@@ -33,16 +33,16 @@ protected:
     DeviceBuffer<int> d_targeting_inner_vol_;       // [1]
 
     DeviceBuffer<int> d_ligand_idxs_;
-    DeviceBuffer<RealType> d_src_log_weights_;  // [num_target_mols_ * this->samples_per_proposal_]
-    DeviceBuffer<RealType> d_dest_log_weights_; // [num_target_mols_ * this->samples_per_proposal_]
+    DeviceBuffer<RealType> d_src_log_weights_;  // [num_target_mols_ * this->proposals_per_step_]
+    DeviceBuffer<RealType> d_dest_log_weights_; // [num_target_mols_ * this->proposals_per_step_]
     DeviceBuffer<int> d_inner_flags_;
     DeviceBuffer<RealType> d_box_volume_; // [1]
 
 private:
     DeviceBuffer<RealType> d_selected_translation_;    // [3] The translation selected to run
-    DeviceBuffer<int> d_sample_after_segment_offsets_; // [this->samples_per_proposal_ + 1]
-    DeviceBuffer<int> d_weights_before_counts_;        // [this->samples_per_proposal_]
-    DeviceBuffer<int> d_weights_after_counts_;         // [this->samples_per_proposal_]
+    DeviceBuffer<int> d_sample_after_segment_offsets_; // [this->proposals_per_step_ + 1]
+    DeviceBuffer<int> d_weights_before_counts_;        // [this->proposals_per_step_]
+    DeviceBuffer<int> d_weights_after_counts_;         // [this->proposals_per_step_]
 
 public:
     TIBDExchangeMove(

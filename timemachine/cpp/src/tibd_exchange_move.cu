@@ -32,7 +32,7 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     const double cutoff,
     const double radius,
     const int seed,
-    const int proposals_per_move,
+    const int steps_per_move_,
     const int interval)
     : BDExchangeMove<RealType>(
           N,
@@ -42,19 +42,19 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
           nb_beta,
           cutoff,
           seed,
-          proposals_per_move,
+          steps_per_move_,
           interval,
-          round_up_even(TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * proposals_per_move)),
+          round_up_even(TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * steps_per_move_)),
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
       d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
-      d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->proposals_per_move_ * this->samples_per_proposal_)),
-      d_targeting_inner_vol_(this->samples_per_proposal_), d_ligand_idxs_(ligand_idxs),
-      d_src_log_weights_(this->num_target_mols_ * this->samples_per_proposal_),
-      d_dest_log_weights_(this->num_target_mols_ * this->samples_per_proposal_), d_inner_flags_(this->num_target_mols_),
-      d_box_volume_(1), d_selected_translation_(this->samples_per_proposal_ * 3),
+      d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->steps_per_move_ * this->proposals_per_step_)),
+      d_targeting_inner_vol_(this->proposals_per_step_), d_ligand_idxs_(ligand_idxs),
+      d_src_log_weights_(this->num_target_mols_ * this->proposals_per_step_),
+      d_dest_log_weights_(this->num_target_mols_ * this->proposals_per_step_), d_inner_flags_(this->num_target_mols_),
+      d_box_volume_(1), d_selected_translation_(this->proposals_per_step_ * 3),
       d_sample_after_segment_offsets_(this->d_sample_segments_offsets_.length),
-      d_weights_before_counts_(this->samples_per_proposal_), d_weights_after_counts_(this->samples_per_proposal_) {
+      d_weights_before_counts_(this->proposals_per_step_), d_weights_after_counts_(this->proposals_per_step_) {
 
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
@@ -92,7 +92,7 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
         sum_bytes,
         d_weights_before_counts_.data,
         this->d_sample_segments_offsets_.data,
-        this->samples_per_proposal_));
+        this->proposals_per_step_));
     // Take the larger of the two to use as the temp storage data for CUB
     temp_storage_bytes_ = max(flagged_bytes, sum_bytes);
 
@@ -144,7 +144,7 @@ void TIBDExchangeMove<RealType>::move(
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int mol_blocks = ceil_divide(this->num_target_mols_, tpb);
-    const int sample_blocks = ceil_divide(this->samples_per_proposal_, tpb);
+    const int sample_blocks = ceil_divide(this->proposals_per_step_, tpb);
 
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), this->mol_size_, 1);
 
@@ -175,10 +175,10 @@ void TIBDExchangeMove<RealType>::move(
     curandErrchk(
         templateCurandUniform(this->cr_rng_samples_, this->d_sample_noise_.data, this->d_sample_noise_.length));
     k_generate_translations_inside_and_outside_sphere<<<1, d_rand_states_.length, 0, stream>>>(
-        this->proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, this->d_translations_.data);
+        this->steps_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, this->d_translations_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    for (int step = 0; step < this->proposals_per_move_; step++) {
+    for (int step = 0; step < this->steps_per_move_; step++) {
         // To ensure determinism between running 1 step per move or K steps per move we have to partition each pass
         // Ordering is consistent, with the tail reversed.
         // https://nvlabs.github.io/cub/structcub_1_1_device_partition.html#a47515ec2a15804719db1b8f3b3124e43
@@ -193,11 +193,11 @@ void TIBDExchangeMove<RealType>::move(
             stream));
 
         k_decide_targeted_moves<<<sample_blocks, tpb, 0, stream>>>(
-            this->samples_per_proposal_,
+            this->proposals_per_step_,
             this->num_target_mols_,
-            this->d_uniform_noise_buffer_.data + (step * NOISE_PER_STEP * this->samples_per_proposal_),
+            this->d_uniform_noise_buffer_.data + (step * NOISE_PER_STEP * this->proposals_per_step_),
             d_inner_mols_count_.data,
-            this->d_translations_.data + (step * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * this->samples_per_proposal_),
+            this->d_translations_.data + (step * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * this->proposals_per_step_),
             d_targeting_inner_vol_.data,
             d_weights_before_counts_.data,
             d_weights_after_counts_.data,
@@ -218,7 +218,7 @@ void TIBDExchangeMove<RealType>::move(
             temp_storage_bytes_,
             d_weights_before_counts_.data,
             this->d_sample_segments_offsets_.data + 1, // Offset by one as the first idx is always 0
-            this->samples_per_proposal_,
+            this->proposals_per_step_,
             stream));
 
         gpuErrchk(cub::DeviceScan::InclusiveSum(
@@ -226,23 +226,23 @@ void TIBDExchangeMove<RealType>::move(
             temp_storage_bytes_,
             d_weights_after_counts_.data,
             d_sample_after_segment_offsets_.data + 1, // Offset by one as the first idx is always 0
-            this->samples_per_proposal_,
+            this->proposals_per_step_,
             stream));
 
         this->sampler_.sample_given_noise_device(
-            this->num_target_mols_ * this->samples_per_proposal_,
-            this->samples_per_proposal_,
+            this->num_target_mols_ * this->proposals_per_step_,
+            this->proposals_per_step_,
             this->d_sample_segments_offsets_.data,
             this->d_log_weights_before_.data,
-            this->d_sample_noise_.data + (step * this->num_target_mols_ * this->samples_per_proposal_),
+            this->d_sample_noise_.data + (step * this->num_target_mols_ * this->proposals_per_step_),
             this->d_sampling_intermediate_.data,
             this->d_samples_.data,
             stream);
 
         // this->logsumexp_.sum_device(src_count, d_src_log_weights_.data, this->d_lse_max_before_.data, stream);
         this->logsumexp_.sum_device(
-            this->num_target_mols_ * this->samples_per_proposal_,
-            this->samples_per_proposal_,
+            this->num_target_mols_ * this->proposals_per_step_,
+            this->proposals_per_step_,
             this->d_sample_segments_offsets_.data,
             d_src_log_weights_.data,
             this->d_lse_max_before_.data,
@@ -251,7 +251,7 @@ void TIBDExchangeMove<RealType>::move(
 
         // Selected an index from the src weights, need to remap the samples idx to the mol indices
         k_adjust_sample_idxs<<<sample_blocks, tpb, 0, stream>>>(
-            this->samples_per_proposal_,
+            this->proposals_per_step_,
             d_targeting_inner_vol_.data,
             d_inner_mols_count_.data,
             d_partitioned_indices_.data,
@@ -281,8 +281,8 @@ void TIBDExchangeMove<RealType>::move(
         gpuErrchk(cudaPeekAtLastError());
 
         this->logsumexp_.sum_device(
-            this->num_target_mols_ * this->samples_per_proposal_,
-            this->samples_per_proposal_,
+            this->num_target_mols_ * this->proposals_per_step_,
+            this->proposals_per_step_,
             this->d_sample_after_segment_offsets_.data,
             d_dest_log_weights_.data,
             this->d_lse_max_after_.data,

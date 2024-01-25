@@ -23,12 +23,12 @@ protected:
     // Done to avoid having to determine the size of the sample and allows us to test ion sampling by having
     // two different BDExchangemoves
     const int mol_size_;
-    const int proposals_per_move_;
+    const int steps_per_move_;
     const int num_target_mols_;
     const RealType nb_beta_;
     const RealType beta_; // 1 / kT
     const RealType cutoff_squared_;
-    const int samples_per_proposal_;
+    const int proposals_per_step_;
     size_t num_attempted_;
     NonbondedMolEnergyPotential<RealType> mol_potential_;
     SegmentedWeightedRandomSampler<RealType> sampler_;
