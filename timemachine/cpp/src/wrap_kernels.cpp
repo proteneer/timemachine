@@ -1565,7 +1565,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                         const double cutoff,
                         const int seed,
                         const int steps_per_move,
-                        const int interval) {
+                        const int interval,
+                        const int proposals_per_step) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
                     throw std::runtime_error("parameters dimensions must be 2");
@@ -1579,9 +1580,22 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                 if (interval <= 0) {
                     throw std::runtime_error("must provide interval greater than 0");
                 }
+                if (proposals_per_step != 1) {
+                    std::cout << "warning:: proposals_per_step not 1, currently only supported for testing"
+                              << std::endl;
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(
-                    N, target_mols, v_params, temperature, nb_beta, cutoff, seed, steps_per_move, interval);
+                    N,
+                    target_mols,
+                    v_params,
+                    temperature,
+                    nb_beta,
+                    cutoff,
+                    seed,
+                    steps_per_move,
+                    interval,
+                    proposals_per_step);
             }),
             py::arg("N"),
             py::arg("target_mols"),
@@ -1591,7 +1605,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             py::arg("cutoff"),
             py::arg("seed"),
             py::arg("steps_per_move"),
-            py::arg("interval"))
+            py::arg("interval"),
+            py::arg("proposals_per_step") = 1) // TBD: Don't default this to 1
         .def(
             "move",
             [](Class &mover,
@@ -1656,7 +1671,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                         const double radius,
                         const int seed,
                         const int steps_per_move,
-                        const int interval) {
+                        const int interval,
+                        const int proposals_per_step) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
                     throw std::runtime_error("parameters dimensions must be 2");
@@ -1673,6 +1689,9 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                 if (interval <= 0) {
                     throw std::runtime_error("must provide interval greater than 0");
                 }
+                if (proposals_per_step != 1) {
+                    throw std::runtime_error("must provide proposals_per_step equal to 1, future support to come");
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(
                     N,
@@ -1685,7 +1704,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                     radius,
                     seed,
                     steps_per_move,
-                    interval);
+                    interval,
+                    proposals_per_step);
             }),
             py::arg("N"),
             py::arg("ligand_idxs"),
@@ -1697,7 +1717,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
             py::arg("radius"),
             py::arg("seed"),
             py::arg("steps_per_move"),
-            py::arg("interval"))
+            py::arg("interval"),
+            py::arg("proposals_per_step") = 1)
         .def(
             "move",
             [](Class &mover,

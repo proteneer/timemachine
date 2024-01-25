@@ -33,7 +33,8 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     const double radius,
     const int seed,
     const int steps_per_move_,
-    const int interval)
+    const int interval,
+    const int proposals_per_step)
     : BDExchangeMove<RealType>(
           N,
           target_mols,
@@ -44,6 +45,7 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
           seed,
           steps_per_move_,
           interval,
+          1, // proposals_per_step currently only supports 1
           round_up_even(TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * steps_per_move_)),
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
@@ -289,8 +291,7 @@ void TIBDExchangeMove<RealType>::move(
             this->d_lse_exp_sum_after_.data,
             stream);
 
-        k_attempt_exchange_move_targeted<RealType><<<ceil_divide(N, tpb), tpb, 0, stream>>>(
-            N,
+        k_attempt_exchange_move_targeted<RealType><<<ceil_divide(this->num_target_mols_, tpb), tpb, 0, stream>>>(
             this->num_target_mols_,
             d_targeting_inner_vol_.data,
             d_inner_mols_count_.data,
@@ -303,6 +304,7 @@ void TIBDExchangeMove<RealType>::move(
             this->d_lse_exp_sum_before_.data,
             this->d_lse_max_after_.data,
             this->d_lse_exp_sum_after_.data,
+            this->d_target_mol_offsets_.data,
             this->d_intermediate_coords_.data,
             d_coords,
             this->d_log_weights_before_.data,

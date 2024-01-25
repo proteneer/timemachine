@@ -59,7 +59,7 @@ RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targete
     return before_log_prob - after_log_prob + log_vol_prob + (log_rev_prob - log_fwd_prob);
 }
 
-void __global__ k_setup_sample_atoms(
+void __global__ k_setup_proposals(
     const int batch_size,
     const int num_atoms_in_each_mol,
     const int *__restrict__ mol_idx_per_batch,
@@ -71,20 +71,20 @@ void __global__ k_setup_sample_atoms(
 template <typename RealType>
 void __global__ k_attempt_exchange_move(
     const int N,
-    const int num_batches,
-    const RealType *__restrict__ rand,                   // [1]
-    const RealType *__restrict__ before_log_sum_exp_max, // [1]
-    const RealType *__restrict__ before_log_sum_exp_sum, // [1]
-    const RealType *__restrict__ after_log_sum_exp_max,  // [num_batches]
-    const RealType *__restrict__ after_log_sum_exp_sum,  // [num_batches]
-    const double *__restrict__ moved_coords,             // [N, 3]
-    double *__restrict__ dest_coords,                    // [N, 3]
-    size_t *__restrict__ num_accepted                    // [1]
+    const RealType *__restrict__ rand,           // [1]
+    const RealType *__restrict__ before_max,     // [1]
+    const RealType *__restrict__ before_log_sum, // [1]
+    const RealType *__restrict__ after_max,      // [1]
+    const RealType *__restrict__ after_log_sum,  // [1]
+    const int *__restrict__ mol_offsets,         // [num_mols + 1]
+    const int *__restrict__ selected_mol,        // [1]
+    const double *__restrict__ moved_coords,     // [num_atoms_in_each_mol, 3]
+    double *__restrict__ dest_coords,            // [N, 3]
+    size_t *__restrict__ num_accepted            // [1]
 );
 
 template <typename RealType>
 void __global__ k_attempt_exchange_move_targeted(
-    const int N,
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
     const int *__restrict__ inner_count,  // [1]
@@ -96,7 +96,8 @@ void __global__ k_attempt_exchange_move_targeted(
     const RealType *__restrict__ before_log_sum, // [1]
     const RealType *__restrict__ after_max,      // [1]
     const RealType *__restrict__ after_log_sum,  // [1]
-    const double *__restrict__ moved_coords,     // [N, 3]
+    const int *__restrict__ mol_offsets,         // [num_target_mols + 1]
+    const double *__restrict__ moved_coords,     // [, 3]
     double *__restrict__ dest_coords,            // [N, 3]
     RealType *__restrict__ before_weights,       // [num_target_mols]
     RealType *__restrict__ after_weights,        // [num_target_mols]

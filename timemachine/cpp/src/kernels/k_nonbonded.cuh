@@ -585,10 +585,11 @@ template <typename RealType>
 void __global__ k_atom_by_atom_energies(
     const int N,
     const int num_target_atoms,
-    const int *__restrict__ target_atoms, // [num_target_atoms]
-    const double *__restrict__ coords,    // [N, 3]
-    const double *__restrict__ params,    // [N, PARAMS_PER_ATOM]
-    const double *__restrict__ box,       // [3, 3],
+    const int *__restrict__ target_atoms,     // [num_target_atoms]
+    const double *__restrict__ target_coords, // [num_target_atoms, 3] Can be nullptr if should use coords
+    const double *__restrict__ coords,        // [N, 3]
+    const double *__restrict__ params,        // [N, PARAMS_PER_ATOM]
+    const double *__restrict__ box,           // [3, 3],
     const RealType beta,
     const RealType cutoff_squared,
     RealType *__restrict__ output_energies // [num_target_atoms, N]
@@ -605,6 +606,10 @@ void __global__ k_atom_by_atom_energies(
 
         int atom_i_idx = target_atoms[row_idx];
 
+        RealType ci_x = target_coords != nullptr ? target_coords[row_idx * 3 + 0] : coords[atom_i_idx * 3 + 0];
+        RealType ci_y = target_coords != nullptr ? target_coords[row_idx * 3 + 1] : coords[atom_i_idx * 3 + 1];
+        RealType ci_z = target_coords != nullptr ? target_coords[row_idx * 3 + 2] : coords[atom_i_idx * 3 + 2];
+
         int params_i_idx = atom_i_idx * PARAMS_PER_ATOM;
         int charge_param_idx_i = params_i_idx + PARAM_OFFSET_CHARGE;
         int lj_param_idx_sig_i = params_i_idx + PARAM_OFFSET_SIG;
@@ -615,10 +620,6 @@ void __global__ k_atom_by_atom_energies(
         RealType sig_i = params[lj_param_idx_sig_i];
         RealType eps_i = params[lj_param_idx_eps_i];
         RealType w_i = params[w_param_idx_i];
-
-        RealType ci_x = coords[atom_i_idx * 3 + 0];
-        RealType ci_y = coords[atom_i_idx * 3 + 1];
-        RealType ci_z = coords[atom_i_idx * 3 + 2];
 
         int atom_j_idx = blockIdx.x * blockDim.x + threadIdx.x;
         while (atom_j_idx < N) {

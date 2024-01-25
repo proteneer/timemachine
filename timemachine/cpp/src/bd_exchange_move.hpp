@@ -85,6 +85,7 @@ protected:
         const int seed,
         const int proposals_per_move,
         const int interval,
+        const int proposals_per_step,
         const int translation_buffer_size);
 
 public:
@@ -97,7 +98,8 @@ public:
         const double cutoff,
         const int seed,
         const int proposals_per_move,
-        const int interval);
+        const int interval,
+        const int proposals_per_step);
 
     ~BDExchangeMove();
 

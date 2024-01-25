@@ -31,6 +31,7 @@ std::vector<RealType> compute_atom_by_atom_energies(
         N,
         static_cast<int>(d_target_atoms.length),
         d_target_atoms.data,
+        nullptr, // Use the provided coords to compute the energies
         d_coords.data,
         d_params.data,
         d_box.data,

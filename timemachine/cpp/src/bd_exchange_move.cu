@@ -28,7 +28,8 @@ BDExchangeMove<RealType>::BDExchangeMove(
     const double cutoff,
     const int seed,
     const int steps_per_move,
-    const int interval)
+    const int interval,
+    const int proposals_per_step)
     : BDExchangeMove<RealType>(
           N,
           target_mols,
@@ -39,7 +40,8 @@ BDExchangeMove<RealType>::BDExchangeMove(
           seed,
           steps_per_move,
           interval,
-          round_up_even(BD_TRANSLATIONS_PER_STEP_XYZW * steps_per_move)) {}
+          proposals_per_step,
+          round_up_even(BD_TRANSLATIONS_PER_STEP_XYZW * steps_per_move * proposals_per_step)) {}
 
 template <typename RealType>
 BDExchangeMove<RealType>::BDExchangeMove(
@@ -52,24 +54,26 @@ BDExchangeMove<RealType>::BDExchangeMove(
     const int seed,
     const int steps_per_move,
     const int interval,
+    const int proposals_per_step,
     const int translation_buffer_size)
     : Mover(interval), N_(N), mol_size_(target_mols[0].size()), steps_per_move_(steps_per_move),
       num_target_mols_(target_mols.size()), nb_beta_(static_cast<RealType>(nb_beta)),
       beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))),
-      cutoff_squared_(static_cast<RealType>(cutoff * cutoff)),
-      proposals_per_step_(1), // Hardcoded to 1 currently, will be exposed in the constructor eventually
+      cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), proposals_per_step_(proposals_per_step),
       num_attempted_(0), mol_potential_(N, target_mols, nb_beta, cutoff),
       sampler_(num_target_mols_, proposals_per_step_, seed), logsumexp_(num_target_mols_, proposals_per_step_),
-      d_intermediate_coords_(N * 3), d_params_(params), d_mol_energy_buffer_(num_target_mols_),
-      d_sample_per_atom_energy_buffer_(mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
-      d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
-      d_log_weights_after_(num_target_mols_), d_lse_max_before_(1), d_lse_exp_sum_before_(1),
-      d_lse_max_after_(proposals_per_step_), d_lse_exp_sum_after_(proposals_per_step_), d_samples_(proposals_per_step_),
-      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * steps_per_move_)), d_num_accepted_(1),
+      d_intermediate_coords_(proposals_per_step_ * mol_size_ * 3), d_params_(params),
+      d_mol_energy_buffer_(num_target_mols_), d_sample_per_atom_energy_buffer_(mol_size_ * N),
+      d_atom_idxs_(get_atom_indices(target_mols)), d_mol_offsets_(get_mol_offsets(target_mols)),
+      d_log_weights_before_(num_target_mols_), d_log_weights_after_(num_target_mols_), d_lse_max_before_(1),
+      d_lse_exp_sum_before_(1), d_lse_max_after_(proposals_per_step_), d_lse_exp_sum_after_(proposals_per_step_),
+      d_samples_(proposals_per_step_),
+      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * steps_per_move_ * proposals_per_step_)), d_num_accepted_(1),
       d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
       d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)),
-      d_sample_noise_(round_up_even(num_target_mols_ * steps_per_move_)), d_sampling_intermediate_(num_target_mols_),
-      d_translations_(translation_buffer_size), d_sample_segments_offsets_(proposals_per_step_ + 1) {
+      d_sample_noise_(round_up_even(num_target_mols_ * steps_per_move_)),
+      d_sampling_intermediate_(num_target_mols_ * proposals_per_step_), d_translations_(translation_buffer_size),
+      d_sample_segments_offsets_(proposals_per_step_ + 1) {
 
     if (steps_per_move_ <= 0) {
         throw std::runtime_error("steps per move must be greater than 0");
@@ -208,15 +212,16 @@ void BDExchangeMove<RealType>::move(
             d_lse_exp_sum_after_.data,
             stream);
 
-        k_attempt_exchange_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
+        k_attempt_exchange_move<RealType><<<1, 1, 0, stream>>>(
             N,
-            proposals_per_step_,
             d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZW * proposals_per_step_) +
                 (BD_TRANSLATIONS_PER_STEP_XYZW - 1), // Offset to get the last value for the acceptance criteria
             d_lse_max_before_.data,
             d_lse_exp_sum_before_.data,
             d_lse_max_after_.data,
             d_lse_exp_sum_after_.data,
+            d_target_mol_offsets_.data,
+            d_samples_.data,
             d_intermediate_coords_.data,
             d_coords,
             d_num_accepted_.data);
@@ -261,17 +266,13 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     const bool scale,
     const double *d_box,            // [3, 3]
     const double *d_coords,         // [N, 3]
-    const RealType *d_quaternions,  // [4]
-    const RealType *d_translations, // [3]
+    const RealType *d_quaternions,  // [proposals_per_step_, 4]
+    const RealType *d_translations, // [proposals_per_step_, 3]
     cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
-    dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_, 1);
+    dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_ * proposals_per_step_, 1);
 
-    // Make a copy of the coordinates
-    gpuErrchk(cudaMemcpyAsync(
-        d_intermediate_coords_.data, d_coords, d_intermediate_coords_.size(), cudaMemcpyDeviceToDevice, stream));
-
-    k_setup_sample_atoms<<<ceil_divide(proposals_per_step_, tpb), tpb, 0, stream>>>(
+    k_setup_proposals<<<ceil_divide(proposals_per_step_, tpb), tpb, 0, stream>>>(
         proposals_per_step_,
         mol_size_,
         d_samples_.data,
@@ -309,6 +310,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
         N,
         mol_size_,
         d_target_mol_atoms_.data,
+        nullptr,
         d_coords,
         d_params_.data,
         d_box,
@@ -336,6 +338,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
         mol_size_,
         d_target_mol_atoms_.data,
         d_intermediate_coords_.data,
+        d_coords,
         d_params_.data,
         d_box,
         nb_beta_,

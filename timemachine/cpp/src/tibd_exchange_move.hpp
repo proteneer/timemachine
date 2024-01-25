@@ -56,7 +56,8 @@ public:
         const double radius,
         const int seed,
         const int proposals_per_move,
-        const int interval);
+        const int interval,
+        const int proposals_per_step);
 
     ~TIBDExchangeMove();
 

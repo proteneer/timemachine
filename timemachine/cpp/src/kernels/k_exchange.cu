@@ -6,7 +6,11 @@
 
 namespace timemachine {
 
-void __global__ k_setup_sample_atoms(
+// k_setup_proposals takes a set of sampled indices and constructs buffers containing the molecule offsets
+// as well as the atom indices (refer to src/mol_utils.hpp for impl) and setups up the offsets and the atom
+// indices for each sample. Note that the output mol offsets are constructed so that the start of the mol is
+// the starting atom idx rather than the prefix sum of mol lengths that the mol_offsets is.
+void __global__ k_setup_proposals(
     const int batch_size,                      // Number of molecules to setup
     const int num_atoms_in_each_mol,           // number of atoms in each sample
     const int *__restrict__ mol_idx_per_batch, // [batch_size] The index of the molecules to sample
@@ -35,69 +39,73 @@ void __global__ k_setup_sample_atoms(
 template <typename RealType>
 void __global__ k_attempt_exchange_move(
     const int N,
-    const int batch_size,
     const RealType *__restrict__ rand,           // [1]
     const RealType *__restrict__ before_max,     // [1]
     const RealType *__restrict__ before_log_sum, // [1]
-    const RealType *__restrict__ after_max,      // [batch_size]
-    const RealType *__restrict__ after_log_sum,  // [batch_size]
-    const double *__restrict__ moved_coords,     // [N, 3]
+    const RealType *__restrict__ after_max,      // [1]
+    const RealType *__restrict__ after_log_sum,  // [1]
+    const int *__restrict__ mol_offsets,         // [num_mols + 1]
+    const int *__restrict__ selected_mol,        // [1]
+    const double *__restrict__ moved_coords,     // [num_atoms_in_each_mol, 3]
     double *__restrict__ dest_coords,            // [N, 3]
     size_t *__restrict__ num_accepted            // [1]
 ) {
-    int sample_idx = blockIdx.y;
-    // Does not yet handle more than one sample
-    assert(sample_idx == 0);
-    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    assert(idx == 0);
 
-    // All kernels compute the same acceptance
-    // TBD investigate shared memory for speed
-    RealType before_log_prob =
+    const int moved_mol_idx = selected_mol[0];
+    const int mol_start = mol_offsets[moved_mol_idx];
+    const int mol_end = mol_offsets[moved_mol_idx + 1];
+    const int num_atoms_in_each_mol = mol_end - mol_start;
+
+    const RealType before_log_prob =
         convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_max[0], before_log_sum[0]));
-    RealType after_log_prob = convert_nan_to_inf<RealType>(
-        compute_logsumexp_final<RealType>(after_max[sample_idx], after_log_sum[sample_idx]));
+    const RealType after_log_prob =
+        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_max[0], after_log_sum[0]));
 
-    RealType log_acceptance_prob = min(before_log_prob - after_log_prob, static_cast<RealType>(0.0));
+    const RealType log_acceptance_prob = min(before_log_prob - after_log_prob, static_cast<RealType>(0.0));
     const bool accepted = rand[0] < exp(log_acceptance_prob);
-    if (atom_idx == 0 && accepted) {
+    if (idx == 0 && accepted) {
         num_accepted[0]++;
     }
 
-    // If accepted, move the coords into place
-    while (accepted && atom_idx < N) {
-        dest_coords[atom_idx * 3 + 0] = moved_coords[atom_idx * 3 + 0];
-        dest_coords[atom_idx * 3 + 1] = moved_coords[atom_idx * 3 + 1];
-        dest_coords[atom_idx * 3 + 2] = moved_coords[atom_idx * 3 + 2];
-        atom_idx += gridDim.x * blockDim.x;
+    if (accepted && idx == 0) {
+        // If accepted, move the coords of the selected mol into place
+        for (int i = 0; i < num_atoms_in_each_mol; i++) {
+            dest_coords[(mol_start + i) * 3 + 0] = moved_coords[i * 3 + 0];
+            dest_coords[(mol_start + i) * 3 + 1] = moved_coords[i * 3 + 1];
+            dest_coords[(mol_start + i) * 3 + 2] = moved_coords[i * 3 + 2];
+        }
     }
 }
 
 template void __global__ k_attempt_exchange_move<float>(
     const int N,
-    const int batch_size,
     const float *__restrict__ rand,
     const float *__restrict__ before_max,
     const float *__restrict__ before_log_sum,
     const float *__restrict__ after_max,
     const float *__restrict__ after_log_sum,
+    const int *__restrict__ mol_offsets,
+    const int *__restrict__ selected_mol,
     const double *__restrict__ moved_coords,
     double *__restrict__ dest_coords,
     size_t *__restrict__ num_accepted);
 template void __global__ k_attempt_exchange_move<double>(
     const int N,
-    const int batch_size,
     const double *__restrict__ rand,
     const double *__restrict__ before_max,
     const double *__restrict__ before_log_sum,
     const double *__restrict__ after_max,
     const double *__restrict__ after_log_sum,
+    const int *__restrict__ mol_offsets,
+    const int *__restrict__ selected_mol,
     const double *__restrict__ moved_coords,
     double *__restrict__ dest_coords,
     size_t *__restrict__ num_accepted);
 
 template <typename RealType>
 void __global__ k_attempt_exchange_move_targeted(
-    const int N,
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
     const int *__restrict__ inner_count,  // [1]
@@ -109,7 +117,8 @@ void __global__ k_attempt_exchange_move_targeted(
     const RealType *__restrict__ before_log_sum, // [1]
     const RealType *__restrict__ after_max,      // [1]
     const RealType *__restrict__ after_log_sum,  // [1]
-    const double *__restrict__ moved_coords,     // [N, 3]
+    const int *__restrict__ mol_offsets,         // [num_mols + 1]
+    const double *__restrict__ moved_coords,     // [num_atoms_in_each_mol, 3]
     double *__restrict__ dest_coords,            // [N, 3]
     RealType *__restrict__ before_weights,       // [num_target_mols]
     RealType *__restrict__ after_weights,        // [num_target_mols]
@@ -123,6 +132,11 @@ void __global__ k_attempt_exchange_move_targeted(
     const RealType outer_vol = box_vol[0] - inner_volume;
 
     const int local_inner_count = inner_count[0];
+
+    const int moved_mol_idx = samples[0];
+    const int mol_start = mol_offsets[moved_mol_idx];
+    const int mol_end = mol_offsets[moved_mol_idx + 1];
+    const int num_atoms_in_each_mol = mol_end - mol_start;
 
     const RealType raw_log_acceptance = compute_raw_log_probability_targeted<RealType>(
         targeting_inner,
@@ -140,18 +154,17 @@ void __global__ k_attempt_exchange_move_targeted(
     const bool accepted = rand[0] < exp(log_acceptance_prob);
     if (atom_idx == 0 && accepted) {
         num_accepted[0]++;
-        int mol_idx = samples[0];
         // XOR 1 to flip the flag from 0 to 1 or 1 to 0
-        inner_flags[mol_idx] ^= 1;
+        inner_flags[moved_mol_idx] ^= 1;
     }
 
     // If accepted, move the coords into place
     // Always copy the weights, either copying from before to after or after to before
-    while (atom_idx < N) {
-        if (accepted) {
-            dest_coords[atom_idx * 3 + 0] = moved_coords[atom_idx * 3 + 0];
-            dest_coords[atom_idx * 3 + 1] = moved_coords[atom_idx * 3 + 1];
-            dest_coords[atom_idx * 3 + 2] = moved_coords[atom_idx * 3 + 2];
+    while (atom_idx < num_target_mols || atom_idx < num_atoms_in_each_mol) {
+        if (accepted && atom_idx < num_atoms_in_each_mol) {
+            dest_coords[(mol_start + atom_idx) * 3 + 0] = moved_coords[atom_idx * 3 + 0];
+            dest_coords[(mol_start + atom_idx) * 3 + 1] = moved_coords[atom_idx * 3 + 1];
+            dest_coords[(mol_start + atom_idx) * 3 + 2] = moved_coords[atom_idx * 3 + 2];
         }
         // If accepted store the after weights as before weights else copy the before weights to the after weights
         // so the next iteration can incrementally update the weights. The copying of the before to the after is
@@ -168,7 +181,6 @@ void __global__ k_attempt_exchange_move_targeted(
 }
 
 template void __global__ k_attempt_exchange_move_targeted<float>(
-    const int N,
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
     const int *__restrict__ inner_count,
@@ -180,6 +192,7 @@ template void __global__ k_attempt_exchange_move_targeted<float>(
     const float *__restrict__ before_log_sum,
     const float *__restrict__ after_max,
     const float *__restrict__ after_log_sum,
+    const int *__restrict__ mol_offsets,
     const double *__restrict__ moved_coords,
     double *__restrict__ dest_coords,
     float *__restrict__ before_weights,
@@ -187,7 +200,6 @@ template void __global__ k_attempt_exchange_move_targeted<float>(
     int *__restrict__ inner_flags,
     size_t *__restrict__ num_accepted);
 template void __global__ k_attempt_exchange_move_targeted<double>(
-    const int N,
     const int num_target_mols,
     const int *__restrict__ targeting_inner_volume,
     const int *__restrict__ inner_count,
@@ -199,6 +211,7 @@ template void __global__ k_attempt_exchange_move_targeted<double>(
     const double *__restrict__ before_log_sum,
     const double *__restrict__ after_max,
     const double *__restrict__ after_log_sum,
+    const int *__restrict__ mol_offsets,
     const double *__restrict__ moved_coords,
     double *__restrict__ dest_coords,
     double *__restrict__ before_weights,
