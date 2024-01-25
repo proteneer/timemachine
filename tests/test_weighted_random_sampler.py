@@ -159,18 +159,31 @@ def test_segmented_random_sampler_simple_distribution(seed, num_samples, precisi
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
 def test_segmented_random_sampler_zero_probability(seed, num_samples, precision):
     """Make sure that if we zero out a probability we never sample that value"""
-
-    # Setup weights such that expected percentages are obvious
-    weights = [[1.5, 0.0, 2.5] for _ in range(num_samples)]
+    rng = np.random.default_rng(seed)
 
     klass = custom_ops.SegmentedWeightedRandomSampler_f32
     if precision == np.float64:
         klass = custom_ops.SegmentedWeightedRandomSampler_f64
 
-    sampler = klass(len(weights[0]), num_samples, seed)
+    max_values_per_segment = 100
+
+    sampler = klass(max_values_per_segment, num_samples, seed)
+
+    weights = []
+    # Any of the idx in this array should not be sampled as the weight is 0.0
+    expected_unsampled_idxs = []
+    for _ in range(num_samples):
+        values_in_segment = rng.integers(1, max_values_per_segment)
+        non_zero_idxs = rng.integers(0, values_in_segment)
+        prob_vec = np.zeros(values_in_segment)
+        prob_vec[non_zero_idxs] = 1.0
+        unnormalized_prob_vec = prob_vec * rng.uniform(0.1, 10.0)
+        expected_unsampled_idxs.append(set(np.argwhere(unnormalized_prob_vec == 0.0).reshape(-1)))
+
+        weights.append(unnormalized_prob_vec)
 
     test_selection = sampler.sample(weights)
     assert len(test_selection) == num_samples
 
-    # All of the values should exclude the first index which contains a zero weight
-    assert np.all(np.array(test_selection) != 1)
+    for selection, invalid_idxs in zip(test_selection, expected_unsampled_idxs):
+        assert selection not in invalid_idxs
