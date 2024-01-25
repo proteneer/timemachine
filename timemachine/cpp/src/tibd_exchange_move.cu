@@ -50,10 +50,10 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
       d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->proposals_per_move_ * this->samples_per_proposal_)),
       d_targeting_inner_vol_(this->samples_per_proposal_), d_ligand_idxs_(ligand_idxs),
-      d_src_weights_(this->num_target_mols_), d_dest_weights_(this->num_target_mols_),
-      d_inner_flags_(this->num_target_mols_), d_box_volume_(1), p_inner_count_(1), p_targeting_inner_vol_(1),
-      d_selected_translation_(this->samples_per_proposal_ * 3),
-      d_sample_after_segments_(this->d_sample_segments_offsets_.length),
+      d_src_weights_(this->num_target_mols_ * this->samples_per_proposal_),
+      d_dest_weights_(this->num_target_mols_ * this->samples_per_proposal_), d_inner_flags_(this->num_target_mols_),
+      d_box_volume_(1), d_selected_translation_(this->samples_per_proposal_ * 3),
+      d_sample_after_segment_offsets_(this->d_sample_segments_offsets_.length),
       d_weights_before_counts_(this->samples_per_proposal_), d_weights_after_counts_(this->samples_per_proposal_) {
 
     if (radius <= 0.0) {
@@ -62,9 +62,6 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     if (d_uniform_noise_buffer_.length / NOISE_PER_STEP != this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
         throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
-
-    // Create event with timings disabled as timings slow down events
-    gpuErrchk(cudaEventCreateWithFlags(&host_copy_event_, cudaEventDisableTiming));
 
     // Add 3 to the seed provided to avoid correlating with the three other RNGs
     k_initialize_curand_states<<<
@@ -101,20 +98,19 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
 
     // Zero out the sample segments offsets, the first index will always be zero and the inclusive sum will be offset by 1
     gpuErrchk(cudaMemset(this->d_sample_segments_offsets_.data, 0, this->d_sample_segments_offsets_.size()));
+    gpuErrchk(cudaMemset(d_sample_after_segment_offsets_.data, 0, d_sample_after_segment_offsets_.size()));
+    // Set the inner count to zero and target the inner at the start to ensure that calling `log_probability` produces
+    // a zero
+    gpuErrchk(cudaMemset(d_inner_mols_count_.data, 0, d_inner_mols_count_.size()));
+    std::vector<int> h_targeting_inner(d_targeting_inner_vol_.length, 1);
+    d_targeting_inner_vol_.copy_from(&h_targeting_inner[0]);
 
     // Allocate char as temp_storage_bytes_ is in raw bytes and the type doesn't matter in practice.
     // Equivalent to DeviceBuffer<int> buf(temp_storage_bytes_ / sizeof(int))
     d_temp_storage_buffer_.realloc(temp_storage_bytes_);
-
-    // Set the inner count to zero and target the inner at the start to ensure that calling `log_probability` produces
-    // a zero
-    p_inner_count_.data[0] = 0;
-    p_targeting_inner_vol_.data[0] = 1;
 }
 
-template <typename RealType> TIBDExchangeMove<RealType>::~TIBDExchangeMove() {
-    gpuErrchk(cudaEventDestroy(host_copy_event_));
-}
+template <typename RealType> TIBDExchangeMove<RealType>::~TIBDExchangeMove() {}
 
 template <typename RealType>
 void TIBDExchangeMove<RealType>::move(
@@ -181,6 +177,7 @@ void TIBDExchangeMove<RealType>::move(
     k_generate_translations_inside_and_outside_sphere<<<1, d_rand_states_.length, 0, stream>>>(
         this->proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, this->d_translations_.data);
     gpuErrchk(cudaPeekAtLastError());
+
     for (int step = 0; step < this->proposals_per_move_; step++) {
         // To ensure determinism between running 1 step per move or K steps per move we have to partition each pass
         // Ordering is consistent, with the tail reversed.
@@ -207,17 +204,6 @@ void TIBDExchangeMove<RealType>::move(
             d_selected_translation_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        // Copy count and flag to the host, needed to know how many values to look at for logsumexp
-        gpuErrchk(cudaMemcpyAsync(
-            p_inner_count_.data, d_inner_mols_count_.data, d_inner_mols_count_.size(), cudaMemcpyDeviceToHost, stream));
-        gpuErrchk(cudaMemcpyAsync(
-            p_targeting_inner_vol_.data,
-            d_targeting_inner_vol_.data,
-            d_targeting_inner_vol_.size(),
-            cudaMemcpyDeviceToHost,
-            stream));
-        gpuErrchk(cudaEventRecord(host_copy_event_, stream));
-
         k_separate_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->num_target_mols_,
             d_targeting_inner_vol_.data,
@@ -235,14 +221,13 @@ void TIBDExchangeMove<RealType>::move(
             this->samples_per_proposal_,
             stream));
 
-        // Not yet necessary until SegmentedLogSumExp
-        // gpuErrchk(cub::DeviceScan::InclusiveSum(
-        //     d_temp_storage_buffer_.data,
-        //     temp_storage_bytes_,
-        //     d_weights_after_counts_.data,
-        //     d_sample_after_segments_.data + 1, // Offset by one as the first idx is always 0
-        //     this->samples_per_proposal_,
-        //     stream));
+        gpuErrchk(cub::DeviceScan::InclusiveSum(
+            d_temp_storage_buffer_.data,
+            temp_storage_bytes_,
+            d_weights_after_counts_.data,
+            d_sample_after_segment_offsets_.data + 1, // Offset by one as the first idx is always 0
+            this->samples_per_proposal_,
+            stream));
 
         this->sampler_.sample_given_noise_device(
             this->num_target_mols_ * this->samples_per_proposal_,
@@ -254,15 +239,15 @@ void TIBDExchangeMove<RealType>::move(
             this->d_samples_.data,
             stream);
 
-        gpuErrchk(cudaEventSynchronize(host_copy_event_));
-        int inner_count = p_inner_count_.data[0];
-
-        // targeting_inner_vol == 1 indicates that we are targeting the inner volume, starting from the outer mols
-        int targeting_inner_vol = p_targeting_inner_vol_.data[0];
-        int src_count = targeting_inner_vol == 0 ? inner_count : this->num_target_mols_ - inner_count;
-        int dest_count = this->num_target_mols_ - src_count;
-
-        this->logsumexp_.sum_device(src_count, d_src_weights_.data, this->d_log_sum_exp_before_.data, stream);
+        // this->logsumexp_.sum_device(src_count, d_src_weights_.data, this->d_lse_max_before_.data, stream);
+        this->logsumexp_.sum_device(
+            this->num_target_mols_ * this->samples_per_proposal_,
+            this->samples_per_proposal_,
+            this->d_sample_segments_offsets_.data,
+            d_src_weights_.data,
+            this->d_lse_max_before_.data,
+            this->d_lse_exp_sum_before_.data,
+            stream);
 
         // Selected an index from the src weights, need to remap the samples idx to the mol indices
         k_adjust_sample_idxs<<<sample_blocks, tpb, 0, stream>>>(
@@ -295,8 +280,14 @@ void TIBDExchangeMove<RealType>::move(
             d_dest_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        // Add one to the destination count, as we just moved a mol there
-        this->logsumexp_.sum_device(dest_count + 1, d_dest_weights_.data, this->d_log_sum_exp_after_.data, stream);
+        this->logsumexp_.sum_device(
+            this->num_target_mols_ * this->samples_per_proposal_,
+            this->samples_per_proposal_,
+            this->d_sample_after_segment_offsets_.data,
+            d_dest_weights_.data,
+            this->d_lse_max_after_.data,
+            this->d_lse_exp_sum_after_.data,
+            stream);
 
         k_attempt_exchange_move_targeted<RealType><<<ceil_divide(N, tpb), tpb, 0, stream>>>(
             N,
@@ -308,8 +299,10 @@ void TIBDExchangeMove<RealType>::move(
             // Offset to get the last value for the acceptance criteria
             this->d_uniform_noise_buffer_.data + (step * NOISE_PER_STEP) + (NOISE_PER_STEP - 1),
             this->d_samples_.data,
-            this->d_log_sum_exp_before_.data,
-            this->d_log_sum_exp_after_.data,
+            this->d_lse_max_before_.data,
+            this->d_lse_exp_sum_before_.data,
+            this->d_lse_max_after_.data,
+            this->d_lse_exp_sum_after_.data,
             this->d_intermediate_coords_.data,
             d_coords,
             this->d_log_weights_before_.data,
@@ -353,12 +346,16 @@ TIBDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const
 template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probability_host() {
     std::vector<RealType> h_log_exp_before(2);
     std::vector<RealType> h_log_exp_after(2);
-    this->d_log_sum_exp_before_.copy_to(&h_log_exp_before[0]);
-    this->d_log_sum_exp_after_.copy_to(&h_log_exp_after[0]);
+    this->d_lse_max_before_.copy_to(&h_log_exp_before[0]);
+    this->d_lse_exp_sum_before_.copy_to(&h_log_exp_before[1]);
+    this->d_lse_max_after_.copy_to(&h_log_exp_after[0]);
+    this->d_lse_exp_sum_after_.copy_to(&h_log_exp_after[1]);
 
-    int h_targeting_inner_vol = p_targeting_inner_vol_.data[0];
+    int h_targeting_inner_vol[1];
+    d_targeting_inner_vol_.copy_to(h_targeting_inner_vol);
 
-    int local_inner_count = p_inner_count_.data[0];
+    int local_inner_count[1];
+    d_inner_mols_count_.copy_to(local_inner_count);
 
     RealType h_box_vol;
     d_box_volume_.copy_to(&h_box_vol);
@@ -366,13 +363,15 @@ template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probabil
     RealType outer_vol = h_box_vol - inner_volume_;
 
     const RealType raw_log_acceptance = compute_raw_log_probability_targeted<RealType>(
-        h_targeting_inner_vol,
+        h_targeting_inner_vol[0],
         inner_volume_,
         outer_vol,
-        local_inner_count,
+        local_inner_count[0],
         this->num_target_mols_,
         &h_log_exp_before[0],
-        &h_log_exp_after[0]);
+        &h_log_exp_before[1],
+        &h_log_exp_after[0],
+        &h_log_exp_after[1]);
 
     return static_cast<double>(raw_log_acceptance);
 }

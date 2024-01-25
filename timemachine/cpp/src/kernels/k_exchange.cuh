@@ -35,8 +35,10 @@ RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targete
     const RealType outer_vol,
     const int inner_count,
     const int num_target_mols,
-    const RealType *__restrict__ before_log_sum_exp, // [2]
-    const RealType *__restrict__ after_log_sum_exp   // [2]
+    const RealType *__restrict__ before_max,     // [1]
+    const RealType *__restrict__ before_log_sum, // [1]
+    const RealType *__restrict__ after_max,      // [1]
+    const RealType *__restrict__ after_log_sum   // [1]
 ) {
     const RealType log_vol_prob =
         targeting_inner_volume == 1 ? log(inner_volume) - log(outer_vol) : log(outer_vol) - log(inner_volume);
@@ -49,15 +51,18 @@ RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targete
     const RealType log_rev_prob =
         compute_log_proposal_probabilities_given_counts<RealType>(src_count - 1, dest_count + 1);
 
-    RealType before_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_log_sum_exp));
-    RealType after_log_prob = convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_log_sum_exp));
+    RealType before_log_prob =
+        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_max[0], before_log_sum[0]));
+    RealType after_log_prob =
+        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_max[0], after_log_sum[0]));
 
     return before_log_prob - after_log_prob + log_vol_prob + (log_rev_prob - log_fwd_prob);
 }
 
 void __global__ k_setup_sample_atoms(
-    const int sample_atoms,          // number of atoms in each sample
-    const int *__restrict__ samples, // [1]
+    const int batch_size,
+    const int num_atoms_in_each_mol,
+    const int *__restrict__ mol_idx_per_batch,
     const int *__restrict__ target_atoms,
     const int *__restrict__ mol_offsets,
     int *__restrict__ output_atom_idxs,
@@ -66,12 +71,15 @@ void __global__ k_setup_sample_atoms(
 template <typename RealType>
 void __global__ k_attempt_exchange_move(
     const int N,
-    const RealType *__restrict__ rand,               // [1]
-    const RealType *__restrict__ before_log_sum_exp, // [2]
-    const RealType *__restrict__ after_log_sum_exp,  // [2]
-    const double *__restrict__ moved_coords,         // [N, 3]
-    double *__restrict__ dest_coords,                // [N, 3]
-    size_t *__restrict__ num_accepted                // [1]
+    const int num_batches,
+    const RealType *__restrict__ rand,                   // [1]
+    const RealType *__restrict__ before_log_sum_exp_max, // [1]
+    const RealType *__restrict__ before_log_sum_exp_sum, // [1]
+    const RealType *__restrict__ after_log_sum_exp_max,  // [num_batches]
+    const RealType *__restrict__ after_log_sum_exp_sum,  // [num_batches]
+    const double *__restrict__ moved_coords,             // [N, 3]
+    double *__restrict__ dest_coords,                    // [N, 3]
+    size_t *__restrict__ num_accepted                    // [1]
 );
 
 template <typename RealType>
@@ -82,26 +90,30 @@ void __global__ k_attempt_exchange_move_targeted(
     const int *__restrict__ inner_count,  // [1]
     const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
-    const RealType *__restrict__ rand, // [1]
-    const int *__restrict__ samples,
-    const RealType *__restrict__ before_log_sum_exp, // [2]
-    const RealType *__restrict__ after_log_sum_exp,  // [2]
-    const double *__restrict__ moved_coords,         // [N, 3]
-    double *__restrict__ dest_coords,                // [N, 3]
-    RealType *__restrict__ before_weights,           // [num_target_mols]
-    RealType *__restrict__ after_weights,            // [num_target_mols]
-    int *__restrict__ inner_flags,
-    size_t *__restrict__ num_accepted // [1]
+    const RealType *__restrict__ rand,           // [1]
+    const int *__restrict__ samples,             // [1]
+    const RealType *__restrict__ before_max,     // [1]
+    const RealType *__restrict__ before_log_sum, // [1]
+    const RealType *__restrict__ after_max,      // [1]
+    const RealType *__restrict__ after_log_sum,  // [1]
+    const double *__restrict__ moved_coords,     // [N, 3]
+    double *__restrict__ dest_coords,            // [N, 3]
+    RealType *__restrict__ before_weights,       // [num_target_mols]
+    RealType *__restrict__ after_weights,        // [num_target_mols]
+    int *__restrict__ inner_flags,               // [num_target_mols]
+    size_t *__restrict__ num_accepted            // [1]
 );
 
 template <typename RealType>
 void __global__ k_store_accepted_log_probability(
     const int num_weights,
-    const RealType *__restrict__ rand,              // [1]
-    RealType *__restrict__ before_log_sum_exp,      // [2]
-    const RealType *__restrict__ after_log_sum_exp, // [2]
-    RealType *__restrict__ before_weights,          // [num_weights]
-    const RealType *__restrict__ after_weights      // [num_weights]
+    const RealType *__restrict__ rand,                  // [1]
+    RealType *__restrict__ before_log_sum_exp_max,      // [1]
+    RealType *__restrict__ before_log_sum_exp_sum,      // [1]
+    const RealType *__restrict__ after_log_sum_exp_max, // [num_batches]
+    const RealType *__restrict__ after_log_sum_exp_sum, // [num_batches]
+    RealType *__restrict__ before_weights,              // [num_weights]
+    const RealType *__restrict__ after_weights          // [num_weights]
 );
 
 template <typename RealType>
@@ -161,15 +173,15 @@ void __global__ k_flag_mols_inner_outer(
 
 template <typename RealType>
 void __global__ k_decide_targeted_moves(
-    const int num_samples,
+    const int num_batches,
     const int num_target_mols,
-    const RealType *__restrict__ rand,         // [num_samples]
+    const RealType *__restrict__ rand,         // [num_batches]
     const int *__restrict__ inner_count,       // [1]
-    const RealType *__restrict__ translations, // [num_samples, 2, 3] first translation is inside, second is outer
-    int *__restrict__ targeting_inner_volume,  // [num_samples]
+    const RealType *__restrict__ translations, // [num_batches, 2, 3] first translation is inside, second is outer
+    int *__restrict__ targeting_inner_volume,  // [num_batches]
     int *__restrict__ src_weights_counts,
     int *__restrict__ target_weights_counts,
-    RealType *__restrict__ output_translation // [num_samples, 3]
+    RealType *__restrict__ output_translation // [num_batches, 3]
 );
 
 template <typename RealType>
@@ -192,11 +204,11 @@ void __global__ k_setup_destination_weights_for_targeted(
     RealType *__restrict__ output_weights);
 
 void __global__ k_adjust_sample_idxs(
-    const int num_samples,
-    const int *__restrict__ targeting_inner_volume, // [num_samples]
+    const int num_batches,
+    const int *__restrict__ targeting_inner_volume, // [num_batches]
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ partitioned_indices,    // [inner_count]
-    int *__restrict__ sample_idxs                   // [num_samples]
+    int *__restrict__ sample_idxs                   // [num_batches]
 );
 
 } // namespace timemachine

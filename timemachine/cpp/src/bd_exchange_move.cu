@@ -59,11 +59,12 @@ BDExchangeMove<RealType>::BDExchangeMove(
       cutoff_squared_(static_cast<RealType>(cutoff * cutoff)),
       samples_per_proposal_(1), // Hardcoded to 1 currently, will be exposed in the constructor eventually
       num_attempted_(0), mol_potential_(N, target_mols, nb_beta, cutoff),
-      sampler_(num_target_mols_, samples_per_proposal_, seed), logsumexp_(num_target_mols_),
+      sampler_(num_target_mols_, samples_per_proposal_, seed), logsumexp_(num_target_mols_, samples_per_proposal_),
       d_intermediate_coords_(N * 3), d_params_(params), d_mol_energy_buffer_(num_target_mols_),
       d_sample_per_atom_energy_buffer_(mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
-      d_log_weights_after_(num_target_mols_), d_log_sum_exp_before_(2), d_log_sum_exp_after_(2),
+      d_log_weights_after_(num_target_mols_), d_lse_max_before_(1), d_lse_exp_sum_before_(1),
+      d_lse_max_after_(samples_per_proposal_), d_lse_exp_sum_after_(samples_per_proposal_),
       d_samples_(samples_per_proposal_), d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * proposals_per_move_)),
       d_num_accepted_(1), d_target_mol_atoms_(mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
       d_intermediate_sample_weights_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)),
@@ -84,8 +85,10 @@ BDExchangeMove<RealType>::BDExchangeMove(
         }
     }
     // Clear out the logsumexp values so the log probability starts off as zero
-    gpuErrchk(cudaMemset(d_log_sum_exp_before_.data, 0, d_log_sum_exp_before_.size()));
-    gpuErrchk(cudaMemset(d_log_sum_exp_after_.data, 0, d_log_sum_exp_after_.size()));
+    gpuErrchk(cudaMemset(d_lse_exp_sum_before_.data, 0, d_lse_exp_sum_before_.size()));
+    gpuErrchk(cudaMemset(d_lse_max_before_.data, 0, d_lse_max_before_.size()));
+    gpuErrchk(cudaMemset(d_lse_exp_sum_after_.data, 0, d_lse_exp_sum_after_.size()));
+    gpuErrchk(cudaMemset(d_lse_max_after_.data, 0, d_lse_max_after_.size()));
     gpuErrchk(cudaMemset(d_num_accepted_.data, 0, d_num_accepted_.size()));
 
     // Initialize several different RNGs to allow for determinism between numbers of proposals per move
@@ -158,8 +161,10 @@ void BDExchangeMove<RealType>::move(
                 num_target_mols_,
                 d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZW * samples_per_proposal_) +
                     (BD_TRANSLATIONS_PER_STEP_XYZW - 1), // Offset to get the last value for the acceptance criteria
-                d_log_sum_exp_before_.data,
-                d_log_sum_exp_after_.data,
+                d_lse_max_before_.data,
+                d_lse_exp_sum_before_.data,
+                d_lse_max_after_.data,
+                d_lse_exp_sum_after_.data,
                 d_log_weights_before_.data,
                 d_log_weights_after_.data);
             gpuErrchk(cudaPeekAtLastError());
@@ -195,14 +200,24 @@ void BDExchangeMove<RealType>::move(
             this->d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZW * samples_per_proposal_),
             stream);
 
-        logsumexp_.sum_device(num_target_mols_, d_log_weights_after_.data, d_log_sum_exp_after_.data, stream);
+        logsumexp_.sum_device(
+            num_target_mols_ * samples_per_proposal_,
+            samples_per_proposal_,
+            d_sample_segments_offsets_.data,
+            d_log_weights_after_.data,
+            d_lse_max_after_.data,
+            d_lse_exp_sum_after_.data,
+            stream);
 
         k_attempt_exchange_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
             N,
+            samples_per_proposal_,
             d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZW * samples_per_proposal_) +
                 (BD_TRANSLATIONS_PER_STEP_XYZW - 1), // Offset to get the last value for the acceptance criteria
-            d_log_sum_exp_before_.data,
-            d_log_sum_exp_after_.data,
+            d_lse_max_before_.data,
+            d_lse_exp_sum_before_.data,
+            d_lse_max_after_.data,
+            d_lse_exp_sum_after_.data,
             d_intermediate_coords_.data,
             d_coords,
             d_num_accepted_.data);
@@ -231,7 +246,14 @@ void BDExchangeMove<RealType>::compute_initial_weights(
     gpuErrchk(cudaPeekAtLastError());
 
     // Compute logsumexp of energies once upfront to get log probabilities
-    logsumexp_.sum_device(num_target_mols_, d_log_weights_before_.data, d_log_sum_exp_before_.data, stream);
+    logsumexp_.sum_device(
+        num_target_mols_,
+        1,
+        d_sample_segments_offsets_.data,
+        d_log_weights_before_.data,
+        d_lse_max_before_.data,
+        d_lse_exp_sum_before_.data,
+        stream);
 }
 
 template <typename RealType>
@@ -250,8 +272,8 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     gpuErrchk(cudaMemcpyAsync(
         d_intermediate_coords_.data, d_coords, d_intermediate_coords_.size(), cudaMemcpyDeviceToDevice, stream));
 
-    // Only support sampling a single mol at this time, so only one block
-    k_setup_sample_atoms<<<1, tpb, 0, stream>>>(
+    k_setup_sample_atoms<<<ceil_divide(samples_per_proposal_, tpb), tpb, 0, stream>>>(
+        samples_per_proposal_,
         mol_size_,
         d_samples_.data,
         d_atom_idxs_.data,
@@ -261,8 +283,8 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     gpuErrchk(cudaPeekAtLastError());
 
     if (scale) {
-        k_rotate_and_translate_mols<RealType, true><<<1, tpb, 0, stream>>>(
-            1,
+        k_rotate_and_translate_mols<RealType, true><<<ceil_divide(samples_per_proposal_, tpb), tpb, 0, stream>>>(
+            samples_per_proposal_,
             d_coords,
             d_box,
             d_samples_.data,
@@ -272,8 +294,8 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
     } else {
-        k_rotate_and_translate_mols<RealType, false><<<1, tpb, 0, stream>>>(
-            1,
+        k_rotate_and_translate_mols<RealType, false><<<ceil_divide(samples_per_proposal_, tpb), tpb, 0, stream>>>(
+            samples_per_proposal_,
             d_coords,
             d_box,
             d_samples_.data,
@@ -357,11 +379,13 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
 template <typename RealType> double BDExchangeMove<RealType>::raw_log_probability_host() {
     std::vector<RealType> h_log_exp_before(2);
     std::vector<RealType> h_log_exp_after(2);
-    d_log_sum_exp_before_.copy_to(&h_log_exp_before[0]);
-    d_log_sum_exp_after_.copy_to(&h_log_exp_after[0]);
+    d_lse_max_before_.copy_to(&h_log_exp_before[0]);
+    d_lse_exp_sum_before_.copy_to(&h_log_exp_before[1]);
+    d_lse_max_after_.copy_to(&h_log_exp_after[0]);
+    d_lse_exp_sum_after_.copy_to(&h_log_exp_after[1]);
 
-    RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_before[0]));
-    RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(&h_log_exp_after[0]));
+    RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(h_log_exp_before[0], h_log_exp_before[1]));
+    RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(h_log_exp_after[0], h_log_exp_after[1]));
 
     return static_cast<double>(before_log_prob - after_log_prob);
 }
