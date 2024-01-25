@@ -32,20 +32,17 @@ def test_segmented_random_sampler_validation(seed, precision):
     with pytest.raises(RuntimeError, match="empty probability distribution not allowed"):
         sampler.sample([[5.0, 3.0, 10.0], []])
 
-    with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
+    with pytest.raises(RuntimeError, match="unable to use infinity as a weight"):
         sampler.sample([[np.inf], [np.inf]])
 
-    with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
+    with pytest.raises(RuntimeError, match="unable to use negative values as a weight"):
         sampler.sample([[-np.inf], [-np.inf]])
 
-    with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
+    with pytest.raises(RuntimeError, match="unable to use nan as a weight"):
         sampler.sample([[np.nan], [np.nan]])
 
-    with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
+    with pytest.raises(RuntimeError, match="unable to use negative values as a weight"):
         sampler.sample([[1.0], [-0.1]])
-
-    with pytest.raises(RuntimeError, match="all values in log space must be finite and non-negative"):
-        sampler.sample([[1.0], [0.0]])
 
 
 @pytest.mark.parametrize("seed", [2024, 2025, 2026, 2027])
@@ -155,3 +152,38 @@ def test_segmented_random_sampler_simple_distribution(seed, num_samples, precisi
     _, counts = np.unique(test_selection, return_counts=True)
     percentages = counts / num_samples
     np.testing.assert_allclose(expected_percentages, percentages, atol=0.05)
+
+
+@pytest.mark.parametrize("seed", [2024])
+@pytest.mark.parametrize("num_samples", [1000])
+@pytest.mark.parametrize("precision", [np.float32, np.float64])
+def test_segmented_random_sampler_zero_probability(seed, num_samples, precision):
+    """Make sure that if we zero out a probability we never sample that value"""
+    rng = np.random.default_rng(seed)
+
+    klass = custom_ops.SegmentedWeightedRandomSampler_f32
+    if precision == np.float64:
+        klass = custom_ops.SegmentedWeightedRandomSampler_f64
+
+    max_values_per_segment = 100
+
+    sampler = klass(max_values_per_segment, num_samples, seed)
+
+    weights = []
+    # Any of the idx in this array should not be sampled as the weight is 0.0
+    expected_unsampled_idxs = []
+    for _ in range(num_samples):
+        values_in_segment = rng.integers(1, max_values_per_segment)
+        non_zero_idxs = rng.integers(0, values_in_segment)
+        prob_vec = np.zeros(values_in_segment)
+        prob_vec[non_zero_idxs] = 1.0
+        unnormalized_prob_vec = prob_vec * rng.uniform(0.1, 10.0)
+        expected_unsampled_idxs.append(set(np.argwhere(unnormalized_prob_vec == 0.0).reshape(-1)))
+
+        weights.append(unnormalized_prob_vec)
+
+    test_selection = sampler.sample(weights)
+    assert len(test_selection) == num_samples
+
+    for selection, invalid_idxs in zip(test_selection, expected_unsampled_idxs):
+        assert selection not in invalid_idxs

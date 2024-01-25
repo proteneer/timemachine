@@ -33,8 +33,8 @@ protected:
     DeviceBuffer<int> d_targeting_inner_vol_;       // [1]
 
     DeviceBuffer<int> d_ligand_idxs_;
-    DeviceBuffer<RealType> d_src_weights_;  // [num_target_mols_]
-    DeviceBuffer<RealType> d_dest_weights_; // [num_target_mols_]
+    DeviceBuffer<RealType> d_src_log_weights_;  // [num_target_mols_ * this->samples_per_proposal_]
+    DeviceBuffer<RealType> d_dest_log_weights_; // [num_target_mols_ * this->samples_per_proposal_]
     DeviceBuffer<int> d_inner_flags_;
     DeviceBuffer<RealType> d_box_volume_; // [1]
 

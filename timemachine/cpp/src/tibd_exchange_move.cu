@@ -50,8 +50,8 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
       d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->proposals_per_move_ * this->samples_per_proposal_)),
       d_targeting_inner_vol_(this->samples_per_proposal_), d_ligand_idxs_(ligand_idxs),
-      d_src_weights_(this->num_target_mols_ * this->samples_per_proposal_),
-      d_dest_weights_(this->num_target_mols_ * this->samples_per_proposal_), d_inner_flags_(this->num_target_mols_),
+      d_src_log_weights_(this->num_target_mols_ * this->samples_per_proposal_),
+      d_dest_log_weights_(this->num_target_mols_ * this->samples_per_proposal_), d_inner_flags_(this->num_target_mols_),
       d_box_volume_(1), d_selected_translation_(this->samples_per_proposal_ * 3),
       d_sample_after_segment_offsets_(this->d_sample_segments_offsets_.length),
       d_weights_before_counts_(this->samples_per_proposal_), d_weights_after_counts_(this->samples_per_proposal_) {
@@ -210,7 +210,7 @@ void TIBDExchangeMove<RealType>::move(
             d_inner_mols_count_.data,
             d_partitioned_indices_.data,
             this->d_log_weights_before_.data,
-            d_src_weights_.data);
+            d_src_log_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         gpuErrchk(cub::DeviceScan::InclusiveSum(
@@ -239,12 +239,12 @@ void TIBDExchangeMove<RealType>::move(
             this->d_samples_.data,
             stream);
 
-        // this->logsumexp_.sum_device(src_count, d_src_weights_.data, this->d_lse_max_before_.data, stream);
+        // this->logsumexp_.sum_device(src_count, d_src_log_weights_.data, this->d_lse_max_before_.data, stream);
         this->logsumexp_.sum_device(
             this->num_target_mols_ * this->samples_per_proposal_,
             this->samples_per_proposal_,
             this->d_sample_segments_offsets_.data,
-            d_src_weights_.data,
+            d_src_log_weights_.data,
             this->d_lse_max_before_.data,
             this->d_lse_exp_sum_before_.data,
             stream);
@@ -277,14 +277,14 @@ void TIBDExchangeMove<RealType>::move(
             d_inner_mols_count_.data,
             d_partitioned_indices_.data,
             this->d_log_weights_after_.data,
-            d_dest_weights_.data);
+            d_dest_log_weights_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         this->logsumexp_.sum_device(
             this->num_target_mols_ * this->samples_per_proposal_,
             this->samples_per_proposal_,
             this->d_sample_after_segment_offsets_.data,
-            d_dest_weights_.data,
+            d_dest_log_weights_.data,
             this->d_lse_max_after_.data,
             this->d_lse_exp_sum_after_.data,
             stream);

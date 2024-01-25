@@ -207,24 +207,24 @@ template <typename RealType> void declare_segmented_weighted_random_sampler(py::
             py::arg("seed"))
         .def(
             "sample",
-            [](Class &sampler, const std::vector<std::vector<double>> &probabilities) -> std::vector<int> {
-                std::vector<std::vector<RealType>> real_batches(probabilities.size());
-                for (unsigned long i = 0; i < probabilities.size(); i++) {
-                    real_batches[i] = py_vector_to_vector_with_cast<double, RealType>(probabilities[i]);
+            [](Class &sampler, const std::vector<std::vector<double>> &weights) -> std::vector<int> {
+                std::vector<std::vector<RealType>> real_batches(weights.size());
+                for (unsigned long i = 0; i < weights.size(); i++) {
+                    real_batches[i] = py_vector_to_vector_with_cast<double, RealType>(weights[i]);
                 }
 
                 std::vector<int> samples = sampler.sample_host(real_batches);
                 return samples;
             },
-            py::arg("probabilities"),
+            py::arg("weights"),
             R"pbdoc(
-        Randomly select a value from batches of probability distributions.
+        Randomly select a value from batches of weights.
 
         Parameters
         ----------
 
-        probabilities: vector of vectors containing doubles
-            Probabilities to sample from. Do not need to be normalized.
+        weights: vector of vectors containing doubles
+            Weights to sample from. Do not need to be normalized.
 
         Returns
         -------
