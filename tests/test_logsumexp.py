@@ -22,14 +22,7 @@ def test_segmented_cuda_logsumexp_validation(precision):
         summer.logsumexp([[1.0]])
 
     with pytest.raises(RuntimeError, match="empty array not allowed"):
-        summer.logsumexp(
-            [
-                [
-                    1.0,
-                ],
-                [],
-            ]
-        )
+        summer.logsumexp([[1.0], []])
 
     with pytest.raises(RuntimeError, match="total values is greater than buffer size"):
         summer.logsumexp([[1.0] * (max_values_per_segment + 1) for _ in range(num_segments)])
