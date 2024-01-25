@@ -7,6 +7,8 @@ namespace timemachine {
 // SegmentedSumExp is a class for computing the max and sum(exp(x - max) for x in xs) of a set of values
 // To compute the logsumexp you can use the code in kernels/k_logsumexp.cuh::compute_logsumexp_final given the
 // max and exp sum.
+// logsumexp_host performs the final computation of the logsumexp value for testing purposes, as this is the primary
+// use case for this class.
 template <typename RealType> class SegmentedSumExp {
 
 private:
