@@ -9,14 +9,6 @@ RealType __host__ __device__ __forceinline__ compute_logsumexp_final(const RealT
 }
 
 template <typename RealType>
-void __global__ k_exp_sub_max(
-    const int N,
-    const RealType *__restrict__ max,  // [1]
-    const RealType *__restrict__ vals, // [N]
-    RealType *__restrict__ out         // [N]
-);
-
-template <typename RealType>
 void __global__ k_segmented_exp_sub_max(
     const int num_segments,
     const int *__restrict__ d_segment_offsets, // [num_segments]
