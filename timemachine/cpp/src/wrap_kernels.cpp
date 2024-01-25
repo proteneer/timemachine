@@ -1688,7 +1688,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                     interval);
             }),
             py::arg("N"),
-            py::arg("target_mols"),
+            py::arg("ligand_idxs"),
             py::arg("target_mols"),
             py::arg("params"),
             py::arg("temperature"),
