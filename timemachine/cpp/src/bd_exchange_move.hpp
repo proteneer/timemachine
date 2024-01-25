@@ -1,9 +1,9 @@
 #pragma once
 
 #include "device_buffer.hpp"
-#include "logsumexp.hpp"
 #include "mover.hpp"
 #include "nonbonded_mol_energy.hpp"
+#include "segmented_sumexp.hpp"
 #include "segmented_weighted_random_sampler.hpp"
 #include <array>
 #include <vector>
@@ -32,7 +32,7 @@ protected:
     size_t num_attempted_;
     NonbondedMolEnergyPotential<RealType> mol_potential_;
     SegmentedWeightedRandomSampler<RealType> sampler_;
-    LogSumExp<RealType> logsumexp_;
+    SegmentedSumExp<RealType> logsumexp_;
     // Buffer for evaluating moves without touching the original coords
     DeviceBuffer<double> d_intermediate_coords_;
     DeviceBuffer<double> d_params_;
@@ -42,10 +42,14 @@ protected:
     DeviceBuffer<int> d_mol_offsets_;
     DeviceBuffer<RealType> d_log_weights_before_;
     DeviceBuffer<RealType> d_log_weights_after_;
-    DeviceBuffer<RealType> d_log_sum_exp_before_; // [2]
-    DeviceBuffer<RealType> d_log_sum_exp_after_;  // [2]
-    DeviceBuffer<int>
-        d_samples_; // where the indices to sample a molecule come from, currently fixed to a single sample
+
+    // Arrays used for computing logsumexp, split into max component and the sum component
+    DeviceBuffer<RealType> d_lse_max_before_;     // [1]
+    DeviceBuffer<RealType> d_lse_exp_sum_before_; // [1]
+    DeviceBuffer<RealType> d_lse_max_after_;      // [samples_per_proposal]
+    DeviceBuffer<RealType> d_lse_exp_sum_after_;  // [samples_per_proposal]
+
+    DeviceBuffer<int> d_samples_;          // [samples_per_proposal] where the indices to sample a molecule come from
     DeviceBuffer<RealType> d_quaternions_; // Normal noise for uniform random rotations
     DeviceBuffer<size_t> d_num_accepted_;
     DeviceBuffer<int> d_target_mol_atoms_;

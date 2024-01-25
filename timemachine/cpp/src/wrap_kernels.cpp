@@ -25,7 +25,6 @@
 #include "langevin_integrator.hpp"
 #include "local_md_utils.hpp"
 #include "log_flat_bottom_bond.hpp"
-#include "logsumexp.hpp"
 #include "mover.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
@@ -38,6 +37,7 @@
 #include "potential.hpp"
 #include "rmsd_align.hpp"
 #include "rotations.hpp"
+#include "segmented_sumexp.hpp"
 #include "segmented_weighted_random_sampler.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
@@ -1512,25 +1512,43 @@ void declare_fanout_summed_potential(py::module &m) {
         .def("get_potentials", &FanoutSummedPotential::get_potentials);
 }
 
-template <typename RealType> void declare_log_sum_exp(py::module &m, const char *typestr) {
+template <typename RealType> void declare_segmented_sum_exp(py::module &m, const char *typestr) {
 
-    using Class = LogSumExp<RealType>;
-    std::string pyclass_name = std::string("LogSumExp_") + typestr;
+    using Class = SegmentedSumExp<RealType>;
+    std::string pyclass_name = std::string("SegmentedSumExp_") + typestr;
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](const int N) { return new Class(N); }), py::arg("N"))
         .def(
-            "sum",
-            [](Class &summer,
-               const py::array_t<double, py::array::c_style> &values) -> py::array_t<RealType, py::array::c_style> {
-                std::vector<RealType> h_vals = py_array_to_vector_with_cast<double, RealType>(values);
-                int N = h_vals.size();
-                py::array_t<RealType, py::array::c_style> py_res(1);
-                summer.sum_host(N, &h_vals[0], py_res.mutable_data());
+            py::init([](const int max_vals_per_segment, const int segments) {
+                return new Class(max_vals_per_segment, segments);
+            }),
+            py::arg("max_vals_per_segment"),
+            py::arg("num_segments"))
+        .def(
+            "logsumexp",
+            [](Class &summer, const std::vector<std::vector<double>> &vals) -> std::vector<RealType> {
+                std::vector<std::vector<RealType>> real_batches(vals.size());
+                for (unsigned long i = 0; i < vals.size(); i++) {
+                    real_batches[i] = py_vector_to_vector_with_cast<double, RealType>(vals[i]);
+                }
+                std::vector<RealType> results = summer.logsumexp_host(real_batches);
 
-                return py_res;
+                return results;
             },
-            py::arg("values"));
-    ;
+            py::arg("values"),
+            R"pbdoc(
+        Compute the logsumexp of a batch of vectors
+
+        Parameters
+        ----------
+
+        vals: vector of vectors containing doubles
+            A vector of vectors to compute the logsumexp
+
+        Returns
+        -------
+        Array of sample indices
+            Shape (vals.size(), )
+        )pbdoc");
 }
 
 template <typename RealType> void declare_bias_deletion_exchange_move(py::module &m, const char *typestr) {
@@ -1943,8 +1961,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_segmented_weighted_random_sampler<double>(m, "f64");
     declare_segmented_weighted_random_sampler<float>(m, "f32");
 
-    declare_log_sum_exp<double>(m, "f64");
-    declare_log_sum_exp<float>(m, "f32");
+    declare_segmented_sum_exp<double>(m, "f64");
+    declare_segmented_sum_exp<float>(m, "f32");
 
     declare_nonbonded_mol_energy<double>(m, "f64");
     declare_nonbonded_mol_energy<float>(m, "f32");
