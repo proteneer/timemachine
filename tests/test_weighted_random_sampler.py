@@ -35,7 +35,7 @@ def test_segmented_random_sampler_validation(seed, precision):
     with pytest.raises(RuntimeError, match="unable to use infinity as a weight"):
         sampler.sample([[np.inf], [np.inf]])
 
-    with pytest.raises(RuntimeError, match="unable to use infinity as a weight"):
+    with pytest.raises(RuntimeError, match="unable to use negative values as a weight"):
         sampler.sample([[-np.inf], [-np.inf]])
 
     with pytest.raises(RuntimeError, match="unable to use nan as a weight"):

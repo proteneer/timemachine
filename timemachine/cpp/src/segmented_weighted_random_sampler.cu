@@ -118,7 +118,7 @@ SegmentedWeightedRandomSampler<RealType>::sample_host(const std::vector<std::vec
         // Convert the weights into log weights
         for (unsigned long j = 0; j < num_vals; j++) {
             RealType weight = weights[i][j];
-            if (weight == -inf || weight == inf) {
+            if (weight == inf) {
                 throw std::runtime_error("unable to use infinity as a weight");
             } else if (isnan(weight)) {
                 throw std::runtime_error("unable to use nan as a weight");
