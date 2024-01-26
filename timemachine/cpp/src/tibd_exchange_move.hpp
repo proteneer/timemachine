@@ -3,10 +3,7 @@
 #include "bd_exchange_move.hpp"
 #include "curand_kernel.h"
 #include "device_buffer.hpp"
-#include "logsumexp.hpp"
-#include "nonbonded_mol_energy.hpp"
 #include "pinned_host_buffer.hpp"
-#include "weighted_random_sampler.hpp"
 #include <array>
 #include <vector>
 
@@ -29,22 +26,23 @@ protected:
     DeviceBuffer<char> d_temp_storage_buffer_;
     size_t temp_storage_bytes_;
 
-    DeviceBuffer<RealType> d_center_;      // [3]
-    DeviceBuffer<RealType> d_translation_; // [3]
+    DeviceBuffer<RealType> d_center_; // [3]
     // Uniform noise with the first element used for deciding directionality of insertion
     // and the second element is used for comparison against the acceptance rate in the Metropolis-Hastings check
     DeviceBuffer<RealType> d_uniform_noise_buffer_; // [2]
     DeviceBuffer<int> d_targeting_inner_vol_;       // [1]
 
     DeviceBuffer<int> d_ligand_idxs_;
-    DeviceBuffer<RealType> d_src_weights_;  // [num_target_mols_]
-    DeviceBuffer<RealType> d_dest_weights_; // [num_target_mols_]
+    DeviceBuffer<RealType> d_src_log_weights_;  // [num_target_mols_ * this->samples_per_proposal_]
+    DeviceBuffer<RealType> d_dest_log_weights_; // [num_target_mols_ * this->samples_per_proposal_]
     DeviceBuffer<int> d_inner_flags_;
-    DeviceBuffer<RealType> d_box_volume_;         // [1]
-    PinnedHostBuffer<int> p_inner_count_;         // [1]
-    PinnedHostBuffer<int> p_targeting_inner_vol_; // [1]
+    DeviceBuffer<RealType> d_box_volume_; // [1]
 
-    cudaEvent_t host_copy_event_;
+private:
+    DeviceBuffer<RealType> d_selected_translation_;    // [3] The translation selected to run
+    DeviceBuffer<int> d_sample_after_segment_offsets_; // [this->samples_per_proposal_ + 1]
+    DeviceBuffer<int> d_weights_before_counts_;        // [this->samples_per_proposal_]
+    DeviceBuffer<int> d_weights_after_counts_;         // [this->samples_per_proposal_]
 
 public:
     TIBDExchangeMove(

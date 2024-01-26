@@ -6,6 +6,7 @@ def normalize(x):
     return x / jnp.linalg.norm(x)
 
 
+@jax.jit
 def pyramidal_volume(xc, x1, x2, x3):
     """
     Compute the normalized pyramidal volume given four points. This is implemented
@@ -34,6 +35,7 @@ def pyramidal_volume(xc, x1, x2, x3):
     return jnp.dot(jnp.cross(v0, v1), v2)
 
 
+@jax.jit
 def torsion_volume(ci, cj, ck, cl):
     """
     Compute normalized torsional volume given four points. This is implemented
