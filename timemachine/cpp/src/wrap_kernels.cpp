@@ -1564,7 +1564,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                         const double nb_beta,
                         const double cutoff,
                         const int seed,
-                        const int steps_per_move,
+                        const int num_proposals_per_move,
                         const int interval) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
@@ -1588,7 +1588,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                     nb_beta,
                     cutoff,
                     seed,
-                    steps_per_move,
+                    num_proposals_per_move,
                     interval,
                     1 // only support 1 proposal per step at the moment
                 );
@@ -1600,7 +1600,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             py::arg("nb_beta"),
             py::arg("cutoff"),
             py::arg("seed"),
-            py::arg("steps_per_move"),
+            py::arg("num_proposals_per_move"),
             py::arg("interval"))
         .def(
             "move",
@@ -1665,7 +1665,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                         const double cutoff,
                         const double radius,
                         const int seed,
-                        const int steps_per_move,
+                        const int num_proposals_per_move,
                         const int interval) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
@@ -1694,9 +1694,9 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                     cutoff,
                     radius,
                     seed,
-                    steps_per_move,
+                    num_proposals_per_move,
                     interval,
-                    1 // proposals_per_step must be 1 for now
+                    1 // batch_size must be 1 for now
                 );
             }),
             py::arg("N"),
@@ -1708,7 +1708,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
             py::arg("cutoff"),
             py::arg("radius"),
             py::arg("seed"),
-            py::arg("steps_per_move"),
+            py::arg("num_proposals_per_move"),
             py::arg("interval"))
         .def(
             "move",
