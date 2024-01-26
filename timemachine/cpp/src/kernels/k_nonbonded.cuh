@@ -581,15 +581,21 @@ void __global__ k_accumulate_atom_energies_to_per_mol_energies(
     per_mol_energies[idx] = energy_accumulator;
 }
 
+// k_atom_by_atom_energies is intended to be used for computing the energies of a subset of atoms
+// against all other atoms. The kernel allows changing the positions of the target atomsby passing in an
+// array for target_coords, if a nullptr is provided it will use the coords array for the positions of the target
+// atoms. This allows modification of the positions of a subset of atoms, avoiding the need to duplicating all of the
+// coordinates.
 template <typename RealType>
 void __global__ k_atom_by_atom_energies(
     const int N,
     const int num_target_atoms,
-    const int *__restrict__ target_atoms,     // [num_target_atoms]
-    const double *__restrict__ target_coords, // [num_target_atoms, 3] Can be nullptr if should use coords
-    const double *__restrict__ coords,        // [N, 3]
-    const double *__restrict__ params,        // [N, PARAMS_PER_ATOM]
-    const double *__restrict__ box,           // [3, 3],
+    const int *__restrict__ target_atoms, // [num_target_atoms]
+    const double
+        *__restrict__ target_coords,   // [num_target_atoms, 3] Can be nullptr if should use coords for the target atoms
+    const double *__restrict__ coords, // [N, 3]
+    const double *__restrict__ params, // [N, PARAMS_PER_ATOM]
+    const double *__restrict__ box,    // [3, 3],
     const RealType beta,
     const RealType cutoff_squared,
     RealType *__restrict__ output_energies // [num_target_atoms, N]
