@@ -50,6 +50,8 @@ void __global__ k_attempt_exchange_move(
     double *__restrict__ dest_coords,            // [N, 3]
     size_t *__restrict__ num_accepted            // [1]
 ) {
+    // Note that this kernel does not handle multiple proposals, expects that the proposals
+    // have been reduced down to a single proposal beforehand.
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     assert(idx == 0);
 

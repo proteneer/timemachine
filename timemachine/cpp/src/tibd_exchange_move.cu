@@ -45,7 +45,7 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
           seed,
           steps_per_move_,
           interval,
-          1, // proposals_per_step currently only supports 1
+          proposals_per_step,
           round_up_even(TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * steps_per_move_)),
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
