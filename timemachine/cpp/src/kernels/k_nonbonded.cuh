@@ -582,7 +582,7 @@ void __global__ k_accumulate_atom_energies_to_per_mol_energies(
 }
 
 // k_atom_by_atom_energies is intended to be used for computing the energies of a subset of atoms
-// against all other atoms. The kernel allows changing the positions of the target atomsby passing in an
+// against all other atoms. The kernel allows changing the positions of the target atoms by passing in an
 // array for target_coords, if a nullptr is provided it will use the coords array for the positions of the target
 // atoms. This allows modification of the positions of a subset of atoms, avoiding the need to duplicating all of the
 // coordinates.
