@@ -1564,7 +1564,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                         const double nb_beta,
                         const double cutoff,
                         const int seed,
-                        const int proposals_per_move,
+                        const int num_proposals_per_move,
                         const int interval) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
@@ -1581,7 +1581,17 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                 }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(
-                    N, target_mols, v_params, temperature, nb_beta, cutoff, seed, proposals_per_move, interval);
+                    N,
+                    target_mols,
+                    v_params,
+                    temperature,
+                    nb_beta,
+                    cutoff,
+                    seed,
+                    num_proposals_per_move,
+                    interval,
+                    1 // only support 1 proposal per step at the moment
+                );
             }),
             py::arg("N"),
             py::arg("target_mols"),
@@ -1590,7 +1600,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             py::arg("nb_beta"),
             py::arg("cutoff"),
             py::arg("seed"),
-            py::arg("proposals_per_move"),
+            py::arg("num_proposals_per_move"),
             py::arg("interval"))
         .def(
             "move",
@@ -1655,7 +1665,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                         const double cutoff,
                         const double radius,
                         const int seed,
-                        const int proposals_per_move,
+                        const int num_proposals_per_move,
                         const int interval) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
@@ -1684,11 +1694,13 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                     cutoff,
                     radius,
                     seed,
-                    proposals_per_move,
-                    interval);
+                    num_proposals_per_move,
+                    interval,
+                    1 // batch_size must be 1 for now
+                );
             }),
             py::arg("N"),
-            py::arg("target_mols"),
+            py::arg("ligand_idxs"),
             py::arg("target_mols"),
             py::arg("params"),
             py::arg("temperature"),
@@ -1696,7 +1708,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
             py::arg("cutoff"),
             py::arg("radius"),
             py::arg("seed"),
-            py::arg("proposals_per_move"),
+            py::arg("num_proposals_per_move"),
             py::arg("interval"))
         .def(
             "move",

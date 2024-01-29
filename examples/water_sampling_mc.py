@@ -71,6 +71,9 @@ def test_exchange():
     parser.add_argument("--iterations", type=int, help="Number of iterations", default=1000000)
     parser.add_argument("--equilibration_steps", type=int, help="Number of equilibration steps", default=50000)
     parser.add_argument("--seed", default=2024, type=int, help="Random seed")
+    parser.add_argument(
+        "--save_last_frame", type=str, help="Store last frame as a npz file, used to verify bitwise determinism"
+    )
 
     args = parser.parse_args()
 
@@ -229,6 +232,14 @@ def test_exchange():
         xvb_t = npt_mover.move(xvb_t)
 
     writer.close()
+    if args.save_last_frame:
+        np.savez(
+            args.save_last_frame,
+            coords=xvb_t.coords,
+            velocities=xvb_t.velocities,
+            box=xvb_t.box,
+            iterations=args.iterations,
+        )
 
 
 if __name__ == "__main__":

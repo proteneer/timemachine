@@ -88,16 +88,17 @@ void __global__ k_rotate_coordinates(
 
 template <typename RealType, bool SCALE>
 void __global__ k_rotate_and_translate_mols(
-    const int num_samples,
+    const int batch_size,
     const double *__restrict__ coords,         // [N, 3]
     const double *__restrict__ box,            // [3, 3]
-    const int *__restrict__ samples,           // [num_samples]
-    const int *__restrict__ mol_offsets,       // [max_sample_idx+1]
-    const RealType *__restrict__ quaternions,  // [num_samples, 4]
-    const RealType *__restrict__ translations, // [num_samples, 3]
-    double *__restrict__ coords_out) {
+    const int *__restrict__ samples,           // [batch_size]
+    const int *__restrict__ mol_offsets,       // [batch_size + 1]
+    const RealType *__restrict__ quaternions,  // [batch_size, 4]
+    const RealType *__restrict__ translations, // [batch_size, 3]
+    double *__restrict__ coords_out            // [batch_size, num_atoms, 3]
+) {
 
-    int sample_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx_in_batch = blockIdx.x * blockDim.x + threadIdx.x;
 
     const RealType box_x = box[0 * 3 + 0];
     const RealType box_y = box[1 * 3 + 1];
@@ -107,21 +108,24 @@ void __global__ k_rotate_and_translate_mols(
     const RealType inv_box_y = 1 / box_y;
     const RealType inv_box_z = 1 / box_z;
 
-    while (sample_idx < num_samples) {
-        int mol_sample = samples[sample_idx];
+    while (idx_in_batch < batch_size) {
+        int mol_sample = samples[idx_in_batch];
         int mol_start = mol_offsets[mol_sample];
         int mol_end = mol_offsets[mol_sample + 1];
         int num_atoms = mol_end - mol_start;
 
         RealType ref_quat[4];
-        ref_quat[0] = quaternions[sample_idx * 4 + 0];
-        ref_quat[1] = quaternions[sample_idx * 4 + 1];
-        ref_quat[2] = quaternions[sample_idx * 4 + 2];
-        ref_quat[3] = quaternions[sample_idx * 4 + 3];
+        ref_quat[0] = quaternions[idx_in_batch * 4 + 0];
+        ref_quat[1] = quaternions[idx_in_batch * 4 + 1];
+        ref_quat[2] = quaternions[idx_in_batch * 4 + 2];
+        ref_quat[3] = quaternions[idx_in_batch * 4 + 3];
 
-        RealType translation_x = SCALE ? box_x * translations[sample_idx * 3 + 0] : translations[sample_idx * 3 + 0];
-        RealType translation_y = SCALE ? box_y * translations[sample_idx * 3 + 1] : translations[sample_idx * 3 + 1];
-        RealType translation_z = SCALE ? box_z * translations[sample_idx * 3 + 2] : translations[sample_idx * 3 + 2];
+        RealType translation_x =
+            SCALE ? box_x * translations[idx_in_batch * 3 + 0] : translations[idx_in_batch * 3 + 0];
+        RealType translation_y =
+            SCALE ? box_y * translations[idx_in_batch * 3 + 1] : translations[idx_in_batch * 3 + 1];
+        RealType translation_z =
+            SCALE ? box_z * translations[idx_in_batch * 3 + 2] : translations[idx_in_batch * 3 + 2];
 
         // Image the translation in the home box
         translation_x -= box_x * floor(translation_x * inv_box_x);
@@ -161,13 +165,12 @@ void __global__ k_rotate_and_translate_mols(
             local_coords[1] += translation_x;
             local_coords[2] += translation_y;
             local_coords[3] += translation_z;
-
-            coords_out[(mol_start + i) * 3 + 0] = local_coords[1];
-            coords_out[(mol_start + i) * 3 + 1] = local_coords[2];
-            coords_out[(mol_start + i) * 3 + 2] = local_coords[3];
+            coords_out[(idx_in_batch * num_atoms) + (i * 3) + 0] = local_coords[1];
+            coords_out[(idx_in_batch * num_atoms) + (i * 3) + 1] = local_coords[2];
+            coords_out[(idx_in_batch * num_atoms) + (i * 3) + 2] = local_coords[3];
         }
 
-        sample_idx += gridDim.x * blockDim.x;
+        idx_in_batch += gridDim.x * blockDim.x;
     }
 }
 
