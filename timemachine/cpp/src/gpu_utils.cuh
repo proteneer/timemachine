@@ -27,7 +27,7 @@ curandStatus_t templateCurandUniform(curandGenerator_t generator, double *output
     { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = true) {
     if (code != cudaSuccess) {
-        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+        fprintf(stderr, "GPUassert: %s %s %d - Abort %d\n", cudaGetErrorString(code), file, line, abort);
         if (abort) {
             // If the GPU is invalid or missing for some reason, raise an exception so we can handle that
             // Error codes can be found here: https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html#group__CUDART__TYPES_1g3f51e3575c2178246db0a94a430e0038

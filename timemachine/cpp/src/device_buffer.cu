@@ -3,6 +3,7 @@
 #include "gpu_utils.cuh"
 #include <cstddef>
 #include <cub/util_type.cuh>
+#include <exception>
 
 namespace timemachine {
 
@@ -33,10 +34,14 @@ template <typename T> void DeviceBuffer<T>::realloc(const size_t new_length) {
 }
 
 template <typename T> DeviceBuffer<T>::~DeviceBuffer() {
-    // TODO: the file/line context reported by gpuErrchk on failure is
+    // If there are uncaught exceptions, attempt to clean up but don't abort the process in case
+    // the exception is an InvalidHardware exception and gpuAssert would raise an identical error causing
+    // a call to std::terminate from pybind
+    const bool abort = std::uncaught_exceptions() == 0;
+    // TODO: the file/line context reported by gpuAssert on failure is
     // not very useful when it's called from here. Is there a way to
     // report a stack trace?
-    gpuErrchk(cudaFree(data));
+    gpuAssert(cudaFree(data), __FILE__, __LINE__, abort);
 }
 
 template <typename T> size_t DeviceBuffer<T>::size() const { return this->length * sizeof(T); }
