@@ -75,7 +75,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_sample_segments_offsets_(batch_size_ + 1) {
 
     if (num_proposals_per_move_ <= 0) {
-        throw std::runtime_error("steps per move must be greater than 0");
+        throw std::runtime_error("proposals per move must be greater than 0");
     }
     if (mol_size_ == 0) {
         throw std::runtime_error("must provide non-empty molecule indices");

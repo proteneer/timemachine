@@ -54,7 +54,7 @@ def test_bd_exchange_validation(precision):
         klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
     # Proposals must be non-zero
-    with pytest.raises(RuntimeError, match="steps per move must be greater than 0"):
+    with pytest.raises(RuntimeError, match="proposals per move must be greater than 0"):
         klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, 0, 1)
 
     group_idxs = [[0], [1]]

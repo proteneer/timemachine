@@ -249,7 +249,7 @@ def test_tibd_exchange_validation(precision):
         klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 1)
 
     # Proposals must be non-zero
-    with pytest.raises(RuntimeError, match="steps per move must be greater than 0"):
+    with pytest.raises(RuntimeError, match="proposals per move must be greater than 0"):
         klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, 0, 1)
 
     group_idxs = [[0]]
