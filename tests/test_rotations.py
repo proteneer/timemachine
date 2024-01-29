@@ -1,20 +1,10 @@
 import numpy as np
 import pytest
-from numpy.typing import NDArray
+from common import convert_quaternion_for_scipy
 from scipy.spatial.transform import Rotation
 
 from timemachine.fe.model_utils import image_molecule
 from timemachine.lib import custom_ops
-
-
-def convert_quaternion_for_scipy(quat: NDArray) -> NDArray:
-    """Scipy has the convention of (x, y, z, w) which is different than the wikipedia definition, swap ordering to verify using scipy.
-
-    References
-    ----------
-    https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.from_quat.html
-    """
-    return np.append(quat[1:], [quat[0]])
 
 
 @pytest.mark.memcheck

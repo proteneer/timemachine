@@ -173,14 +173,14 @@ void BDExchangeMove<RealType>::move(
                 d_log_weights_before_.data,
                 d_log_weights_after_.data);
             gpuErrchk(cudaPeekAtLastError());
-        }
 
-        gpuErrchk(cudaMemcpyAsync(
-            d_log_weights_after_.data,
-            d_log_weights_before_.data,
-            d_log_weights_after_.size(),
-            cudaMemcpyDeviceToDevice,
-            stream));
+            gpuErrchk(cudaMemcpyAsync(
+                d_log_weights_after_.data,
+                d_log_weights_before_.data,
+                d_log_weights_after_.size(),
+                cudaMemcpyDeviceToDevice,
+                stream));
+        }
 
         // We only ever sample a single molecule
         sampler_.sample_given_noise_device(
@@ -196,7 +196,7 @@ void BDExchangeMove<RealType>::move(
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // scale the translations as they are between [0, 1]
-        this->compute_incremental_weights(
+        this->compute_incremental_weights_device(
             N,
             true,
             d_box,
@@ -260,10 +260,18 @@ void BDExchangeMove<RealType>::compute_initial_weights(
         d_lse_max_before_.data,
         d_lse_exp_sum_before_.data,
         stream);
+
+    // Initial the after weights to be the before weights, adjusted in compute_incremental_weights
+    gpuErrchk(cudaMemcpyAsync(
+        d_log_weights_after_.data,
+        d_log_weights_before_.data,
+        d_log_weights_after_.size(),
+        cudaMemcpyDeviceToDevice,
+        stream));
 }
 
 template <typename RealType>
-void BDExchangeMove<RealType>::compute_incremental_weights(
+void BDExchangeMove<RealType>::compute_incremental_weights_device(
     const int N,
     const bool scale,
     const double *d_box,            // [3, 3]
@@ -378,6 +386,61 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
         d_intermediate_sample_weights_.data,                     // intermediate fixed point weights
         d_log_weights_after_.data);
     gpuErrchk(cudaPeekAtLastError());
+}
+
+template <typename RealType>
+std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental_weights_host(
+    const int N,
+    const double *h_coords, // [N, 3]
+    const double *h_box,    // [3, 3]
+    const int *h_mol_idxs,
+    const RealType *h_quaternions, // [batch_size_, 4]
+    const RealType *h_translations // [batch_size_, 3]
+) {
+    if (N != N_) {
+        throw std::runtime_error("N != N_");
+    }
+
+    DeviceBuffer<double> d_coords(N * 3);
+    DeviceBuffer<double> d_box(3 * 3);
+
+    d_coords.copy_from(h_coords);
+    d_box.copy_from(h_box);
+
+    d_quaternions_.copy_from(h_quaternions);
+    d_translations_.copy_from(h_translations);
+
+    d_samples_.copy_from(h_mol_idxs);
+
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+
+    // Setup the initial weights
+    this->compute_initial_weights(N, d_coords.data, d_box.data, stream);
+
+    this->compute_incremental_weights_device(
+        N,
+        false, // Never scale the translations here, expect the user to do that in python
+        d_box.data,
+        d_coords.data,
+        d_quaternions_.data,
+        d_translations_.data,
+        stream);
+
+    gpuErrchk(cudaStreamSynchronize(stream));
+
+    std::vector<RealType> h_log_weights_after(d_log_weights_after_.length);
+    d_log_weights_after_.copy_to(&h_log_weights_after[0]);
+
+    std::vector<int> h_sample_segments_offsets(d_sample_segments_offsets_.length);
+    d_sample_segments_offsets_.copy_to(&h_sample_segments_offsets[0]);
+
+    std::vector<std::vector<RealType>> h_output(this->batch_size_);
+    for (unsigned int i = 0; i < this->batch_size_; i++) {
+        int start = h_sample_segments_offsets[i];
+        int end = h_sample_segments_offsets[i + 1];
+        h_output[i] = std::vector<RealType>(h_log_weights_after.begin() + start, h_log_weights_after.begin() + end);
+    }
+    return h_output;
 }
 
 template <typename RealType> double BDExchangeMove<RealType>::raw_log_probability_host() {

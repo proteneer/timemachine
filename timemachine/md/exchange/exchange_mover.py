@@ -29,7 +29,7 @@ def randomly_rotate_and_translate(coords, new_loc):
     return rotated_coords + new_loc
 
 
-def randomly_translate(coords, new_loc):
+def translate_coordinates(coords, new_loc):
     """
     Translate coords such that the centroid of the displaced
     coordinates is equal to new_loc.
@@ -187,7 +187,7 @@ class BDExchangeMove(moves.MonteCarloMove):
         # tbd - what should we do  with velocities?
 
         moved_coords = randomly_rotate_and_translate(trial_chosen_coords, trial_translation)
-        # moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
+        # moved_coords = translate_coordinates(trial_chosen_coords, trial_translation)
 
         # optimized version using double transposition
         log_weights_after, trial_coords = self.batch_log_weights_incremental(
@@ -388,7 +388,7 @@ class TIBDExchangeMove(BDExchangeMove):
 
         # remove centroid and offset into insertion site
         new_coords = randomly_rotate_and_translate(new_coords, vj_site)
-        # new_coords = randomly_translate(new_coords, vj_site) # keep for pedagogical utility
+        # new_coords = translate_coordinates(new_coords, vj_site) # keep for pedagogical utility
 
         vj_plus_one_idxs = np.concatenate([[water_idx], vj_mols])
         log_weights_after_full, trial_coords = self.batch_log_weights_incremental(

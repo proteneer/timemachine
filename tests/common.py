@@ -39,6 +39,16 @@ def temporary_working_dir():
             os.chdir(init_dir)
 
 
+def convert_quaternion_for_scipy(quat: NDArray) -> NDArray:
+    """Scipy has the convention of (x, y, z, w) which is different than the wikipedia definition, swap ordering to verify using scipy.
+
+    References
+    ----------
+    https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.from_quat.html
+    """
+    return np.append(quat[1:], [quat[0]])
+
+
 def fixed_overflowed(a):
     """Refer to timemachine/cpp/src/kernels/k_fixed_point.cuh::FLOAT_TO_FIXED_ENERGY for documentation on how we handle energies and overflows"""
     converted_a = np.int64(np.uint64(a))

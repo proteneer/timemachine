@@ -74,15 +74,6 @@ protected:
 
     void compute_initial_weights(const int N, double *d_coords, double *d_box, cudaStream_t stream);
 
-    void compute_incremental_weights(
-        const int N,
-        const bool scale,
-        const double *d_box,
-        const double *d_coords,
-        const RealType *d_quaternions,
-        const RealType *d_translations,
-        cudaStream_t stream);
-
     BDExchangeMove(
         const int N,
         const std::vector<std::vector<int>> &target_mols,
@@ -109,6 +100,26 @@ public:
         const int interval,
         const int batch_size);
 
+    void compute_incremental_weights_device(
+        const int N,
+        const bool scale,
+        const double *d_box,
+        const double *d_coords,
+        const RealType *d_quaternions,
+        const RealType *d_translations,
+        cudaStream_t stream);
+
+    // compute_incremental_weights_host is used for testing the computation of incremental weights
+    // with different batch sizes.
+    // Note that the translations provided are used as is and are not scaled by the box extents.
+    std::vector<std::vector<RealType>> compute_incremental_weights_host(
+        const int N,
+        const double *h_coords,
+        const double *h_box,
+        const int *mol_idxs,
+        const RealType *h_quaternions,
+        const RealType *h_translations);
+
     ~BDExchangeMove();
 
     virtual void move(
@@ -119,6 +130,8 @@ public:
 
     virtual double log_probability_host();
     virtual double raw_log_probability_host();
+
+    size_t batch_size() const { return batch_size_; }
 
     size_t n_proposed() const { return num_attempted_; }
 
