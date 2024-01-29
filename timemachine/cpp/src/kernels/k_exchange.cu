@@ -596,22 +596,22 @@ template void __global__ k_flag_mols_inner_outer<double>(
 
 template <typename RealType>
 void __global__ k_decide_targeted_moves(
-    const int samples,
+    const int batch_size,
     const int num_target_mols,
-    const RealType *__restrict__ rand,         // [samples]
+    const RealType *__restrict__ rand,         // [batch_size]
     const int *__restrict__ inner_count,       // [1]
-    const RealType *__restrict__ translations, // [samples, 2, 3] first translation is inside, second is outer
-    int *__restrict__ targeting_inner_volume,  // [samples]
-    int *__restrict__ src_weights_counts,      // [samples]
-    int *__restrict__ target_weights_counts,   // [samples]
-    RealType *__restrict__ output_translation  // [samples, 3]
+    const RealType *__restrict__ translations, // [batch_size, 2, 3] first translation is inside, second is outer
+    int *__restrict__ targeting_inner_volume,  // [batch_size]
+    int *__restrict__ src_weights_counts,      // [batch_size]
+    int *__restrict__ target_weights_counts,   // [batch_size]
+    RealType *__restrict__ output_translation  // [batch_size, 3]
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     const int count_inside = inner_count[0];
     const int count_outside = num_target_mols - count_inside;
     int flag;
-    while (idx < samples) {
+    while (idx < batch_size) {
         if (count_inside == 0 && count_outside == 0) {
             assert(0);
         } else if (count_inside > 0 && count_outside == 0) {
@@ -646,7 +646,7 @@ void __global__ k_decide_targeted_moves(
 }
 
 template void __global__ k_decide_targeted_moves<float>(
-    const int samples,
+    const int batch_size,
     const int num_target_mols,
     const float *__restrict__ rand,
     const int *__restrict__ inner_count,
@@ -656,7 +656,7 @@ template void __global__ k_decide_targeted_moves<float>(
     int *__restrict__ target_weights_counts,
     float *__restrict__ output_translation);
 template void __global__ k_decide_targeted_moves<double>(
-    const int samples,
+    const int batch_size,
     const int num_target_mols,
     const double *__restrict__ rand,
     const int *__restrict__ inner_count,

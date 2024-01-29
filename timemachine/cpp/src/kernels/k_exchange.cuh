@@ -111,8 +111,8 @@ void __global__ k_store_accepted_log_probability(
     const RealType *__restrict__ rand,                  // [1]
     RealType *__restrict__ before_log_sum_exp_max,      // [1]
     RealType *__restrict__ before_log_sum_exp_sum,      // [1]
-    const RealType *__restrict__ after_log_sum_exp_max, // [num_batches]
-    const RealType *__restrict__ after_log_sum_exp_sum, // [num_batches]
+    const RealType *__restrict__ after_log_sum_exp_max, // [batch_size]
+    const RealType *__restrict__ after_log_sum_exp_sum, // [batch_size]
     RealType *__restrict__ before_weights,              // [num_weights]
     const RealType *__restrict__ after_weights          // [num_weights]
 );
@@ -174,15 +174,15 @@ void __global__ k_flag_mols_inner_outer(
 
 template <typename RealType>
 void __global__ k_decide_targeted_moves(
-    const int num_batches,
+    const int batch_size,
     const int num_target_mols,
-    const RealType *__restrict__ rand,         // [num_batches]
+    const RealType *__restrict__ rand,         // [batch_size]
     const int *__restrict__ inner_count,       // [1]
-    const RealType *__restrict__ translations, // [num_batches, 2, 3] first translation is inside, second is outer
-    int *__restrict__ targeting_inner_volume,  // [num_batches]
+    const RealType *__restrict__ translations, // [batch_size, 2, 3] first translation is inside, second is outer
+    int *__restrict__ targeting_inner_volume,  // [batch_size]
     int *__restrict__ src_weights_counts,
     int *__restrict__ target_weights_counts,
-    RealType *__restrict__ output_translation // [num_batches, 3]
+    RealType *__restrict__ output_translation // [batch_size, 3]
 );
 
 template <typename RealType>
@@ -205,11 +205,11 @@ void __global__ k_setup_destination_weights_for_targeted(
     RealType *__restrict__ output_weights);
 
 void __global__ k_adjust_sample_idxs(
-    const int num_batches,
-    const int *__restrict__ targeting_inner_volume, // [num_batches]
+    const int batch_size,
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ partitioned_indices,    // [inner_count]
-    int *__restrict__ sample_idxs                   // [num_batches]
+    int *__restrict__ sample_idxs                   // [batch_size]
 );
 
 } // namespace timemachine
