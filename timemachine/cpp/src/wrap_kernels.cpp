@@ -25,7 +25,6 @@
 #include "langevin_integrator.hpp"
 #include "local_md_utils.hpp"
 #include "log_flat_bottom_bond.hpp"
-#include "logsumexp.hpp"
 #include "mover.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded_all_pairs.hpp"
@@ -38,12 +37,13 @@
 #include "potential.hpp"
 #include "rmsd_align.hpp"
 #include "rotations.hpp"
+#include "segmented_sumexp.hpp"
+#include "segmented_weighted_random_sampler.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
 #include "tibd_exchange_move.hpp"
 #include "translations.hpp"
 #include "verlet_integrator.hpp"
-#include "weighted_random_sampler.hpp"
 
 #include <iostream>
 
@@ -100,6 +100,14 @@ std::vector<T2> py_array_to_vector_with_cast(const py::array_t<T1, py::array::c_
     std::vector<T2> v(arr.size());
     for (int i = 0; i < arr.size(); i++) {
         v[i] = static_cast<T2>(arr.data()[i]);
+    }
+    return v;
+}
+
+template <typename T1, typename T2> std::vector<T2> py_vector_to_vector_with_cast(const std::vector<T1> &arr) {
+    std::vector<T2> v(arr.size());
+    for (unsigned long i = 0; i < arr.size(); i++) {
+        v[i] = static_cast<T2>(arr[i]);
     }
     return v;
 }
@@ -187,39 +195,41 @@ void declare_hilbert_sort(py::module &m) {
             py::arg("box"));
 }
 
-template <typename RealType> void declare_weighted_random_sampler(py::module &m, const char *typestr) {
+template <typename RealType> void declare_segmented_weighted_random_sampler(py::module &m, const char *typestr) {
 
-    using Class = WeightedRandomSampler<RealType>;
-    std::string pyclass_name = std::string("WeightedRandomSampler_") + typestr;
+    using Class = SegmentedWeightedRandomSampler<RealType>;
+    std::string pyclass_name = std::string("SegmentedWeightedRandomSampler_") + typestr;
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](const int N, const int seed) { return new Class(N, seed); }), py::arg("size"), py::arg("seed"))
+        .def(
+            py::init([](const int N, const int segments, const int seed) { return new Class(N, segments, seed); }),
+            py::arg("max_vals_per_segment"),
+            py::arg("segments"),
+            py::arg("seed"))
         .def(
             "sample",
-            [](Class &sampler,
-               const int num_samples,
-               const py::array_t<double, py::array::c_style> &probabilities) -> std::vector<int> {
-                std::vector<RealType> real_probs = py_array_to_vector_with_cast<double, RealType>(probabilities);
+            [](Class &sampler, const std::vector<std::vector<double>> &weights) -> std::vector<int> {
+                std::vector<std::vector<RealType>> real_batches(weights.size());
+                for (unsigned long i = 0; i < weights.size(); i++) {
+                    real_batches[i] = py_vector_to_vector_with_cast<double, RealType>(weights[i]);
+                }
 
-                std::vector<int> samples = sampler.sample_host(num_samples, real_probs);
+                std::vector<int> samples = sampler.sample_host(real_batches);
                 return samples;
             },
-            py::arg("num_samples"),
-            py::arg("probabilities"),
+            py::arg("weights"),
             R"pbdoc(
-        Randomly select num_samples from a probability distribution.
+        Randomly select a value from batches of weights.
 
         Parameters
         ----------
-        num_samples: int
-            Number of Samples to return
 
-        probabilities: array of doubles
-            Probabilities to assign to each index. Do not need to be normalized
+        weights: vector of vectors containing doubles
+            Weights to sample from. Do not need to be normalized.
 
         Returns
         -------
         Array of sample indices
-            Shape (num_samples, )
+            Shape (num_batches, )
         )pbdoc");
 }
 
@@ -1502,25 +1512,43 @@ void declare_fanout_summed_potential(py::module &m) {
         .def("get_potentials", &FanoutSummedPotential::get_potentials);
 }
 
-template <typename RealType> void declare_log_sum_exp(py::module &m, const char *typestr) {
+template <typename RealType> void declare_segmented_sum_exp(py::module &m, const char *typestr) {
 
-    using Class = LogSumExp<RealType>;
-    std::string pyclass_name = std::string("LogSumExp_") + typestr;
+    using Class = SegmentedSumExp<RealType>;
+    std::string pyclass_name = std::string("SegmentedSumExp_") + typestr;
     py::class_<Class, std::shared_ptr<Class>>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](const int N) { return new Class(N); }), py::arg("N"))
         .def(
-            "sum",
-            [](Class &summer,
-               const py::array_t<double, py::array::c_style> &values) -> py::array_t<RealType, py::array::c_style> {
-                std::vector<RealType> h_vals = py_array_to_vector_with_cast<double, RealType>(values);
-                int N = h_vals.size();
-                py::array_t<RealType, py::array::c_style> py_res(1);
-                summer.sum_host(N, &h_vals[0], py_res.mutable_data());
+            py::init([](const int max_vals_per_segment, const int segments) {
+                return new Class(max_vals_per_segment, segments);
+            }),
+            py::arg("max_vals_per_segment"),
+            py::arg("num_segments"))
+        .def(
+            "logsumexp",
+            [](Class &summer, const std::vector<std::vector<double>> &vals) -> std::vector<RealType> {
+                std::vector<std::vector<RealType>> real_batches(vals.size());
+                for (unsigned long i = 0; i < vals.size(); i++) {
+                    real_batches[i] = py_vector_to_vector_with_cast<double, RealType>(vals[i]);
+                }
+                std::vector<RealType> results = summer.logsumexp_host(real_batches);
 
-                return py_res;
+                return results;
             },
-            py::arg("values"));
-    ;
+            py::arg("values"),
+            R"pbdoc(
+        Compute the logsumexp of a batch of vectors
+
+        Parameters
+        ----------
+
+        vals: vector of vectors containing doubles
+            A vector of vectors to compute the logsumexp
+
+        Returns
+        -------
+        Array of sample indices
+            Shape (vals.size(), )
+        )pbdoc");
 }
 
 template <typename RealType> void declare_bias_deletion_exchange_move(py::module &m, const char *typestr) {
@@ -1536,7 +1564,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                         const double nb_beta,
                         const double cutoff,
                         const int seed,
-                        const int proposals_per_move,
+                        const int num_proposals_per_move,
                         const int interval) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
@@ -1553,7 +1581,17 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                 }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(
-                    N, target_mols, v_params, temperature, nb_beta, cutoff, seed, proposals_per_move, interval);
+                    N,
+                    target_mols,
+                    v_params,
+                    temperature,
+                    nb_beta,
+                    cutoff,
+                    seed,
+                    num_proposals_per_move,
+                    interval,
+                    1 // only support 1 proposal per step at the moment
+                );
             }),
             py::arg("N"),
             py::arg("target_mols"),
@@ -1562,7 +1600,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             py::arg("nb_beta"),
             py::arg("cutoff"),
             py::arg("seed"),
-            py::arg("proposals_per_move"),
+            py::arg("num_proposals_per_move"),
             py::arg("interval"))
         .def(
             "move",
@@ -1627,7 +1665,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                         const double cutoff,
                         const double radius,
                         const int seed,
-                        const int proposals_per_move,
+                        const int num_proposals_per_move,
                         const int interval) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
@@ -1656,11 +1694,13 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                     cutoff,
                     radius,
                     seed,
-                    proposals_per_move,
-                    interval);
+                    num_proposals_per_move,
+                    interval,
+                    1 // batch_size must be 1 for now
+                );
             }),
             py::arg("N"),
-            py::arg("target_mols"),
+            py::arg("ligand_idxs"),
             py::arg("target_mols"),
             py::arg("params"),
             py::arg("temperature"),
@@ -1668,7 +1708,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
             py::arg("cutoff"),
             py::arg("radius"),
             py::arg("seed"),
-            py::arg("proposals_per_move"),
+            py::arg("num_proposals_per_move"),
             py::arg("interval"))
         .def(
             "move",
@@ -1841,32 +1881,10 @@ py::array_t<double, py::array::c_style> py_rotate_and_translate_mol(
 }
 
 template <typename RealType>
-py::array_t<RealType, py::array::c_style> py_translation_within_sphere(
+py::array_t<RealType, py::array::c_style> py_translations_inside_and_outside_sphere_host(
     const int num_translations,
-    const py::array_t<double, py::array::c_style> &center,
-    const double radius,
-    const int seed) {
-
-    if (center.size() != 3) {
-        throw std::runtime_error("Center must be of length 3");
-    }
-
-    std::vector<RealType> v_center = py_array_to_vector_with_cast<double, RealType>(center);
-
-    std::vector<RealType> translations =
-        get_translations_within_sphere_host<RealType>(num_translations, v_center, static_cast<RealType>(radius), seed);
-    py::array_t<RealType, py::array::c_style> py_translations({num_translations, 3});
-    for (unsigned int i = 0; i < translations.size(); i++) {
-        py_translations.mutable_data()[i] = translations[i];
-    }
-    return py_translations;
-}
-
-template <typename RealType>
-py::array_t<RealType, py::array::c_style> py_translation_outside_sphere(
-    const int num_translations,
-    const py::array_t<double, py::array::c_style> &center,
     const py::array_t<double, py::array::c_style> &box,
+    const py::array_t<double, py::array::c_style> &center,
     const double radius,
     const int seed) {
 
@@ -1877,9 +1895,9 @@ py::array_t<RealType, py::array::c_style> py_translation_outside_sphere(
     std::vector<RealType> v_center = py_array_to_vector_with_cast<double, RealType>(center);
     std::vector<double> v_box = py_array_to_vector(box);
 
-    std::vector<RealType> translations = get_translations_outside_sphere_host<RealType>(
+    std::vector<RealType> translations = translations_inside_and_outside_sphere_host<RealType>(
         num_translations, v_box, v_center, static_cast<RealType>(radius), seed);
-    py::array_t<RealType, py::array::c_style> py_translations({num_translations, 3});
+    py::array_t<RealType, py::array::c_style> py_translations({num_translations, 2, 3});
     for (unsigned int i = 0; i < translations.size(); i++) {
         py_translations.mutable_data()[i] = translations[i];
     }
@@ -1952,11 +1970,11 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded_pair_list<double, true>(m, "f64");
     declare_nonbonded_pair_list<float, true>(m, "f32");
 
-    declare_weighted_random_sampler<double>(m, "f64");
-    declare_weighted_random_sampler<float>(m, "f32");
+    declare_segmented_weighted_random_sampler<double>(m, "f64");
+    declare_segmented_weighted_random_sampler<float>(m, "f32");
 
-    declare_log_sum_exp<double>(m, "f64");
-    declare_log_sum_exp<float>(m, "f32");
+    declare_segmented_sum_exp<double>(m, "f64");
+    declare_segmented_sum_exp<float>(m, "f32");
 
     declare_nonbonded_mol_energy<double>(m, "f64");
     declare_nonbonded_mol_energy<float>(m, "f32");
@@ -2046,37 +2064,21 @@ PYBIND11_MODULE(custom_ops, m) {
         py::arg("group_idxs"),
         py::arg("radius"));
     m.def(
-        "translation_within_sphere_f32",
-        &py_translation_within_sphere<float>,
+        "translations_inside_and_outside_sphere_host_f32",
+        &py_translations_inside_and_outside_sphere_host<float>,
         "Function to test translations within sphere",
         py::arg("num_translations"),
+        py::arg("box"),
         py::arg("center"),
         py::arg("radius"),
         py::arg("seed"));
     m.def(
-        "translation_within_sphere_f64",
-        &py_translation_within_sphere<double>,
+        "translations_inside_and_outside_sphere_host_f64",
+        &py_translations_inside_and_outside_sphere_host<double>,
         "Function to test translations within sphere",
         py::arg("num_translations"),
-        py::arg("center"),
-        py::arg("radius"),
-        py::arg("seed"));
-    m.def(
-        "translation_outside_sphere_f32",
-        &py_translation_outside_sphere<float>,
-        "Function to test translations outside sphere",
-        py::arg("num_translations"),
-        py::arg("center"),
         py::arg("box"),
-        py::arg("radius"),
-        py::arg("seed"));
-    m.def(
-        "translation_outside_sphere_f64",
-        &py_translation_outside_sphere<double>,
-        "Function to test translations outside sphere",
-        py::arg("num_translations"),
         py::arg("center"),
-        py::arg("box"),
         py::arg("radius"),
         py::arg("seed"));
 

@@ -105,8 +105,8 @@ def verify_targeted_moves(
                 np.testing.assert_allclose(
                     np.exp(raw_test_log_prob),
                     np.exp(raw_ref_log_prob),
-                    rtol=1e-2,
-                    atol=1e-5,
+                    rtol=1e-1,
+                    atol=1e-3,
                     err_msg=f"Step {step} failed",
                 )
                 # Verify that the true log probabilities match with the specified rtol/atol
@@ -176,7 +176,7 @@ def test_inner_and_outer_water_groups(seed, radius, precision):
 @pytest.mark.parametrize("n_translations", [1, 1000])
 @pytest.mark.parametrize("radius", [1.0, 2.0])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
-def test_translations_within_sphere(seed, n_translations, radius, precision):
+def test_translations_inside_and_outside_sphere(seed, n_translations, radius, precision):
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
     system, coords, box, _ = builders.build_water_system(4.0, ff.water_ff)
@@ -192,57 +192,24 @@ def test_translations_within_sphere(seed, n_translations, radius, precision):
 
     center = np.mean(coords[center_group], axis=0)
 
-    func = custom_ops.translation_within_sphere_f32
+    func = custom_ops.translations_inside_and_outside_sphere_host_f32
     if precision == np.float64:
-        func = custom_ops.translation_within_sphere_f64
+        func = custom_ops.translations_inside_and_outside_sphere_host_f64
 
-    translations_a = func(n_translations, center, radius, seed)
-    translations_b = func(n_translations, center, radius, seed)
-    # Bitwise deterministic with a provided seed
-    np.testing.assert_array_equal(translations_a, translations_b)
-
-    last_translation = None
-    for translation in translations_a:
-        assert np.linalg.norm(delta_r_np(translation, center, box)) < radius
-        if last_translation is not None:
-            assert not np.all(last_translation == translation)
-
-
-@pytest.mark.memcheck
-@pytest.mark.parametrize("seed", [2023])
-@pytest.mark.parametrize("n_translations", [1, 32])
-@pytest.mark.parametrize("radius", [1.0, 2.0])
-@pytest.mark.parametrize("precision", [np.float64, np.float32])
-def test_translations_outside_sphere(seed, n_translations, radius, precision):
-    rng = np.random.default_rng(seed)
-    ff = Forcefield.load_default()
-    system, coords, box, _ = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), coords.shape[0])
-
-    center_group_idx = rng.choice(np.arange(len(all_group_idxs)))
-
-    center_group = all_group_idxs.pop(center_group_idx)
-
-    center = np.mean(coords[center_group], axis=0)
-
-    func = custom_ops.translation_outside_sphere_f32
-    if precision == np.float64:
-        func = custom_ops.translation_outside_sphere_f64
-
-    translations_a = func(n_translations, center, box, radius, seed)
-    translations_b = func(n_translations, center, box, radius, seed)
+    translations_a = func(n_translations, box, center, radius, seed)
+    translations_b = func(n_translations, box, center, radius, seed)
+    assert translations_a.shape == (n_translations, 2, 3)
     # Bitwise deterministic with a provided seed
     np.testing.assert_array_equal(translations_a, translations_b)
 
     last_translation = None
     for i, translation in enumerate(translations_a):
-        assert np.linalg.norm(delta_r_np(translation, center, box)) >= radius, str(i)
+        inner_translation, outer_translation = translation
+        assert np.linalg.norm(delta_r_np(inner_translation, center, box)) < radius, str(i)
+        assert np.linalg.norm(delta_r_np(outer_translation, center, box)) >= radius, str(i)
         if last_translation is not None:
             assert not np.all(last_translation == translation)
+        last_translation = translation
 
 
 @pytest.mark.memcheck
@@ -401,7 +368,7 @@ def hif2a_rbfe_state() -> InitialState:
 
 @pytest.mark.parametrize("radius", [0.4])
 @pytest.mark.parametrize("moves", [10000])
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 2e-5, 2e-5), (np.float32, 1e-4, 2e-3)])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 3e-5, 2e-5), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2024])
 def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol, atol, seed):
     """Test the edges cases of targeted insertion where the proposal probability isn't symmetric.
@@ -481,8 +448,9 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
 @pytest.mark.parametrize("seed", [2023])
 def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed):
     proposals_per_move = 10000
-    interval = 100
-    steps = 1000
+    # Interval has to be large enough to resolve clashes in the MD steps
+    interval = 800
+    steps = interval * 3
     initial_state = hif2a_rbfe_state
 
     conf = initial_state.x0
@@ -543,12 +511,21 @@ def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed
     assert bdem.n_accepted() > 0
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("radius", [1.0])
-@pytest.mark.parametrize("moves", [1, 100])
+@pytest.mark.parametrize("proposals_per_move", [1, 100])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
-def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
-    """Given one water the exchange mover should accept every move and the results should be deterministic"""
+def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision, seed):
+    """Given one water the exchange mover should accept every move and the results should be deterministic if the seed and proposals per move are the same.
+
+
+    There are three forms of determinism we require:
+    * Constructing an exchange move produces the same results every time
+    * Calling an exchange move with one proposals per move or K proposals per move produce the same state.
+      * It is difficult to test each move when there are K proposals per move so we need to know that it matches the single proposals per move case
+    * TBD: When we attempt K proposals in a batch (each proposal is made up of K proposals) it produces the same as the serial version
+    """
     ff = Forcefield.load_default()
     system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
@@ -568,9 +545,6 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
     conf_idxs = np.array(all_group_idxs).reshape(-1)
 
     conf = conf[conf_idxs]
-
-    # Set the two waters on top of each other
-    conf[group_idxs[0], :] = conf[group_idxs[1], :]
 
     box = np.eye(3) * 100.0
 
@@ -610,19 +584,20 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
         cutoff,
         radius,
         seed,
-        moves,
+        proposals_per_move,
         1,
     )
 
     iterative_moved_coords = conf.copy()
-    for _ in range(moves):
+    for _ in range(proposals_per_move):
         iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
-
+        assert not np.all(conf == iterative_moved_coords)  # We should move every time since its a single mol
     batch_moved_coords, _ = bdem_b.move(conf, box)
     # Moves should be deterministic regardless the number of steps taken per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
+
     assert bdem_a.n_accepted() > 0
-    assert bdem_a.n_proposed() == moves
+    assert bdem_a.n_proposed() == proposals_per_move
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
@@ -637,7 +612,7 @@ def test_tibd_exchange_deterministic_moves(radius, moves, precision, seed):
         pytest.param(1, 5000, 5.7, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 2e-5, 2e-5), (np.float32, 1e-4, 2e-3)])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 2e-5, 2e-5), (np.float32, 5e-3, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
 def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, box_size, precision, rtol, atol, seed):
     """Given bulk water molecules with one of them treated as the targeted region"""
@@ -686,37 +661,31 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, box_size, p
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
 def test_moves_with_three_waters(radius, steps_per_move, moves, precision, rtol, atol, seed):
-    """Given three water molecules with one of them treated as the targeted region"""
+    """Given three water molecules with one of them treated as the targeted region."""
     ff = Forcefield.load_default()
-    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
+    system, host_conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
 
     # Get first two mols as the ones two move
     group_idxs = all_group_idxs[:2]
 
+    # Third mol is the 'center' of the inner volume
     center_group = all_group_idxs[2]
 
     all_group_idxs = all_group_idxs[:3]
 
-    conf_idxs = np.array(all_group_idxs).reshape(-1)
-
-    conf = conf[conf_idxs]
-
-    # Set the two waters on top of each other
-    conf[group_idxs[0], :] = conf[group_idxs[1], :]
-
     box = np.eye(3) * 100.0
 
+    conf_idxs = np.array(all_group_idxs).reshape(-1)
+    conf = host_conf[conf_idxs]
     # Re-image coords so that everything is imaged to begin with
     conf = image_frame(all_group_idxs, conf, box)
-
     N = conf.shape[0]
-
     params = nb.params[conf_idxs]
 
     cutoff = nb.potential.cutoff

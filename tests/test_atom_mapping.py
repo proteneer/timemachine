@@ -5,9 +5,10 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
-from timemachine.fe.utils import plot_atom_mapping_grid
+from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -375,8 +376,7 @@ def get_mol_name(mol) -> str:
 @pytest.mark.parametrize("filepath", datasets)
 @pytest.mark.nightly(reason="Slow")
 def test_all_pairs(filepath):
-    mols = Chem.SDMolSupplier(filepath, removeHs=False)
-    mols = [m for m in mols]
+    mols = read_sdf(filepath)
     for idx, mol_a in enumerate(mols):
         for mol_b in mols[idx + 1 :]:
             all_cores = atom_mapping.get_cores(
@@ -988,3 +988,23 @@ def test_min_threshold():
 
     with pytest.raises(NoMappingError, match="Unable to find mapping with at least 18 atoms"):
         atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)
+
+
+def test_get_cores_and_diagnostics():
+    mols = read_sdf(hif2a_set)
+    n_pairs = 30
+    random_pair_idxs = np.random.default_rng(2024).choice(len(mols), size=(n_pairs, 2))
+
+    for i_a, i_b in random_pair_idxs:
+        mol_a = mols[i_a]
+        mol_b = mols[i_b]
+        all_cores, diagnostics = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
+
+        assert len(all_cores) > 0
+        assert all(len(core) == len(all_cores[0]) for core in all_cores)
+
+        assert diagnostics.core_size >= len(all_cores[0])
+        assert diagnostics.num_cores >= len(all_cores)
+        assert (
+            diagnostics.total_nodes_visited >= diagnostics.core_size
+        )  # must visit at least one node per atom pair in core
