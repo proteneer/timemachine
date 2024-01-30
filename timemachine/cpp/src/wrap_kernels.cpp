@@ -1709,33 +1709,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
             py::arg("radius"),
             py::arg("seed"),
             py::arg("num_proposals_per_move"),
-            py::arg("interval"))
-        .def(
-            "move",
-            [](Class &mover,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
-                verify_coords_and_box(coords, box);
-                const int N = coords.shape()[0];
-                const int D = coords.shape()[1];
-
-                std::array<std::vector<double>, 2> result = mover.move_host(N, coords.data(), box.data());
-
-                py::array_t<double, py::array::c_style> out_x_buffer({N, D});
-                std::memcpy(
-                    out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(*result[0].data()));
-
-                py::array_t<double, py::array::c_style> box_buffer({D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(*result[1].data()));
-
-                return py::make_tuple(out_x_buffer, box_buffer);
-            },
-            py::arg("coords"),
-            py::arg("box"))
-        .def("last_log_probability", &Class::log_probability_host)
-        .def("n_accepted", &Class::n_accepted)
-        .def("n_proposed", &Class::n_proposed)
-        .def("acceptance_fraction", &Class::acceptance_fraction);
+            py::arg("interval"));
 }
 
 const py::array_t<double, py::array::c_style>
