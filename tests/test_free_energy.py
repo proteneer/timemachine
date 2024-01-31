@@ -74,30 +74,37 @@ def assert_no_second_derivative(f, x):
     assert isinstance(problem, TypeError)
 
 
-def assert_ff_optimizable(U, coords, sys_params, box, tol=1e-10):
+def assert_ff_optimizable(U, coords, sys_params, box):
     """define a differentiable loss function in terms of U, assert it can be minimized,
     and return initial params, optimized params, and the loss function"""
 
     nb_params = sys_params[-1]
     nb_params_shape = nb_params.shape
 
-    def loss(nb_params):
+    def downhill_loss(nb_params):
+        """minimize this to go downhill"""
         concat_params = sys_params[:-1] + [nb_params]
-        return (U(coords, concat_params, box) - 666) ** 2
+        return U(coords, concat_params, box)
+
+    def uphill_loss(nb_params):
+        """minimize this to go uphill"""
+        return -downhill_loss(nb_params)
 
     x_0 = nb_params.flatten()
 
-    def flat_loss(flat_nb_params):
-        return loss(flat_nb_params.reshape(nb_params_shape))
+    for loss_fn in [uphill_loss, downhill_loss]:
 
-    def fun(flat_nb_params):
-        v, g = value_and_grad(flat_loss)(flat_nb_params)
-        return float(v), np.array(g)
+        def flat_loss(flat_nb_params):
+            return loss_fn(flat_nb_params.reshape(nb_params_shape))
 
-    # minimization successful
-    result = minimize(fun, x_0, jac=True, tol=0)
-    x_opt = result.x
-    assert flat_loss(x_opt) < tol
+        def fun(flat_nb_params):
+            v, g = value_and_grad(flat_loss)(flat_nb_params)
+            return float(v), np.array(g)
+
+        # minimization successful
+        result = minimize(fun, x_0, jac=True, tol=0)
+        x_opt = result.x
+        assert flat_loss(x_opt) < flat_loss(x_0)
 
     return x_0, x_opt, flat_loss
 
