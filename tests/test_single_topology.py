@@ -860,7 +860,7 @@ def test_no_chiral_atom_restraints():
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
 
-    assert len(state.chiral_atom.potential.idxs) == 0  # TODO: update
+    assert len(state.chiral_atom.potential.idxs) == 0
     U = state.get_U_fn()
     _ = U(init_conf)
 
