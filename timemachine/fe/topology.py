@@ -413,6 +413,8 @@ class BaseTopology:
 
         chiral_atom_params = np.array(chiral_atom_params)
         chiral_atom_restr_idxs = np.array(chiral_atom_restr_idxs)
+        assert len(chiral_atom_params) == len(chiral_atom_restr_idxs)
+
         chiral_atom_potential = potentials.ChiralAtomRestraint(chiral_atom_restr_idxs).bind(chiral_atom_params)
 
         chiral_bond_restr_idxs = []
