@@ -134,26 +134,18 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
         """
         Return a jax function that evaluates the potential energy of a set of coordinates.
         """
+        assert self.torsion
+        U_fns = self.get_U_fns()
 
         def U_fn(x):
-            assert self.torsion
-
-            # Chiral bond restraints are disabled until checks are added (see GH #815)
-            # chiral_U = chiral_atom_U(x) + chiral_bond_U(x)
-            return (
-                self.bond(x, box=None)
-                + self.angle(x, box=None)
-                + self.torsion(x, box=None)
-                + self.nonbonded(x, box=None)
-                + self.chiral_atom(x, box=None)
-                # + self.chiral_bond(x, box=None)
-            )
+            return sum(U(x, box=None) for U in U_fns)
 
         return U_fn
 
     def get_U_fns(self) -> List[BoundPotential[Potential]]:
         # For molecules too small for to have certain terms,
         # skip when no params are present
+        # Chiral bond restraints are disabled until checks are added (see GH #815)
         potentials = [self.bond, self.angle, self.torsion, self.nonbonded, self.chiral_atom]  # , self.chiral_bond]
         terms = cast(
             List[BoundPotential[Potential]],
