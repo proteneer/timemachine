@@ -407,9 +407,7 @@ class BaseTopology:
 
         chiral_atom_restr_idxs = chiral_utils.setup_all_chiral_atom_restr_idxs(self.mol, get_romol_conf(self.mol))
 
-        chiral_atom_params = []
-        for idxs in chiral_atom_restr_idxs:
-            chiral_atom_params.extend(restraint_k for _ in idxs)
+        chiral_atom_params = restraint_k * np.ones(len(chiral_atom_restr_idxs))
 
         chiral_atom_params = np.array(chiral_atom_params)
         chiral_atom_restr_idxs = np.array(chiral_atom_restr_idxs)
