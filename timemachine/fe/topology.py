@@ -403,30 +403,27 @@ class BaseTopology:
             Returns a ChiralAtomRestraint and a ChiralBondRestraint
 
         """
-        chiral_bonds = chiral_utils.find_chiral_bonds(self.mol)
+        mol = self.mol
+        conf = get_romol_conf(mol)
 
-        chiral_atom_restr_idxs = chiral_utils.setup_all_chiral_atom_restr_idxs(self.mol, get_romol_conf(self.mol))
-
+        # chiral atoms
+        chiral_atom_restr_idxs = np.array(chiral_utils.setup_all_chiral_atom_restr_idxs(mol, conf))
         chiral_atom_params = restraint_k * np.ones(len(chiral_atom_restr_idxs))
-
-        chiral_atom_params = np.array(chiral_atom_params)
-        chiral_atom_restr_idxs = np.array(chiral_atom_restr_idxs)
-        assert len(chiral_atom_params) == len(chiral_atom_restr_idxs)
-
+        assert len(chiral_atom_params) == len(chiral_atom_restr_idxs)  # TODO: can this be checked in Potential::bind ?
         chiral_atom_potential = potentials.ChiralAtomRestraint(chiral_atom_restr_idxs).bind(chiral_atom_params)
 
+        # chiral bonds
+        chiral_bonds = chiral_utils.find_chiral_bonds(mol)
         chiral_bond_restr_idxs = []
         chiral_bond_restr_signs = []
         chiral_bond_params = []
         for src_idx, dst_idx in chiral_bonds:
-            idxs, signs = chiral_utils.setup_chiral_bond_restraints(
-                self.mol, get_romol_conf(self.mol), src_idx, dst_idx
-            )
+            idxs, signs = chiral_utils.setup_chiral_bond_restraints(mol, conf, src_idx, dst_idx)
             for ii in idxs:
                 assert ii not in chiral_bond_restr_idxs
             chiral_bond_restr_idxs.extend(idxs)
             chiral_bond_restr_signs.extend(signs)
-            chiral_bond_params.extend(restraint_k for _ in idxs)
+            chiral_bond_params.extend(restraint_k for _ in idxs)  # TODO: double-check this
 
         chiral_bond_restr_idxs = np.array(chiral_bond_restr_idxs)
         chiral_bond_restr_signs = np.array(chiral_bond_restr_signs)
