@@ -133,15 +133,14 @@ def test_functional():
     potentials = [bp.potential for bp in bps]
     sys_params = [np.array(bp.params) for bp in bps]
 
-    tol_at_precision = {np.float32: 2.5e-10, np.float64: 1e-10}
-    for precision, tol in tol_at_precision.items():
+    for precision in [np.float32, np.float64]:
         U = SummedPotential(potentials, sys_params).to_gpu(precision).call_with_params_list
 
         # U, grad(U) have the right shapes
         assert_shapes_consistent(U, coords, sys_params, box)
 
         # can scipy.optimize a differentiable Jax function that calls U
-        x_0, x_opt, flat_loss = assert_ff_optimizable(U, coords, sys_params, box, tol)
+        x_0, x_opt, flat_loss = assert_ff_optimizable(U, coords, sys_params, box)
 
         # jacfwd agrees with jacrev
         assert_fwd_rev_consistent(flat_loss, x_0)
