@@ -444,7 +444,7 @@ $$$$""",
         pytest.param(True, True, marks=pytest.mark.xfail(reason="chiral bonds not supported yet")),
     ],
 )
-def test_chiral_topology(check_chiral_atoms=True, check_chiral_bonds=False):
+def test_chiral_topology(check_chiral_atoms, check_chiral_bonds):
     # test adding chiral restraints to the base topology
     # this molecule has several chiral atoms and bonds
     # 1) setup the molecule with a particular set of chiral restraints
