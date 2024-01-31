@@ -644,7 +644,9 @@ $$$$""",
 
 
 def test_chiral_inversion_in_single_topology():
-    very_short_hrex_params = replace(DEFAULT_HREX_PARAMS, n_frames=2, n_eq_steps=2)
+    very_short_hrex_params = replace(
+        DEFAULT_HREX_PARAMS, n_frames=2, n_eq_steps=2, steps_per_frame=2, n_frames_bisection=2
+    )
     ff = Forcefield.load_default()
 
     # smi_a simplified from
@@ -690,9 +692,9 @@ def test_chiral_inversion_in_single_topology():
 
     # check that it runs
     mol_a, mol_b, core = generate_more_complete_mapping()
-    _ = run_vacuum(mol_a, mol_b, core, ff, None, very_short_hrex_params)
+    _ = run_vacuum(mol_a, mol_b, core, ff, None, very_short_hrex_params, n_windows=3)
 
     mol_a, mol_b, core = generate_less_complete_mapping()
-    _ = run_vacuum(mol_a, mol_b, core, ff, None, very_short_hrex_params)
+    _ = run_vacuum(mol_a, mol_b, core, ff, None, very_short_hrex_params, n_windows=3)
 
     # TODO: slow, assert endstate chirality is preserved
