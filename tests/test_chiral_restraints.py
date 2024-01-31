@@ -10,6 +10,7 @@ from rdkit.Chem import AllChem
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import topology, utils
 from timemachine.fe.atom_mapping import get_cores
+from timemachine.fe.free_energy import HREXParams
 from timemachine.fe.rbfe import DEFAULT_HREX_PARAMS, run_vacuum
 from timemachine.fe.system import simulate_system
 from timemachine.ff import Forcefield
@@ -645,7 +646,7 @@ $$$$""",
 
 def test_chiral_inversion_in_single_topology():
     very_short_hrex_params = replace(
-        DEFAULT_HREX_PARAMS, n_frames=2, n_eq_steps=2, steps_per_frame=2, n_frames_bisection=2
+        DEFAULT_HREX_PARAMS, n_frames=2, n_eq_steps=2, steps_per_frame=2, hrex_params=HREXParams(n_frames_bisection=2)
     )
     ff = Forcefield.load_default()
 
