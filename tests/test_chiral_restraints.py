@@ -651,12 +651,14 @@ def test_chiral_inversion_in_single_topology():
     # https://github.com/rdkit/rdkit/blob/06b135b4d54ea0c34d8a488df730390267bf5a36/Code/GraphMol/testChirality.cpp#L3213C18-L3213C41
     smi_a = "C[C@]1(F)C[C@]([H])(O)C1"
     smi_b = "C[C@]1(F)C[C@@]([H])(O)C1"  # invert one center, relative to mol_a
+    mol_a = Chem.AddHs(Chem.MolFromSmiles(smi_a))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles(smi_b))
+    mol_a.SetProp("_Name", "A")
+    mol_b.SetProp("_Name", "B")
+    AllChem.EmbedMolecule(mol_a, randomSeed=2024)
 
     def generate_more_complete_mapping():
         """map whole ring + one substituent"""
-        mol_a = Chem.AddHs(Chem.MolFromSmiles(smi_a))
-        mol_b = Chem.AddHs(Chem.MolFromSmiles(smi_b))
-        AllChem.EmbedMolecule(mol_a, randomSeed=2024)
         substruct = Chem.MolFromSmiles("C1CCC1C")
         atom_map = dict(zip(mol_a.GetSubstructMatch(substruct), mol_b.GetSubstructMatch(substruct)))
         conf_a = mol_a.GetConformer()
@@ -676,8 +678,6 @@ def test_chiral_inversion_in_single_topology():
 
     def generate_less_complete_mapping():
         """map part of ring + other substituent"""
-        mol_a = Chem.AddHs(Chem.MolFromSmiles(smi_a))
-        mol_b = Chem.AddHs(Chem.MolFromSmiles(smi_b))
         substruct = Chem.MolFromSmiles("C1CCC1O")
         atom_map = dict(zip(mol_a.GetSubstructMatch(substruct), mol_b.GetSubstructMatch(substruct)))
         conf_a = mol_a.GetConformer()
