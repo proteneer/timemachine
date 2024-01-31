@@ -1,10 +1,16 @@
+from dataclasses import replace
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
 import scipy
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
+from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import topology, utils
+from timemachine.fe.atom_mapping import get_cores
+from timemachine.fe.rbfe import DEFAULT_HREX_PARAMS, run_vacuum
 from timemachine.fe.system import simulate_system
 from timemachine.ff import Forcefield
 from timemachine.potentials import chiral_restraints
@@ -635,3 +641,58 @@ $$$$""",
             assert_same_signs(frame_atom_vols, ref_chiral_atom_vols)
         if check_chiral_bonds:
             assert_same_signs(frame_bond_vols, ref_chiral_bond_vols)
+
+
+def test_chiral_inversion_in_single_topology():
+    very_short_hrex_params = replace(DEFAULT_HREX_PARAMS, n_frames=2, n_eq_steps=2)
+    ff = Forcefield.load_default()
+
+    # smi_a simplified from
+    # https://github.com/rdkit/rdkit/blob/06b135b4d54ea0c34d8a488df730390267bf5a36/Code/GraphMol/testChirality.cpp#L3213C18-L3213C41
+    smi_a = "C[C@]1(F)C[C@]([H])(O)C1"
+    smi_b = "C[C@]1(F)C[C@@]([H])(O)C1"  # invert one center, relative to mol_a
+
+    def generate_more_complete_mapping():
+        """map whole ring + one substituent"""
+        mol_a = Chem.AddHs(Chem.MolFromSmiles(smi_a))
+        mol_b = Chem.AddHs(Chem.MolFromSmiles(smi_b))
+        AllChem.EmbedMolecule(mol_a, randomSeed=2024)
+        substruct = Chem.MolFromSmiles("C1CCC1C")
+        atom_map = dict(zip(mol_a.GetSubstructMatch(substruct), mol_b.GetSubstructMatch(substruct)))
+        conf_a = mol_a.GetConformer()
+        coord_map = {atom_map[idx]: conf_a.GetAtomPosition(idx) for idx in atom_map}
+        AllChem.EmbedMolecule(
+            mol_b,
+            randomSeed=2024,
+            coordMap=coord_map,
+            useRandomCoords=True,
+            clearConfs=True,
+            enforceChirality=True,
+            useBasicKnowledge=True,
+        )
+        core = get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+        assert len(core) == 15
+        return mol_a, mol_b, core
+
+    def generate_less_complete_mapping():
+        """map part of ring + other substituent"""
+        mol_a = Chem.AddHs(Chem.MolFromSmiles(smi_a))
+        mol_b = Chem.AddHs(Chem.MolFromSmiles(smi_b))
+        substruct = Chem.MolFromSmiles("C1CCC1O")
+        atom_map = dict(zip(mol_a.GetSubstructMatch(substruct), mol_b.GetSubstructMatch(substruct)))
+        conf_a = mol_a.GetConformer()
+        coord_map = {atom_map[idx]: conf_a.GetAtomPosition(idx) for idx in atom_map}
+        AllChem.EmbedMolecule(mol_b, randomSeed=2045, coordMap=coord_map)
+        core = get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+        assert len(core) == 10
+
+        return mol_a, mol_b, core
+
+    # check that it runs
+    mol_a, mol_b, core = generate_more_complete_mapping()
+    _ = run_vacuum(mol_a, mol_b, core, ff, None, very_short_hrex_params)
+
+    mol_a, mol_b, core = generate_less_complete_mapping()
+    _ = run_vacuum(mol_a, mol_b, core, ff, None, very_short_hrex_params)
+
+    # TODO: slow, assert endstate chirality is preserved
