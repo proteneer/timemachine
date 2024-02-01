@@ -292,7 +292,12 @@ def plot_fwd_reverse_predictions(
     rev_mask = np.isfinite(rev_err)
     xs = np.linspace(1.0 / len(fwd), 1.0, len(fwd))
 
+    combined_vals = np.concatenate([fwd, rev])
+    y_max = np.max(combined_vals)
+    y_min = np.min(combined_vals)
+
     plt.figure(figsize=(6, 6))
+    plt.ylim(y_min - 1.0, y_max + 1.0)
     plt.title(f"{energy_type} Convergence Over Time")
     plt.plot(xs, fwd, label=f"Forward {energy_type}", marker="o")
     plt.fill_between(xs[fwd_mask], fwd[fwd_mask] - fwd_err[fwd_mask], fwd[fwd_mask] + fwd_err[fwd_mask], alpha=0.25)
