@@ -1662,7 +1662,6 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
 
                 std::vector<std::vector<RealType>> weights = mover.compute_incremental_weights_host(
                     N, coords.data(), box.data(), mol_idxs.data(), &h_quats[0], &h_translations[0]);
-
                 return weights;
             },
             py::arg("coords"),

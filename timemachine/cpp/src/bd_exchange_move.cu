@@ -68,7 +68,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
       d_log_weights_after_(batch_size_ * num_target_mols_), d_lse_max_before_(1), d_lse_exp_sum_before_(1),
       d_lse_max_after_(batch_size_), d_lse_exp_sum_after_(batch_size_), d_samples_(batch_size_),
-      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * num_proposals_per_move_ * batch_size_)), d_num_accepted_(1),
+      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * num_proposals_per_move_)), d_num_accepted_(1),
       d_target_mol_atoms_(batch_size_ * mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
       d_intermediate_sample_weights_(batch_size_ * num_intermediates_per_reduce_),
       d_sample_noise_(round_up_even(num_target_mols_ * num_proposals_per_move_)),
@@ -175,12 +175,10 @@ void BDExchangeMove<RealType>::move(
                 d_log_weights_after_.data);
             gpuErrchk(cudaPeekAtLastError());
 
-            gpuErrchk(cudaMemcpyAsync(
-                d_log_weights_after_.data,
-                d_log_weights_before_.data,
-                d_log_weights_after_.size(),
-                cudaMemcpyDeviceToDevice,
-                stream));
+            // Copy the same weights repeatedly from the before weights to the after weights
+            k_copy_batch<RealType><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
+                num_target_mols_, batch_size_, d_log_weights_before_.data, d_log_weights_after_.data);
+            gpuErrchk(cudaPeekAtLastError());
         }
 
         // We only ever sample a single molecule
@@ -262,13 +260,10 @@ void BDExchangeMove<RealType>::compute_initial_weights(
         d_lse_exp_sum_before_.data,
         stream);
 
-    // Initial the after weights to be the before weights, adjusted in compute_incremental_weights
-    gpuErrchk(cudaMemcpyAsync(
-        d_log_weights_after_.data,
-        d_log_weights_before_.data,
-        d_log_weights_after_.size(),
-        cudaMemcpyDeviceToDevice,
-        stream));
+    // Copy the same weights repeatedly from the before weights to the after weights
+    k_copy_batch<RealType><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
+        num_target_mols_, batch_size_, d_log_weights_before_.data, d_log_weights_after_.data);
+    gpuErrchk(cudaPeekAtLastError());
 }
 
 template <typename RealType>
@@ -319,7 +314,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
 
     k_atom_by_atom_energies<<<atom_by_atom_grid, tpb, 0, stream>>>(
         N,
-        mol_size_,
+        mol_size_ * batch_size_,
         d_target_mol_atoms_.data,
         nullptr,
         d_coords,
@@ -333,10 +328,11 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
     // Subtract off the weights for the individual waters from the sampled water.
     // It modifies the sampled mol energy value, leaving it in an invalid state, which is why
     // we later call k_set_sampled_weight to set the weight of the sampled mol
-    k_adjust_weights<RealType, true><<<ceil_divide(num_target_mols_, tpb), tpb, 0, stream>>>(
+    k_adjust_weights<RealType, true><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
         N,
-        num_target_mols_,
+        batch_size_,
         mol_size_,
+        num_target_mols_,
         d_atom_idxs_.data,
         d_mol_offsets_.data,
         d_sample_per_atom_energy_buffer_.data,
@@ -346,7 +342,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
 
     k_atom_by_atom_energies<<<atom_by_atom_grid, tpb, 0, stream>>>(
         N,
-        mol_size_,
+        mol_size_ * batch_size_,
         d_target_mol_atoms_.data,
         d_intermediate_coords_.data,
         d_coords,
@@ -359,10 +355,11 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
 
     // Add in the new weights from the individual waters
     // the sampled weight continues to be garbage
-    k_adjust_weights<RealType, false><<<ceil_divide(num_target_mols_, tpb), tpb, 0, stream>>>(
+    k_adjust_weights<RealType, false><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
         N,
-        num_target_mols_,
+        batch_size_,
         mol_size_,
+        num_target_mols_,
         d_atom_idxs_.data,
         d_mol_offsets_.data,
         d_sample_per_atom_energy_buffer_.data,
@@ -372,20 +369,25 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
 
     // Set the sampled weight to be the correct value
     k_set_sampled_weight_block<RealType, WEIGHT_THREADS_PER_BLOCK>
-        <<<num_intermediates_per_reduce_, WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
+        <<<dim3(num_intermediates_per_reduce_, batch_size_, 1), WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
             N,
+            batch_size_,
             mol_size_,
+            num_target_mols_,
             d_target_mol_atoms_.data,
             d_sample_per_atom_energy_buffer_.data,
             beta_, // 1 / kT
             d_intermediate_sample_weights_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    k_set_sampled_weight_reduce<RealType, WEIGHT_THREADS_PER_BLOCK><<<1, WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
-        num_intermediates_per_reduce_,       // Number of intermediates
-        d_samples_.data,                     // where to set the value
-        d_intermediate_sample_weights_.data, // intermediate fixed point weights
-        d_log_weights_after_.data);
+    k_set_sampled_weight_reduce<RealType, WEIGHT_THREADS_PER_BLOCK>
+        <<<dim3(1, batch_size_, 1), WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
+            batch_size_,
+            num_target_mols_,
+            num_intermediates_per_reduce_,       // Number of intermediates per sample in batch
+            d_samples_.data,                     // where to set the value
+            d_intermediate_sample_weights_.data, // intermediate fixed point weights
+            d_log_weights_after_.data);
     gpuErrchk(cudaPeekAtLastError());
 }
 
@@ -410,7 +412,6 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
 
     d_quaternions_.copy_from(h_quaternions);
     d_translations_.copy_from(h_translations);
-
     d_samples_.copy_from(h_mol_idxs);
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);

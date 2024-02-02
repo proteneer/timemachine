@@ -14,6 +14,10 @@ template <typename RealType> RealType __host__ __device__ __forceinline__ conver
 }
 
 template <typename RealType>
+void __global__
+k_copy_batch(const int N, const int batch_size, const RealType *__restrict__ src, RealType *__restrict__ dest);
+
+template <typename RealType>
 RealType __host__ __device__ __forceinline__
 compute_log_proposal_probabilities_given_counts(const int src_count, const int dest_count) {
     if (src_count > 0 && dest_count > 0) {
@@ -128,8 +132,9 @@ void __global__ k_compute_box_volume(const double *__restrict__ box, RealType *_
 template <typename RealType, bool Negated>
 void __global__ k_adjust_weights(
     const int N,
-    const int num_target_mols,
+    const int batch_size,
     const int mol_size,
+    const int num_weights,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
@@ -139,7 +144,9 @@ void __global__ k_adjust_weights(
 template <typename RealType, int THREADS_PER_BLOCK>
 void __global__ k_set_sampled_weight_block(
     const int N,
+    const int batch_size,
     const int mol_size,
+    const int num_weights,
     const int *__restrict__ target_atoms,
     const RealType *__restrict__ per_atom_energies,
     const RealType inv_kT, // 1 / kT
@@ -147,8 +154,10 @@ void __global__ k_set_sampled_weight_block(
 
 template <typename RealType, int THREADS_PER_BLOCK>
 void __global__ k_set_sampled_weight_reduce(
+    const int batch_size,
     const int num_intermediates,
-    const int *__restrict__ samples, // [1]
+    const int num_weights,
+    const int *__restrict__ samples, // [batch_size]
     const __int128 *__restrict__ intermediate_accum,
     RealType *__restrict__ log_weights);
 

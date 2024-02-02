@@ -3,7 +3,7 @@ from importlib import resources
 
 import numpy as np
 import pytest
-from common import convert_quaternion_for_scipy, prepare_single_topology_initial_state
+from common import assert_energy_arrays_match, convert_quaternion_for_scipy, prepare_single_topology_initial_state
 from scipy.spatial.transform import Rotation
 from scipy.special import logsumexp
 
@@ -391,11 +391,13 @@ def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, 
 @pytest.mark.parametrize(
     "batch_size,samples,box_size",
     [
-        (1, 10, 3.0),
+        (1, 1000, 3.0),
+        (2, 1000, 3.0),
+        (1000, 10, 3.0),
     ],
 )
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-5, 1e-5), (np.float32, 1e-4, 2e-3)])
-@pytest.mark.parametrize("seed", [2023])
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-5, 1e-5), (np.float32, 8e-4, 2e-3)])
+@pytest.mark.parametrize("seed", [2023, 814])
 def test_compute_incremental_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
     """Verify that the incremental weights computed are valid for different collections of rotations/translations"""
     proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
@@ -453,7 +455,10 @@ def test_compute_incremental_weights(batch_size, samples, box_size, precision, r
             ref_final_weights, trial_conf = ref_bdem.batch_log_weights_incremental(
                 conf, box, selected_mol, updated_mol_conf, before_log_weights
             )
-            np.testing.assert_allclose(ref_final_weights, test_weights, atol=atol, rtol=rtol, err_msg=selected_mol)
+            moved_conf[mol_idxs] = updated_mol_conf
+            np.testing.assert_equal(trial_conf, moved_conf)
+            # Janky re-use of assert_energy_arrays_match which is for energies, but functions for any fixed point
+            assert_energy_arrays_match(np.array(ref_final_weights), np.array(test_weights), atol=atol, rtol=rtol)
 
 
 @pytest.fixture(scope="module")

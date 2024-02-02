@@ -6,6 +6,28 @@
 
 namespace timemachine {
 
+template <typename RealType>
+void __global__
+k_copy_batch(const int N, const int batch_size, const RealType *__restrict__ src, RealType *__restrict__ dest) {
+    int idx_in_batch = blockIdx.y;
+    while (idx_in_batch < batch_size) {
+        int offset = idx_in_batch * N;
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        while (idx < N) {
+            dest[offset + idx] = src[idx];
+
+            idx += gridDim.x * blockDim.x;
+        }
+        idx_in_batch += gridDim.y * blockDim.y;
+    }
+}
+
+template void __global__
+k_copy_batch<float>(const int N, const int batch_size, const float *__restrict__ src, float *__restrict__ dest);
+
+template void __global__
+k_copy_batch<double>(const int N, const int batch_size, const double *__restrict__ src, double *__restrict__ dest);
+
 // k_setup_proposals takes a set of sampled indices and constructs buffers containing the molecule offsets
 // as well as the atom indices (refer to src/mol_utils.hpp for impl) and setups up the offsets and the atom
 // indices for each sample. Note that the output mol offsets are constructed so that the start of the mol is
@@ -14,14 +36,15 @@ void __global__ k_setup_proposals(
     const int batch_size,                      // Number of molecules to setup
     const int num_atoms_in_each_mol,           // number of atoms in each sample
     const int *__restrict__ mol_idx_per_batch, // [batch_size] The index of the molecules to sample
-    const int *__restrict__ target_atoms,
-    const int *__restrict__ mol_offsets,
-    int *__restrict__ output_atom_idxs,
+    const int *__restrict__ target_atoms,      // [N, 3]
+    const int *__restrict__ mol_offsets,       // [num_target_mols]
+    int *__restrict__ output_atom_idxs,        // [batch_size, num_atoms_in_each_mol]
     int *__restrict__ output_mol_offsets) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     while (idx < batch_size) {
         int mol_idx = mol_idx_per_batch[idx];
         int mol_start = mol_offsets[mol_idx];
+
         int mol_end = mol_offsets[mol_idx + 1];
         output_mol_offsets[mol_idx] = target_atoms[mol_start];
         output_mol_offsets[mol_idx + 1] = target_atoms[mol_end - 1] + 1;
@@ -308,45 +331,55 @@ template void __global__ k_compute_box_volume<double>(
 template <typename RealType, bool Negated>
 void __global__ k_adjust_weights(
     const int N,
-    const int num_target_mols,
+    const int batch_size,
     const int mol_size,
+    const int num_weights,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
     const RealType inv_kT, // 1 / kT
     RealType *__restrict__ log_weights) {
-    int mol_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    while (mol_idx < num_target_mols) {
 
-        RealType current_log_weight = log_weights[mol_idx];
-        __int128 weight_accumulator = 0;
+    int idx_in_batch = blockIdx.y;
+    while (idx_in_batch < batch_size) {
 
-        int mol_start = mol_offsets[mol_idx];
-        int mol_end = mol_offsets[mol_idx + 1];
-        int min_atom_idx = mol_atoms_idxs[mol_start];
-        int max_atom_idx = mol_atoms_idxs[mol_end - 1];
+        int mol_idx = blockIdx.x * blockDim.x + threadIdx.x;
+        while (mol_idx < num_weights) {
 
-        // A loop that in the case of water will be 3x3
-        for (int i = 0; i < mol_size; i++) {
-            for (int j = min_atom_idx; j <= max_atom_idx; j++) {
-                weight_accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + j]);
+            RealType current_log_weight = log_weights[idx_in_batch * num_weights + mol_idx];
+            __int128 weight_accumulator = 0;
+
+            int mol_start = mol_offsets[mol_idx];
+            int mol_end = mol_offsets[mol_idx + 1];
+            int min_atom_idx = mol_atoms_idxs[mol_start];
+            int max_atom_idx = mol_atoms_idxs[mol_end - 1];
+
+            // A loop that in the case of water will be 3x3
+            for (int i = idx_in_batch * mol_size; i < (idx_in_batch + 1) * mol_size; i++) {
+                for (int j = min_atom_idx; j <= max_atom_idx; j++) {
+                    weight_accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + j]);
+                }
             }
+
+            weight_accumulator = Negated ? FLOAT_TO_FIXED_ENERGY<RealType>(current_log_weight) - weight_accumulator
+                                         : FLOAT_TO_FIXED_ENERGY<RealType>(current_log_weight) + weight_accumulator;
+
+            log_weights[idx_in_batch * num_weights + mol_idx] =
+                fixed_point_overflow(weight_accumulator) ? INFINITY
+                                                         : FIXED_ENERGY_TO_FLOAT<RealType>(weight_accumulator);
+
+            mol_idx += gridDim.x * blockDim.x;
         }
 
-        weight_accumulator = Negated ? FLOAT_TO_FIXED_ENERGY<RealType>(current_log_weight) - weight_accumulator
-                                     : FLOAT_TO_FIXED_ENERGY<RealType>(current_log_weight) + weight_accumulator;
-
-        log_weights[mol_idx] =
-            fixed_point_overflow(weight_accumulator) ? INFINITY : FIXED_ENERGY_TO_FLOAT<RealType>(weight_accumulator);
-
-        mol_idx += gridDim.x * blockDim.x;
+        idx_in_batch += gridDim.y * blockDim.y;
     }
 }
 
 template void __global__ k_adjust_weights<float, 0>(
     const int N,
-    const int num_target_mols,
+    const int batch_size,
     const int mol_size,
+    const int num_weights,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const float *__restrict__ per_atom_energies,
@@ -354,8 +387,9 @@ template void __global__ k_adjust_weights<float, 0>(
     float *__restrict__ log_weights);
 template void __global__ k_adjust_weights<float, 1>(
     const int N,
-    const int num_target_mols,
+    const int batch_size,
     const int mol_size,
+    const int num_weights,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const float *__restrict__ per_atom_energies,
@@ -364,8 +398,9 @@ template void __global__ k_adjust_weights<float, 1>(
 
 template void __global__ k_adjust_weights<double, 0>(
     const int N,
-    const int num_target_mols,
+    const int batch_size,
     const int mol_size,
+    const int num_weights,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const double *__restrict__ per_atom_energies,
@@ -373,8 +408,9 @@ template void __global__ k_adjust_weights<double, 0>(
     double *__restrict__ log_weights);
 template void __global__ k_adjust_weights<double, 1>(
     const int N,
-    const int num_target_mols,
+    const int batch_size,
     const int mol_size,
+    const int num_weights,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const double *__restrict__ per_atom_energies,
@@ -384,45 +420,57 @@ template void __global__ k_adjust_weights<double, 1>(
 template <typename RealType, int THREADS_PER_BLOCK>
 void __global__ k_set_sampled_weight_block(
     const int N,
+    const int batch_size,
     const int mol_size,
-    const int *__restrict__ target_atoms,
+    const int num_weights,
+    const int *__restrict__ target_atoms, // [batch_size + 1]
     const RealType *__restrict__ per_atom_energies,
-    const RealType inv_kT, // 1 / kT
-    __int128 *__restrict__ intermediate_accum) {
+    const RealType inv_kT,                    // 1 / kT
+    __int128 *__restrict__ intermediate_accum // [batch_size, ceil_divide(N, THREADS_PER_BLOCK)]
+) {
     __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
-    int min_atom_idx = target_atoms[0];
-    int max_atom_idx = target_atoms[mol_size - 1];
+    int idx_in_batch = blockIdx.y;
 
-    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    __int128 accumulator = 0;
-    // Zero all of the accumulators
-    while (atom_idx < N) {
-        if (atom_idx < min_atom_idx || atom_idx > max_atom_idx) {
-            for (int i = 0; i < mol_size; i++) {
-                accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + atom_idx]);
+    while (idx_in_batch < batch_size) {
+        int min_atom_idx = target_atoms[idx_in_batch * mol_size];
+        int max_atom_idx = target_atoms[(idx_in_batch + 1) * mol_size - 1];
+
+        int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
+        // Zero all of the accumulators
+        __int128 accumulator = 0;
+        while (atom_idx < N) {
+            if (atom_idx < min_atom_idx || atom_idx > max_atom_idx) {
+                for (int i = idx_in_batch * mol_size; i < (idx_in_batch + 1) * mol_size; i++) {
+                    accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + atom_idx]);
+                }
             }
+            atom_idx += gridDim.x * blockDim.x;
         }
-        atom_idx += gridDim.x * blockDim.x;
-    }
-    accumulators[threadIdx.x] = accumulator;
-    __syncthreads();
-    block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
-    if (threadIdx.x == 0) {
-        intermediate_accum[blockIdx.x] = accumulators[0];
+        accumulators[threadIdx.x] = accumulator;
+        __syncthreads();
+        block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
+        if (threadIdx.x == 0) {
+            intermediate_accum[idx_in_batch * gridDim.x + blockIdx.x] = accumulators[0];
+        }
+        idx_in_batch += gridDim.y * blockDim.y;
     }
 }
 
 template void __global__ k_set_sampled_weight_block<float, 512>(
     const int N,
+    const int batch_size,
     const int mol_size,
+    const int num_weights,
     const int *__restrict__ target_atoms,
     const float *__restrict__ per_atom_energies,
     const float inv_kT,
     __int128 *__restrict__ intermediate_accum);
 template void __global__ k_set_sampled_weight_block<double, 512>(
     const int N,
+    const int batch_size,
     const int mol_size,
+    const int num_weights,
     const int *__restrict__ target_atoms,
     const double *__restrict__ per_atom_energies,
     const double inv_kT,
@@ -430,40 +478,58 @@ template void __global__ k_set_sampled_weight_block<double, 512>(
 
 template <typename RealType, int THREADS_PER_BLOCK>
 void __global__ k_set_sampled_weight_reduce(
+    const int batch_size,
+    const int num_weights,
     const int num_intermediates,
-    const int *__restrict__ samples,                 // [1]
-    const __int128 *__restrict__ intermediate_accum, // [num_intermediates]
-    RealType *__restrict__ log_weights) {
+    const int *__restrict__ samples,                 // [batch_size]
+    const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
+    RealType *__restrict__ log_weights               // [batch_size, num_weights]
+) {
     __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // One block per set of weights
+    int idx_in_batch = blockIdx.y;
 
-    // Zero all of the accumulators
-    __int128 accumulator = 0;
-    while (idx < num_intermediates) {
-        accumulator += intermediate_accum[idx];
-        idx += gridDim.x * blockDim.x;
-    }
-    accumulators[threadIdx.x] = accumulator;
-    __syncthreads();
-    block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
-    if (threadIdx.x == 0) {
-        int sample_idx = samples[0];
-        log_weights[sample_idx] =
-            fixed_point_overflow(accumulators[0]) ? INFINITY : FIXED_ENERGY_TO_FLOAT<RealType>(accumulators[0]);
+    while (idx_in_batch < batch_size) {
+        int offset = idx_in_batch * num_intermediates;
+        // Threads act on a specific set of weights which is why just threadIdx.x
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+        // Zero all of the accumulators
+        __int128 accumulator = 0;
+        while (idx < num_intermediates) {
+            accumulator += intermediate_accum[offset + idx];
+            idx += gridDim.x * blockDim.x;
+        }
+        accumulators[threadIdx.x] = accumulator;
+        __syncthreads();
+        block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
+        if (threadIdx.x == 0) {
+            int mol_idx = samples[idx_in_batch];
+            log_weights[idx_in_batch * num_weights + mol_idx] =
+                fixed_point_overflow(accumulators[0]) ? INFINITY : FIXED_ENERGY_TO_FLOAT<RealType>(accumulators[0]);
+        }
+
+        idx_in_batch += gridDim.y * blockDim.y;
     }
 }
 
 template void __global__ k_set_sampled_weight_reduce<float, 512>(
+    const int batch_size,
     const int num_intermediates,
-    const int *__restrict__ samples,                 // [1]
-    const __int128 *__restrict__ intermediate_accum, // [num_intermediates]
-    float *__restrict__ log_weights);
+    const int num_weights,
+    const int *__restrict__ samples,                 // [batch_size]
+    const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
+    float *__restrict__ log_weights                  // [batch_size, num_weights]
+);
 template void __global__ k_set_sampled_weight_reduce<double, 512>(
+    const int batch_size,
     const int num_intermediates,
-    const int *__restrict__ samples,                 // [1]
-    const __int128 *__restrict__ intermediate_accum, // [num_intermediates]
-    double *__restrict__ log_weights);
+    const int num_weights,
+    const int *__restrict__ samples,                 // [batch_size]
+    const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
+    double *__restrict__ log_weights                 // [batch_size, num_weights]
+);
 
 template <typename RealType>
 void __global__ k_compute_centroid_of_atoms(
