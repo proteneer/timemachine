@@ -146,7 +146,7 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
         # For molecules too small for to have certain terms,
         # skip when no params are present
         # Chiral bond restraints are disabled until checks are added (see GH #815)
-        potentials = [self.bond, self.angle, self.torsion, self.nonbonded, self.chiral_atom]  # , self.chiral_bond]
+        potentials = [self.bond, self.angle, self.torsion, self.chiral_atom, self.nonbonded]
         terms = cast(
             List[BoundPotential[Potential]],
             [p for p in potentials if p],
