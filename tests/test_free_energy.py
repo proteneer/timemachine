@@ -279,14 +279,14 @@ def test_plot_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
     )
     make_pair_bar_plots(pair_result, DEFAULT_TEMP, "")
     assert mock_fig.call_args is not None
-    expcted_potentials = {
+    expected_potentials = {
         "HarmonicBond",
         "HarmonicAngleStable",
         "PeriodicTorsion",
         "NonbondedPairListPrecomputed",
         "ChiralAtomRestraint",
     }
-    assert set(mock_fig.call_args.args[0]) == expcted_potentials
+    assert set(mock_fig.call_args.args[0]) == expected_potentials
 
 
 def test_run_sims_bisection_early_stopping(hif2a_ligand_pair_single_topology_lam0_state):
