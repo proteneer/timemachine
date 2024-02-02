@@ -36,6 +36,7 @@ protected:
     const RealType beta_; // 1 / kT
     const RealType cutoff_squared_;
     const int batch_size_;
+    const int num_intermediates_per_reduce_; // Number of intermediate values to reduce mol weights
     size_t num_attempted_;
     NonbondedMolEnergyPotential<RealType> mol_potential_;
     SegmentedWeightedRandomSampler<RealType> sampler_;
@@ -61,12 +62,12 @@ protected:
     DeviceBuffer<size_t> d_num_accepted_;    // [1]
     DeviceBuffer<int> d_target_mol_atoms_;   // [batch_size_, mol_size_]
     DeviceBuffer<int> d_target_mol_offsets_; // [num_target_mols + 1]
-    DeviceBuffer<__int128> d_intermediate_sample_weights_;
-    DeviceBuffer<RealType> d_sample_noise_; // Noise to use for selecting molecules
+    DeviceBuffer<__int128> d_intermediate_sample_weights_; // [batch_size, num_intermediates_per_reduce_]
+    DeviceBuffer<RealType> d_sample_noise_;                // Noise to use for selecting molecules
     DeviceBuffer<RealType>
         d_sampling_intermediate_;           // [batch_size_, num_target_mols_] Intermediate buffer for weighted sampling
     DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
-    DeviceBuffer<int> d_sample_segments_offsets_; // Segment offsets for the sampler
+    DeviceBuffer<int> d_sample_segments_offsets_; // Segment offsets for the sampler // [batch_size + 1]
 
     curandGenerator_t cr_rng_quat_;
     curandGenerator_t cr_rng_translations_;
