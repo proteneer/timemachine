@@ -46,9 +46,11 @@ def fixed_overflowed(a):
     return converted_a == np.iinfo(np.int64).max
 
 
-def prepare_single_topology_initial_state(st: SingleTopology, host_config: HostConfig, lamb: float = 0.1):
+def prepare_single_topology_initial_state(st: SingleTopology, host_config: Optional[HostConfig], lamb: float = 0.1):
     temperature = DEFAULT_TEMP
-    host = rbfe.setup_optimized_host(st, host_config)
+    host = None
+    if host_config is not None:
+        host = rbfe.setup_optimized_host(st, host_config)
     initial_state = rbfe.setup_initial_states(st, host, temperature, [lamb], seed=2022)[0]
     return initial_state
 
