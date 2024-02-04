@@ -141,15 +141,15 @@ def harmonic_angle(conf, params, box, angle_idxs, cos_angles=True):
     return jnp.sum(energies, -1)  # reduce over all angles
 
 
-def signed_torsion_angle(ci, cj, ck, cl):
+def signed_torsion_angle(xa, xb, xc, xd):
     """
     Batch compute the signed angle of a torsion angle.  The torsion angle
     between two planes should be periodic but not necessarily symmetric.
 
     Parameters
     ----------
-    ci, cj, ck, cl: shape [num_torsions, 3] np.ndarrays
-        atom coordinates defining torsion angle i-j-k-l
+    xa, xb, xc, xd: shape [num_torsions, 3] np.ndarrays
+        atom coordinates defining torsion angle a-b-c-d
 
     Returns
     -------
@@ -164,14 +164,17 @@ def signed_torsion_angle(ci, cj, ck, cl):
     # implementation as opposed to the OpenMM energy function to
     # avoid a singularity when the angle is zero.
 
-    rij = cj - ci
-    rkj = cj - ck
-    rkl = cl - ck
+    # (ytz): Feb 4th 2024, switch to OpenMM convention
+    # https://github.com/openmm/openmm/blob/master/platforms/reference/src/SimTKReference/ReferenceProperDihedralBond.cpp#L97C23-L97C32
 
-    n1 = jnp.cross(rij, rkj)
-    n2 = jnp.cross(rkj, rkl)
+    r0 = xa - xb
+    r1 = xc - xb
+    r2 = xc - xd
 
-    y = jnp.sum(jnp.multiply(jnp.cross(n1, n2), rkj / jnp.linalg.norm(rkj, axis=-1, keepdims=True)), axis=-1)
+    n1 = jnp.cross(r0, r1)
+    n2 = jnp.cross(r1, r2)
+
+    y = jnp.sum(jnp.multiply(jnp.cross(n1, n2), r1 / jnp.linalg.norm(r1, axis=-1, keepdims=True)), axis=-1)
     x = jnp.sum(jnp.multiply(n1, n2), -1)
 
     return jnp.arctan2(y, x)
