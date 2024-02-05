@@ -1,9 +1,10 @@
 from dataclasses import replace
 
-import jax.numpy as jnp
 import numpy as np
 import pytest
 import scipy
+from jax import jit
+from jax import numpy as jnp
 from rdkit import Chem
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
@@ -11,6 +12,7 @@ from timemachine.fe import topology, utils
 from timemachine.fe.atom_mapping import get_cores
 from timemachine.fe.free_energy import HREXParams
 from timemachine.fe.rbfe import DEFAULT_HREX_PARAMS, run_vacuum
+from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.fe.system import simulate_system
 from timemachine.ff import Forcefield
 from timemachine.potentials import chiral_restraints
@@ -641,12 +643,7 @@ $$$$""",
             assert_same_signs(frame_bond_vols, ref_chiral_bond_vols)
 
 
-def test_chiral_inversion_in_single_topology():
-    very_short_hrex_params = replace(
-        DEFAULT_HREX_PARAMS, n_frames=2, n_eq_steps=2, steps_per_frame=2, hrex_params=HREXParams(n_frames_bisection=2)
-    )
-    ff = Forcefield.load_default()
-
+def make_chiral_flip_pair(well_aligned=True):
     # mol_a, mol_b : substituted chiral cyclobutyl
     # with 2 different alignments of mol_b w.r.t. mol_a
     mol_dict = {utils.get_mol_name(mol): mol for mol in utils.read_sdf("tests/data/1243_chiral_ring_confs.sdf")}
@@ -658,7 +655,110 @@ def test_chiral_inversion_in_single_topology():
     assert len(core_0) == 10
     assert len(core_1) == 15
 
-    _ = run_vacuum(mol_a, mol_b_0, core_0, ff, None, very_short_hrex_params, n_windows=3)
-    _ = run_vacuum(mol_a, mol_b_1, core_1, ff, None, very_short_hrex_params, n_windows=3)
+    if well_aligned:
+        return AtomMapMixin(mol_a, mol_b_1, core_1)
+    else:
+        return AtomMapMixin(mol_a, mol_b_0, core_0)
 
-    # TODO: slow, assert endstate chirality is preserved
+
+@pytest.mark.parameterize("well_aligned", [True, False])
+def test_chiral_inversion_in_single_topology_runs(well_aligned):
+    """simply test that no exceptions are raised, when running vacuum hrex"""
+    very_short_hrex_params = replace(
+        DEFAULT_HREX_PARAMS, n_frames=2, n_eq_steps=2, steps_per_frame=2, hrex_params=HREXParams(n_frames_bisection=2)
+    )
+    ff = Forcefield.load_default()
+
+    atom_map = make_chiral_flip_pair(well_aligned)
+    _ = run_vacuum(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, very_short_hrex_params, n_windows=3)
+
+
+# some util fxns: TODO: move these where appropriate
+def make_chiral_restr_fxns(mol_a, mol_b, chiral_k=1000.0):
+    from timemachine.fe.chiral_utils import setup_all_chiral_atom_restr_idxs
+
+    restr_idxs_a = np.array(setup_all_chiral_atom_restr_idxs(mol_a, utils.get_romol_conf(mol_a)))
+    restr_idxs_b = np.array(setup_all_chiral_atom_restr_idxs(mol_b, utils.get_romol_conf(mol_b)))
+
+    @jit
+    def U_a(x_a):
+        return U_chiral_atom_batch(x_a, restr_idxs_a, chiral_k).sum()
+
+    @jit
+    def U_b(x_b):
+        return U_chiral_atom_batch(x_b, restr_idxs_b, chiral_k).sum()
+
+    return U_a, U_b
+
+
+# TODO: should def x_ab_from_x, def xs_ab_from_xs move to a utils.py?
+def x_ab_from_x(x, atom_map):
+    """extract confs of mol_a, mol_b from combined conf
+
+    TODO: jaxify this...
+    """
+    # duplicating from https://github.com/proteneer/timemachine/blob/85c15ac58315e7304233ac847fe2d24db8c1773f/timemachine/fe/cif_writer.py#L9
+    n_a = atom_map.mol_a.GetNumAtoms()
+    n_b = atom_map.mol_b.GetNumAtoms()
+
+    x_a = np.zeros((n_a, 3))
+    x_b = np.zeros((n_b, 3))
+
+    for a_idx, c_idx in enumerate(atom_map.a_to_c):
+        x_a[a_idx] = x[c_idx]
+    for b_idx, c_idx in enumerate(atom_map.b_to_c):
+        x_b[b_idx] = x[c_idx]
+    #
+
+    return x_a, x_b
+
+
+def xs_ab_from_xs(xs, atom_map):
+    """map x_ab_from_x over xs
+
+    TODO: remove when x_ab_from_x is jaxified
+    """
+    xs_a, xs_b = [], []
+    for x in xs:
+        x_a, x_b = x_ab_from_x(x, atom_map)
+        xs_a.append(x_a)
+        xs_b.append(x_b)
+    xs_a = np.array(xs_a)
+    xs_b = np.array(xs_b)
+    return xs_a, xs_b
+
+
+def make_chiral_flip_heatmaps(vacuum_results, atom_map):
+    """evaluate mol_a and mol_b chiral restraint energy in each frame of every trajectory"""
+    mol_a_chiral_conflicts = []
+    mol_b_chiral_conflicts = []
+    U_a, U_b = make_chiral_restr_fxns(atom_map.mol_a, atom_map.mol_b)
+
+    for traj in vacuum_results.frames:
+        xs = np.array(traj)
+        xs_a, xs_b = xs_ab_from_xs(np.array(xs), atom_map)
+        # TODO: probably vmap
+        mol_a_chiral_conflicts.append(np.array([U_a(x) for x in xs_a]))
+        mol_b_chiral_conflicts.append(np.array([U_b(x) for x in xs_b]))
+
+    mol_a_chiral_conflicts = np.array(mol_a_chiral_conflicts)
+    mol_b_chiral_conflicts = np.array(mol_b_chiral_conflicts)
+
+    assert mol_a_chiral_conflicts.shape == (len(vacuum_results.frames), len(vacuum_results.frames[0]))
+
+    return mol_a_chiral_conflicts, mol_b_chiral_conflicts
+
+
+# @pytest.mark.nightly(reason="slow")
+@pytest.mark.parameterize("well_aligned", [True, False])
+def test_chiral_inversion_in_single_topology(well_aligned):
+    """assert chiral consistency preserved through vacuum HREX"""
+
+    ff = Forcefield.load_default()
+
+    atom_map = make_chiral_flip_pair(well_aligned)
+
+    vacuum_results = run_vacuum(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, DEFAULT_HREX_PARAMS)
+    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(vacuum_results, atom_map)
+    assert (heatmap_a[0] == 0).all(), "chirality in end state A was not preserved"
+    assert (heatmap_b[-1] == 0).all(), "chirality in end state B was not preserved"
