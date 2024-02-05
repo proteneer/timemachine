@@ -155,7 +155,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
     )
 
     initial_state = InitialState(
-        host_bps, integrator, barostat, final_conf, np.zeros_like(final_conf), solvent_box, lamb, ligand_idxs
+        host_bps, integrator, barostat, final_conf, np.zeros_like(final_conf), solvent_box, lamb, ligand_idxs, []
     )
 
     assert num_water_atoms % 3 == 0

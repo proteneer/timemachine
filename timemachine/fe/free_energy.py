@@ -118,6 +118,7 @@ class InitialState:
     box0: NDArray
     lamb: float
     ligand_idxs: NDArray
+    protein_idxs: NDArray
 
 
 @dataclass
