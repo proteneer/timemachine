@@ -1856,7 +1856,7 @@ py::array_t<double, py::array::c_style> py_rotate_coords(
     const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &quaternions) {
     verify_coords(coords);
 
-    size_t quaternions_ndims = coords.ndim();
+    size_t quaternions_ndims = quaternions.ndim();
     if (quaternions_ndims != 2) {
         throw std::runtime_error("quaternions dimensions must be 2");
     }
@@ -1878,25 +1878,43 @@ template <typename RealType>
 py::array_t<double, py::array::c_style> py_rotate_and_translate_mol(
     const py::array_t<double, py::array::c_style> &coords,
     const py::array_t<double, py::array::c_style> &box,
-    const py::array_t<double, py::array::c_style> &quaternion,
-    const py::array_t<double, py::array::c_style> &translation) {
-    verify_coords(coords);
+    const py::array_t<double, py::array::c_style> &quaternions,
+    const py::array_t<double, py::array::c_style> &translations) {
+    verify_coords_and_box(coords, box);
 
-    if (quaternion.size() != 4) {
-        throw std::runtime_error("quaternion must be of size 4");
+    if (quaternions.ndim() != 2) {
+        throw std::runtime_error("quaternions dimensions must be 2");
+    }
+    if (quaternions.shape(1) != 4) {
+        throw std::runtime_error("quaternions must be of length 4");
     }
 
-    if (translation.size() != 3) {
-        throw std::runtime_error("translation must be of size 3");
+    if (translations.ndim() != 2) {
+        throw std::runtime_error("translations dimensions must be 2");
+    }
+    if (translations.shape(1) != 3) {
+        throw std::runtime_error("translations must be of size 3");
     }
 
-    std::vector<RealType> v_quaternion = py_array_to_vector_with_cast<double, RealType>(quaternion);
-    std::vector<RealType> v_translation = py_array_to_vector_with_cast<double, RealType>(translation);
+    if (quaternions.shape(0) != translations.shape(0)) {
+        throw std::runtime_error("Number of quaternions and translations must match");
+    }
+
+    std::vector<RealType> v_quaternions = py_array_to_vector_with_cast<double, RealType>(quaternions);
+    std::vector<RealType> v_translations = py_array_to_vector_with_cast<double, RealType>(translations);
+
+    const int batch_size = quaternions.shape(0);
 
     const int N = coords.shape(0);
-    py::array_t<double, py::array::c_style> py_rotated_coords({N, 3});
+    py::array_t<double, py::array::c_style> py_rotated_coords({batch_size, N, 3});
     rotate_coordinates_and_translate_mol_host<RealType>(
-        N, coords.data(), box.data(), &v_quaternion[0], &v_translation[0], py_rotated_coords.mutable_data());
+        N,
+        batch_size,
+        coords.data(),
+        box.data(),
+        &v_quaternions[0],
+        &v_translations[0],
+        py_rotated_coords.mutable_data());
     return py_rotated_coords;
 }
 
