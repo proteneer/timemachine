@@ -146,7 +146,7 @@ def setup_initial_state(
         protein_idxs = np.arange(0, len(host.physical_masses) - host.num_water_atoms)
     else:
         x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
-        protein_idxs = np.array([])
+        protein_idxs = np.array([], dtype=np.int32)
 
     # provide a different run_seed for every lambda window,
     # but in a way that should be symmetric for
@@ -161,7 +161,7 @@ def setup_initial_state(
     # determine ligand idxs
 
     num_total_atoms = len(x0)
-    ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
+    ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms, dtype=np.int32)
 
     # initialize Langevin integrator
     dt = 2.5e-3

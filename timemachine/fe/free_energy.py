@@ -120,6 +120,10 @@ class InitialState:
     ligand_idxs: NDArray
     protein_idxs: NDArray
 
+    def __post_init__(self):
+        assert self.ligand_idxs.dtype == np.int32 or self.ligand_idxs.dtype == np.int64
+        assert self.protein_idxs.dtype == np.int32 or self.protein_idxs.dtype == np.int64
+
 
 @dataclass
 class BarResult:

@@ -312,7 +312,7 @@ def setup_initial_states(
         friction = 1.0
         intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, seed)
 
-        state = InitialState(bps, intg, baro, x0, v0, box0, lamb, ligand_idxs, np.array([]))
+        state = InitialState(bps, intg, baro, x0, v0, box0, lamb, ligand_idxs, np.array([], dtype=np.int32))
         initial_states.append(state)
     return initial_states
 
