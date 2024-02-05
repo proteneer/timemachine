@@ -661,7 +661,7 @@ def make_chiral_flip_pair(well_aligned=True):
         return AtomMapMixin(mol_a, mol_b_0, core_0)
 
 
-@pytest.mark.parameterize("well_aligned", [True, False])
+@pytest.mark.parametrize("well_aligned", [True, False])
 def test_chiral_inversion_in_single_topology_runs(well_aligned):
     """simply test that no exceptions are raised, when running vacuum hrex"""
     very_short_hrex_params = replace(
