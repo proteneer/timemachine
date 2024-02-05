@@ -944,7 +944,7 @@ class SingleTopology(AtomMapMixin):
 
     def _setup_end_state_dst(self):
         """
-        Setup the source end-state, where mol_a is fully interacting, with mol_b's dummy atoms attached
+        Setup the source end-state, where mol_b is fully interacting, with mol_a's dummy atoms attached
         in a factorizable way.
 
         Returns
@@ -952,8 +952,7 @@ class SingleTopology(AtomMapMixin):
         VacuumSystem
             Gas-phase system
         """
-        new_core = np.stack([self.core[:, 1], self.core[:, 0]], axis=1)
-        return setup_end_state(self.ff, self.mol_b, self.mol_a, new_core, self.b_to_c, self.a_to_c)
+        return setup_end_state(self.ff, self.mol_b, self.mol_a, self.core[:, ::-1], self.b_to_c, self.a_to_c)
 
     def _setup_intermediate_bonded_term(
         self, src_bond: BoundPotential[_Bonded], dst_bond: BoundPotential[_Bonded], lamb, align_fn, interpolate_fn

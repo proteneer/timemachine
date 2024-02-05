@@ -570,7 +570,9 @@ def test_combine_with_host():
         potentials.NonbondedPairListPrecomputed,
         potentials.Nonbonded,
         potentials.SummedPotential,  # P-L + L-W interactions
-        # NOTE: chiral bond and chiral atom restraints excluded
+        potentials.ChiralAtomRestraint,
+        # potentials.ChiralBondRestraint,
+        # NOTE: chiral bond restraints excluded
         # This should be updated when chiral restraints are re-enabled.
     }
 
