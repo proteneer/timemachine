@@ -749,7 +749,7 @@ def make_chiral_flip_heatmaps(vacuum_results, atom_map):
     return mol_a_chiral_conflicts, mol_b_chiral_conflicts
 
 
-# @pytest.mark.nightly(reason="slow")
+@pytest.mark.nightly(reason="slow")
 @pytest.mark.parameterize("well_aligned", [True, False])
 def test_chiral_inversion_in_single_topology(well_aligned):
     """assert chiral consistency preserved through vacuum HREX"""
