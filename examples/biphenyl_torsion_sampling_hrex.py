@@ -206,7 +206,7 @@ def sample_biphenyl_hrex(
 
     def make_initial_state(lamb: float) -> InitialState:
         bps = get_potentials(top, ff.get_params(), intramol_atom_pairs_to_decouple, atoms_to_decouple_from_env, lamb)
-        return InitialState(bps, integrator, baro, x0, v0, box0, lamb, ligand_idxs)
+        return InitialState(bps, integrator, baro, x0, v0, box0, lamb, ligand_idxs, np.array([], dtype=np.int32))
 
     results, trajectories_by_state = run_sims_bisection(
         [0.0, 1.0],

@@ -135,6 +135,7 @@ def setup_initial_state(
     conf_b = get_romol_conf(st.mol_b)
 
     ligand_conf = st.combine_confs(conf_a, conf_b, lamb)
+    num_ligand_atoms = len(ligand_conf)
     # use a different seed to initialize every window,
     # but in a way that should be symmetric for
     # A -> B vs. B -> A edge definitions
@@ -142,8 +143,10 @@ def setup_initial_state(
     if host:
         x0, hmr_masses, potentials, baro = setup_in_env(st, host, ligand_conf, lamb, temperature, init_seed)
         box0 = host.box
+        protein_idxs = np.arange(0, len(host.physical_masses) - host.num_water_atoms)
     else:
         x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
+        protein_idxs = np.array([], dtype=np.int32)
 
     # provide a different run_seed for every lambda window,
     # but in a way that should be symmetric for
@@ -156,16 +159,16 @@ def setup_initial_state(
     v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
 
     # determine ligand idxs
-    num_ligand_atoms = len(ligand_conf)
+
     num_total_atoms = len(x0)
-    ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms)
+    ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms, dtype=np.int32)
 
     # initialize Langevin integrator
     dt = 2.5e-3
     friction = 1.0
     intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
 
-    return InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs)
+    return InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs, protein_idxs)
 
 
 def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
@@ -357,8 +360,11 @@ def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[NDArray]:
     for state, coords in zip(initial_states, all_xs):
         displacement_distances = jax_utils.distance_on_pairs(state.x0, coords, box=state.box0)
         if min_cutoff is not None:
+            # assert that ligand and protein atoms are not allowed to move more than min_cutoff
+            restricted_idxs = np.concatenate([state.ligand_idxs, state.protein_idxs])
+
             assert (
-                displacement_distances < min_cutoff
+                displacement_distances[restricted_idxs] < min_cutoff
             ).all(), f"λ = {state.lamb} moved an atom > {min_cutoff*10} Å from initial state during minimization"
 
     return all_xs
@@ -644,13 +650,15 @@ def estimate_relative_free_energy_bisection_hrex_impl(
                 x0=traj.frames[-1],
                 v0=traj.final_velocities,  # type: ignore
                 box0=traj.boxes[-1],
-                barostat=replace(
-                    initial_state.barostat,
-                    adaptive_scaling_enabled=False,
-                    initial_volume_scale_factor=mean_final_barostat_volume_scale_factor,
-                )
-                if initial_state.barostat
-                else None,
+                barostat=(
+                    replace(
+                        initial_state.barostat,
+                        adaptive_scaling_enabled=False,
+                        initial_volume_scale_factor=mean_final_barostat_volume_scale_factor,
+                    )
+                    if initial_state.barostat
+                    else None
+                ),
             )
             for initial_state, traj in zip(initial_states, trajectories_by_state)
         ]
@@ -942,9 +950,11 @@ def run_edge_and_save_results(
                 [
                     f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
                     f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
-                    f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
-                    if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
-                    else "",
+                    (
+                        f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
+                        if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
+                        else ""
+                    ),
                 ]
             ),
         )
@@ -979,9 +989,11 @@ def run_edge_and_save_results(
                 f"solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f}",
                 f"tm_pred {tm_ddg:.2f} +- {tm_err:.2f}",
                 f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
-                f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
-                if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
-                else "",
+                (
+                    f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
+                    if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
+                    else ""
+                ),
             ]
         ),
     )
