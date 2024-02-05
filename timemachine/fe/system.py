@@ -6,7 +6,6 @@ import jax
 import numpy as np
 import openmm
 import scipy
-from jax import numpy as jnp
 
 from timemachine import potentials
 from timemachine.ff.handlers import openmm_deserializer
@@ -139,7 +138,7 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
         U_fns = self.get_U_fns()
 
         def U_fn(x):
-            return jnp.sum(jnp.array([U(x, box=None) for U in U_fns]))
+            return sum(U(x, box=None) for U in U_fns)
 
         return U_fn
 
