@@ -24,7 +24,7 @@ from timemachine.potentials import (
     SummedPotential,
 )
 
-# Chiral restraints are disabled until checks are added (see GH #815)
+# Chiral bond restraints are disabled until checks are added (see GH #815)
 # from timemachine.potentials import bonded, chiral_restraints, nonbonded
 
 
@@ -84,7 +84,7 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
 
 
 def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
-    bond = angle = torsion = nonbonded = None
+    bond = angle = torsion = nonbonded = chiral_atom = chiral_bond = None
 
     for bp in bps:
         if isinstance(bp.potential, potentials.HarmonicBond):
@@ -95,6 +95,11 @@ def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
             torsion = bp
         elif isinstance(bp.potential, potentials.Nonbonded):
             nonbonded = bp
+        elif isinstance(bp.potential, potentials.ChiralAtomRestraint):
+            chiral_atom = bp
+        # TODO: uncomment when re-enabling chiral_bond
+        # elif isinstance(bp.potential, potentials.ChiralBondRestraint):
+        #     chiral_bond = bp
         else:
             assert 0, "Unknown potential"
 
@@ -102,7 +107,7 @@ def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
     assert angle
     assert nonbonded
 
-    return VacuumSystem(bond, angle, torsion, nonbonded, None, None)
+    return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
 
 def convert_omm_system(omm_system: openmm.System) -> Tuple["VacuumSystem", List[float]]:
@@ -129,29 +134,22 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
         """
         Return a jax function that evaluates the potential energy of a set of coordinates.
         """
+        assert self.torsion
+        U_fns = self.get_U_fns()
 
         def U_fn(x):
-            assert self.torsion
-
-            # Chiral restraints are disabled until checks are added (see GH #815)
-            # chiral_U = chiral_atom_U(x) + chiral_bond_U(x)
-            return (
-                self.bond(x, box=None)
-                + self.angle(x, box=None)
-                + self.torsion(x, box=None)
-                + self.nonbonded(x, box=None)
-                # + self.chiral_atom(x, box=None)
-                # + self.chiral_bond(x, box=None)
-            )
+            return sum(U(x, box=None) for U in U_fns)
 
         return U_fn
 
     def get_U_fns(self) -> List[BoundPotential[Potential]]:
         # For molecules too small for to have certain terms,
         # skip when no params are present
+        # Chiral bond restraints are disabled until checks are added (see GH #815)
+        potentials = [self.bond, self.angle, self.torsion, self.chiral_atom, self.nonbonded]
         terms = cast(
             List[BoundPotential[Potential]],
-            [p for p in [self.bond, self.angle, self.torsion, self.nonbonded] if p],
+            [p for p in potentials if p],
         )
         return [p for p in terms if p and len(p.params) > 0]
 
@@ -172,9 +170,9 @@ class HostGuestSystem:
             self.bond,
             self.angle,
             self.torsion,
-            # Chiral restraints are disabled until checks are added
+            # Chiral bond restraints are disabled until checks are added
             # for consistency.
-            # self.chiral_atom,
+            self.chiral_atom,
             # self.chiral_bond,
             self.nonbonded_guest_pairs,
             self.nonbonded_host,
