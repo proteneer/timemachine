@@ -88,7 +88,7 @@ class BDExchangeMove(moves.MonteCarloMove):
         self.last_conf = None
         self.last_bw = None
 
-        @jax.jit
+        # @jax.jit
         def U_fn_unsummed(conf, box, a_idxs, b_idxs):
             # compute the energy of an interaction group
             conf_i = conf[a_idxs]
@@ -103,11 +103,12 @@ class BDExchangeMove(moves.MonteCarloMove):
 
         self.U_fn_unsummed = U_fn_unsummed
 
-        @jax.jit
+        # @jax.jit
         def U_fn(conf, box, a_idxs, b_idxs):
             return jnp.sum(U_fn_unsummed(conf, box, a_idxs, b_idxs))
 
-        self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
+        # self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
+        self.batch_U_fn = jax.vmap(U_fn, (None, None, 0, 0))
 
         def batch_log_weights(conf, box):
             """
