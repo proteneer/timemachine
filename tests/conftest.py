@@ -33,6 +33,12 @@ hypothesis.settings.register_profile("no-deadline", deadline=None)
 
 
 @pytest.fixture(autouse=True)
+def reset_jax_cache(request):
+    """Reset the jax cache after each test"""
+    jax.clear_caches()
+
+
+@pytest.fixture(autouse=True)
 def reset_cuda_device_after_test(request):
     """Calls cudaDeviceReset() after each test marked with memcheck.
 
