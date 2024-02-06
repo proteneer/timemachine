@@ -15,7 +15,7 @@ NOCUDA_MARKER := nocuda
 NOGPU_MARKER := nogpu
 
 MEMCHECK_MARKER := memcheck
-NIGHTLY_MARKER := nightly
+NIGHTLY_MARKER := nightlyzzz
 
 NPROCS = `nproc`
 

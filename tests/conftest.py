@@ -34,7 +34,7 @@ hypothesis.settings.register_profile("no-deadline", deadline=None)
 
 @pytest.fixture(autouse=True)
 def reset_jax_cache(request):
-    """Reset the jax cache after each test"""
+    """Reset the jax cache before each test"""
     jax.clear_caches()
 
 
