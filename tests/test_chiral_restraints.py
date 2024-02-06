@@ -3,7 +3,6 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import scipy
-from jax import jit
 from jax import numpy as jnp
 from rdkit import Chem
 
@@ -680,11 +679,9 @@ def make_chiral_restr_fxns(mol_a, mol_b, chiral_k=1000.0):
     restr_idxs_a = np.array(setup_all_chiral_atom_restr_idxs(mol_a, utils.get_romol_conf(mol_a)))
     restr_idxs_b = np.array(setup_all_chiral_atom_restr_idxs(mol_b, utils.get_romol_conf(mol_b)))
 
-    @jit
     def U_a(x_a):
         return U_chiral_atom_batch(x_a, restr_idxs_a, chiral_k).sum()
 
-    @jit
     def U_b(x_b):
         return U_chiral_atom_batch(x_b, restr_idxs_b, chiral_k).sum()
 
