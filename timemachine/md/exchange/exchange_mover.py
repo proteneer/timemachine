@@ -107,8 +107,6 @@ class BDExchangeMove(moves.MonteCarloMove):
         def U_fn(conf, box, a_idxs, b_idxs):
             return jnp.sum(U_fn_unsummed(conf, box, a_idxs, b_idxs))
 
-        self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
-
         def batch_log_weights(conf, box):
             """
             Return a list of energies equal to len(water_idxs)
@@ -117,7 +115,9 @@ class BDExchangeMove(moves.MonteCarloMove):
             """
             if not np.array_equal(self.last_conf, conf):
                 self.last_conf = conf
-                tmp = self.beta * self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
+                tmp = []
+                for a_idxs, b_idxs in zip(self.all_a_idxs, self.all_b_idxs):
+                    tmp.append(self.beta * U_fn(conf, box, a_idxs, b_idxs))
                 self.last_bw = np.array(tmp)
             return self.last_bw
 
