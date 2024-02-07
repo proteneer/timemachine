@@ -1164,63 +1164,67 @@ class SingleTopology(AtomMapMixin):
 
         return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
-    def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
-        """
-        Return an array containing the guest_charges, guest_sigmas, guest_epsilons, guest_w_coords
-        for the guest at a given lambda.
-        """
-        guest_charges = []
-        guest_sigmas = []
-        guest_epsilons = []
-        guest_w_coords = []
+    def _get_guest_qlj(self, q_handle, lj_handle, lamb: float) -> jax.Array:
+        """Returns an array containing the charges, sigmas, and epsilons for the guest at a given lambda."""
 
         # generate charges and lj parameters for each guest
-        guest_a_q = q_handle.parameterize(self.mol_a)
-        guest_a_lj = lj_handle.parameterize(self.mol_a)
+        q_a = q_handle.parameterize(self.mol_a)
+        lj_a = lj_handle.parameterize(self.mol_a)
 
-        guest_b_q = q_handle.parameterize(self.mol_b)
-        guest_b_lj = lj_handle.parameterize(self.mol_b)
+        q_b = q_handle.parameterize(self.mol_b)
+        lj_b = lj_handle.parameterize(self.mol_b)
 
-        for idx, membership in enumerate(self.c_flags):
-            if membership == 0:  # core atom
-                a_idx = self.c_to_a[idx]
-                b_idx = self.c_to_b[idx]
+        def lerp(lamb, a, b):
+            return (1.0 - lamb) * a + lamb * b
 
-                # interpolate charges when in common-core
-                q = (1 - lamb) * guest_a_q[a_idx] + lamb * guest_b_q[b_idx]
-                sig = (1 - lamb) * guest_a_lj[a_idx, 0] + lamb * guest_b_lj[b_idx, 0]
-                eps = (1 - lamb) * guest_a_lj[a_idx, 1] + lamb * guest_b_lj[b_idx, 1]
+        idx = np.arange(self.get_num_atoms())
+        a_idx = np.array([self.c_to_a.get(i, -1) for i in idx])
+        b_idx = np.array([self.c_to_b.get(i, -1) for i in idx])
 
-                # fixed at w = 0
-                w = 0.0
+        # linearly interpolate charges and LJ parameters in the core
+        qlj_core = jnp.column_stack(
+            (
+                lerp(lamb, q_a[a_idx], q_b[b_idx]),
+                lerp(lamb, lj_a[a_idx, 0], lj_b[b_idx, 0]),  # LJ sigma
+                lerp(lamb, lj_a[a_idx, 1], lj_b[b_idx, 1]),  # LJ epsilon
+            )
+        )
 
-            elif membership == 1:  # dummy_A
-                a_idx = self.c_to_a[idx]
-                q = guest_a_q[a_idx]
-                sig = guest_a_lj[a_idx, 0]
-                eps = guest_a_lj[a_idx, 1]
+        qlj_dummy_a = jnp.column_stack((q_a[a_idx], lj_a[a_idx, 0], lj_a[a_idx, 1]))
+        qlj_dummy_b = jnp.column_stack((q_b[b_idx], lj_b[b_idx, 0], lj_b[b_idx, 1]))
 
-                # Decouple dummy group A as lambda goes from 0 to 1
-                w = interpolate_w_coord(0.0, cutoff, lamb)
+        is_core = self.c_flags == 0
+        is_dummy_a = self.c_flags == 1
 
-            elif membership == 2:  # dummy_B
-                b_idx = self.c_to_b[idx]
-                q = guest_b_q[b_idx]
-                sig = guest_b_lj[b_idx, 0]
-                eps = guest_b_lj[b_idx, 1]
+        qlj = jnp.where(
+            is_core[:, np.newaxis],
+            qlj_core,
+            jnp.where(
+                is_dummy_a[:, np.newaxis],
+                qlj_dummy_a,
+                qlj_dummy_b,
+            ),
+        )
 
-                # Couple dummy group B as lambda goes from 0 to 1
-                # NOTE: this is only for host-guest nonbonded ixns (there is no clash between A and B at lambda = 0.5)
-                w = interpolate_w_coord(cutoff, 0.0, lamb)
-            else:
-                assert 0
+        return qlj
 
-            guest_charges.append(q)
-            guest_sigmas.append(sig)
-            guest_epsilons.append(eps)
-            guest_w_coords.append(w)
+    def _get_guest_w_coords(self, lamb: float, cutoff: float) -> jax.Array:
+        is_core = self.c_flags == 0
+        is_dummy_a = self.c_flags == 1
+        return jnp.where(
+            is_core[:, np.newaxis],
+            0.0,
+            jnp.where(
+                is_dummy_a[:, np.newaxis],
+                interpolate_w_coord(0.0, cutoff, lamb),
+                interpolate_w_coord(cutoff, 0.0, lamb),
+            ),
+        )
 
-        return jnp.stack(jnp.array([guest_charges, guest_sigmas, guest_epsilons, guest_w_coords]), axis=1)
+    def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
+        qlj = self._get_guest_qlj(q_handle, lj_handle, lamb)
+        w = self._get_guest_w_coords(lamb, cutoff)
+        return jnp.hstack((qlj, w))
 
     def _parameterize_host_nonbonded(self, host_nonbonded: BoundPotential[Nonbonded]) -> BoundPotential[Nonbonded]:
         """Parameterize host-host nonbonded interactions"""
