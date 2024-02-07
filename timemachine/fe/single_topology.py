@@ -1,5 +1,6 @@
 import warnings
 from collections.abc import Iterable
+from dataclasses import dataclass
 from functools import partial
 from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Tuple, TypeVar, Union, cast
 
@@ -792,6 +793,39 @@ class AtomMapMixin:
 _Bonded = TypeVar("_Bonded", bound=Union[ChiralAtomRestraint, HarmonicAngleStable, HarmonicBond, PeriodicTorsion])
 
 
+@dataclass
+class IntermolDecouplingProtocol:
+    lambdas: NDArray
+    normalized_w_by_lambda_by_atom: NDArray
+
+    def get_w_by_atom(self, lamb: float, cutoff: float):
+        normalized_w_by_atom = jax.vmap(partial(jnp.interp, lamb, self.lambdas))(self.normalized_w_by_lambda_by_atom)
+        w_by_atom = normalized_w_by_atom * cutoff
+        return w_by_atom
+
+    @classmethod
+    def from_atom_map(cls, atom_map: AtomMapMixin, n_windows: int):
+        # TODO: replace with dynamically-optimized schedule
+        lambdas = np.linspace(0.0, 1.0, n_windows)
+        w_by_lambda_a = construct_pre_optimized_relative_lambda_schedule(None)
+        assert n_windows == len(w_by_lambda_a), f"currently only n_windows={len(w_by_lambda_a)} is supported"
+        w_by_lambda_b = w_by_lambda_a[::-1]
+
+        is_core = atom_map.c_flags == 0
+        is_dummy_a = atom_map.c_flags == 1
+
+        w_by_lambda_by_atom = np.where(
+            is_core[:, np.newaxis],
+            0.0,
+            np.where(
+                is_dummy_a[:, np.newaxis],
+                w_by_lambda_a,
+                w_by_lambda_b,
+            ),
+        )
+        return IntermolDecouplingProtocol(lambdas, w_by_lambda_by_atom)
+
+
 class SingleTopology(AtomMapMixin):
     def __init__(self, mol_a, mol_b, core, forcefield):
         """
@@ -827,6 +861,8 @@ class SingleTopology(AtomMapMixin):
         # setup end states
         self.src_system = self._setup_end_state_src()
         self.dst_system = self._setup_end_state_dst()
+
+        self.intermol_decoupling_protocol = IntermolDecouplingProtocol.from_atom_map(self, n_windows=30)
 
     def combine_masses(self, use_hmr=False):
         """
@@ -1223,8 +1259,8 @@ class SingleTopology(AtomMapMixin):
 
     def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
         qlj = self._get_guest_qlj(q_handle, lj_handle, lamb)
-        w = self._get_guest_w_coords(lamb, cutoff)
-        return jnp.hstack((qlj, w))
+        w = self.intermol_decoupling_protocol.get_w_by_atom(lamb, cutoff)
+        return jnp.hstack((qlj, w[:, np.newaxis]))
 
     def _parameterize_host_nonbonded(self, host_nonbonded: BoundPotential[Nonbonded]) -> BoundPotential[Nonbonded]:
         """Parameterize host-host nonbonded interactions"""
