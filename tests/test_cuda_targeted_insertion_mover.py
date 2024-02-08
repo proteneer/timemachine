@@ -21,7 +21,7 @@ from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get
 from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDExchangeMove
 from timemachine.md.exchange.exchange_mover import compute_raw_ratio_given_weights, delta_r_np, get_water_groups
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
-from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology_truncated
 
 
 def compute_ref_raw_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j, coords, box, new_coords):
@@ -314,7 +314,7 @@ def hif2a_rbfe_state() -> InitialState:
         )
 
     host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology_truncated()
     st = SingleTopology(mol_a, mol_b, core, ff)
 
     initial_state = prepare_single_topology_initial_state(st, host_config)

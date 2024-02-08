@@ -56,6 +56,40 @@ def get_hif2a_ligand_pair_single_topology():
     return mol_a, mol_b, core
 
 
+def get_hif2a_ligand_pair_single_topology_truncated():
+    """Return two ligands from hif2a truncated in the backpocket"""
+
+    with resources.path("timemachine.testsystems.data", "hif2a_ligands_truncated.sdf") as path_to_ligand:
+        all_mols = read_sdf(str(path_to_ligand))
+
+    mol_a = all_mols[0]
+    mol_b = all_mols[1]
+
+    core = np.array(
+        [
+            [1, 4],
+            [2, 5],
+            [3, 6],
+            [4, 7],
+            [5, 8],
+            [6, 9],
+            [7, 10],
+            [8, 11],
+            [9, 12],
+            [10, 13],
+            [11, 14],
+            [12, 15],
+            [13, 16],
+            [18, 23],
+            [19, 24],
+            [20, 25],
+            [22, 26],
+        ]
+    )
+
+    return mol_a, mol_b, core
+
+
 def get_relative_hif2a_in_vacuum():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_default()
