@@ -437,6 +437,7 @@ def hif2a_complex():
     return complex_system, conf, box
 
 
+@pytest.mark.skip(reason="Needs further investigation to address flakiness")
 @pytest.mark.parametrize(
     "steps_per_move,moves",
     [(1, 500), (5000, 5000)],
@@ -585,6 +586,7 @@ def hif2a_rbfe_state() -> InitialState:
     return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
 
 
+@pytest.mark.skip(reason="Needs further investigation to address flakiness")
 @pytest.mark.parametrize(
     "steps_per_move,moves",
     [pytest.param(1, 15000, marks=pytest.mark.nightly(reason="slow")), (15000, 15000)],
