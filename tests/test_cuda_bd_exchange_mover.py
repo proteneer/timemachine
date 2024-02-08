@@ -431,7 +431,7 @@ def hif2a_complex():
         bound_impls,
         movers=[baro_impl],
     )
-    ctxt.multiple_steps(1000)
+    ctxt.multiple_steps(10000)
     conf = ctxt.get_x_t()
     box = ctxt.get_box()
     return complex_system, conf, box

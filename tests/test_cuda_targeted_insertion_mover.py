@@ -360,7 +360,7 @@ def hif2a_rbfe_state() -> InitialState:
         bound_impls,
         movers=[baro_impl],
     )
-    ctxt.multiple_steps(1000)
+    ctxt.multiple_steps(10000)
     conf = ctxt.get_x_t()
     box = ctxt.get_box()
     return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
