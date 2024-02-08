@@ -294,7 +294,7 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
 
 
 @pytest.mark.parametrize(
-    "steps_per_move,moves,box_size",
+    "num_proposals_per_move,total_num_proposals,box_size",
     [
         (1, 2500, 3.0),
         (2500, 2500, 3.0),
@@ -305,7 +305,7 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, atol, seed):
+def test_moves_in_a_water_box(num_proposals_per_move, total_num_proposals, box_size, precision, rtol, atol, seed):
     """Verify that the log acceptance probability between the reference and cuda implementation agree"""
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
@@ -328,14 +328,14 @@ def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, 
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
+    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
     assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     accepted = 0
     last_conf = conf
-    for _ in range(moves // steps_per_move):
+    for _ in range(total_num_proposals // num_proposals_per_move):
         x_move, x_box = bdem.move(last_conf, box)
         # The box will never change
         np.testing.assert_array_equal(box, x_box)
@@ -353,7 +353,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, 
             np.testing.assert_allclose(image_frame(group_idxs, x_move, x_box), x_move)
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
-            if steps_per_move == 1:
+            if num_proposals_per_move == 1:
                 before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
                 after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
                     last_conf, x_box, idx, new_pos, before_log_weights
@@ -370,20 +370,21 @@ def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, 
                 )
         elif num_moved == 0:
             np.testing.assert_array_equal(last_conf, x_move)
-        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
+        assert num_proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
         last_conf = x_move
-    assert bdem.n_proposed() == moves
-    if moves < 10_000:
+    assert bdem.n_proposed() == total_num_proposals
+    if total_num_proposals < 10_000:
+        print("test_moves_in_a_water_box accepted", accepted)
         assert accepted > 0, "No moves were made, nothing was tested"
     else:
         assert bdem.n_accepted() > 10
         assert bdem.acceptance_fraction() >= 0.0001
-    if steps_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
+    if num_proposals_per_move == 1:
+        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
         assert bdem.n_accepted() == accepted
     else:
         assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / moves
+        assert bdem.acceptance_fraction() >= accepted / total_num_proposals
 
 
 @pytest.fixture(scope="module")
@@ -438,12 +439,15 @@ def hif2a_complex():
 
 
 @pytest.mark.parametrize(
-    "steps_per_move,moves",
-    [(1, 500), (5000, 5000)],
+    "num_proposals_per_move, total_num_proposals",
+    [
+        pytest.param(1, 40000, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(5000, 40000, marks=pytest.mark.nightly(reason="slow")),
+    ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_with_complex(hif2a_complex, steps_per_move, moves, precision, rtol, atol, seed):
+def test_moves_with_complex(hif2a_complex, num_proposals_per_move, total_num_proposals, precision, rtol, atol, seed):
     complex_system, conf, box = hif2a_complex
     bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
@@ -467,14 +471,14 @@ def test_moves_with_complex(hif2a_complex, steps_per_move, moves, precision, rto
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
+    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 
     assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     accepted = 0
     last_conf = conf
-    for step in range(moves // steps_per_move):
+    for step in range(total_num_proposals // num_proposals_per_move):
         x_move, x_box = bdem.move(last_conf, box)
         # The box will never change
         np.testing.assert_array_equal(box, x_box)
@@ -492,7 +496,7 @@ def test_moves_with_complex(hif2a_complex, steps_per_move, moves, precision, rto
             np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
-            if steps_per_move == 1:
+            if num_proposals_per_move == 1:
                 before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
                 after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
                     last_conf, x_box, idx, new_pos, before_log_weights
@@ -510,17 +514,18 @@ def test_moves_with_complex(hif2a_complex, steps_per_move, moves, precision, rto
                 )
         elif num_moved == 0:
             np.testing.assert_array_equal(last_conf, x_move)
-        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
+        assert num_proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
 
         last_conf = x_move
-    assert bdem.n_proposed() == moves
+    assert bdem.n_proposed() == total_num_proposals
+    print("test_moves_in_complex accepted", accepted)
     assert accepted > 0, "No moves were made, nothing was tested"
-    if steps_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
+    if num_proposals_per_move == 1:
+        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
         assert bdem.n_accepted() == accepted
     else:
         assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / moves
+        assert bdem.acceptance_fraction() >= accepted / total_num_proposals
 
 
 @pytest.fixture(scope="module")
@@ -586,12 +591,17 @@ def hif2a_rbfe_state() -> InitialState:
 
 
 @pytest.mark.parametrize(
-    "steps_per_move,moves",
-    [pytest.param(1, 15000, marks=pytest.mark.nightly(reason="slow")), (15000, 15000)],
+    "num_proposals_per_move, total_num_proposals",
+    [
+        pytest.param(1, 40000, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(5000, 40000, marks=pytest.mark.nightly(reason="slow")),
+    ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_with_complex_and_ligand(hif2a_rbfe_state, steps_per_move, moves, precision, rtol, atol, seed):
+def test_moves_with_complex_and_ligand(
+    hif2a_rbfe_state, num_proposals_per_move, total_num_proposals, precision, rtol, atol, seed
+):
     """Verify that when the water atoms are between the protein and ligand that the reference and cuda exchange mover agree"""
     initial_state = hif2a_rbfe_state
 
@@ -622,14 +632,14 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, steps_per_move, moves, 
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
+    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 
     assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     accepted = 0
     last_conf = conf
-    for step in range(moves // steps_per_move):
+    for step in range(total_num_proposals // num_proposals_per_move):
         x_move, x_box = bdem.move(last_conf, box)
         # The box will never change
         np.testing.assert_array_equal(box, x_box)
@@ -647,7 +657,7 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, steps_per_move, moves, 
             np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
-            if steps_per_move == 1:
+            if num_proposals_per_move == 1:
                 before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
                 after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
                     last_conf, x_box, idx, new_pos, before_log_weights
@@ -665,14 +675,15 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, steps_per_move, moves, 
                 )
         elif num_moved == 0:
             np.testing.assert_array_equal(last_conf, x_move)
-        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
+        assert num_proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
 
         last_conf = x_move
-    assert bdem.n_proposed() == moves
+    assert bdem.n_proposed() == total_num_proposals
+    print("test_moves_with_complex_and_ligand accepted", accepted)
     assert accepted > 0, "No moves were made, nothing was tested"
-    if steps_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
+    if num_proposals_per_move == 1:
+        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
         assert bdem.n_accepted() == accepted
     else:
         assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / moves
+        assert bdem.acceptance_fraction() >= accepted / total_num_proposals
