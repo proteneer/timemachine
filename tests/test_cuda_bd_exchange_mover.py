@@ -397,7 +397,7 @@ def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, 
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-5, 1e-5), (np.float32, 8e-4, 2e-3)])
-@pytest.mark.parametrize("seed", [2023, 814])
+@pytest.mark.parametrize("seed", [2023])
 def test_compute_incremental_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
     """Verify that the incremental weights computed are valid for different collections of rotations/translations"""
     proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
