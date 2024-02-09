@@ -60,6 +60,7 @@ def get_cores_and_diagnostics(
     enforce_chiral,
     disallow_planar_torsion_flips,
     min_threshold,
+    initial_mapping,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     """Same as :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
     assert max_cores > 0
@@ -76,6 +77,7 @@ def get_cores_and_diagnostics(
         enforce_chiral=enforce_chiral,
         disallow_planar_torsion_flips=disallow_planar_torsion_flips,
         min_threshold=min_threshold,
+        initial_mapping=initial_mapping,
     )
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
@@ -188,6 +190,7 @@ def get_cores(
         enforce_chiral,
         disallow_planar_torsion_flips,
         min_threshold,
+        None,
     )
 
     return all_cores
@@ -212,11 +215,31 @@ def bfs(g, atom):
     return levels_array
 
 
-def reorder_atoms_by_degree(mol):
+# def reorder_atoms_by_degree(mol):
+#     degrees = [len(a.GetNeighbors()) for a in mol.GetAtoms()]
+#     perm = np.argsort(degrees, kind="stable")[::-1]
+#     new_mol = Chem.RenumberAtoms(mol, perm.tolist())
+#     return new_mol, perm
+
+
+def reorder_atoms_by_degree_and_initial_mapping(mol, initial_mapping):
     degrees = [len(a.GetNeighbors()) for a in mol.GetAtoms()]
+    for a in mol.GetAtoms():
+        if a.GetIdx() in initial_mapping[:, 0]:
+            degrees[a.GetIdx()] += np.inf
     perm = np.argsort(degrees, kind="stable")[::-1]
+
+    old_to_new = {}
+    for new, old in enumerate(perm):
+        old_to_new[old] = new
+
     new_mol = Chem.RenumberAtoms(mol, perm.tolist())
-    return new_mol, perm
+    new_mapping = []
+    for a, b in initial_mapping:
+        new_mapping.append([old_to_new[a], b])
+    new_mapping = np.array(new_mapping)
+
+    return new_mol, perm, new_mapping
 
 
 def find_cycles(g: nx.Graph):
@@ -333,6 +356,9 @@ def _deduplicate_all_cores_and_bonds(all_cores, all_bonds):
     return cores, bonds
 
 
+# from rdkit.Chem import Draw
+
+
 def _get_cores_impl(
     mol_a,
     mol_b,
@@ -347,8 +373,31 @@ def _get_cores_impl(
     enforce_chiral,
     disallow_planar_torsion_flips,
     min_threshold,
+    initial_mapping,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
-    mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
+    # print("before initial_mapping", initial_mapping)
+    # # def mol_with_atom_index(mol):
+    # for atom in mol_a.GetAtoms():
+    #     atom.SetAtomMapNum(atom.GetIdx())
+
+    # img = Draw.MolsToGridImage([mol_a], useSVG=True)
+    # with open("debug_before.svg", "w") as fh:
+    #     fh.write(img)
+
+    mol_a, perm, initial_mapping = reorder_atoms_by_degree_and_initial_mapping(mol_a, initial_mapping)  # UNINVERT
+
+    # def mol_with_atom_index(mol):
+    # for atom in mol_a.GetAtoms():
+    #     atom.SetAtomMapNum(atom.GetIdx())
+
+    # img = Draw.MolsToGridImage([mol_a], useSVG=True)
+    # with open("debug_after.svg", "w") as fh:
+    #     fh.write(img)
+
+    # print(perm)
+    # print(initial_mapping)
+
+    # assert 0
 
     bonds_a = get_romol_bonds(mol_a)
     bonds_b = get_romol_bonds(mol_b)
@@ -357,30 +406,34 @@ def _get_cores_impl(
 
     priority_idxs = []  # ordered list of atoms to consider
 
-    # setup co-domain for each atom in mol_a
+    # setup co-domain for each atom in mol_a, if an initial mapping is provided, it overrides
+    # the priority_idxs
     for idx, a_xyz in enumerate(conf_a):
-        atom_i = mol_a.GetAtomWithIdx(idx)
-        dijs = []
+        if idx < len(initial_mapping):
+            priority_idxs.append([initial_mapping[idx]])
+        else:
+            atom_i = mol_a.GetAtomWithIdx(idx)
+            dijs = []
 
-        allowed_idxs = set()
-        for jdx, b_xyz in enumerate(conf_b):
-            atom_j = mol_b.GetAtomWithIdx(jdx)
-            dij = np.linalg.norm(a_xyz - b_xyz)
-            dijs.append(dij)
+            allowed_idxs = set()
+            for jdx, b_xyz in enumerate(conf_b):
+                atom_j = mol_b.GetAtomWithIdx(jdx)
+                dij = np.linalg.norm(a_xyz - b_xyz)
+                dijs.append(dij)
 
-            if ring_matches_ring_only and (atom_i.IsInRing() != atom_j.IsInRing()):
-                continue
+                if ring_matches_ring_only and (atom_i.IsInRing() != atom_j.IsInRing()):
+                    continue
 
-            cutoff = ring_cutoff if (atom_i.IsInRing() or atom_j.IsInRing()) else chain_cutoff
-            if dij < cutoff:
-                allowed_idxs.add(jdx)
+                cutoff = ring_cutoff if (atom_i.IsInRing() or atom_j.IsInRing()) else chain_cutoff
+                if dij < cutoff:
+                    allowed_idxs.add(jdx)
 
-        final_idxs = []
-        for idx in np.argsort(dijs, kind="stable"):
-            if idx in allowed_idxs:
-                final_idxs.append(idx)
+            final_idxs = []
+            for idx in np.argsort(dijs, kind="stable"):
+                if idx in allowed_idxs:
+                    final_idxs.append(idx)
 
-        priority_idxs.append(final_idxs)
+            priority_idxs.append(final_idxs)
 
     n_a = len(conf_a)
     n_b = len(conf_b)
@@ -419,8 +472,15 @@ def _get_cores_impl(
         max_cores,
         enforce_core_core,
         min_threshold,
+        initial_mapping,
         filter_fxn=filter_fxn,
     )
+
+    # print(all_cores)
+
+    print(mcs_diagnostics.total_nodes_visited)
+
+    assert 0
 
     all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
 

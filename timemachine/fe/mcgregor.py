@@ -191,15 +191,39 @@ def mcs(
     max_cores,
     enforce_core_core,
     min_threshold,
+    initial_mapping,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
 
+    predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
+
+    print(priority_idxs)
+
     g_a = Graph(n_a, bonds_a)
     g_b = Graph(n_b, bonds_b)
 
-    predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
-    marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
+    print("B_A", "B_B", len(bonds_a), len(bonds_b))
+    # if an atom-mapping is pre-specified, then we fast track and re-use the default mapping.
+    # assume that the initial mapping passes chiral filters etc.
+    base_marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
+    base_map_a_to_b = [UNMAPPED] * n_a
+    base_map_b_to_a = [UNMAPPED] * n_b
+    if initial_mapping is not None:
+        for a, b in initial_mapping:
+            base_map_a_to_b[a] = b
+            base_map_b_to_a[b] = a
+
+            print("arcs_left", _arcs_left(base_marcs))
+            base_marcs = refine_marcs(g_a, g_b, a, b, base_marcs)
+
+    assert 0
+
+    base_layer = len(initial_mapping)
+    # assert 0
+
+    print(priority_idxs)
+    # assert 0
 
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
     # Keep start time for debugging purposes below
@@ -208,22 +232,29 @@ def mcs(
     mcs_result = None
 
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
-    max_threshold = _arcs_left(marcs)
+    max_threshold = _arcs_left(base_marcs)
+
+    # print("MAX_THRESHOLD", max_threshold)
+    # assert 0
+
     total_nodes_visited = 0
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
+        print("cur_threshold", cur_threshold)
+        # assert 0
         if cur_threshold < min_threshold:
             raise NoMappingError(f"Unable to find mapping with at least {min_threshold} atoms")
-        map_a_to_b = [UNMAPPED] * n_a
-        map_b_to_a = [UNMAPPED] * n_b
+
+        map_a_to_b = copy.deepcopy(base_map_a_to_b)
+        map_b_to_a = copy.deepcopy(base_map_b_to_a)
         mcs_result = MCSResult()
         recursion(
             g_a,
             g_b,
             map_a_to_b,
             map_b_to_a,
-            0,
-            marcs,
+            base_layer,
+            base_marcs,
             mcs_result,
             priority_idxs,
             max_visits,

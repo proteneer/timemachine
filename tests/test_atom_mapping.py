@@ -1008,3 +1008,112 @@ def test_get_cores_and_diagnostics():
         assert (
             diagnostics.total_nodes_visited >= diagnostics.core_size
         )  # must visit at least one node per atom pair in core
+
+
+# import time
+
+
+def test_initial_mapping():
+    mols = read_sdf(hif2a_set, removeHs=False)
+    n_mols = len(mols)
+
+    for i in range(n_mols):
+        for j in range(i + 1, n_mols):
+            print(i, j)
+            mol_a, mol_b = mols[i], mols[j]
+            # start_time = time.time()
+
+            initial_mapping = (
+                np.array(
+                    [
+                        [13, 17],
+                        [12, 16],
+                        [11, 14],
+                        [10, 13],
+                        [9, 12],
+                        [15, 19],
+                        [8, 11],
+                        [7, 10],
+                        [6, 9],
+                        [5, 8],
+                        [4, 7],
+                        [3, 6],
+                        [2, 5],
+                    ]
+                )
+                - 1
+            )  # adjust for 1-indexing
+
+            # initial_mapping = np.zeros((0, 2))
+            # print(initial_mapping.shape)
+
+            # assert 0
+
+            TEST_ATOM_MAPPING_KWARGS = {
+                "ring_cutoff": 0.12,
+                "chain_cutoff": 0.2,
+                "max_visits": 1e7,
+                "connected_core": True,
+                "max_cores": 1e5,
+                "enforce_core_core": True,
+                "ring_matches_ring_only": True,
+                "complete_rings": False,
+                "enforce_chiral": True,
+                "disallow_planar_torsion_flips": True,
+                "min_threshold": 0,
+                "initial_mapping": initial_mapping,
+            }
+            _, diagnostics = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **TEST_ATOM_MAPPING_KWARGS)
+            assert 0
+
+
+def test_truncated_mols():
+    mols_with_hs = read_sdf(hif2a_set, removeHs=False)
+    mols_without_hs = read_sdf(hif2a_set, removeHs=True)
+
+    n_mols = len(mols_with_hs)
+
+    with_h_visits = []
+    without_h_visits = []
+    for i in range(n_mols):
+        for j in range(i + 1, n_mols):
+            print(i, j)
+            mol_a_with_h, mol_b_with_h = mols_with_hs[i], mols_with_hs[j]
+            mol_a_without_h, mol_b_without_h = mols_without_hs[i], mols_without_hs[j]
+            # start_time = time.time()
+            _, diagnostics = atom_mapping.get_cores_and_diagnostics(
+                mol_a_with_h, mol_b_with_h, **DEFAULT_ATOM_MAPPING_KWARGS
+            )
+            with_h_visits.append(diagnostics.total_nodes_visited)
+            # mid_time = time.time()
+            _, diagnostics = atom_mapping.get_cores_and_diagnostics(
+                mol_a_without_h, mol_b_without_h, **DEFAULT_ATOM_MAPPING_KWARGS
+            )
+            without_h_visits.append(diagnostics.total_nodes_visited)
+            # print(diagnostics.total_nodes_visited)
+            # end_time = time.time()
+
+            # print(end_time - mid_time, end_time - start_time)
+    import matplotlib.pyplot as plt
+
+    print(np.mean(with_h_visits), np.mean(without_h_visits))
+
+    plt.hist(with_h_visits, label="with_h_visits", bins=20)
+    plt.show()
+    plt.hist(without_h_visits, label="without_h_visits", bins=20)
+    plt.show()
+    # random_pair_idxs = np.random.default_rng(2024).choice(len(mols), size=(n_pairs, 2))
+
+    # for i_a, i_b in random_pair_idxs:
+    #     mol_a = mols[i_a]
+    #     mol_b = mols[i_b]
+    #     all_cores, diagnostics = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
+
+    #     assert len(all_cores) > 0
+    #     assert all(len(core) == len(all_cores[0]) for core in all_cores)
+
+    #     assert diagnostics.core_size >= len(all_cores[0])
+    #     assert diagnostics.num_cores >= len(all_cores)
+    #     assert (
+    #         diagnostics.total_nodes_visited >= diagnostics.core_size
+    #     )  # must visit at least one node per atom pair in core
