@@ -85,7 +85,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
         bt = BaseTopology(mol, ff)
         afe = AbsoluteFreeEnergy(mol, bt)
         potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, lamb)
-        ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
+        ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms(), dtype=np.int32)
         nb_params = np.array(params[-1])
         final_conf = np.concatenate([solvent_conf, get_romol_conf(mol)], axis=0)
         component_dim = 4  # q,s,e,w
@@ -110,7 +110,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
         potentials = [bp.potential for bp in host_fns]
         params = [bp.params for bp in host_fns]
         final_conf = solvent_conf
-        ligand_idxs = np.array([])
+        ligand_idxs = np.array([], dtype=np.int32)
         nb_params = np.array(params[-1])
 
     # override last potential with the updated nb_params
