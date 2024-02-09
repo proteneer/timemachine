@@ -386,16 +386,23 @@ def _get_cores_impl(
 
     mol_a, perm, initial_mapping = reorder_atoms_by_degree_and_initial_mapping(mol_a, initial_mapping)  # UNINVERT
 
-    # def mol_with_atom_index(mol):
-    # for atom in mol_a.GetAtoms():
-    #     atom.SetAtomMapNum(atom.GetIdx())
+    from rdkit.Chem import Draw
 
-    # img = Draw.MolsToGridImage([mol_a], useSVG=True)
-    # with open("debug_after.svg", "w") as fh:
-    #     fh.write(img)
+    for atom in mol_a.GetAtoms():
+        atom.SetAtomMapNum(atom.GetIdx())
+    for atom in mol_b.GetAtoms():
+        atom.SetAtomMapNum(atom.GetIdx())
+
+    img = Draw.MolsToGridImage([mol_a], useSVG=True)
+    with open("debug_after_mol_a.svg", "w") as fh:
+        fh.write(img)
+
+    img = Draw.MolsToGridImage([mol_b], useSVG=True)
+    with open("debug_after_mol_b.svg", "w") as fh:
+        fh.write(img)
 
     # print(perm)
-    # print(initial_mapping)
+    print(initial_mapping)
 
     # assert 0
 
@@ -480,7 +487,8 @@ def _get_cores_impl(
 
     print(mcs_diagnostics.total_nodes_visited)
 
-    assert 0
+    # return all_cores, all_marcs
+    # assert 0
 
     all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
 

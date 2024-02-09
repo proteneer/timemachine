@@ -1044,7 +1044,7 @@ def test_initial_mapping():
                 - 1
             )  # adjust for 1-indexing
 
-            # initial_mapping = np.zeros((0, 2))
+            initial_mapping = np.zeros((0, 2))
             # print(initial_mapping.shape)
 
             # assert 0
@@ -1063,7 +1063,13 @@ def test_initial_mapping():
                 "min_threshold": 0,
                 "initial_mapping": initial_mapping,
             }
-            _, diagnostics = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **TEST_ATOM_MAPPING_KWARGS)
+            all_cores, diagnostics = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **TEST_ATOM_MAPPING_KWARGS)
+
+            core = all_cores[0]
+            svg = plot_atom_mapping_grid(mol_a, mol_b, core)
+            with open("mapping.svg", "w") as fh:
+                fh.write(svg)
+
             assert 0
 
 

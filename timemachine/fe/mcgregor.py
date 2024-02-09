@@ -207,6 +207,14 @@ def mcs(
     # if an atom-mapping is pre-specified, then we fast track and re-use the default mapping.
     # assume that the initial mapping passes chiral filters etc.
     base_marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
+
+    for row in base_marcs.astype(np.int32).tolist():
+        print("".join([str(x) for x in row]))
+
+    assert 0
+
+    print("arcs_left_BASE", _arcs_left(base_marcs))  # should >= 29
+    assert 0
     base_map_a_to_b = [UNMAPPED] * n_a
     base_map_b_to_a = [UNMAPPED] * n_b
     if initial_mapping is not None:
@@ -217,7 +225,7 @@ def mcs(
             print("arcs_left", _arcs_left(base_marcs))
             base_marcs = refine_marcs(g_a, g_b, a, b, base_marcs)
 
-    assert 0
+    # assert 0
 
     base_layer = len(initial_mapping)
     # assert 0
@@ -236,6 +244,10 @@ def mcs(
 
     # print("MAX_THRESHOLD", max_threshold)
     # assert 0
+
+    print(base_map_a_to_b)
+    print(base_map_b_to_a)
+    assert 0
 
     total_nodes_visited = 0
     for idx in range(max_threshold):
