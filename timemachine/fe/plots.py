@@ -110,7 +110,7 @@ def plot_overlap_detail_figure(
         component names
     dGs: (n_lambdas - 1) floats
     dG_errs: (n_lambdas - 1) floats
-    u_kln_by_component_by_lambda: [L,P,2,2,T] array
+    u_kln_by_component_by_lambda: [n_lambdas - 1,P,2,2,T] array
     temperature: float
         kelvin
     prefix: string
@@ -132,7 +132,8 @@ def plot_overlap_detail_figure(
     num_rows = len(u_kln_by_component_by_lambda)  # L - 1 adjacent pairs
     num_cols = num_energy_components + 1  # one per component + one for overall energy
 
-    _, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))
+    fig, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))
+    fig.tight_layout(pad=4.0)
     if num_rows == 1:
         all_axes = [all_axes]
 
@@ -150,8 +151,8 @@ def plot_overlap_detail_figure(
         df_err = beta * dG_errs[lamb_idx]
 
         # add to plot
-        plot_axis = all_axes[lamb_idx - 1][num_energy_components]
-        plot_title = f"{prefix}_{lamb_idx - 1}_to_{lamb_idx}"
+        plot_axis = all_axes[lamb_idx][num_energy_components]
+        plot_title = f"{prefix}_{lamb_idx}_to_{lamb_idx + 1}"
         plot_BAR(df, df_err, w_fwd, w_rev, plot_title, plot_axis)
 
     # [n_lambdas x num_energy_components] plots (relying on energy decomposition)
@@ -161,7 +162,7 @@ def plot_overlap_detail_figure(
 
         # loop over bond, angle, torsion, nonbonded terms etc.
         for u_idx in range(num_energy_components):
-            plot_axis = all_axes[lamb_idx - 1][u_idx]
+            plot_axis = all_axes[lamb_idx][u_idx]
 
             plot_work(w_fwd_by_component[u_idx], w_rev_by_component[u_idx], plot_axis)
             plot_axis.set_title(components[u_idx])

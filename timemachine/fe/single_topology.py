@@ -250,6 +250,9 @@ def get_num_connected_components(num_atoms: int, bonds: Collection[Tuple[int, in
     return len(list(nx.connected_components(g)))
 
 
+MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT = 10.0
+
+
 def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     """
     Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
@@ -289,13 +292,38 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
 
     dgs = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
     # gotta add 'em all!
+
+    # use mol_b to find chiral_atom_idxs
+    mol_b_top = topology.BaseTopology(mol_b, ff)
+    mol_b_chiral_atom, _ = mol_b_top.setup_chiral_restraints()
+    mol_b_chiral_atom_idxs = mol_b_chiral_atom.potential.idxs
+
+    # (i,j,k) angle idxs implied by (center, i, j, k)
+    mol_b_chiral_atom_angle_idxs = set()
+    for center, i, j, k in mol_b_chiral_atom_idxs:
+        mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([i, center, j]))
+        mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([i, center, k]))
+        mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([j, center, k]))
+
     for anchor, (nbr, dg) in dgs.items():
         all_idxs, all_params = setup_dummy_interactions_from_ff(ff, mol_b, dg, anchor, nbr)
         all_dummy_bond_idxs.extend(all_idxs[0])
         all_dummy_angle_idxs.extend(all_idxs[1])
         all_dummy_improper_idxs.extend(all_idxs[2])
         all_dummy_bond_params.extend(all_params[0])
-        all_dummy_angle_params.extend(all_params[1])
+
+        # weaken angle terms defining the chiral restraints
+        modified_angle_params = []
+        for angle_idxs, angle_params in zip(all_idxs[1], all_params[1]):
+            # sanity check that we're already canonical
+            assert canonicalize_bond(angle_idxs) == angle_idxs
+            if angle_idxs in mol_b_chiral_atom_angle_idxs:
+                modified_angle_params.append([MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT, angle_params[1]])
+            else:
+                modified_angle_params.append(angle_params)
+
+        modified_angle_params = np.array(modified_angle_params)
+        all_dummy_angle_params.extend(modified_angle_params)
         all_dummy_improper_params.extend(all_params[2])
 
     # generate parameters for mol_a
@@ -1112,6 +1140,8 @@ class SingleTopology(AtomMapMixin):
             ),
         )
 
+        START_ANGLE_MIN = 0.2
+
         angle = self._setup_intermediate_bonded_term(
             src_system.angle,
             dst_system.angle,
@@ -1120,7 +1150,7 @@ class SingleTopology(AtomMapMixin):
             partial(
                 interpolate_harmonic_angle_params,
                 k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
-                lambda_min=0.0,
+                lambda_min=START_ANGLE_MIN,
                 lambda_max=0.7,
             ),
         )
@@ -1145,12 +1175,27 @@ class SingleTopology(AtomMapMixin):
 
         assert src_system.chiral_atom
         assert dst_system.chiral_atom
+
+        # turn on chiral atom restraints before scaling up the angle terms.
+        def rescaled_log_linear_interpolation(src_params, dst_params, lamb):
+            if lamb > START_ANGLE_MIN:
+                return dst_params
+            else:
+                return interpolate.log_linear_interpolation(src_params, dst_params, lamb / START_ANGLE_MIN, 1e-6)
+
+        # def rescaled_linear_interpolation(src_params, dst_params, lamb):
+        #     if lamb > START_ANGLE_MIN:
+        #         return dst_params
+        #     else:
+        #         return interpolate.linear_interpolation(src_params, dst_params, lamb/START_ANGLE_MIN)
+
         chiral_atom = self._setup_intermediate_bonded_term(
             src_system.chiral_atom,
             dst_system.chiral_atom,
             lamb,
             interpolate.align_chiral_atom_idxs_and_params,
-            interpolate.linear_interpolation,
+            # rescaled_linear_interpolation,
+            rescaled_log_linear_interpolation,
         )
 
         assert src_system.chiral_bond
