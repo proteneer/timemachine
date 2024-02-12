@@ -265,6 +265,9 @@ $$$$""",
     )
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    # pessimize: strengthen harmonic angle force constant to max
+    ff.ha_handle.params[:, 0] = np.max(ff.ha_handle.params[:, 0])
+
     s_top = topology.BaseTopology(mol, ff)
     x0 = utils.get_romol_conf(mol)
 
