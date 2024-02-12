@@ -179,12 +179,12 @@ def setup_dummy_interactions(
             dummy_improper_idxs.append(tuple([int(x) for x in idxs]))
             dummy_improper_params.append(params)
     for idxs, params in zip(chiral_atom_idxs, chiral_atom_params):
-        # consider a few cases: (1) all idxs dummy, (2) central atom anchor / rest dummy, (3) other
-
+        # consider a few cases: (1) all idxs dummy, (2) a single root_anchor_atom and 3 dummies, (3) other
         center, i, j, k = idxs
-
         case_1 = all(a in dummy_group for a in (center, i, j, k))
-        case_2 = (center == root_anchor_atom) and all(a in dummy_group for a in (i, j, k))
+        three_in_dummy_group = sum(a in dummy_group for a in (center, i, j, k)) == 3
+        one_is_root_anchor_atom = sum(a == root_anchor_atom for a in (center, i, j, k)) == 1
+        case_2 = three_in_dummy_group and one_is_root_anchor_atom
         # TODO: maybe add more cases, if we convince ourselves they are also factorizable...
         #    e.g. if center is root_anchor_atom, and at most one of (i, j, k) is neighbor_anchor_atom
         #   (and maybe also if root_anchor_atom, neighbor_anchor_atom are swapped in above statement)
@@ -323,11 +323,14 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_b_chiral_atom_idxs = mol_b_chiral_atom.potential.idxs
 
     # (i,j,k) angle idxs implied by (center, i, j, k)
-    mol_b_chiral_atom_angle_idxs = set()
+    interpolating_mol_b_chiral_atom_angle_idxs = set()
     for center, i, j, k in mol_b_chiral_atom_idxs:
-        mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([i, center, j]))
-        mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([i, center, k]))
-        mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([j, center, k]))
+        # if this chiral atom restraint is present in mol_b but not in the dummy group,
+        # then it is being interpolated and the angle terms need to be weakened
+        if (center, i, j, k) not in all_dummy_chiral_atom_idxs:
+            interpolating_mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([i, center, j]))
+            interpolating_mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([i, center, k]))
+            interpolating_mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([j, center, k]))
 
     for anchor, (nbr, dg) in dgs.items():
         all_idxs, all_params = setup_dummy_interactions_from_ff(ff, mol_b, dg, anchor, nbr)
@@ -343,7 +346,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
         for angle_idxs, angle_params in zip(all_idxs[1], all_params[1]):
             # sanity check that we're already canonical
             assert canonicalize_bond(angle_idxs) == angle_idxs
-            if angle_idxs in mol_b_chiral_atom_angle_idxs:
+            if angle_idxs in interpolating_mol_b_chiral_atom_angle_idxs:
                 modified_angle_params.append([MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT, angle_params[1]])
             else:
                 modified_angle_params.append(angle_params)
@@ -403,8 +406,8 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     # canonicalize improper with cw/ccw check
     mol_c_improper_idxs = tuple([canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs])
 
-    mol_c_chiral_atom_idxs = list(mol_a_chiral_atom_idxs) + all_dummy_chiral_atom_idxs
-    mol_c_chiral_atom_params = list(mol_a_chiral_atom.params) + all_dummy_chiral_atom_params
+    mol_c_chiral_atom_idxs = list(mol_a_chiral_atom_idxs) + list(all_dummy_chiral_atom_idxs)
+    mol_c_chiral_atom_params = list(mol_a_chiral_atom.params) + list(all_dummy_chiral_atom_params)
 
     # check that the improper idxs are canonical
     def assert_improper_idxs_are_canonical(all_idxs):
