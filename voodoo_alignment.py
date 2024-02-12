@@ -23,7 +23,7 @@ def get_shape_params(sig_eps):
     # generalization of rmin = 2**1/6 with a 4D decoupling parameter
     # (other solutions are imaginary)
     r_min = np.sqrt(2 ** (1 / 3) * sigmas**2)
-    r_min_half = np.nan_to_num(r_min) / 12
+    r_min_half = np.nan_to_num(r_min) / 12  # WHY?
     return np.stack([r_min_half, epsilons], axis=1)
 
 
