@@ -1178,10 +1178,9 @@ class SingleTopology(AtomMapMixin):
 
         # turn on chiral atom restraints before scaling up the angle terms.
         def rescaled_log_linear_interpolation(src_params, dst_params, lamb):
-            if lamb > START_ANGLE_MIN:
-                return dst_params
-            else:
-                return interpolate.log_linear_interpolation(src_params, dst_params, lamb / START_ANGLE_MIN, 1e-6)
+            return interpolate_harmonic_force_constant(
+                src_params, dst_params, lamb, k_min=1e-6, lambda_min=0, lambda_max=START_ANGLE_MIN
+            )
 
         # def rescaled_linear_interpolation(src_params, dst_params, lamb):
         #     if lamb > START_ANGLE_MIN:
