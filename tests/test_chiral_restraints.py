@@ -553,7 +553,7 @@ $$$$""",
         assert bond_vol * bond_sign < 0
 
     def assert_same_signs(a, b):
-        assert np.all(np.sign(a) == np.sign(b))
+        np.testing.assert_array_equal(np.sign(a), np.sign(b))
 
     # frames = simulate_system(U_fn, x0, num_samples=1000)
     # for f in frames:
