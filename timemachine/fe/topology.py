@@ -9,6 +9,7 @@ from timemachine.fe import chiral_utils
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff.handlers import nonbonded
+from timemachine.potentials import BoundPotential, ChiralAtomRestraint, ChiralBondRestraint
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 from timemachine.potentials.types import Params
 
@@ -644,6 +645,36 @@ class DualTopology(BaseTopology):
 
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
+
+    def setup_chiral_restraints(self):
+        bt_a = BaseTopology(self.mol_a, self.ff)
+        bt_b = BaseTopology(self.mol_b, self.ff)
+
+        chiral_atom_potential_a, chiral_bond_potential_a = bt_a.setup_chiral_restraints()
+        chiral_atom_potential_b, chiral_bond_potential_b = bt_b.setup_chiral_restraints()
+
+        chiral_atom_idxs_combined = np.concatenate(
+            [chiral_atom_potential_a.potential.idxs, chiral_atom_potential_b.potential.idxs]
+        )
+        chiral_atom_params_combined = np.concatenate([chiral_atom_potential_a.params, chiral_atom_potential_b.params])
+
+        chiral_bond_idxs_combined = np.concatenate(
+            [chiral_bond_potential_a.potential.idxs, chiral_bond_potential_b.potential.idxs]
+        )
+
+        chiral_bond_signs_combined = np.concatenate(
+            [chiral_bond_potential_a.potential.signs, chiral_bond_potential_b.potential.signs]
+        )
+
+        chiral_bond_params_combined = np.concatenate([chiral_bond_potential_a.params, chiral_bond_potential_b.params])
+
+        chiral_atom_potential_combined = ChiralAtomRestraint(chiral_atom_idxs_combined)
+        chiral_bond_potential_combined = ChiralBondRestraint(chiral_bond_idxs_combined, chiral_bond_signs_combined)
+
+        bp_a = BoundPotential(chiral_atom_potential_combined, chiral_atom_params_combined)
+        bp_b = BoundPotential(chiral_bond_potential_combined, chiral_bond_params_combined)
+
+        return bp_a, bp_b
 
 
 class DualTopologyMinimization(DualTopology):

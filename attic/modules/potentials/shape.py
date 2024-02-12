@@ -39,7 +39,6 @@ def volume(conf_a, params_a, conf_b, params_b):
 
     pi = jnp.expand_dims(params_a[:, 1], axis=1)
     pj = jnp.expand_dims(params_b[:, 1], axis=0)
-
     kij = jnp.exp(-(ai * aj * d2ij) / (ai + aj))
     vij = pi * pj * kij * jnp.power(jnp.pi / (ai + aj), 3 / 2)
 
