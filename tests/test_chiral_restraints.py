@@ -821,7 +821,7 @@ $$$$""",
         [
             (1, 0, 4),  # nbr_anchor - anchor - dummy
             (2, 0, 4),  # nbr_anchor - anchor - dummy
-            (3, 0, 4),  # core - anchor - dummy
+            (3, 0, 4),  # nbr_anchor - anchor - dummy
         ]
     )
     for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
