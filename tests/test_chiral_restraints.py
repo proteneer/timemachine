@@ -770,6 +770,74 @@ def test_chiral_inversion_in_single_topology(well_aligned):
 from timemachine.fe.single_topology import MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT, SingleTopology
 
 
+def test_converting_1_dummy_atom():
+    # convert NH3 to CH3F, Flourine is marker for dummy
+    # test that we're weakening the angle terms correctly at the end-states
+    ff = Forcefield.load_default()
+
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02122422333D
+
+  4  3  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633   -0.5138   -0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633   -0.5138    0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633    1.0277    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+$$$$
+""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02122422333D
+
+  5  4  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633   -0.5138   -0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633   -0.5138    0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633    1.0277    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3710    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3]])
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # test the lambda = 0 end state with dummy atoms
+    vacuum_system = st.setup_intermediate_state(0)
+    weakened_angles = set(
+        [
+            (1, 0, 4),  # nbr_anchor - anchor - dummy
+            (2, 0, 4),  # nbr_anchor - anchor - dummy
+            (3, 0, 4),  # core - anchor - dummy
+        ]
+    )
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        if tuple(idxs) in weakened_angles:
+            assert k_angle <= MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+        else:
+            assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+    # test the lambda = 1 end state with fully interacting atoms
+    vacuum_system = st.setup_intermediate_state(1)
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+
 def test_converting_2_dummy_atoms():
     # convert OH2 in to CH2F2, Flourines are markers for dummy
     # test that we're weakening the angle terms correctly at the end-states
