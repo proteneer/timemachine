@@ -56,7 +56,7 @@ def recursive_map(items, mapping):
         return mapping[items]
 
 
-def setup_dummy_interactions_from_ff(ff, mol, dummy_group, root_anchor_atom, nbr_anchor_atom):
+def setup_dummy_interactions_from_ff(ff, mol, dummy_group, root_anchor_atom, nbr_anchor_atom, chiral_atom_k=250.0):
     """
     Setup interactions involving atoms in a given dummy group.
     """
@@ -65,6 +65,9 @@ def setup_dummy_interactions_from_ff(ff, mol, dummy_group, root_anchor_atom, nbr
     bond_params, hb = top.parameterize_harmonic_bond(ff.hb_handle.params)
     angle_params, ha = top.parameterize_harmonic_angle(ff.ha_handle.params)
     improper_params, it = top.parameterize_improper_torsion(ff.it_handle.params)
+    chiral_atom_potential, chiral_bond_potential = top.setup_chiral_restraints(chiral_atom_k)
+    chiral_atom_idxs = chiral_atom_potential.potential.idxs
+    chiral_atom_params = chiral_bond_potential.params
 
     return setup_dummy_interactions(
         hb.idxs,
@@ -73,6 +76,8 @@ def setup_dummy_interactions_from_ff(ff, mol, dummy_group, root_anchor_atom, nbr
         angle_params,
         improper_params,
         it.idxs,
+        chiral_atom_idxs,
+        chiral_atom_params,
         dummy_group,
         root_anchor_atom,
         nbr_anchor_atom,
@@ -86,6 +91,8 @@ def setup_dummy_interactions(
     angle_params,
     improper_idxs,
     improper_params,
+    chiral_atom_idxs,
+    chiral_atom_params,
     dummy_group,
     root_anchor_atom,
     nbr_anchor_atom,
@@ -123,6 +130,9 @@ def setup_dummy_interactions(
     improper_params: list of 3-tuples
         Force constant, phase, periods
 
+    chiral_atom_idxs : list of 4-tuples
+    chiral_atom_params: list of floats
+
     dummy_group: set or list of int
         Atoms to be decoupled
 
@@ -144,6 +154,8 @@ def setup_dummy_interactions(
     dummy_angle_params = []
     dummy_improper_idxs = []
     dummy_improper_params = []
+    dummy_chiral_atom_idxs = []
+    dummy_chiral_atom_params = []
 
     # dummy_group may be a set in certain cases, so sanity check.
 
@@ -166,6 +178,19 @@ def setup_dummy_interactions(
         if all([a in dga for a in idxs]):
             dummy_improper_idxs.append(tuple([int(x) for x in idxs]))
             dummy_improper_params.append(params)
+    for idxs, params in zip(chiral_atom_idxs, chiral_atom_params):
+        # consider a few cases: (1) all idxs dummy, (2) central atom anchor / rest dummy, (3) other
+
+        center, i, j, k = idxs
+
+        case_1 = all(a in dummy_group for a in (center, i, j, k))
+        case_2 = (center == root_anchor_atom) and all(a in dummy_group for a in (i, j, k))
+        # TODO: maybe add more cases, if we convince ourselves they are also factorizable...
+        #    e.g. if center is root_anchor_atom, and at most one of (i, j, k) is neighbor_anchor_atom
+        #   (and maybe also if root_anchor_atom, neighbor_anchor_atom are swapped in above statement)
+        if case_1 or case_2:
+            dummy_chiral_atom_idxs.append(tuple(int(x) for x in idxs))
+            dummy_chiral_atom_params.append(params)
 
     # (ytz): copy interactions that involve nbr_anchor_atom, if not None
     # this may be set to None
@@ -186,11 +211,9 @@ def setup_dummy_interactions(
                 f"Missing angle interaction in mol_b, dg={dummy_group}, root={root_anchor_atom}, nbr={nbr_anchor_atom}"
             )
 
-    return (dummy_bond_idxs, dummy_angle_idxs, dummy_improper_idxs), (
-        dummy_bond_params,
-        dummy_angle_params,
-        dummy_improper_params,
-    )
+    bonded_idxs = (dummy_bond_idxs, dummy_angle_idxs, dummy_improper_idxs, dummy_chiral_atom_idxs)
+    bonded_params = (dummy_bond_params, dummy_angle_params, dummy_improper_params, dummy_chiral_atom_params)
+    return bonded_idxs, bonded_params
 
 
 def canonicalize_improper_idxs(idxs) -> Tuple[int, int, int, int]:
@@ -289,6 +312,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     all_dummy_bond_idxs, all_dummy_bond_params = [], []
     all_dummy_angle_idxs, all_dummy_angle_params = [], []
     all_dummy_improper_idxs, all_dummy_improper_params = [], []
+    all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params = [], []
 
     dgs = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
     # gotta add 'em all!
@@ -310,6 +334,8 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
         all_dummy_bond_idxs.extend(all_idxs[0])
         all_dummy_angle_idxs.extend(all_idxs[1])
         all_dummy_improper_idxs.extend(all_idxs[2])
+        all_dummy_chiral_atom_idxs.extend(all_idxs[3])
+
         all_dummy_bond_params.extend(all_params[0])
 
         # weaken angle terms defining the chiral restraints
@@ -325,6 +351,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
         modified_angle_params = np.array(modified_angle_params)
         all_dummy_angle_params.extend(modified_angle_params)
         all_dummy_improper_params.extend(all_params[2])
+        all_dummy_chiral_atom_idxs.extend(all_params[3])
 
     # generate parameters for mol_a
     mol_a_top = topology.BaseTopology(mol_a, ff)
@@ -358,6 +385,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     all_dummy_bond_idxs = recursive_map(all_dummy_bond_idxs, b_to_c)
     all_dummy_angle_idxs = recursive_map(all_dummy_angle_idxs, b_to_c)
     all_dummy_improper_idxs = recursive_map(all_dummy_improper_idxs, b_to_c)
+    all_dummy_chiral_atom_idxs = recursive_map(all_dummy_chiral_atom_idxs, b_to_c)
 
     # parameterize the combined molecule
     mol_c_bond_idxs = mol_a_bond_idxs + all_dummy_bond_idxs
@@ -374,6 +402,9 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
 
     # canonicalize improper with cw/ccw check
     mol_c_improper_idxs = tuple([canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs])
+
+    mol_c_chiral_atom_idxs = list(mol_a_chiral_atom_idxs) + all_dummy_chiral_atom_idxs
+    mol_c_chiral_atom_params = list(mol_a_chiral_atom.params) + all_dummy_chiral_atom_params
 
     # check that the improper idxs are canonical
     def assert_improper_idxs_are_canonical(all_idxs):
@@ -408,7 +439,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     # chiral atoms need special code for canonicalization, since triple product is invariant
     # under rotational symmetry (but not something like swap symmetry)
     canon_chiral_atom_idxs = []
-    for i, j, k, l in mol_a_chiral_atom_idxs:
+    for i, j, k, l in mol_c_chiral_atom_idxs:
         rotations = [(j, k, l), (l, j, k), (k, l, j)]
         jj, kk, ll = min(rotations)
         canon_chiral_atom_idxs.append((i, jj, kk, ll))
@@ -418,7 +449,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     chiral_bond_idxs = np.array(mol_c_chiral_bond_idxs_canon, dtype=np.int32).reshape((-1, 4))
     chiral_bond_signs = np.array(mol_a_chiral_bond.potential.signs)
 
-    chiral_atom_potential = ChiralAtomRestraint(chiral_atom_idxs).bind(mol_a_chiral_atom.params)
+    chiral_atom_potential = ChiralAtomRestraint(chiral_atom_idxs).bind(mol_c_chiral_atom_params)
     chiral_bond_potential = ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(mol_a_chiral_bond.params)
 
     num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
