@@ -377,44 +377,34 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     # use mol_b to find chiral_atom_idxs
     mol_b_top = topology.BaseTopology(mol_b, ff)
     mol_b_chiral_atom, _ = mol_b_top.setup_chiral_restraints()
+
+    # all chiral atom interactions present in mol_a, including dummy group interactions from mol_b
+    canon_mol_a_chiral_atom_idxs = set(
+        [canonicalize_chiral_atom_idxs(x) for x in mol_a_chiral_atom_idxs]
+        + [canonicalize_chiral_atom_idxs(x) for x in all_dummy_chiral_atom_idxs]
+    )
+
+    # all chiral atom interactions present in mol_b, excluding dummy group interactions from mol_a
     canon_mol_b_chiral_atom_idxs = set(
         [canonicalize_chiral_atom_idxs(x) for x in recursive_map(mol_b_chiral_atom.potential.idxs, b_to_c)]
     )
-    canon_dummy_chiral_atom_idxs = set([canonicalize_chiral_atom_idxs(x) for x in all_dummy_chiral_atom_idxs])
 
-    amm = AtomMapMixin(mol_a, mol_b, core)
-    # these chiral idxs are being converted
-    interpolated_dummy_chiral_atom_idxs = canon_mol_b_chiral_atom_idxs.difference(canon_dummy_chiral_atom_idxs)
-
-    print("IDCAI", interpolated_dummy_chiral_atom_idxs)
-
-    dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs = set()
-    for dummy_center, dummy_i, dummy_j, dummy_k in interpolated_dummy_chiral_atom_idxs:
-        if np.sum(amm.c_flags[[dummy_i, dummy_center, dummy_j]]) > 0:
-            dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs.add(
-                canonicalize_bond([dummy_i, dummy_center, dummy_j])
-            )
-        if np.sum(amm.c_flags[[dummy_i, dummy_center, dummy_k]]) > 0:
-            dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs.add(
-                canonicalize_bond([dummy_i, dummy_center, dummy_k])
-            )
-        if np.sum(amm.c_flags[[dummy_j, dummy_center, dummy_k]]) > 0:
-            dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs.add(
-                canonicalize_bond([dummy_j, dummy_center, dummy_k])
-            )
-
-    print("AII", dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs)
+    chiral_atom_idxs_turned_off_at_end_state = canon_mol_b_chiral_atom_idxs.difference(canon_mol_a_chiral_atom_idxs)
+    all_angles_implied_by_turned_off_chiral_atom_idxs = set()
+    for dummy_center, dummy_i, dummy_j, dummy_k in chiral_atom_idxs_turned_off_at_end_state:
+        all_angles_implied_by_turned_off_chiral_atom_idxs.add(canonicalize_bond([dummy_i, dummy_center, dummy_j]))
+        all_angles_implied_by_turned_off_chiral_atom_idxs.add(canonicalize_bond([dummy_i, dummy_center, dummy_k]))
+        all_angles_implied_by_turned_off_chiral_atom_idxs.add(canonicalize_bond([dummy_j, dummy_center, dummy_k]))
 
     all_dummy_angle_params_modified = []
     for angle_idxs, angle_params in zip(all_dummy_angle_idxs, all_dummy_angle_params):
-        if angle_idxs in dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs:
-            print("!!!!!")
+        if angle_idxs in all_angles_implied_by_turned_off_chiral_atom_idxs:
             all_dummy_angle_params_modified.append([MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT, angle_params[1]])
         else:
             all_dummy_angle_params_modified.append(angle_params)
 
     mol_c_angle_idxs = mol_a_angle_idxs + all_dummy_angle_idxs
-    mol_c_angle_params = mol_a_angle_params + all_dummy_angle_params
+    mol_c_angle_params = mol_a_angle_params + all_dummy_angle_params_modified
 
     mol_c_proper_idxs = mol_a_proper_idxs
     mol_c_proper_params = mol_a_proper_params
