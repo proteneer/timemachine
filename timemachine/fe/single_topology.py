@@ -65,17 +65,17 @@ def setup_dummy_interactions_from_ff(ff, mol, dummy_group, root_anchor_atom, nbr
     bond_params, hb = top.parameterize_harmonic_bond(ff.hb_handle.params)
     angle_params, ha = top.parameterize_harmonic_angle(ff.ha_handle.params)
     improper_params, it = top.parameterize_improper_torsion(ff.it_handle.params)
-    chiral_atom_potential, chiral_bond_potential = top.setup_chiral_restraints(chiral_atom_k)
+    chiral_atom_potential, _ = top.setup_chiral_restraints(chiral_atom_k)
     chiral_atom_idxs = chiral_atom_potential.potential.idxs
-    chiral_atom_params = chiral_bond_potential.params
+    chiral_atom_params = chiral_atom_potential.params
 
     return setup_dummy_interactions(
         hb.idxs,
         bond_params,
         ha.idxs,
         angle_params,
-        improper_params,
         it.idxs,
+        improper_params,
         chiral_atom_idxs,
         chiral_atom_params,
         dummy_group,
@@ -276,6 +276,12 @@ def get_num_connected_components(num_atoms: int, bonds: Collection[Tuple[int, in
 MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT = 10.0
 
 
+def canonicalize_chiral_atom_idxs(idxs):
+    center, i, j, k = idxs
+    results = [(center, i, j, k), (center, j, k, i), (center, k, i, j)]
+    return sorted(results)[0]
+
+
 def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     """
     Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
@@ -317,44 +323,16 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     dgs = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
     # gotta add 'em all!
 
-    # use mol_b to find chiral_atom_idxs
-    mol_b_top = topology.BaseTopology(mol_b, ff)
-    mol_b_chiral_atom, _ = mol_b_top.setup_chiral_restraints()
-    mol_b_chiral_atom_idxs = mol_b_chiral_atom.potential.idxs
-
-    # (i,j,k) angle idxs implied by (center, i, j, k)
-    interpolating_mol_b_chiral_atom_angle_idxs = set()
-    for center, i, j, k in mol_b_chiral_atom_idxs:
-        # if this chiral atom restraint is present in mol_b but not in the dummy group,
-        # then it is being interpolated and the angle terms need to be weakened
-        if (center, i, j, k) not in all_dummy_chiral_atom_idxs:
-            interpolating_mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([i, center, j]))
-            interpolating_mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([i, center, k]))
-            interpolating_mol_b_chiral_atom_angle_idxs.add(canonicalize_bond([j, center, k]))
-
     for anchor, (nbr, dg) in dgs.items():
         all_idxs, all_params = setup_dummy_interactions_from_ff(ff, mol_b, dg, anchor, nbr)
         all_dummy_bond_idxs.extend(all_idxs[0])
         all_dummy_angle_idxs.extend(all_idxs[1])
         all_dummy_improper_idxs.extend(all_idxs[2])
         all_dummy_chiral_atom_idxs.extend(all_idxs[3])
-
         all_dummy_bond_params.extend(all_params[0])
-
-        # weaken angle terms defining the chiral restraints
-        modified_angle_params = []
-        for angle_idxs, angle_params in zip(all_idxs[1], all_params[1]):
-            # sanity check that we're already canonical
-            assert canonicalize_bond(angle_idxs) == angle_idxs
-            if angle_idxs in interpolating_mol_b_chiral_atom_angle_idxs:
-                modified_angle_params.append([MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT, angle_params[1]])
-            else:
-                modified_angle_params.append(angle_params)
-
-        modified_angle_params = np.array(modified_angle_params)
-        all_dummy_angle_params.extend(modified_angle_params)
+        all_dummy_angle_params.extend(all_params[1])
         all_dummy_improper_params.extend(all_params[2])
-        all_dummy_chiral_atom_idxs.extend(all_params[3])
+        all_dummy_chiral_atom_params.extend(all_params[3])
 
     # generate parameters for mol_a
     mol_a_top = topology.BaseTopology(mol_a, ff)
@@ -393,6 +371,47 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     # parameterize the combined molecule
     mol_c_bond_idxs = mol_a_bond_idxs + all_dummy_bond_idxs
     mol_c_bond_params = mol_a_bond_params + all_dummy_bond_params
+
+    # adjust dummy angle params if there are interpolating chiral_idxs
+
+    # use mol_b to find chiral_atom_idxs
+    mol_b_top = topology.BaseTopology(mol_b, ff)
+    mol_b_chiral_atom, _ = mol_b_top.setup_chiral_restraints()
+    canon_mol_b_chiral_atom_idxs = set(
+        [canonicalize_chiral_atom_idxs(x) for x in recursive_map(mol_b_chiral_atom.potential.idxs, b_to_c)]
+    )
+    canon_dummy_chiral_atom_idxs = set([canonicalize_chiral_atom_idxs(x) for x in all_dummy_chiral_atom_idxs])
+
+    amm = AtomMapMixin(mol_a, mol_b, core)
+    # these chiral idxs are being converted
+    interpolated_dummy_chiral_atom_idxs = canon_mol_b_chiral_atom_idxs.difference(canon_dummy_chiral_atom_idxs)
+
+    print("IDCAI", interpolated_dummy_chiral_atom_idxs)
+
+    dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs = set()
+    for dummy_center, dummy_i, dummy_j, dummy_k in interpolated_dummy_chiral_atom_idxs:
+        if np.sum(amm.c_flags[[dummy_i, dummy_center, dummy_j]]) > 0:
+            dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs.add(
+                canonicalize_bond([dummy_i, dummy_center, dummy_j])
+            )
+        if np.sum(amm.c_flags[[dummy_i, dummy_center, dummy_k]]) > 0:
+            dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs.add(
+                canonicalize_bond([dummy_i, dummy_center, dummy_k])
+            )
+        if np.sum(amm.c_flags[[dummy_j, dummy_center, dummy_k]]) > 0:
+            dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs.add(
+                canonicalize_bond([dummy_j, dummy_center, dummy_k])
+            )
+
+    print("AII", dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs)
+
+    all_dummy_angle_params_modified = []
+    for angle_idxs, angle_params in zip(all_dummy_angle_idxs, all_dummy_angle_params):
+        if angle_idxs in dummy_angle_idxs_involved_in_interpolated_dummy_chiral_atom_idxs:
+            print("!!!!!")
+            all_dummy_angle_params_modified.append([MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT, angle_params[1]])
+        else:
+            all_dummy_angle_params_modified.append(angle_params)
 
     mol_c_angle_idxs = mol_a_angle_idxs + all_dummy_angle_idxs
     mol_c_angle_params = mol_a_angle_params + all_dummy_angle_params
