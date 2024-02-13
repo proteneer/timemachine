@@ -31,6 +31,7 @@ from timemachine.potentials import (
 def minimize_scipy(U_fn, x0, return_traj=False):
     shape = x0.shape
 
+    @jax.jit
     def U_flat(x_flat):
         x_full = x_flat.reshape(*shape)
         return U_fn(x_full)
@@ -42,7 +43,8 @@ def minimize_scipy(U_fn, x0, return_traj=False):
     def callback_fn(x):
         traj.append(x.reshape(*shape))
 
-    res = scipy.optimize.minimize(U_flat, x0.reshape(-1), jac=grad_bfgs_fn, callback=callback_fn)
+    minimizer_kwargs = {"jac": grad_bfgs_fn, "callback": callback_fn}
+    res = scipy.optimize.basinhopping(U_flat, x0.reshape(-1), minimizer_kwargs=minimizer_kwargs)
     xi = res.x.reshape(*shape)
 
     if return_traj:
