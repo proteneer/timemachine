@@ -398,16 +398,20 @@ $$$$""",
     assert np.all(np.asarray(U_chiral_atom_batch(x0, normal_restr_idxs, kc)) == 0)
     assert np.all(np.asarray(U_chiral_atom_batch(x0, inverted_restr_idxs, kc)) > 0)
 
+    # ugh basin-hopping is inverting the non-chiral endstates too, sigh
     system = s_top.setup_end_state()
     U_fn = system.get_U_fn()
 
     vols_orig = []
     frames = simulate_system(U_fn, x0, num_samples=4000)
     for f in frames:
+        print("f0", f)
         vol_list = []
         for p in normal_restr_idxs:
             vol_list.append(pyramidal_volume(*f[p]))
         vols_orig.append(vol_list)
+
+    assert 0
 
     def U_total(x):
         nrgs = [U_fn(x)]
@@ -419,6 +423,7 @@ $$$$""",
     vols_chiral = []
     frames = simulate_system(U_total, x0, num_samples=4000)
     for f in frames:
+        print("f1", f)
         vol_list = []
         for p in normal_restr_idxs:
             vol_list.append(pyramidal_volume(*f[p]))
@@ -442,6 +447,8 @@ $$$$""",
     ref_dist = np.array([x for x in vols_orig if x < 0])
     test_dist = np.array([x for x in vols_chiral if x > 0])
     # should be indistinguishable under KS-test
+    print("REF_DIST, TEST_DIST", ref_dist, test_dist)
+
     ks, pv = scipy.stats.ks_2samp(-ref_dist, test_dist)
     assert ks < 0.05 or pv > 0.10
 
@@ -824,6 +831,9 @@ $$$$""",
             (3, 0, 4),  # nbr_anchor - anchor - dummy
         ]
     )
+
+    # test that we weaken the angle parameters for angle idxs implied
+    # by chiral volumes that are being turned on/off between the end-states
     for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
         k_angle = params[0]
         if tuple(idxs) in weakened_angles:
@@ -951,13 +961,13 @@ $$$$""",
     # CF3 does *not* turn off any angle idxs associated with the chiral idxs, the chiral volume
     # implied by HCF2 does turn off the angle idxs (which overlap with the the above)
     vacuum_system = st.setup_intermediate_state(0)
-    for _, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+    for params in vacuum_system.angle.params:
         k_angle = params[0]
         assert k_angle <= MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
 
     # test the lambda = 1 end state with fully interacting atoms
     vacuum_system = st.setup_intermediate_state(1)
-    for _, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+    for params in vacuum_system.angle.params:
         k_angle = params[0]
         assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
 

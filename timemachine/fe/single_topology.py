@@ -1218,25 +1218,12 @@ class SingleTopology(AtomMapMixin):
         assert src_system.chiral_atom
         assert dst_system.chiral_atom
 
-        # turn on chiral atom restraints before scaling up the angle terms.
-        def rescaled_log_linear_interpolation(src_params, dst_params, lamb):
-            return interpolate_harmonic_force_constant(
-                src_params, dst_params, lamb, k_min=1e-6, lambda_min=0, lambda_max=START_ANGLE_MIN
-            )
-
-        # def rescaled_linear_interpolation(src_params, dst_params, lamb):
-        #     if lamb > START_ANGLE_MIN:
-        #         return dst_params
-        #     else:
-        #         return interpolate.linear_interpolation(src_params, dst_params, lamb/START_ANGLE_MIN)
-
         chiral_atom = self._setup_intermediate_bonded_term(
             src_system.chiral_atom,
             dst_system.chiral_atom,
             lamb,
             interpolate.align_chiral_atom_idxs_and_params,
-            # rescaled_linear_interpolation,
-            rescaled_log_linear_interpolation,
+            partial(interpolate_harmonic_force_constant, k_min=1e-6, lambda_min=0, lambda_max=START_ANGLE_MIN),
         )
 
         assert src_system.chiral_bond
