@@ -56,7 +56,7 @@ def recursive_map(items, mapping):
         return mapping[items]
 
 
-def setup_dummy_interactions_from_ff(ff, mol, dummy_group, root_anchor_atom, nbr_anchor_atom, chiral_atom_k=250.0):
+def setup_dummy_interactions_from_ff(ff, mol, dummy_group, root_anchor_atom, nbr_anchor_atom, chiral_atom_k=1000.0):
     """
     Setup interactions involving atoms in a given dummy group.
     """
@@ -415,7 +415,8 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_c_improper_idxs = tuple([canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs])
 
     mol_c_chiral_atom_idxs = list(mol_a_chiral_atom_idxs) + list(all_dummy_chiral_atom_idxs)
-    mol_c_chiral_atom_params = list(mol_a_chiral_atom.params) + list(all_dummy_chiral_atom_params)
+    # mol_c_chiral_atom_params = list(mol_a_chiral_atom.params) + list()
+    mol_c_chiral_atom_params = np.concatenate([mol_a_chiral_atom.params, all_dummy_chiral_atom_params])
 
     # check that the improper idxs are canonical
     def assert_improper_idxs_are_canonical(all_idxs):

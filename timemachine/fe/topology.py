@@ -388,7 +388,7 @@ class BaseTopology:
         combined_potential = potentials.PeriodicTorsion(combined_idxs)
         return combined_params, combined_potential
 
-    def setup_chiral_restraints(self, restraint_k=250.0):
+    def setup_chiral_restraints(self, restraint_k=1000.0):
         """
         Create chiral atom and bond potentials.
 
