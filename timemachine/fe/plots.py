@@ -133,7 +133,7 @@ def plot_overlap_detail_figure(
     num_energy_components = len(components)
     assert num_energy_components == u_kln_by_component_by_lambda[0].shape[0]
 
-    num_rows = len(u_kln_by_component_by_lambda)  # L - 1 adjacent pairs
+    num_rows = len(u_kln_by_component_by_lambda)  # n_lambdas - 1 adjacent pairs
     num_cols = num_energy_components + 1  # one per component + one for overall energy
 
     fig, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))

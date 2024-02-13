@@ -778,8 +778,8 @@ def run_sims_bisection(
             lamb1 = lambdas[left_idx]
             lamb2 = lambdas[left_idx + 1]
             print(
-                f"Bisection iteration {iteration}: "
-                f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} "
+                f"Bisection iteration {iteration} (of {n_bisections}): "
+                f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} <= {min_overlap:.3g}"
                 f"between states at λ={lamb1:.3g} and λ={lamb2:.3g}. "
                 f"Sampling new state at λ={lamb_new:.3g}…"
             )

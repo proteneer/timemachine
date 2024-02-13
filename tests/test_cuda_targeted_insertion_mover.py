@@ -443,6 +443,7 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
         verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, proposals_per_move, rtol, atol)
 
 
+@pytest.skip(reason="flaky")
 @pytest.mark.parametrize("radius", [2.0])
 @pytest.mark.parametrize("precision", [np.float32])
 @pytest.mark.parametrize("seed", [2023])

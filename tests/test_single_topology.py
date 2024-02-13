@@ -60,38 +60,70 @@ def test_phenol():
     all_idxs, _ = setup_dummy_interactions_from_ff(
         ff, mol, dummy_group=[6, 12], root_anchor_atom=5, nbr_anchor_atom=None
     )
-    bond_idxs, angle_idxs, improper_idxs = all_idxs
+    bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
     assert set(bond_idxs) == set([(5, 6), (6, 12)])
     assert set(angle_idxs) == set([(5, 6, 12)])
     assert set(improper_idxs) == set()
+    assert set(chiral_atom_idxs) == set()
 
     # set [O,H] as the dummy group but allow an extra angle
     all_idxs, _ = setup_dummy_interactions_from_ff(ff, mol, dummy_group=[6, 12], root_anchor_atom=5, nbr_anchor_atom=0)
-    bond_idxs, angle_idxs, improper_idxs = all_idxs
+    bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
     assert set(bond_idxs) == set([(5, 6), (6, 12)])
     assert set(angle_idxs) == set([(5, 6, 12), (0, 5, 6)])
     assert set(improper_idxs) == set()
+    assert set(chiral_atom_idxs) == set()
 
     # set [H] as the dummy group, without neighbor anchor atom
     all_idxs, _ = setup_dummy_interactions_from_ff(ff, mol, dummy_group=[12], root_anchor_atom=6, nbr_anchor_atom=None)
-    bond_idxs, angle_idxs, improper_idxs = all_idxs
+    bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
     assert set(bond_idxs) == set([(6, 12)])
     assert set(angle_idxs) == set()
     assert set(improper_idxs) == set()
+    assert set(chiral_atom_idxs) == set()
 
     # set [H] as the dummy group, with neighbor anchor atom
     all_idxs, _ = setup_dummy_interactions_from_ff(ff, mol, dummy_group=[12], root_anchor_atom=6, nbr_anchor_atom=5)
-    bond_idxs, angle_idxs, improper_idxs = all_idxs
+    bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
     assert set(bond_idxs) == set([(6, 12)])
     assert set(angle_idxs) == set([(5, 6, 12)])
     assert set(improper_idxs) == set()
+    assert set(chiral_atom_idxs) == set()
 
     with pytest.raises(single_topology.MissingAngleError):
         all_idxs, _ = setup_dummy_interactions_from_ff(ff, mol, dummy_group=[12], root_anchor_atom=6, nbr_anchor_atom=4)
+
+
+@pytest.mark.nocuda
+def test_methyl_chiral_atom_idxs():
+    """
+    Check that we're leaving the chiral restraints on correctly for a methyl, when only a single hydrogen is a core atom.
+    """
+    mol = Chem.AddHs(Chem.MolFromSmiles("C"))
+    AllChem.EmbedMolecule(mol, randomSeed=2022)
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    # set [O,H] as the dummy group
+    all_idxs, _ = setup_dummy_interactions_from_ff(
+        ff, mol, dummy_group=[1, 2, 3, 4], root_anchor_atom=0, nbr_anchor_atom=None
+    )
+    _, _, _, chiral_atom_idxs = all_idxs
+
+    expected_set = set(
+        [
+            (0, 1, 3, 4),
+            (0, 3, 2, 4),
+            (0, 2, 1, 4),
+            (0, 1, 2, 3),
+        ]
+    )
+
+    assert set(chiral_atom_idxs) == expected_set
 
 
 @pytest.mark.nocuda

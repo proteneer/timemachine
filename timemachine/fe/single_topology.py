@@ -277,9 +277,10 @@ MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT = 10.0
 
 
 def canonicalize_chiral_atom_idxs(idxs):
-    center, i, j, k = idxs
-    results = [(center, i, j, k), (center, j, k, i), (center, k, i, j)]
-    return sorted(results)[0]
+    i, j, k, l = idxs
+    rotations = [(j, k, l), (l, j, k), (k, l, j)]
+    jj, kk, ll = min(rotations)
+    return i, jj, kk, ll
 
 
 def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
@@ -451,10 +452,8 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     # chiral atoms need special code for canonicalization, since triple product is invariant
     # under rotational symmetry (but not something like swap symmetry)
     canon_chiral_atom_idxs = []
-    for i, j, k, l in mol_c_chiral_atom_idxs:
-        rotations = [(j, k, l), (l, j, k), (k, l, j)]
-        jj, kk, ll = min(rotations)
-        canon_chiral_atom_idxs.append((i, jj, kk, ll))
+    for idxs in mol_c_chiral_atom_idxs:
+        canon_chiral_atom_idxs.append(canonicalize_chiral_atom_idxs(idxs))
 
     chiral_atom_idxs = np.array(canon_chiral_atom_idxs, dtype=np.int32).reshape((-1, 4))
     mol_c_chiral_bond_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_a_chiral_bond_idxs]
