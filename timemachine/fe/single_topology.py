@@ -1169,6 +1169,12 @@ class SingleTopology(AtomMapMixin):
         src_system = self.src_system
         dst_system = self.dst_system
 
+        # stagger the lambda schedule
+        bonds_min, bonds_max = [0.0, 0.3]
+        angles_min, angles_max = [0.6, 0.8]
+        torsions_min, torsions_max = [0.8, 1.0]
+        chiral_atoms_min, chiral_atoms_max = [0.3, 0.6]
+
         bond = self._setup_intermediate_bonded_term(
             src_system.bond,
             dst_system.bond,
@@ -1177,12 +1183,10 @@ class SingleTopology(AtomMapMixin):
             partial(
                 interpolate_harmonic_bond_params,
                 k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
-                lambda_min=0.0,
-                lambda_max=0.7,
+                lambda_min=bonds_min,
+                lambda_max=bonds_max,
             ),
         )
-
-        START_ANGLE_MIN = 0.2
 
         angle = self._setup_intermediate_bonded_term(
             src_system.angle,
@@ -1192,8 +1196,8 @@ class SingleTopology(AtomMapMixin):
             partial(
                 interpolate_harmonic_angle_params,
                 k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
-                lambda_min=START_ANGLE_MIN,
-                lambda_max=0.7,
+                lambda_min=angles_min,
+                lambda_max=angles_max,
             ),
         )
 
@@ -1204,7 +1208,7 @@ class SingleTopology(AtomMapMixin):
             dst_system.torsion,
             lamb,
             interpolate.align_torsion_idxs_and_params,
-            partial(interpolate_periodic_torsion_params, lambda_min=0.7, lambda_max=1.0),
+            partial(interpolate_periodic_torsion_params, lambda_min=torsions_min, lambda_max=torsions_max),
         )
 
         nonbonded = self._setup_intermediate_nonbonded_term(
@@ -1223,7 +1227,12 @@ class SingleTopology(AtomMapMixin):
             dst_system.chiral_atom,
             lamb,
             interpolate.align_chiral_atom_idxs_and_params,
-            partial(interpolate_harmonic_force_constant, k_min=1e-6, lambda_min=0, lambda_max=START_ANGLE_MIN),
+            partial(
+                interpolate_harmonic_force_constant,
+                k_min=1e-6,
+                lambda_min=chiral_atoms_min,
+                lambda_max=chiral_atoms_max,
+            ),
         )
 
         assert src_system.chiral_bond
