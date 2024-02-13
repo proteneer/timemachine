@@ -1022,7 +1022,6 @@ $$$$""",
     )
     for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
         k_angle = params[0]
-        print(idxs, params)
         if tuple(idxs) in weakened_angles:
             assert k_angle <= MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
         else:
@@ -1033,3 +1032,18 @@ $$$$""",
     for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
         k_angle = params[0]
         assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+    # swap mol_b, mol_a ordering to test for symmetry
+    st_swapped = SingleTopology(mol_b, mol_a, core, ff)
+    vacuum_system = st_swapped.setup_intermediate_state(0)
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+    vacuum_system = st_swapped.setup_intermediate_state(1)
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        if tuple(idxs) in weakened_angles:
+            assert k_angle <= MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+        else:
+            assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT

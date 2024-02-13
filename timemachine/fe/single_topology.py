@@ -372,19 +372,18 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_c_bond_idxs = mol_a_bond_idxs + all_dummy_bond_idxs
     mol_c_bond_params = mol_a_bond_params + all_dummy_bond_params
 
-    # adjust dummy angle params if there are interpolating chiral_idxs
-
+    # adjust dummy angle params associated with mol_b's dummy atoms to make chiral inversions easier
     # use mol_b to find chiral_atom_idxs
     mol_b_top = topology.BaseTopology(mol_b, ff)
     mol_b_chiral_atom, _ = mol_b_top.setup_chiral_restraints()
 
-    # all chiral atom interactions present in mol_a, including dummy group interactions from mol_b
+    # all chiral atom interactions present in mol_a, *including* dummy group interactions from mol_b
     canon_mol_a_chiral_atom_idxs = set(
         [canonicalize_chiral_atom_idxs(x) for x in mol_a_chiral_atom_idxs]
         + [canonicalize_chiral_atom_idxs(x) for x in all_dummy_chiral_atom_idxs]
     )
 
-    # all chiral atom interactions present in mol_b, excluding dummy group interactions from mol_a
+    # all chiral atom interactions present in mol_b, *excluding* dummy group interactions from mol_a
     canon_mol_b_chiral_atom_idxs = set(
         [canonicalize_chiral_atom_idxs(x) for x in recursive_map(mol_b_chiral_atom.potential.idxs, b_to_c)]
     )
