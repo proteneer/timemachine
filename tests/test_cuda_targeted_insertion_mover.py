@@ -458,6 +458,8 @@ def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed
     box = initial_state.box0
 
     bps = initial_state.potentials
+    summed_pot = next(bp for bp in initial_state.potentials if isinstance(bp.potential, SummedPotential))
+    water_params = summed_pot.potential.params_init[0]
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
@@ -474,8 +476,6 @@ def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed
 
     N = conf.shape[0]
 
-    params = nb.params
-
     cutoff = nb.potential.cutoff
     klass = custom_ops.TIBDExchangeMove_f32
     if precision == np.float64:
@@ -489,7 +489,7 @@ def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed
         N,
         initial_state.ligand_idxs,
         water_idxs,
-        params,
+        water_params,
         DEFAULT_TEMP,
         nb.potential.beta,
         cutoff,
@@ -752,6 +752,9 @@ def test_moves_with_complex_and_ligand(
     box = initial_state.box0
 
     bps = initial_state.potentials
+
+    summed_pot = next(bp for bp in initial_state.potentials if isinstance(bp.potential, SummedPotential))
+    water_params = summed_pot.potential.params_init[0]
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
@@ -779,7 +782,7 @@ def test_moves_with_complex_and_ligand(
         N,
         initial_state.ligand_idxs,
         water_idxs,
-        params,
+        water_params,
         DEFAULT_TEMP,
         nb.potential.beta,
         cutoff,
