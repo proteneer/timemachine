@@ -1229,7 +1229,7 @@ class SingleTopology(AtomMapMixin):
             interpolate.align_chiral_atom_idxs_and_params,
             partial(
                 interpolate_harmonic_force_constant,
-                k_min=1e-6,
+                k_min=0.025,
                 lambda_min=chiral_atoms_min,
                 lambda_max=chiral_atoms_max,
             ),

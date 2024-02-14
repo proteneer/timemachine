@@ -1106,3 +1106,113 @@ def test_interpolate_w_coord_monotonic():
     lambdas = np.linspace(0.0, 1.0, 100)
     ws = interpolate_w_coord(0.0, 1.0, lambdas)
     assert np.all(np.diff(ws) >= 0.0)
+
+
+@pytest.mark.skip(reason="schedule debug")
+@pytest.mark.nocuda
+def test_hif2a_plot_force_constants():
+    # generate plots of force constants
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
+
+    pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
+
+    np.random.seed(2023)
+    np.random.shuffle(pairs)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    # this has been tested for up to 50 random pairs
+    for pair_idx, (mol_a, mol_b) in enumerate(pairs[:10]):
+        if mol_a.GetProp("_Name") == mol_b.GetProp("_Name"):
+            continue
+
+        print("Checking pair", pair_idx, " | ", get_mol_name(mol_a), "->", get_mol_name(mol_b))
+        core = _get_core_by_mcs(mol_a, mol_b)
+        st = SingleTopology(mol_a, mol_b, core, ff)
+
+        n_windows = 128
+
+        bond_ks = []
+        angle_ks = []
+        torsion_ks = []
+        chiral_atom_ks = []
+
+        xs = np.linspace(0, 1, n_windows)
+        for lamb in xs:
+            vac_sys = st.setup_intermediate_state(lamb)
+            lamb_bond_ks = []
+            for k, _ in vac_sys.bond.params:
+                lamb_bond_ks.append(k)
+            bond_ks.append(lamb_bond_ks)
+
+            lamb_angle_ks = []
+            for k, _, _ in vac_sys.angle.params:
+                lamb_angle_ks.append(k)
+            angle_ks.append(lamb_angle_ks)
+
+            lamb_torsion_ks = []
+            for k, _, _ in vac_sys.torsion.params:
+                lamb_torsion_ks.append(k)
+            torsion_ks.append(lamb_torsion_ks)
+
+            lamb_chiral_atom_ks = []
+            for k in vac_sys.chiral_atom.params:
+                lamb_chiral_atom_ks.append(k)
+            chiral_atom_ks.append(lamb_chiral_atom_ks)
+
+        bond_ks = np.array(bond_ks).T
+        angle_ks = np.array(angle_ks).T
+        torsion_ks = np.array(torsion_ks).T
+        chiral_atom_ks = np.array(chiral_atom_ks).T
+
+        bond_ks /= np.amax(bond_ks, axis=1, keepdims=True)
+        angle_ks /= np.amax(angle_ks, axis=1, keepdims=True)
+        torsion_ks /= np.amax(torsion_ks, axis=1, keepdims=True)
+        chiral_atom_ks /= np.amax(chiral_atom_ks, axis=1, keepdims=True)
+
+        import matplotlib.pyplot as plt
+
+        fig, all_axes = plt.subplots(4, 1, figsize=(1 * 5, 4 * 3))
+        fig.tight_layout()
+
+        for v in bond_ks:
+            all_axes[0].plot(xs, v)
+        all_axes[0].set_title("bond")
+        all_axes[0].set_ylabel("fraction of full strength")
+        all_axes[0].set_xlabel("lambda")
+        all_axes[0].axvline(0.3, ls="--", color="gray")
+        all_axes[0].axvline(0.6, ls="--", color="gray")
+        all_axes[0].axvline(0.8, ls="--", color="gray")
+        all_axes[0].set_ylim(0, 1)
+
+        for v in angle_ks:
+            all_axes[1].plot(xs, v)
+        all_axes[1].set_title("angle")
+        all_axes[1].set_ylabel("fraction of full strength")
+        all_axes[1].set_xlabel("lambda")
+        all_axes[1].axvline(0.3, ls="--", color="gray")
+        all_axes[1].axvline(0.6, ls="--", color="gray")
+        all_axes[1].axvline(0.8, ls="--", color="gray")
+        all_axes[1].set_ylim(0, 1)
+
+        for v in torsion_ks:
+            all_axes[2].plot(xs, v)
+        all_axes[2].set_title("torsion")
+        all_axes[2].set_ylabel("fraction of full strength")
+        all_axes[2].set_xlabel("lambda")
+        all_axes[2].axvline(0.3, ls="--", color="gray")
+        all_axes[2].axvline(0.6, ls="--", color="gray")
+        all_axes[2].axvline(0.8, ls="--", color="gray")
+        all_axes[2].set_ylim(0, 1)
+
+        for v in chiral_atom_ks:
+            all_axes[3].plot(xs, v)
+        all_axes[3].set_title("chiral atom")
+        all_axes[3].set_ylabel("fraction of full strength")
+        all_axes[3].set_xlabel("lambda")
+        all_axes[3].axvline(0.3, ls="--", color="gray")
+        all_axes[3].axvline(0.6, ls="--", color="gray")
+        all_axes[3].axvline(0.8, ls="--", color="gray")
+        all_axes[3].set_ylim(0, 1)
+
+        plt.show()
