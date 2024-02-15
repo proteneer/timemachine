@@ -28,7 +28,7 @@ from timemachine.potentials import (
 # from timemachine.potentials import bonded, chiral_restraints, nonbonded
 
 
-def minimize_scipy(U_fn, x0, return_traj=False):
+def minimize_scipy(U_fn, x0, return_traj=False, seed=2024):
     shape = x0.shape
 
     @jax.jit
@@ -44,7 +44,7 @@ def minimize_scipy(U_fn, x0, return_traj=False):
         traj.append(x.reshape(*shape))
 
     minimizer_kwargs = {"jac": grad_bfgs_fn, "callback": callback_fn}
-    res = scipy.optimize.basinhopping(U_flat, x0.reshape(-1), minimizer_kwargs=minimizer_kwargs)
+    res = scipy.optimize.basinhopping(U_flat, x0.reshape(-1), minimizer_kwargs=minimizer_kwargs, seed=seed)
     xi = res.x.reshape(*shape)
 
     if return_traj:
@@ -55,12 +55,13 @@ def minimize_scipy(U_fn, x0, return_traj=False):
 
 def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_workers=None, minimize=True):
     num_atoms = x0.shape[0]
-    if minimize:
-        x_min = minimize_scipy(U_fn, x0)
-    else:
-        x_min = x0
 
     seed = 2023
+
+    if minimize:
+        x_min = minimize_scipy(U_fn, x0, seed=seed)
+    else:
+        x_min = x0
 
     num_workers = num_workers or multiprocessing.cpu_count()
     samples_per_worker = int(np.ceil(num_samples / num_workers))
