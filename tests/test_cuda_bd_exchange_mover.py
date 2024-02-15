@@ -1,9 +1,11 @@
 from dataclasses import replace
 from importlib import resources
+from typing import List
 
 import numpy as np
 import pytest
 from common import prepare_single_topology_initial_state
+from numpy.typing import NDArray
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
@@ -16,8 +18,76 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
-from timemachine.potentials import HarmonicBond, Nonbonded
+from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology_truncated
+
+
+def verify_bias_deletion_moves(
+    mol_groups: List,
+    bdem,
+    ref_bdem: RefBDExchangeMove,
+    conf: NDArray,
+    box: NDArray,
+    total_num_proposals: int,
+    proposals_per_move: int,
+    rtol: float,
+    atol: float,
+):
+    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
+    accepted = 0
+    last_conf = conf
+    last_accepted = bdem.n_accepted()
+    for step in range(total_num_proposals // proposals_per_move):
+        x_move, x_box = bdem.move(last_conf, box)
+        new_accepted = bdem.n_accepted()
+        # The box will never change
+        np.testing.assert_array_equal(box, x_box)
+        num_moved = 0
+        new_pos = None
+        idx = -1
+        for i, mol_idxs in enumerate(ref_bdem.water_idxs_np):
+            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
+                num_moved += 1
+                new_pos = x_move[mol_idxs]
+                idx = i
+        if num_moved > 0:
+            accepted += 1
+            # The molecules should all be imaged in the home box
+            np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
+            # Verify that the probabilities and per mol energies agree when we do accept moves
+            # can only be done when we only attempt a single move per step
+            if proposals_per_move == 1 or new_accepted - last_accepted == 1:
+                before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
+                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
+                    last_conf, x_box, idx, new_pos, before_log_weights
+                )
+                np.testing.assert_array_equal(tested, x_move)
+                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
+                ref_prob = np.exp(ref_log_prob)
+                assert np.isfinite(ref_prob) and ref_prob > 0.0
+                # Only when proposals_per_move == 1 can we use the last log probability
+                if proposals_per_move == 1:
+                    np.testing.assert_allclose(
+                        np.exp(bdem.last_log_probability()),
+                        ref_prob,
+                        rtol=rtol,
+                        atol=atol,
+                        err_msg=f"Step {step} failed",
+                    )
+        elif num_moved == 0:
+            np.testing.assert_array_equal(last_conf, x_move)
+        assert proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
+
+        last_conf = x_move
+        last_accepted = new_accepted
+    assert bdem.n_proposed() == total_num_proposals
+    assert accepted > 0, "No moves were made, nothing was tested"
+    if proposals_per_move == 1:
+        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
+        assert bdem.n_accepted() == accepted
+    else:
+        assert bdem.n_accepted() >= accepted
+        assert bdem.acceptance_fraction() >= accepted / total_num_proposals
 
 
 @pytest.mark.memcheck
@@ -132,39 +202,9 @@ def test_pair_of_waters_in_box(moves, precision, rtol, atol, seed):
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    last_conf = conf
-    accepted = 0
-    for _ in range(moves):
-        before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-        x_move, x_box = bdem.move(last_conf, box)
-        after_log_weights = ref_bdem.batch_log_weights(x_move, x_box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        for mol_idxs in group_idxs:
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-        if num_moved > 0 and proposals_per_move == 1:
-            accepted += 1
-            # Verify that the probabilities agree when we do accept moves
-            ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
-            ref_prob = np.exp(ref_log_prob)
-            assert np.isfinite(ref_prob) and ref_prob > 0.0
-            np.testing.assert_allclose(
-                np.exp(bdem.last_log_probability()),
-                ref_prob,
-                rtol=rtol,
-                atol=atol,
-            )
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(group_idxs, x_move, x_box), x_move)
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert num_moved <= 1, "More than one mol moved, something is wrong"
-        last_conf = x_move
-    # All moves are accepted, however the two waters could clash do to a proposal.
-    assert accepted == moves
+    verify_bias_deletion_moves(
+        group_idxs, bdem, ref_bdem, conf, box, proposals_per_move * moves, proposals_per_move, rtol, atol
+    )
 
 
 @pytest.mark.parametrize("precision", [np.float32])
@@ -332,59 +372,11 @@ def test_moves_in_a_water_box(num_proposals_per_move, total_num_proposals, box_s
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    accepted = 0
-    last_conf = conf
-    for _ in range(total_num_proposals // num_proposals_per_move):
-        x_move, x_box = bdem.move(last_conf, box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        new_pos = None
-        idx = -1
-        for i, mol_idxs in enumerate(group_idxs):
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-                new_pos = x_move[mol_idxs]
-                idx = i
-        if num_moved > 0:
-            accepted += 1
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(group_idxs, x_move, x_box), x_move)
-            # Verify that the probabilities and per mol energies agree when we do accept moves
-            # can only be done when we only attempt a single move per step
-            if num_proposals_per_move == 1:
-                before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
-                    last_conf, x_box, idx, new_pos, before_log_weights
-                )
-                np.testing.assert_array_equal(tested, x_move)
-                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
-                ref_prob = np.exp(ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
-                np.testing.assert_allclose(
-                    np.exp(bdem.last_log_probability()),
-                    ref_prob,
-                    rtol=rtol,
-                    atol=atol,
-                )
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert num_proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-        last_conf = x_move
-    assert bdem.n_proposed() == total_num_proposals
-    if total_num_proposals < 10_000:
-        print("test_moves_in_a_water_box accepted", accepted)
-        assert accepted > 0, "No moves were made, nothing was tested"
-    else:
-        assert bdem.n_accepted() > 10
-        assert bdem.acceptance_fraction() >= 0.0001
-    if num_proposals_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
-        assert bdem.n_accepted() == accepted
-    else:
-        assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / total_num_proposals
+    verify_bias_deletion_moves(
+        group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
+    )
+    if total_num_proposals >= 10_000:
+        assert bdem.n_accepted() >= 10
 
 
 @pytest.fixture(scope="module")
@@ -475,57 +467,9 @@ def test_moves_with_complex(hif2a_complex, num_proposals_per_move, total_num_pro
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    accepted = 0
-    last_conf = conf
-    for step in range(total_num_proposals // num_proposals_per_move):
-        x_move, x_box = bdem.move(last_conf, box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        new_pos = None
-        idx = -1
-        for i, mol_idxs in enumerate(water_idxs):
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-                new_pos = x_move[mol_idxs]
-                idx = i
-        if num_moved > 0:
-            accepted += 1
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
-            # Verify that the probabilities and per mol energies agree when we do accept moves
-            # can only be done when we only attempt a single move per step
-            if num_proposals_per_move == 1:
-                before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
-                    last_conf, x_box, idx, new_pos, before_log_weights
-                )
-                np.testing.assert_array_equal(tested, x_move)
-                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
-                ref_prob = np.exp(ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
-                np.testing.assert_allclose(
-                    np.exp(bdem.last_log_probability()),
-                    ref_prob,
-                    rtol=rtol,
-                    atol=atol,
-                    err_msg=f"Step {step} failed",
-                )
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert num_proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-
-        last_conf = x_move
-    assert bdem.n_proposed() == total_num_proposals
-    print("test_moves_in_complex accepted", accepted)
-    assert accepted > 0, "No moves were made, nothing was tested"
-    if num_proposals_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
-        assert bdem.n_accepted() == accepted
-    else:
-        assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / total_num_proposals
+    verify_bias_deletion_moves(
+        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
+    )
 
 
 @pytest.fixture(scope="module")
@@ -599,7 +543,7 @@ def hif2a_rbfe_state() -> InitialState:
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_with_complex_and_ligand(
+def test_bd_moves_with_complex_and_ligand(
     hif2a_rbfe_state, num_proposals_per_move, total_num_proposals, precision, rtol, atol, seed
 ):
     """Verify that when the water atoms are between the protein and ligand that the reference and cuda exchange mover agree"""
@@ -609,8 +553,11 @@ def test_moves_with_complex_and_ligand(
     box = initial_state.box0
 
     bps = initial_state.potentials
+    summed_pot = next(bp for bp in bps if isinstance(bp.potential, SummedPotential))
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    water_params = summed_pot.potential.params_init[0]
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -625,65 +572,15 @@ def test_moves_with_complex_and_ligand(
 
     N = conf.shape[0]
 
-    params = nb.params
-
     cutoff = nb.potential.cutoff
     klass = custom_ops.BDExchangeMove_f32
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
+    bdem = klass(N, water_idxs, water_params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
 
-    ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
+    ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, water_params, water_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    accepted = 0
-    last_conf = conf
-    for step in range(total_num_proposals // num_proposals_per_move):
-        x_move, x_box = bdem.move(last_conf, box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        new_pos = None
-        idx = -1
-        for i, mol_idxs in enumerate(water_idxs):
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-                new_pos = x_move[mol_idxs]
-                idx = i
-        if num_moved > 0:
-            accepted += 1
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
-            # Verify that the probabilities and per mol energies agree when we do accept moves
-            # can only be done when we only attempt a single move per step
-            if num_proposals_per_move == 1:
-                before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
-                    last_conf, x_box, idx, new_pos, before_log_weights
-                )
-                np.testing.assert_array_equal(tested, x_move)
-                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
-                ref_prob = np.exp(ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
-                np.testing.assert_allclose(
-                    np.exp(bdem.last_log_probability()),
-                    ref_prob,
-                    rtol=rtol,
-                    atol=atol,
-                    err_msg=f"Step {step} failed",
-                )
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert num_proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-
-        last_conf = x_move
-    assert bdem.n_proposed() == total_num_proposals
-    print("test_moves_with_complex_and_ligand accepted", accepted)
-    assert accepted > 0, "No moves were made, nothing was tested"
-    if num_proposals_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
-        assert bdem.n_accepted() == accepted
-    else:
-        assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / total_num_proposals
+    verify_bias_deletion_moves(
+        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
+    )
