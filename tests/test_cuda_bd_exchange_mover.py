@@ -36,10 +36,8 @@ def verify_bias_deletion_moves(
     assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     accepted = 0
     last_conf = conf
-    last_accepted = bdem.n_accepted()
     for step in range(total_num_proposals // proposals_per_move):
         x_move, x_box = bdem.move(last_conf, box)
-        new_accepted = bdem.n_accepted()
         # The box will never change
         np.testing.assert_array_equal(box, x_box)
         num_moved = 0
@@ -52,34 +50,33 @@ def verify_bias_deletion_moves(
                 idx = i
         if num_moved > 0:
             accepted += 1
+        if num_moved == 1:
             # The molecules should all be imaged in the home box
             np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
-            if proposals_per_move == 1 or new_accepted - last_accepted == 1:
-                before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
-                    last_conf, x_box, idx, new_pos, before_log_weights
+            before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
+            after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
+                last_conf, x_box, idx, new_pos, before_log_weights
+            )
+            np.testing.assert_array_equal(tested, x_move)
+            ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
+            ref_prob = np.exp(ref_log_prob)
+            assert np.isfinite(ref_prob) and ref_prob > 0.0
+            # Only when proposals_per_move == 1 can we use the last log probability
+            if proposals_per_move == 1:
+                np.testing.assert_allclose(
+                    np.exp(bdem.last_log_probability()),
+                    ref_prob,
+                    rtol=rtol,
+                    atol=atol,
+                    err_msg=f"Step {step} failed",
                 )
-                np.testing.assert_array_equal(tested, x_move)
-                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
-                ref_prob = np.exp(ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
-                # Only when proposals_per_move == 1 can we use the last log probability
-                if proposals_per_move == 1:
-                    np.testing.assert_allclose(
-                        np.exp(bdem.last_log_probability()),
-                        ref_prob,
-                        rtol=rtol,
-                        atol=atol,
-                        err_msg=f"Step {step} failed",
-                    )
         elif num_moved == 0:
             np.testing.assert_array_equal(last_conf, x_move)
         assert proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
 
         last_conf = x_move
-        last_accepted = new_accepted
     assert bdem.n_proposed() == total_num_proposals
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
