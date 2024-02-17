@@ -83,7 +83,7 @@ def assert_ff_optimizable(U, coords, sys_params, box, tol=1e-10):
 
     def loss(nb_params):
         concat_params = sys_params[:-1] + [nb_params]
-        return (U(coords, concat_params, box) - 666) ** 2
+        return (U(coords, concat_params, box) - 0.1) ** 2
 
     x_0 = nb_params.flatten()
 

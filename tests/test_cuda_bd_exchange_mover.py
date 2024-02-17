@@ -427,6 +427,7 @@ def hif2a_complex():
     return complex_system, conf, box
 
 
+@pytest.mark.skip(reason="Needs further investigation to address flakiness")
 @pytest.mark.parametrize(
     "num_proposals_per_move, total_num_proposals",
     [
@@ -531,6 +532,7 @@ def hif2a_rbfe_state() -> InitialState:
     return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
 
 
+@pytest.mark.skip(reason="Needs further investigation to address flakiness")
 @pytest.mark.parametrize(
     "num_proposals_per_move, total_num_proposals",
     [

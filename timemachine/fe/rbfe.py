@@ -42,7 +42,7 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import BoundPotential, jax_utils
 
-DEFAULT_NUM_WINDOWS = 30
+DEFAULT_NUM_WINDOWS = 48
 
 # the constant is arbitrary, but see
 # https://github.com/proteneer/timemachine/commit/e1f7328f01f427534d8744aab6027338e116ad09
