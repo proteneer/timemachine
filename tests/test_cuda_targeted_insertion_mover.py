@@ -72,34 +72,35 @@ def verify_targeted_moves(
                 idx = i
         if num_moved > 0:
             accepted += 1
+        if num_moved == 1:
             # The molecules should all be imaged in the home box
             np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
+            vol_inner = (4 / 3) * np.pi * ref_bdem.radius**3
+            vol_outer = np.prod(np.diag(box)) - vol_inner
+
+            center = np.mean(last_conf[ref_bdem.ligand_idxs], axis=0)
+
+            inner, outer = get_water_groups(last_conf, box, center, ref_bdem.water_idxs_np, ref_bdem.radius)
+            if idx in inner:
+                vi_mols = inner
+                vol_i = vol_inner
+                vj_mols = outer
+                vol_j = vol_outer
+            else:
+                vi_mols = outer
+                vol_i = vol_outer
+                vj_mols = inner
+                vol_j = vol_inner
+            tested, raw_ref_log_prob = compute_ref_raw_log_prob(
+                ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
+            )
+            np.testing.assert_array_equal(tested, x_move)
+            ref_prob = np.exp(raw_ref_log_prob)
+            # positive inf is acceptable, negative inf is not
+            assert not np.isnan(ref_prob) and ref_prob > 0.0
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
             if proposals_per_move == 1:
-                vol_inner = (4 / 3) * np.pi * ref_bdem.radius**3
-                vol_outer = np.prod(np.diag(box)) - vol_inner
-
-                center = np.mean(last_conf[ref_bdem.ligand_idxs], axis=0)
-
-                inner, outer = get_water_groups(last_conf, box, center, ref_bdem.water_idxs_np, ref_bdem.radius)
-                if idx in inner:
-                    vi_mols = inner
-                    vol_i = vol_inner
-                    vj_mols = outer
-                    vol_j = vol_outer
-                else:
-                    vi_mols = outer
-                    vol_i = vol_outer
-                    vj_mols = inner
-                    vol_j = vol_inner
-                tested, raw_ref_log_prob = compute_ref_raw_log_prob(
-                    ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
-                )
-                ref_prob = np.exp(raw_ref_log_prob)
-                # positive inf is acceptable, negative inf is not
-                assert not np.isnan(ref_prob) and ref_prob > 0.0
-                np.testing.assert_array_equal(tested, x_move)
                 raw_test_log_prob = bdem.last_raw_log_probability()
                 # Verify that the raw, without min(x, 0.0), probabilities match coarsely
                 np.testing.assert_allclose(
@@ -120,10 +121,8 @@ def verify_targeted_moves(
         elif num_moved == 0:
             np.testing.assert_array_equal(last_conf, x_move)
         assert proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-
         last_conf = x_move
     assert bdem.n_proposed() == total_num_proposals
-    print("verify_targeted_moves accepted", accepted)
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)

@@ -19,7 +19,7 @@ from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
-from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology_truncated
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 def verify_bias_deletion_moves(
@@ -431,7 +431,7 @@ def hif2a_complex():
     "num_proposals_per_move, total_num_proposals",
     [
         pytest.param(1, 40000, marks=pytest.mark.nightly(reason="slow")),
-        pytest.param(5000, 40000, marks=pytest.mark.nightly(reason="slow")),
+        (5000, 40000),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
@@ -479,7 +479,7 @@ def hif2a_rbfe_state() -> InitialState:
         )
 
     host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology_truncated()
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     st = SingleTopology(mol_a, mol_b, core, ff)
 
     initial_state = prepare_single_topology_initial_state(st, host_config)
