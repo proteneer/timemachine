@@ -487,12 +487,12 @@ void __global__ k_set_sampled_weight_reduce(
 ) {
     __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
-    // One block per set of weights
+    // One y block per set of weights, used instead of x block to avoid nuance of setting idx based only on
+    // the thread idx
     int idx_in_batch = blockIdx.y;
 
     while (idx_in_batch < batch_size) {
         int offset = idx_in_batch * num_intermediates;
-        // Threads act on a specific set of weights which is why just threadIdx.x
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
         // Zero all of the accumulators
@@ -501,6 +501,7 @@ void __global__ k_set_sampled_weight_reduce(
             accumulator += intermediate_accum[offset + idx];
             idx += gridDim.x * blockDim.x;
         }
+        // Each block reduces on a specific set of weights which is why just threadIdx.x
         accumulators[threadIdx.x] = accumulator;
         __syncthreads();
         block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
