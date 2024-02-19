@@ -1,10 +1,18 @@
-import jax.numpy as jnp
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import scipy
+from jax import jit
+from jax import numpy as jnp
 from rdkit import Chem
 
+from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import topology, utils
+from timemachine.fe.atom_mapping import get_cores
+from timemachine.fe.free_energy import HREXParams
+from timemachine.fe.rbfe import DEFAULT_HREX_PARAMS, run_vacuum
+from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.fe.system import simulate_system
 from timemachine.ff import Forcefield
 from timemachine.potentials import chiral_restraints
@@ -15,8 +23,6 @@ from timemachine.potentials.chiral_restraints import (
     pyramidal_volume,
     torsion_volume,
 )
-
-pytestmark = [pytest.mark.nocuda]
 
 
 def test_chiral_restraints_pyramidal():
@@ -259,6 +265,9 @@ $$$$""",
     )
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    # pessimize: strengthen harmonic angle force constant to max
+    ff.ha_handle.params[:, 0] = np.max(ff.ha_handle.params[:, 0])
+
     s_top = topology.BaseTopology(mol, ff)
     x0 = utils.get_romol_conf(mol)
 
@@ -389,11 +398,14 @@ $$$$""",
     assert np.all(np.asarray(U_chiral_atom_batch(x0, normal_restr_idxs, kc)) == 0)
     assert np.all(np.asarray(U_chiral_atom_batch(x0, inverted_restr_idxs, kc)) > 0)
 
+    # ugh basin-hopping is inverting the non-chiral endstates too, sigh
     system = s_top.setup_end_state()
     U_fn = system.get_U_fn()
 
     vols_orig = []
-    frames = simulate_system(U_fn, x0, num_samples=4000)
+
+    # turn off minimization for this case to avoid inversions
+    frames = simulate_system(U_fn, x0, num_samples=4000, minimize=False)
     for f in frames:
         vol_list = []
         for p in normal_restr_idxs:
@@ -433,13 +445,19 @@ $$$$""",
     ref_dist = np.array([x for x in vols_orig if x < 0])
     test_dist = np.array([x for x in vols_chiral if x > 0])
     # should be indistinguishable under KS-test
+
     ks, pv = scipy.stats.ks_2samp(-ref_dist, test_dist)
     assert ks < 0.05 or pv > 0.10
 
 
-# Expected to fail until chiral restraints are re-enabled for vacuum simulations
-@pytest.mark.xfail
-def test_chiral_topology():
+@pytest.mark.parametrize(
+    "check_chiral_atoms, check_chiral_bonds",
+    [
+        (True, False),
+        pytest.param(True, True, marks=pytest.mark.xfail(reason="chiral bonds not supported yet")),
+    ],
+)
+def test_chiral_topology(check_chiral_atoms, check_chiral_bonds):
     # test adding chiral restraints to the base topology
     # this molecule has several chiral atoms and bonds
     # 1) setup the molecule with a particular set of chiral restraints
@@ -539,7 +557,7 @@ $$$$""",
         assert bond_vol * bond_sign < 0
 
     def assert_same_signs(a, b):
-        assert np.all(np.sign(a) == np.sign(b))
+        np.testing.assert_array_equal(np.sign(a), np.sign(b))
 
     # frames = simulate_system(U_fn, x0, num_samples=1000)
     # for f in frames:
@@ -626,5 +644,413 @@ $$$$""",
         frame_bond_vols = get_chiral_bond_volumes(f)
         # f = f - np.mean(f, axis=0)
         # writer.write_frame(f*10)
-        assert_same_signs(frame_atom_vols, ref_chiral_atom_vols)
-        assert_same_signs(frame_bond_vols, ref_chiral_bond_vols)
+        if check_chiral_atoms:
+            assert_same_signs(frame_atom_vols, ref_chiral_atom_vols)
+        if check_chiral_bonds:
+            assert_same_signs(frame_bond_vols, ref_chiral_bond_vols)
+
+
+def make_chiral_flip_pair(well_aligned=True):
+    # mol_a, mol_b : substituted chiral cyclobutyl
+    # with 2 different alignments of mol_b w.r.t. mol_a
+    mol_dict = {utils.get_mol_name(mol): mol for mol in utils.read_sdf("tests/data/1243_chiral_ring_confs.sdf")}
+    mol_a = mol_dict["A"]
+    mol_b_0 = mol_dict["B_0"]
+    mol_b_1 = mol_dict["B_1"]
+    core_0 = get_cores(mol_a, mol_b_0, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+    core_1 = get_cores(mol_a, mol_b_1, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+    assert len(core_0) == 10
+    assert len(core_1) == 15
+
+    if well_aligned:
+        return AtomMapMixin(mol_a, mol_b_1, core_1)
+    else:
+        return AtomMapMixin(mol_a, mol_b_0, core_0)
+
+
+@pytest.mark.parametrize("well_aligned", [True, False])
+def test_chiral_inversion_in_single_topology_runs(well_aligned):
+    """simply test that no exceptions are raised, when running vacuum hrex"""
+    very_short_hrex_params = replace(
+        DEFAULT_HREX_PARAMS, n_frames=2, n_eq_steps=2, steps_per_frame=2, hrex_params=HREXParams(n_frames_bisection=2)
+    )
+    ff = Forcefield.load_default()
+
+    atom_map = make_chiral_flip_pair(well_aligned)
+    _ = run_vacuum(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, very_short_hrex_params, n_windows=3)
+
+
+# some util fxns: TODO: move these where appropriate
+def make_chiral_restr_fxns(mol_a, mol_b, chiral_k=1000.0):
+    from timemachine.fe.chiral_utils import setup_all_chiral_atom_restr_idxs
+
+    restr_idxs_a = np.array(setup_all_chiral_atom_restr_idxs(mol_a, utils.get_romol_conf(mol_a)))
+    restr_idxs_b = np.array(setup_all_chiral_atom_restr_idxs(mol_b, utils.get_romol_conf(mol_b)))
+
+    @jit
+    def U_a(x_a):
+        return U_chiral_atom_batch(x_a, restr_idxs_a, chiral_k).sum()
+
+    @jit
+    def U_b(x_b):
+        return U_chiral_atom_batch(x_b, restr_idxs_b, chiral_k).sum()
+
+    return U_a, U_b
+
+
+# TODO: should def x_ab_from_x, def xs_ab_from_xs move to a utils.py?
+def x_ab_from_x(x, atom_map):
+    """extract confs of mol_a, mol_b from combined conf
+
+    TODO: jaxify this...
+    """
+    # duplicating from https://github.com/proteneer/timemachine/blob/85c15ac58315e7304233ac847fe2d24db8c1773f/timemachine/fe/cif_writer.py#L9
+    n_a = atom_map.mol_a.GetNumAtoms()
+    n_b = atom_map.mol_b.GetNumAtoms()
+
+    x_a = np.zeros((n_a, 3))
+    x_b = np.zeros((n_b, 3))
+
+    for a_idx, c_idx in enumerate(atom_map.a_to_c):
+        x_a[a_idx] = x[c_idx]
+    for b_idx, c_idx in enumerate(atom_map.b_to_c):
+        x_b[b_idx] = x[c_idx]
+    #
+
+    return x_a, x_b
+
+
+def xs_ab_from_xs(xs, atom_map):
+    """map x_ab_from_x over xs
+
+    TODO: remove when x_ab_from_x is jaxified
+    """
+    xs_a, xs_b = [], []
+    for x in xs:
+        x_a, x_b = x_ab_from_x(x, atom_map)
+        xs_a.append(x_a)
+        xs_b.append(x_b)
+    xs_a = np.array(xs_a)
+    xs_b = np.array(xs_b)
+    return xs_a, xs_b
+
+
+def make_chiral_flip_heatmaps(vacuum_results, atom_map):
+    """evaluate mol_a and mol_b chiral restraint energy in each frame of every trajectory"""
+    mol_a_chiral_conflicts = []
+    mol_b_chiral_conflicts = []
+    U_a, U_b = make_chiral_restr_fxns(atom_map.mol_a, atom_map.mol_b)
+
+    for traj in vacuum_results.frames:
+        xs = np.array(traj)
+        xs_a, xs_b = xs_ab_from_xs(np.array(xs), atom_map)
+        # TODO: probably vmap
+        mol_a_chiral_conflicts.append(np.array([U_a(x) for x in xs_a]))
+        mol_b_chiral_conflicts.append(np.array([U_b(x) for x in xs_b]))
+
+    mol_a_chiral_conflicts = np.array(mol_a_chiral_conflicts)
+    mol_b_chiral_conflicts = np.array(mol_b_chiral_conflicts)
+
+    assert mol_a_chiral_conflicts.shape == (len(vacuum_results.frames), len(vacuum_results.frames[0]))
+
+    return mol_a_chiral_conflicts, mol_b_chiral_conflicts
+
+
+@pytest.mark.nightly(reason="slow")
+@pytest.mark.parametrize("well_aligned", [True, False])
+def test_chiral_inversion_in_single_topology(well_aligned):
+    """assert chiral consistency preserved through vacuum HREX"""
+
+    ff = Forcefield.load_default()
+
+    atom_map = make_chiral_flip_pair(well_aligned)
+
+    vacuum_results = run_vacuum(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, DEFAULT_HREX_PARAMS)
+    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(vacuum_results, atom_map)
+    assert (heatmap_a[0] == 0).all(), "chirality in end state A was not preserved"
+    assert (heatmap_b[-1] == 0).all(), "chirality in end state B was not preserved"
+
+
+from timemachine.fe.single_topology import MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT, SingleTopology
+
+
+def test_converting_1_dummy_atom():
+    # convert NH3 to CH3F, Flourine is marker for dummy
+    # test that we're weakening the angle terms correctly at the end-states
+    ff = Forcefield.load_default()
+
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02122422333D
+
+  4  3  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633   -0.5138   -0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633   -0.5138    0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633    1.0277    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+$$$$
+""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02122422333D
+
+  5  4  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633   -0.5138   -0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633   -0.5138    0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3633    1.0277    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3710    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3]])
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # test the lambda = 0 end state with dummy atoms
+    vacuum_system = st.setup_intermediate_state(0)
+    weakened_angles = set(
+        [
+            (1, 0, 4),  # nbr_anchor - anchor - dummy
+            (2, 0, 4),  # nbr_anchor - anchor - dummy
+            (3, 0, 4),  # nbr_anchor - anchor - dummy
+        ]
+    )
+
+    # test that we weaken the angle parameters for angle idxs implied
+    # by chiral volumes that are being turned on/off between the end-states
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        if tuple(idxs) in weakened_angles:
+            assert k_angle <= MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+        else:
+            assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+    # test the lambda = 1 end state with fully interacting atoms
+    vacuum_system = st.setup_intermediate_state(1)
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+
+def test_converting_2_dummy_atoms():
+    # convert OH2 in to CH2F2, Flourines are markers for dummy
+    # test that we're weakening the angle terms correctly at the end-states
+    ff = Forcefield.load_default()
+
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02122422022D
+
+  3  2  0  0  0  0            999 V2000
+   -4.9665    2.4777    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -5.6810    2.0652    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -4.2521    2.0652    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+M  END
+$$$$
+""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02122421572D
+
+  5  4  0  0  0  0            999 V2000
+   -6.0379    1.6295    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -5.4249    2.1815    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -5.2310    1.4579    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -5.5530    0.9620    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+   -6.8629    1.6295    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    core = np.array([[0, 0], [1, 1], [2, 2]])
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # test the lambda = 0 end state with dummy atoms
+    vacuum_system = st.setup_intermediate_state(0)
+    weakened_angles = set(
+        [
+            (1, 0, 3),  # nbr_anchor - anchor - dummy
+            (1, 0, 4),  # nbr_anchor - anchor - dummy
+            (2, 0, 4),  # core - anchor - dummy
+            (2, 0, 3),  # core - anchor - dummy
+            (3, 0, 4),  # dummy - anchor - dummy
+        ]
+    )
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        if tuple(idxs) in weakened_angles:
+            assert k_angle <= MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+        else:
+            assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+    # test the lambda = 1 end state with fully interacting atoms
+    vacuum_system = st.setup_intermediate_state(1)
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+
+def test_converting_3_dummy_atoms():
+    # convert N#N into H3C-CHF3, Flourines are markers for dummy
+    # test that we're weakening the angle terms correctly at the end-states
+    ff = Forcefield.load_default()
+
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02122422182D
+
+  2  1  0  0  0  0            999 V2000
+   -0.3633   -0.5138    0.8900 N   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  3  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02122422193D
+
+  5  4  0  0  0  0            999 V2000
+   -0.3633   -0.5138    0.8900 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 C   0  0  1  0  0  0  0  0  0  0  0  0
+    1.3710    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4570    1.2926    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4570   -0.6463   -1.1194 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    core = np.array([[0, 0], [1, 1]])
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # test the lambda = 0 end state with dummy atoms
+    # all angle terms are weakened here, this is because although the chiral volume defined by
+    # CF3 does *not* turn off any angle idxs associated with the chiral idxs, the chiral volume
+    # implied by HCF2 does turn off the angle idxs (which overlap with the the above)
+    vacuum_system = st.setup_intermediate_state(0)
+    for params in vacuum_system.angle.params:
+        k_angle = params[0]
+        assert k_angle <= MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+    # test the lambda = 1 end state with fully interacting atoms
+    vacuum_system = st.setup_intermediate_state(1)
+    for params in vacuum_system.angle.params:
+        k_angle = params[0]
+        assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+
+def test_converting_distal_dummy_atom():
+    # convert NH3 into CH3CF3
+    ff = Forcefield.load_default()
+
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02122423363D
+
+  4  3  0  0  0  0            999 V2000
+    0.0578    0.0878   -0.1894 N   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5429    0.8060    0.3714 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5487   -0.7984   -0.3841 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.3375    0.5364   -1.1442 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02122423323D
+
+  8  7  0  0  0  0            999 V2000
+    0.0578    0.0878   -0.1894 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5429    0.8060    0.3714 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5487   -0.7984   -0.3841 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.3375    0.5364   -1.1442 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3192   -0.2937    0.6112 C   0  0  2  0  0  0  0  0  0  0  0  0
+    0.9688   -0.8587    1.8138 F   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0840    0.8210    0.8572 F   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0767   -1.1979   -0.0935 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+  5  8  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3]])
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # test the lambda = 0 end state with dummy atoms
+    vacuum_system = st.setup_intermediate_state(0)
+    weakened_angles = set(
+        [
+            (1, 0, 4),  # core - anchor - dummy
+            (2, 0, 4),  # core - anchor - dummy
+            (3, 0, 4),  # core - anchor - dummy
+        ]
+    )
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        if tuple(idxs) in weakened_angles:
+            assert k_angle <= MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+        else:
+            assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+    # test the lambda = 1 end state with fully interacting atoms
+    vacuum_system = st.setup_intermediate_state(1)
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+    # swap mol_b, mol_a ordering to test for symmetry
+    st_swapped = SingleTopology(mol_b, mol_a, core, ff)
+    vacuum_system = st_swapped.setup_intermediate_state(0)
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+
+    vacuum_system = st_swapped.setup_intermediate_state(1)
+    for idxs, params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        k_angle = params[0]
+        if tuple(idxs) in weakened_angles:
+            assert k_angle <= MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT
+        else:
+            assert k_angle > MINIMUM_CHIRAL_ANGLE_FORCE_CONSTANT

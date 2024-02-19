@@ -118,6 +118,11 @@ class InitialState:
     box0: NDArray
     lamb: float
     ligand_idxs: NDArray
+    protein_idxs: NDArray
+
+    def __post_init__(self):
+        assert self.ligand_idxs.dtype == np.int32 or self.ligand_idxs.dtype == np.int64
+        assert self.protein_idxs.dtype == np.int32 or self.protein_idxs.dtype == np.int64
 
 
 @dataclass
@@ -720,7 +725,15 @@ def run_sims_bisection(
     @cache
     def get_samples(lamb: float) -> Trajectory:
         initial_state = get_initial_state(lamb)
+
+        initial_state_path = "initial_state_" + str(lamb) + ".pkl"
+        import pickle
+
+        print("Saving initial state to", initial_state_path)
+        with open(initial_state_path, "wb") as fh:
+            pickle.dump((initial_state, md_params), fh)
         traj = sample(initial_state, md_params, max_buffer_frames=100)
+        # print("lamb max/min", lamb, np.amax(traj.frames), np.amin(traj.frames))
         return traj
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
@@ -767,14 +780,20 @@ def run_sims_bisection(
             break
 
         lambdas_new, info = greedy_bisection_step(lambdas, cost_fn, midpoint)
-
         if verbose:
             costs, left_idx, lamb_new = info
             lamb1 = lambdas[left_idx]
             lamb2 = lambdas[left_idx + 1]
+
+            if min_overlap is not None:
+                overlap_info = f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} <= {min_overlap:.3g} "
+            else:
+                overlap_info = f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} (min_overlap == None)"
+
             print(
-                f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} "
-                f"between states at λ={lamb1:.3g} and λ={lamb2:.3g}. "
+                f"Bisection iteration {iteration} (of {n_bisections}): "
+                + overlap_info
+                + f"between states at λ={lamb1:.3g} and λ={lamb2:.3g}. "
                 f"Sampling new state at λ={lamb_new:.3g}…"
             )
 
