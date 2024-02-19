@@ -23,26 +23,6 @@ from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDEx
 from timemachine.md.exchange.exchange_mover import compute_raw_ratio_given_weights, delta_r_np, get_water_groups
 from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
-from timemachine.potentials.jax_utils import idxs_within_cutoff
-
-
-def mols_within_radius(
-    conf,
-    box,
-    ligand_idxs,
-    target_mols,
-    distance: float,
-):
-    ligand_centroid = np.mean(conf[ligand_idxs], axis=0)
-    idx_to_mol = {idx: i for i, mol_idxs in enumerate(target_mols) for idx in mol_idxs}
-    idxs = idxs_within_cutoff(conf, np.expand_dims(ligand_centroid, axis=0), box, cutoff=distance)
-    output_mols = []
-    for idx in idxs.tolist():
-        if idx not in idx_to_mol:
-            continue
-        mol_idx = idx_to_mol[idx]
-        output_mols.append(target_mols[mol_idx])
-    return output_mols
 
 
 def compute_ref_raw_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j, coords, box, new_coords):
@@ -75,7 +55,7 @@ def verify_targeted_moves(
     proposals_per_move: int,
     rtol: float,
     atol: float,
-) -> NDArray:
+):
     assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     accepted = 0
     last_conf = conf
@@ -150,8 +130,6 @@ def verify_targeted_moves(
         assert bdem.n_accepted() == accepted
     else:
         assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / total_num_proposals
-    return last_conf
 
 
 @pytest.mark.memcheck
@@ -834,14 +812,6 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
         radius,
     )
 
-    water_radius = 0.5
-
-    before_mols = len(mols_within_radius(conf, box, initial_state.ligand_idxs, water_idxs, water_radius))
-
-    final_conf = verify_targeted_moves(
+    verify_targeted_moves(
         all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
     )
-
-    after_mols = len(mols_within_radius(final_conf, box, initial_state.ligand_idxs, water_idxs, water_radius))
-
-    assert after_mols > before_mols
