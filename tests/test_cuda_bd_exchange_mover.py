@@ -79,6 +79,7 @@ def verify_bias_deletion_moves(
 
         last_conf = x_move
     assert bdem.n_proposed() == total_num_proposals
+    print(f"Accepted {accepted} of {total_num_proposals} moves")
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
@@ -389,8 +390,9 @@ def test_moves_in_a_water_box(num_proposals_per_move, total_num_proposals, box_s
 def hif2a_complex():
     seed = 2023
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
-        complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_ligand), ff.protein_ff, ff.water_ff)
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
+    box += np.diag([0.1, 0.1, 0.1])
     bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
@@ -433,15 +435,16 @@ def hif2a_complex():
     ctxt.multiple_steps(10000)
     conf = ctxt.get_x_t()
     box = ctxt.get_box()
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(conf, box, True, False)
+        check_force_norm(-du_dx)
     return complex_system, conf, box
 
 
-@pytest.mark.skip(reason="Needs further investigation to address flakiness")
 @pytest.mark.parametrize(
     "num_proposals_per_move, total_num_proposals",
     [
-        pytest.param(1, 40000, marks=pytest.mark.nightly(reason="slow")),
-        (5000, 40000),
+        (5000, 80000),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
@@ -487,7 +490,7 @@ def hif2a_rbfe_state() -> InitialState:
         complex_system, complex_conf, box, _, num_water_atoms = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
-
+    box += np.diag([0.1, 0.1, 0.1])
     host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     st = SingleTopology(mol_a, mol_b, core, ff)
@@ -535,18 +538,19 @@ def hif2a_rbfe_state() -> InitialState:
         bound_impls,
         movers=[baro_impl],
     )
-    ctxt.multiple_steps(1000)
+    ctxt.multiple_steps(10_000)
     conf = ctxt.get_x_t()
     box = ctxt.get_box()
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(conf, box, True, False)
+        check_force_norm(-du_dx)
     return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
 
 
-@pytest.mark.skip(reason="Needs further investigation to address flakiness")
 @pytest.mark.parametrize(
     "num_proposals_per_move, total_num_proposals",
     [
-        pytest.param(1, 40000, marks=pytest.mark.nightly(reason="slow")),
-        pytest.param(5000, 40000, marks=pytest.mark.nightly(reason="slow")),
+        (20000, 200000),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
