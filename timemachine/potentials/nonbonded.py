@@ -101,7 +101,7 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     w_j = jnp.expand_dims(params_j[:, 3], axis=0)
 
     d2ij = delta_r(ri, rj, box)
-    d2ij = jnp.concatenate([d2ij, jnp.array(w_i - w_j).reshape(*d2ij.shape[:-1], 1)], axis=-1)
+    d2ij = jnp.concatenate([d2ij, (w_i - w_j).reshape(*d2ij.shape[:-1], 1)], axis=-1)
 
     dij = jnp.linalg.norm(d2ij, axis=-1)
     sig_i = jnp.expand_dims(params_i[:, 1], axis=1)
