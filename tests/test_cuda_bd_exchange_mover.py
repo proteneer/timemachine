@@ -18,6 +18,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
+from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -209,6 +210,7 @@ def test_pair_of_waters_in_box(moves, precision, rtol, atol, seed):
 def test_bias_deletion_bulk_water_with_context(precision, seed):
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(4.0, ff.water_ff)
+    box += np.diag([0.1, 0.1, 0.1])
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
@@ -232,9 +234,9 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    proposals_per_move = 1000
+    proposals_per_move = 2000
     interval = 100
-    steps = 500
+    steps = interval * 40
     bdem = klass(
         conf.shape[0],
         water_idxs,
@@ -268,9 +270,14 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
         bound_impls,
         movers=[bdem, baro_impl],
     )
-    ctxt.multiple_steps(steps)
+    xs, boxes = ctxt.multiple_steps(steps)
     assert bdem.n_proposed() == (steps // interval) * proposals_per_move
     assert bdem.n_accepted() > 0
+
+    # Verify that the system is still stable
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(xs[-1], boxes[-1], True, False)
+        check_force_norm(-du_dx)
 
 
 @pytest.mark.parametrize("proposals_per_move", [1, 100])
