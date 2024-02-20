@@ -124,6 +124,7 @@ def verify_targeted_moves(
         assert proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
         last_conf = x_move
     assert bdem.n_proposed() == total_num_proposals
+    print(f"Accepted {accepted} of {total_num_proposals} moves")
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
@@ -317,7 +318,7 @@ def brd4_rbfe_state() -> InitialState:
         complex_system, complex_conf, box, _, num_water_atoms = builders.build_protein_system(
             str(pdb_path), ff.protein_ff, ff.water_ff
         )
-
+    box += np.diag([0.1, 0.1, 0.1])
     with resources.path("timemachine.datasets.water_exchange", "brd4_pair.sdf") as ligand_path:
         mols = read_sdf(ligand_path)
     mol_a = mols[0]
@@ -370,6 +371,9 @@ def brd4_rbfe_state() -> InitialState:
         movers=[baro_impl],
     )
     xs, boxes = ctxt.multiple_steps(10_000)
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(xs[-1], boxes[-1], True, False)
+        check_force_norm(-du_dx)
     return replace(initial_state, v0=ctxt.get_v_t(), x0=xs[-1], box0=boxes[-1])
 
 
@@ -742,8 +746,7 @@ def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals
     )
 
 
-@pytest.mark.parametrize("radius", [1.0])
-@pytest.mark.parametrize("iterations", [10])
+@pytest.mark.parametrize("radius", [0.95])
 @pytest.mark.parametrize(
     "proposals_per_move,total_num_proposals",
     [(10_000, 200_000)],
@@ -754,7 +757,7 @@ def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals
 )
 @pytest.mark.parametrize("seed", [2023])
 def test_targeted_moves_with_complex_and_ligand_in_brd4(
-    brd4_rbfe_state, radius, iterations, proposals_per_move, total_num_proposals, precision, rtol, atol, seed
+    brd4_rbfe_state, radius, proposals_per_move, total_num_proposals, precision, rtol, atol, seed
 ):
     """Verify that when the water atoms are between the protein and ligand that the reference and cuda exchange mover agree.
 
