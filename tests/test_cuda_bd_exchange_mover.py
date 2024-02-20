@@ -219,7 +219,9 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
     # only act on waters
     water_idxs = [group for group in all_group_idxs if len(group) == 3]
 
-    dt = 1.5e-3
+    dt = 2.5e-3
+
+    masses = apply_hmr(masses, bond_list)
 
     bound_impls = []
 
@@ -390,7 +392,7 @@ def hif2a_complex():
 
     # Equilibrate the system a bit before hand, which reduces clashes in the system which results greater differences
     # between the reference and test case.
-    dt = 1.5e-3
+    dt = 2.5e-3
     temperature = DEFAULT_TEMP
     pressure = DEFAULT_PRESSURE
 
@@ -474,9 +476,9 @@ def test_moves_with_complex(hif2a_complex, num_proposals_per_move, total_num_pro
 def hif2a_rbfe_state() -> InitialState:
     seed = 2023
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         complex_system, complex_conf, box, _, num_water_atoms = builders.build_protein_system(
-            str(path_to_ligand), ff.protein_ff, ff.water_ff
+            str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
 
     host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
