@@ -6,7 +6,7 @@ import time
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from importlib import resources
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pytest
@@ -329,28 +329,30 @@ def run_single_topology_benchmarks(
     config: BenchmarkConfig,
     stage: str,
     st: SingleTopology,
-    host_config: HostConfig,
+    host_config: Optional[HostConfig],
 ):
-    host_fns, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
-
-    # RBFE
     initial_state = prepare_single_topology_initial_state(st, host_config)
-    x0 = initial_state.x0[: len(host_config.conf)]
-    v0 = np.zeros_like(x0)
+    barostat_interval = 0
+    if host_config is not None:
+        host_fns, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
 
-    for barostat_interval in [0, 25]:
-        benchmark(
-            config,
-            f"{stage}-apo",
-            np.array(host_masses),
-            x0,
-            v0,
-            host_config.box,
-            host_fns,
-            barostat_interval=barostat_interval,
-        )
+        # RBFE
+        x0 = initial_state.x0[: len(host_config.conf)]
+        v0 = np.zeros_like(x0)
 
-    barostat_interval = initial_state.barostat.interval
+        for barostat_interval in [0, 25]:
+            benchmark(
+                config,
+                f"{stage}-apo",
+                np.array(host_masses),
+                x0,
+                v0,
+                host_config.box,
+                host_fns,
+                barostat_interval=barostat_interval,
+            )
+
+        barostat_interval = initial_state.barostat.interval
 
     benchmark(
         config,
@@ -358,21 +360,22 @@ def run_single_topology_benchmarks(
         initial_state.integrator.masses,
         initial_state.x0,
         initial_state.v0,
-        host_config.box,
+        initial_state.box0,
         initial_state.potentials,
         barostat_interval=barostat_interval,
     )
 
-    benchmark_local(
-        config,
-        f"{stage}-rbfe-local",
-        initial_state.integrator.masses,
-        initial_state.x0,
-        initial_state.v0,
-        host_config.box,
-        initial_state.potentials,
-        initial_state.ligand_idxs,
-    )
+    if host_config is not None:
+        benchmark_local(
+            config,
+            f"{stage}-rbfe-local",
+            initial_state.integrator.masses,
+            initial_state.x0,
+            initial_state.v0,
+            initial_state.box0,
+            initial_state.potentials,
+            initial_state.ligand_idxs,
+        )
 
 
 def benchmark_dhfr(config: BenchmarkConfig):
@@ -427,6 +430,15 @@ def benchmark_solvent(config: BenchmarkConfig):
     run_single_topology_benchmarks(config, "solvent", st, host_config)
 
 
+def benchmark_vacuum(config: BenchmarkConfig):
+    # we use simple charge "sc" to be able to run on machines that don't have openeye licenses.
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+
+    run_single_topology_benchmarks(config, "vacuum", st, None)
+
+
 def test_dhfr():
     benchmark_dhfr(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
 
@@ -437,6 +449,10 @@ def test_hif2a():
 
 def test_solvent():
     benchmark_solvent(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
+
+
+def test_vacuum():
+    benchmark_vacuum(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
 
 
 def get_nonbonded_pot_params(bps):
@@ -511,6 +527,7 @@ if __name__ == "__main__":
     parser.add_argument("--skip_dhfr", action="store_true")
     parser.add_argument("--skip_hif2a", action="store_true")
     parser.add_argument("--skip_solvent", action="store_true")
+    parser.add_argument("--skip_vacuum", action="store_true")
     parser.add_argument("--skip_potentials", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
@@ -523,6 +540,8 @@ if __name__ == "__main__":
         benchmark_hif2a(config)
     if not args.skip_solvent:
         benchmark_solvent(config)
+    if not args.skip_vacuum:
+        benchmark_vacuum(config)
 
     if not args.skip_potentials:
         hif2a_frames = generate_hif2a_frames(1000, 20, seed=2022, barostat_interval=20)
