@@ -725,15 +725,7 @@ def run_sims_bisection(
     @cache
     def get_samples(lamb: float) -> Trajectory:
         initial_state = get_initial_state(lamb)
-
-        initial_state_path = "initial_state_" + str(lamb) + ".pkl"
-        import pickle
-
-        print("Saving initial state to", initial_state_path)
-        with open(initial_state_path, "wb") as fh:
-            pickle.dump((initial_state, md_params), fh)
         traj = sample(initial_state, md_params, max_buffer_frames=100)
-        # print("lamb max/min", lamb, np.amax(traj.frames), np.amin(traj.frames))
         return traj
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
