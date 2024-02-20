@@ -60,7 +60,15 @@ def direct_space_pme(dij, qij, beta):
     return qij * erfc(beta * dij) / dij
 
 
-def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
+def nonbonded_block_unsummed(
+    xi: NDArray,
+    xj: NDArray,
+    box: NDArray,
+    params_i: NDArray,
+    params_j: NDArray,
+    beta: float,
+    cutoff: float,
+):
     """
     This is a modified version of `nonbonded` that computes a block of
     NxM interactions between two sets of particles x_i and x_j. It is assumed that
@@ -100,10 +108,10 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     w_i = jnp.expand_dims(params_i[:, 3], axis=1)
     w_j = jnp.expand_dims(params_j[:, 3], axis=0)
 
-    d2ij = delta_r(ri, rj, box)
-    d2ij = jnp.concatenate([d2ij, (w_i - w_j).reshape(*d2ij.shape[:-1], 1)], axis=-1)
+    dij = delta_r(ri, rj, box)
+    dij = jnp.concatenate([dij, (w_i - w_j).reshape(*dij.shape[:-1], 1)], axis=-1)
 
-    dij = jnp.linalg.norm(d2ij, axis=-1)
+    dij = jnp.linalg.norm(dij, axis=-1)
     sig_i = jnp.expand_dims(params_i[:, 1], axis=1)
     sig_j = jnp.expand_dims(params_j[:, 1], axis=0)
     eps_i = jnp.expand_dims(params_i[:, 2], axis=1)
