@@ -123,7 +123,7 @@ class BDExchangeMove(moves.MonteCarloMove):
             """
             if not np.array_equal(self.last_conf, conf):
                 self.last_conf = conf
-                tmp = self.beta * batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
+                tmp = self.beta * self.batch_U_fn(conf, box, self.all_a_idxs, self.all_b_idxs)
                 self.last_bw = np.array(tmp)
             return self.last_bw
 
