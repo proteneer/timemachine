@@ -72,19 +72,15 @@ void __global__ k_setup_proposals(
     int *__restrict__ output_atom_idxs,
     int *__restrict__ output_mol_offsets);
 
-template <typename RealType>
-void __global__ k_attempt_exchange_move(
-    const int N,
-    const RealType *__restrict__ rand,           // [1]
-    const RealType *__restrict__ before_max,     // [1]
-    const RealType *__restrict__ before_log_sum, // [1]
-    const RealType *__restrict__ after_max,      // [1]
-    const RealType *__restrict__ after_log_sum,  // [1]
-    const int *__restrict__ mol_offsets,         // [num_mols + 1]
-    const int *__restrict__ selected_mol,        // [1]
-    const double *__restrict__ moved_coords,     // [num_atoms_in_each_mol, 3]
-    double *__restrict__ dest_coords,            // [N, 3]
-    size_t *__restrict__ num_accepted            // [1]
+void __global__ k_accepted_exchange_move(
+    const int batch_size,
+    const int num_atoms_in_each_mol,
+    const int *__restrict__ accepted_batched_move, // [1]
+    const int *__restrict__ mol_idx_per_batch,     // [batch_size]
+    const int *__restrict__ mol_offsets,           // [num_target_mols]
+    const double *__restrict__ moved_coords,       // [batch_size, num_atoms_in_each_mol, 3]
+    double *__restrict__ dest_coords,              // [N, 3]
+    size_t *__restrict__ num_accepted              // [1]
 );
 
 template <typename RealType>
@@ -219,6 +215,19 @@ void __global__ k_adjust_sample_idxs(
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ partitioned_indices,    // [inner_count]
     int *__restrict__ sample_idxs                   // [batch_size]
+);
+
+template <typename RealType>
+void __global__ k_select_first_valid_move(
+    const int num_target_mols,
+    const int batch_size,
+    const int *__restrict__ samples,             // [batch_size]
+    const RealType *__restrict__ before_max,     // [1]
+    const RealType *__restrict__ before_log_sum, // [1]
+    const RealType *__restrict__ after_max,      // [batch_size]
+    const RealType *__restrict__ after_log_sum,  // [batch_size]
+    const RealType *__restrict__ rand,           // [batch_size]
+    int *__restrict__ accepted_sample            // [1]
 );
 
 } // namespace timemachine

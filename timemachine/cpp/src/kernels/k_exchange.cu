@@ -59,75 +59,39 @@ void __global__ k_setup_proposals(
     }
 }
 
-template <typename RealType>
-void __global__ k_attempt_exchange_move(
-    const int N,
-    const RealType *__restrict__ rand,           // [1]
-    const RealType *__restrict__ before_max,     // [1]
-    const RealType *__restrict__ before_log_sum, // [1]
-    const RealType *__restrict__ after_max,      // [1]
-    const RealType *__restrict__ after_log_sum,  // [1]
-    const int *__restrict__ mol_offsets,         // [num_mols + 1]
-    const int *__restrict__ selected_mol,        // [1]
-    const double *__restrict__ moved_coords,     // [num_atoms_in_each_mol, 3]
-    double *__restrict__ dest_coords,            // [N, 3]
-    size_t *__restrict__ num_accepted            // [1]
+void __global__ k_accepted_exchange_move(
+    const int batch_size,
+    const int num_atoms_in_each_mol,
+    const int *__restrict__ accepted_batched_move, // [1]
+    const int *__restrict__ mol_idx_per_batch,     // [batch_size]
+    const int *__restrict__ mol_offsets,           // [num_target_mols]
+    const double *__restrict__ moved_coords,       // [batch_size, num_atoms_in_each_mol, 3]
+    double *__restrict__ dest_coords,              // [N, 3]
+    size_t *__restrict__ num_accepted              // [1]
 ) {
     // Note that this kernel does not handle multiple proposals, expects that the proposals
     // have been reduced down to a single proposal beforehand.
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     assert(idx == 0);
 
-    const int moved_mol_idx = selected_mol[0];
-    const int mol_start = mol_offsets[moved_mol_idx];
-    const int mol_end = mol_offsets[moved_mol_idx + 1];
-    const int num_atoms_in_each_mol = mol_end - mol_start;
-
-    const RealType before_log_prob =
-        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_max[0], before_log_sum[0]));
-    const RealType after_log_prob =
-        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_max[0], after_log_sum[0]));
-
-    const RealType log_acceptance_prob = min(before_log_prob - after_log_prob, static_cast<RealType>(0.0));
-    const bool accepted = rand[0] < exp(log_acceptance_prob);
-    if (idx == 0 && accepted) {
-        num_accepted[0]++;
+    const int batch_idx = accepted_batched_move[0];
+    // If the selected mol is not less then the total batch size, no proposal was accepted, we can exit immediately.
+    if (batch_idx >= batch_size) {
+        // TBD: Increment the offset by batch size here
+        return;
     }
+    const int mol_idx = mol_idx_per_batch[batch_idx];
+    const int mol_start = mol_offsets[mol_idx];
+    // TBD: Increment the offset by batch_idx + 1 here
+    num_accepted[0]++;
 
-    if (accepted && idx == 0) {
-        // If accepted, move the coords of the selected mol into place
-        for (int i = 0; i < num_atoms_in_each_mol; i++) {
-            dest_coords[(mol_start + i) * 3 + 0] = moved_coords[i * 3 + 0];
-            dest_coords[(mol_start + i) * 3 + 1] = moved_coords[i * 3 + 1];
-            dest_coords[(mol_start + i) * 3 + 2] = moved_coords[i * 3 + 2];
-        }
+    // If accepted, move the coords of the selected mol into place
+    for (int i = 0; i < num_atoms_in_each_mol; i++) {
+        dest_coords[(mol_start + i) * 3 + 0] = moved_coords[num_atoms_in_each_mol * batch_size * batch_idx + i * 3 + 0];
+        dest_coords[(mol_start + i) * 3 + 1] = moved_coords[num_atoms_in_each_mol * batch_size * batch_idx + i * 3 + 1];
+        dest_coords[(mol_start + i) * 3 + 2] = moved_coords[num_atoms_in_each_mol * batch_size * batch_idx + i * 3 + 2];
     }
 }
-
-template void __global__ k_attempt_exchange_move<float>(
-    const int N,
-    const float *__restrict__ rand,
-    const float *__restrict__ before_max,
-    const float *__restrict__ before_log_sum,
-    const float *__restrict__ after_max,
-    const float *__restrict__ after_log_sum,
-    const int *__restrict__ mol_offsets,
-    const int *__restrict__ selected_mol,
-    const double *__restrict__ moved_coords,
-    double *__restrict__ dest_coords,
-    size_t *__restrict__ num_accepted);
-template void __global__ k_attempt_exchange_move<double>(
-    const int N,
-    const double *__restrict__ rand,
-    const double *__restrict__ before_max,
-    const double *__restrict__ before_log_sum,
-    const double *__restrict__ after_max,
-    const double *__restrict__ after_log_sum,
-    const int *__restrict__ mol_offsets,
-    const int *__restrict__ selected_mol,
-    const double *__restrict__ moved_coords,
-    double *__restrict__ dest_coords,
-    size_t *__restrict__ num_accepted);
 
 template <typename RealType>
 void __global__ k_attempt_exchange_move_targeted(
@@ -836,5 +800,76 @@ void __global__ k_adjust_sample_idxs(
         idx += gridDim.x * blockDim.x;
     }
 }
+
+// k_select_first_valid_move selects the first sample within a batch of samples. Use AtomicMin to
+// find the lowest index sample that was selected, then store that sample in accepted sample field. If no sample is
+// accepted store N in the accepted sample, indicating no valid sample. The accepted sample can also be used as the offset
+// for shifting the noise for backtracking
+template <typename RealType>
+void __global__ k_select_first_valid_move(
+    const int num_target_mols,
+    const int batch_size,
+    const int *__restrict__ samples,             // [batch_size]
+    const RealType *__restrict__ before_max,     // [1]
+    const RealType *__restrict__ before_log_sum, // [1]
+    const RealType *__restrict__ after_max,      // [batch_size]
+    const RealType *__restrict__ after_log_sum,  // [batch_size]
+    const RealType *__restrict__ rand,           // [batch_size]
+    int *__restrict__ accepted_sample            // [1]
+) {
+    __shared__ int selected_idx;
+    assert(blockIdx.x == 0);
+    if (threadIdx.x == 0) {
+        selected_idx = batch_size;
+    }
+    __syncthreads();
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const RealType before_log_prob =
+        convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_max[0], before_log_sum[0]));
+    while (idx < batch_size) {
+
+        const RealType after_log_prob =
+            convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_max[idx], after_log_sum[idx]));
+
+        const RealType log_acceptance_prob = min(before_log_prob - after_log_prob, static_cast<RealType>(0.0));
+        const bool accepted = rand[idx] < exp(log_acceptance_prob);
+        if (accepted) {
+            atomicMin(&selected_idx, idx);
+            // Idx is increasing so the first accepted is the min value the thread can accept
+            // making it safe to break early.
+            break;
+        }
+
+        idx += gridDim.x * blockDim.x;
+    }
+    __syncthreads();
+    if (threadIdx.x == 0) {
+        accepted_sample[0] = selected_idx;
+    }
+}
+
+template void __global__ k_select_first_valid_move<float>(
+    const int num_target_mols,
+    const int batch_size,
+    const int *__restrict__ samples,          // [batch_size]
+    const float *__restrict__ before_max,     // [1]
+    const float *__restrict__ before_log_sum, // [1]
+    const float *__restrict__ after_max,      // [batch_size]
+    const float *__restrict__ after_log_sum,  // [batch_size]
+    const float *__restrict__ rand,           // [batch_size]
+    int *__restrict__ accepted_sample         // [1]
+);
+
+template void __global__ k_select_first_valid_move<double>(
+    const int num_target_mols,
+    const int batch_size,
+    const int *__restrict__ samples,           // [batch_size]
+    const double *__restrict__ before_max,     // [1]
+    const double *__restrict__ before_log_sum, // [1]
+    const double *__restrict__ after_max,      // [batch_size]
+    const double *__restrict__ after_log_sum,  // [batch_size]
+    const double *__restrict__ rand,           // [batch_size]
+    int *__restrict__ accepted_sample          // [1]
+);
 
 } // namespace timemachine
