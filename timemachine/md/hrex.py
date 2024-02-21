@@ -4,7 +4,7 @@ from typing import Callable, Generic, List, NewType, Optional, Sequence, Tuple, 
 import numpy as np
 from numpy.typing import NDArray
 
-from timemachine.md.moves import MixtureOfMoves, MonteCarloMove
+from timemachine.md.moves import BatchedMixtureOfMoves, MonteCarloMove
 from timemachine.utils import batches, not_ragged
 
 Replica = TypeVar("Replica")
@@ -69,11 +69,11 @@ class HREX(Generic[Replica]):
         log_q: Callable[[ReplicaIdx, StateIdx], float],
         n_swap_attempts: int,
     ) -> Tuple["HREX[Replica]", List[Tuple[int, int]]]:
-        move = MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
+        move = BatchedMixtureOfMoves(
+            n_swap_attempts, [NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs]
+        )
 
-        replica_idx_by_state = list(self.replica_idx_by_state)
-        for _ in range(n_swap_attempts):
-            replica_idx_by_state = move.move(replica_idx_by_state)
+        replica_idx_by_state = move.move(list(self.replica_idx_by_state))
 
         fraction_accepted_by_pair = list(zip(move.n_accepted_by_move, move.n_proposed_by_move))
 
