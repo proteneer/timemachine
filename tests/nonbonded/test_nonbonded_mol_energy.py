@@ -202,8 +202,8 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
 def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precision, atol, rtol):
     """Test that computing the per water energies of a system with a complex is equivalent."""
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
-        complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_ligand), ff.protein_ff, ff.water_ff)
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
