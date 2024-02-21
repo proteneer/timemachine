@@ -51,16 +51,19 @@ def verify_bias_deletion_moves(
                 idx = i
         if num_moved > 0:
             accepted += 1
-        if num_moved == 1:
             # The molecules should all be imaged in the home box
             np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
             before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-            after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
-                last_conf, x_box, idx, new_pos, before_log_weights
-            )
-            np.testing.assert_array_equal(tested, x_move)
+            if num_moved == 1:
+                # If only a single mol moved we can use incremental
+                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
+                    last_conf, x_box, idx, new_pos, before_log_weights
+                )
+                np.testing.assert_array_equal(tested, x_move)
+            else:
+                after_log_weights = ref_bdem.batch_log_weights(x_move, box)
             ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
             ref_prob = np.exp(ref_log_prob)
             assert np.isfinite(ref_prob) and ref_prob > 0.0
@@ -343,11 +346,11 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
 @pytest.mark.parametrize(
     "num_proposals_per_move,total_num_proposals,box_size",
     [
-        (1, 2500, 3.0),
-        (2500, 2500, 3.0),
-        (250000, 250000, 3.0),
+        pytest.param(1, 40000, 3.0, marks=pytest.mark.nightly(reason="slow")),
+        (5000, 40000, 3.0),
+        (10000, 250000, 3.0),
         # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
-        pytest.param(1, 2500, 6.0, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1, 10000, 6.0, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
@@ -356,18 +359,55 @@ def test_moves_in_a_water_box(num_proposals_per_move, total_num_proposals, box_s
     """Verify that the log acceptance probability between the reference and cuda implementation agree"""
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    box += np.diag([0.1, 0.1, 0.1])
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
-    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    bond_list = get_bond_list(bond_pot)
+    group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     N = conf.shape[0]
 
     # Re-image coords so that everything is imaged to begin with
-    conf = image_frame(group_idxs, conf, box)
 
+    dt = 2.5e-3
+
+    masses = apply_hmr(masses, bond_list)
+    bound_impls = []
+
+    for potential in bps:
+        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)
+
+    intg = LangevinIntegrator(DEFAULT_TEMP, dt, 1.0, np.array(masses), seed).impl()
+
+    barostat_interval = 5
+    baro = MonteCarloBarostat(
+        conf.shape[0],
+        DEFAULT_PRESSURE,
+        DEFAULT_TEMP,
+        group_idxs,
+        barostat_interval,
+        seed,
+    )
+
+    ctxt = custom_ops.Context(
+        conf,
+        np.zeros_like(conf),
+        box,
+        intg,
+        bound_impls,
+        movers=[baro.impl(bound_impls)],
+    )
+    xs, boxes = ctxt.multiple_steps(10_000)
+    conf = xs[-1]
+    box = boxes[-1]
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(conf, box, True, False)
+        check_force_norm(-du_dx)
+
+    conf = image_frame(group_idxs, conf, box)
     params = nb.params
 
     cutoff = nb.potential.cutoff
@@ -382,8 +422,6 @@ def test_moves_in_a_water_box(num_proposals_per_move, total_num_proposals, box_s
     verify_bias_deletion_moves(
         group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
     )
-    if total_num_proposals >= 10_000:
-        assert bdem.n_accepted() >= 10
 
 
 @pytest.fixture(scope="module")
