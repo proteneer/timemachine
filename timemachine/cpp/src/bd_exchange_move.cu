@@ -66,7 +66,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_sample_per_atom_energy_buffer_(batch_size_ * mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
       d_log_weights_after_(batch_size_ * num_target_mols_), d_lse_max_before_(1), d_lse_exp_sum_before_(1),
-      d_lse_max_after_(batch_size_), d_lse_exp_sum_after_(batch_size_), d_samples_(batch_size_),
+      d_lse_max_after_(batch_size_), d_lse_exp_sum_after_(batch_size_), d_samples_(batch_size_), d_selected_sample_(1),
       d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * num_proposals_per_move_)),
       d_mh_noise_(num_proposals_per_move), d_num_accepted_(1), d_target_mol_atoms_(batch_size_ * mol_size_),
       d_target_mol_offsets_(num_target_mols_ + 1),
@@ -216,15 +216,24 @@ void BDExchangeMove<RealType>::move(
             d_lse_exp_sum_after_.data,
             stream);
 
-        k_attempt_exchange_move<RealType><<<1, 1, 0, stream>>>(
-            N,
-            d_mh_noise_.data + (step * batch_size_),
+        k_select_first_valid_move<RealType><<<1, min(512, batch_size_), 0, stream>>>(
+            num_target_mols_,
+            batch_size_,
+            d_samples_.data,
             d_lse_max_before_.data,
             d_lse_exp_sum_before_.data,
             d_lse_max_after_.data,
             d_lse_exp_sum_after_.data,
-            d_target_mol_offsets_.data,
+            d_mh_noise_.data + (step * batch_size_),
+            d_selected_sample_.data);
+        gpuErrchk(cudaPeekAtLastError());
+
+        k_accepted_exchange_move<<<1, 1, 0, stream>>>(
+            batch_size_,
+            mol_size_,
+            d_selected_sample_.data,
             d_samples_.data,
+            d_target_mol_offsets_.data,
             d_intermediate_coords_.data,
             d_coords,
             d_num_accepted_.data);

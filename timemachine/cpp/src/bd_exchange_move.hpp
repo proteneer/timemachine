@@ -58,6 +58,7 @@ protected:
     DeviceBuffer<RealType> d_lse_exp_sum_after_;  // [batch_size_]
 
     DeviceBuffer<int> d_samples_;            // [batch_size_] The indices of the molecules to make proposals for
+    DeviceBuffer<int> d_selected_sample_;    // [1] The mol selected from the batch
     DeviceBuffer<RealType> d_quaternions_;   // Normal noise for uniform random rotations
     DeviceBuffer<RealType> d_mh_noise_;      // Noise used in the metropolis hastings check
     DeviceBuffer<size_t> d_num_accepted_;    // [1]
