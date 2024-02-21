@@ -7,7 +7,8 @@ import pytest
 from common import prepare_single_topology_initial_state
 from numpy.typing import NDArray
 
-from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.fe import atom_mapping
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState
 from timemachine.fe.model_utils import apply_hmr, image_frame
 from timemachine.fe.single_topology import SingleTopology
@@ -20,8 +21,8 @@ from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDExchangeMove
 from timemachine.md.exchange.exchange_mover import compute_raw_ratio_given_weights, delta_r_np, get_water_groups
+from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
-from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
 def compute_ref_raw_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j, coords, box, new_coords):
@@ -50,15 +51,15 @@ def verify_targeted_moves(
     ref_bdem: RefTIBDExchangeMove,
     conf: NDArray,
     box: NDArray,
-    moves: int,
-    steps_per_move: int,
+    total_num_proposals: int,
+    proposals_per_move: int,
     rtol: float,
     atol: float,
 ):
     assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     accepted = 0
     last_conf = conf
-    for step in range(moves // steps_per_move):
+    for step in range(total_num_proposals // proposals_per_move):
         x_move, x_box = bdem.move(last_conf, box)
         # The box will never change
         np.testing.assert_array_equal(box, x_box)
@@ -72,34 +73,35 @@ def verify_targeted_moves(
                 idx = i
         if num_moved > 0:
             accepted += 1
+        if num_moved == 1:
             # The molecules should all be imaged in the home box
             np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
+            vol_inner = (4 / 3) * np.pi * ref_bdem.radius**3
+            vol_outer = np.prod(np.diag(box)) - vol_inner
+
+            center = np.mean(last_conf[ref_bdem.ligand_idxs], axis=0)
+
+            inner, outer = get_water_groups(last_conf, box, center, ref_bdem.water_idxs_np, ref_bdem.radius)
+            if idx in inner:
+                vi_mols = inner
+                vol_i = vol_inner
+                vj_mols = outer
+                vol_j = vol_outer
+            else:
+                vi_mols = outer
+                vol_i = vol_outer
+                vj_mols = inner
+                vol_j = vol_inner
+            tested, raw_ref_log_prob = compute_ref_raw_log_prob(
+                ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
+            )
+            np.testing.assert_array_equal(tested, x_move)
+            ref_prob = np.exp(raw_ref_log_prob)
+            # positive inf is acceptable, negative inf is not
+            assert not np.isnan(ref_prob) and ref_prob > 0.0
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
-            if steps_per_move == 1:
-                vol_inner = (4 / 3) * np.pi * ref_bdem.radius**3
-                vol_outer = np.prod(np.diag(box)) - vol_inner
-
-                center = np.mean(last_conf[ref_bdem.ligand_idxs], axis=0)
-
-                inner, outer = get_water_groups(last_conf, box, center, ref_bdem.water_idxs_np, ref_bdem.radius)
-                if idx in inner:
-                    vi_mols = inner
-                    vol_i = vol_inner
-                    vj_mols = outer
-                    vol_j = vol_outer
-                else:
-                    vi_mols = outer
-                    vol_i = vol_outer
-                    vj_mols = inner
-                    vol_j = vol_inner
-                tested, raw_ref_log_prob = compute_ref_raw_log_prob(
-                    ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
-                )
-                ref_prob = np.exp(raw_ref_log_prob)
-                # positive inf is acceptable, negative inf is not
-                assert not np.isnan(ref_prob) and ref_prob > 0.0
-                np.testing.assert_array_equal(tested, x_move)
+            if proposals_per_move == 1:
                 raw_test_log_prob = bdem.last_raw_log_probability()
                 # Verify that the raw, without min(x, 0.0), probabilities match coarsely
                 np.testing.assert_allclose(
@@ -119,17 +121,16 @@ def verify_targeted_moves(
                 )
         elif num_moved == 0:
             np.testing.assert_array_equal(last_conf, x_move)
-        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-
+        assert proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
         last_conf = x_move
-    assert bdem.n_proposed() == moves
+    assert bdem.n_proposed() == total_num_proposals
+    print(f"Accepted {accepted} of {total_num_proposals} moves")
     assert accepted > 0, "No moves were made, nothing was tested"
-    if steps_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
+    if proposals_per_move == 1:
+        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
         assert bdem.n_accepted() == accepted
     else:
         assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / moves
 
 
 @pytest.mark.memcheck
@@ -305,19 +306,28 @@ def test_tibd_exchange_get_set_params(precision):
 
 
 @pytest.fixture(scope="module")
-def hif2a_rbfe_state() -> InitialState:
+def brd4_rbfe_state() -> InitialState:
     seed = 2023
+    # Use 0.5 lambda to ensure there is the most space in the binding pocket where both endstate's dummy atoms are
+    # partially decoupled
+    lamb = 0.5
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
+    # BRD4 is a known target that has waters in the binding site, use the structure with the water stripped from
+    # the binding pocket
+    with resources.path("timemachine.datasets.water_exchange", "brd4_no_water.pdb") as pdb_path:
         complex_system, complex_conf, box, _, num_water_atoms = builders.build_protein_system(
-            str(path_to_ligand), ff.protein_ff, ff.water_ff
+            str(pdb_path), ff.protein_ff, ff.water_ff
         )
-
+    box += np.diag([0.1, 0.1, 0.1])
+    with resources.path("timemachine.datasets.water_exchange", "brd4_pair.sdf") as ligand_path:
+        mols = read_sdf(ligand_path)
+    mol_a = mols[0]
+    mol_b = mols[1]
+    core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
     host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     st = SingleTopology(mol_a, mol_b, core, ff)
 
-    initial_state = prepare_single_topology_initial_state(st, host_config)
+    initial_state = prepare_single_topology_initial_state(st, host_config, lamb=lamb)
     conf = initial_state.x0
 
     bond_pot = next(bp for bp in initial_state.potentials if isinstance(bp.potential, HarmonicBond)).potential
@@ -360,10 +370,11 @@ def hif2a_rbfe_state() -> InitialState:
         bound_impls,
         movers=[baro_impl],
     )
-    ctxt.multiple_steps(1000)
-    conf = ctxt.get_x_t()
-    box = ctxt.get_box()
-    return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
+    xs, boxes = ctxt.multiple_steps(10_000)
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(xs[-1], boxes[-1], True, False)
+        check_force_norm(-du_dx)
+    return replace(initial_state, v0=ctxt.get_v_t(), x0=xs[-1], box0=boxes[-1])
 
 
 @pytest.mark.parametrize("radius", [0.4])
@@ -443,21 +454,22 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
         verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, proposals_per_move, rtol, atol)
 
 
-@pytest.mark.skip(reason="flaky")
-@pytest.mark.parametrize("radius", [2.0])
+@pytest.mark.parametrize("radius", [1.3])
 @pytest.mark.parametrize("precision", [np.float32])
 @pytest.mark.parametrize("seed", [2023])
-def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed):
-    proposals_per_move = 10000
+def test_targeted_insertion_brd4_rbfe_with_context(brd4_rbfe_state, radius, precision, seed):
+    proposals_per_move = 20000
     # Interval has to be large enough to resolve clashes in the MD steps
     interval = 800
-    steps = interval * 3
-    initial_state = hif2a_rbfe_state
+    steps = interval * 10
+    initial_state = brd4_rbfe_state
 
     conf = initial_state.x0
     box = initial_state.box0
 
     bps = initial_state.potentials
+    summed_pot = next(bp for bp in initial_state.potentials if isinstance(bp.potential, SummedPotential))
+    water_params = summed_pot.potential.params_init[0]
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
@@ -474,8 +486,6 @@ def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed
 
     N = conf.shape[0]
 
-    params = nb.params
-
     cutoff = nb.potential.cutoff
     klass = custom_ops.TIBDExchangeMove_f32
     if precision == np.float64:
@@ -489,7 +499,7 @@ def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed
         N,
         initial_state.ligand_idxs,
         water_idxs,
-        params,
+        water_params,
         DEFAULT_TEMP,
         nb.potential.beta,
         cutoff,
@@ -507,9 +517,13 @@ def test_targeted_insertion_hif2a_rbfe(hif2a_rbfe_state, radius, precision, seed
         bound_impls,
         movers=[bdem, initial_state.barostat.impl(bound_impls)],
     )
-    ctxt.multiple_steps(steps)
+    xs, boxes = ctxt.multiple_steps(steps)
     assert bdem.n_proposed() == (steps // interval) * proposals_per_move
     assert bdem.n_accepted() > 0
+
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(xs[-1], boxes[-1], True, False)
+        check_force_norm(-du_dx)
 
 
 @pytest.mark.memcheck
@@ -605,17 +619,19 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision
 
 @pytest.mark.parametrize("radius", [1.2])
 @pytest.mark.parametrize(
-    "steps_per_move,moves,box_size",
+    "proposals_per_move,total_num_proposals,box_size",
     [
         (1, 500, 4.0),
-        (5000, 5000, 4.0),
+        (500, 10000, 4.0),
         # The 5.7nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
         pytest.param(1, 5000, 5.7, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 2e-5, 2e-5), (np.float32, 5e-3, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, box_size, precision, rtol, atol, seed):
+def test_targeted_moves_in_bulk_water(
+    radius, proposals_per_move, total_num_proposals, box_size, precision, rtol, atol, seed
+):
     """Given bulk water molecules with one of them treated as the targeted region"""
     ff = Forcefield.load_default()
     system, conf, ref_box, topo = builders.build_water_system(box_size, ff.water_ff)
@@ -647,21 +663,36 @@ def test_targeted_moves_in_bulk_water(radius, steps_per_move, moves, box_size, p
         klass = custom_ops.TIBDExchangeMove_f64
 
     bdem = klass(
-        N, center_group, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, radius, seed, steps_per_move, 1
+        N,
+        center_group,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        1,
     )
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
-    verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, steps_per_move, rtol, atol)
+    verify_targeted_moves(
+        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
+    )
 
 
 @pytest.mark.parametrize("radius", [1.2])
 @pytest.mark.parametrize(
-    "steps_per_move,moves",
-    [(1, 500), (5000, 5000)],
+    "proposals_per_move, total_num_proposals",
+    [
+        pytest.param(1, 40000, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(5000, 40000, marks=pytest.mark.nightly(reason="slow")),
+    ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_with_three_waters(radius, steps_per_move, moves, precision, rtol, atol, seed):
+def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals, precision, rtol, atol, seed):
     """Given three water molecules with one of them treated as the targeted region."""
     ff = Forcefield.load_default()
     system, host_conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
@@ -695,35 +726,55 @@ def test_moves_with_three_waters(radius, steps_per_move, moves, precision, rtol,
         klass = custom_ops.TIBDExchangeMove_f64
 
     bdem = klass(
-        N, center_group, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, radius, seed, steps_per_move, 1
+        N,
+        center_group,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        1,
     )
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
 
-    verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, steps_per_move, rtol, atol)
+    verify_targeted_moves(
+        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
+    )
 
 
-@pytest.mark.skip(reason="N_accepted > 0 assertion is flaky and can fail randomly.")
-@pytest.mark.parametrize("radius", [2.0])
+@pytest.mark.parametrize("radius", [0.95])
 @pytest.mark.parametrize(
-    "steps_per_move,moves",
-    [pytest.param(1, 12500, marks=pytest.mark.nightly(reason="slow")), (12500, 12500)],
+    "proposals_per_move,total_num_proposals",
+    [(10_000, 200_000)],
 )
 @pytest.mark.parametrize(
     "precision,rtol,atol",
-    [pytest.param(np.float64, 5e-6, 5e-6, marks=pytest.mark.nightly(reason="slow")), (np.float32, 1e-4, 2e-3)],
+    [pytest.param(np.float64, 2e-5, 2e-5, marks=pytest.mark.nightly(reason="slow")), (np.float32, 1e-4, 2e-3)],
 )
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_with_complex_and_ligand(hif2a_rbfe_state, radius, steps_per_move, moves, precision, rtol, atol, seed):
-    """Verify that when the water atoms are between the protein and ligand that the reference and cuda exchange mover agree"""
-    initial_state = hif2a_rbfe_state
+def test_targeted_moves_with_complex_and_ligand_in_brd4(
+    brd4_rbfe_state, radius, proposals_per_move, total_num_proposals, precision, rtol, atol, seed
+):
+    """Verify that when the water atoms are between the protein and ligand that the reference and cuda exchange mover agree.
+
+    Uses BRD4 as the protein system as it has waters in the binding site
+    """
+    initial_state = brd4_rbfe_state
 
     conf = initial_state.x0
     box = initial_state.box0
 
     bps = initial_state.potentials
+
+    summed_pot = next(bp for bp in bps if isinstance(bp.potential, SummedPotential))
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    water_params = summed_pot.potential.params_init[0]
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -736,11 +787,6 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, radius, steps_per_move,
     # Re-image coords so that everything is imaged to begin with
     conf = image_frame(all_group_idxs, conf, box)
 
-    N = conf.shape[0]
-
-    params = nb.params
-
-    cutoff = nb.potential.cutoff
     klass = custom_ops.TIBDExchangeMove_f32
     if precision == np.float64:
         klass = custom_ops.TIBDExchangeMove_f64
@@ -749,18 +795,26 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, radius, steps_per_move,
         N,
         initial_state.ligand_idxs,
         water_idxs,
-        params,
+        water_params,
         DEFAULT_TEMP,
         nb.potential.beta,
-        cutoff,
+        nb.potential.cutoff,
         radius,
         seed,
-        steps_per_move,
+        proposals_per_move,
         1,
     )
 
     ref_bdem = RefTIBDExchangeMove(
-        nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP, initial_state.ligand_idxs, radius
+        nb.potential.beta,
+        nb.potential.cutoff,
+        water_params,
+        water_idxs,
+        DEFAULT_TEMP,
+        initial_state.ligand_idxs,
+        radius,
     )
 
-    verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, steps_per_move, rtol, atol)
+    verify_targeted_moves(
+        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
+    )

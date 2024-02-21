@@ -504,15 +504,11 @@ def test_get_movers():
     friction = 0.0
     seed = 2022
 
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=True)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
     v0 = np.zeros_like(coords)
     bps = []
     for p, bp in zip(sys_params, unbound_potentials):
         bps.append(bp.bind(p).to_gpu(np.float32).bound_impl)
-
-    reference_values = []
-    for bp in bps:
-        reference_values.append(bp.execute(coords, box))
 
     intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
