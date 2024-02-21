@@ -11,7 +11,7 @@ from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.fixed_point import fixed_to_float
-from timemachine.md import builders
+from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove, randomly_rotate_and_translate
 from timemachine.potentials import HarmonicBond, Nonbonded
@@ -248,6 +248,10 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
     ctxt.multiple_steps(1000)
     conf = ctxt.get_x_t()
     box = ctxt.get_box()
+
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(conf, box, True, False)
+        minimizer.check_force_norm(-du_dx)
 
     # only act on waters
     water_groups = [group for group in all_group_idxs if len(group) == 3]
