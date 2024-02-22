@@ -39,6 +39,16 @@ def temporary_working_dir():
             os.chdir(init_dir)
 
 
+def convert_quaternion_for_scipy(quat: NDArray) -> NDArray:
+    """Scipy has the convention of (x, y, z, w) which is different than the wikipedia definition, swap ordering to verify using scipy.
+
+    References
+    ----------
+    https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.from_quat.html
+    """
+    return np.append(quat[1:], [quat[0]])
+
+
 def fixed_overflowed(a):
     """Refer to timemachine/cpp/src/kernels/k_fixed_point.cuh::FLOAT_TO_FIXED_ENERGY for documentation on how we handle energies and overflows"""
     converted_a = np.int64(np.uint64(a))
@@ -126,17 +136,19 @@ def assert_energy_arrays_match(
     reference_energies: NDArray, test_energies: NDArray, threshold: float = 1e8, rtol: float = 1e-8, atol: float = 1e-8
 ):
     """When comparing the reference platform (jax) to the cuda platform we can get Nans beyond a certain
-    value and these NaNs will cause issues when comparing energies. This method compares all of the values that aren't
+    value and these NaNs will cause issues when comparing energies (or log weights). This method compares all of the values that aren't
     nans and makes sure that all the cases where the values are Nan are very large in the reference energies.
+
+    Handles any values computed in fixed point where overflows can happen. Typically energies, but can also be log weights
 
     Parameters
     ----------
 
     reference_energies: np.ndarray
-        Energies from the reference platform, method is not trustworthy otherwise
+        Energies/log weights from the reference platform, method is not trustworthy otherwise
 
     test_energies: np.ndarray
-        Energies from the C++ platform
+        Energies/log weights from the C++ platform
 
     threshold: float
         Threshold to use, defaults to 1e8 which is empirically selected

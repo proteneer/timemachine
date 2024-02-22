@@ -1565,7 +1565,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                         const double cutoff,
                         const int seed,
                         const int num_proposals_per_move,
-                        const int interval) {
+                        const int interval,
+                        const int batch_size) {
                 size_t params_dim = params.ndim();
                 if (params_dim != 2) {
                     throw std::runtime_error("parameters dimensions must be 2");
@@ -1579,6 +1580,9 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                 if (interval <= 0) {
                     throw std::runtime_error("must provide interval greater than 0");
                 }
+                if (batch_size <= 0) {
+                    throw std::runtime_error("must provide batch size greater than 0");
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(
                     N,
@@ -1590,8 +1594,7 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                     seed,
                     num_proposals_per_move,
                     interval,
-                    1 // only support 1 proposal per step at the moment
-                );
+                    batch_size);
             }),
             py::arg("N"),
             py::arg("target_mols"),
@@ -1601,7 +1604,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             py::arg("cutoff"),
             py::arg("seed"),
             py::arg("num_proposals_per_move"),
-            py::arg("interval"))
+            py::arg("interval"),
+            py::arg("batch_size") = 1)
         .def(
             "move",
             [](Class &mover,
@@ -1625,6 +1629,47 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
             py::arg("coords"),
             py::arg("box"))
         .def(
+            "compute_incremental_weights",
+            [](Class &mover,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &box,
+               const py::array_t<int, py::array::c_style> &mol_idxs,
+               const py::array_t<double, py::array::c_style> &quaternions,
+               const py::array_t<double, py::array::c_style> &translations) -> std::vector<std::vector<RealType>> {
+                verify_coords_and_box(coords, box);
+                const int N = coords.shape()[0];
+
+                if (mol_idxs.size() != static_cast<ssize_t>(mover.batch_size())) {
+                    throw std::runtime_error("number of mol idxs must match batch size");
+                }
+
+                if (quaternions.shape()[0] != static_cast<ssize_t>(mover.batch_size())) {
+                    throw std::runtime_error("number of quaternions must match batch size");
+                }
+                if (quaternions.shape()[1] != 4) {
+                    throw std::runtime_error("each quaternion must be of length 4");
+                }
+
+                if (translations.shape()[0] != static_cast<ssize_t>(mover.batch_size())) {
+                    throw std::runtime_error("number of translations must match batch size");
+                }
+                if (translations.shape()[1] != 3) {
+                    throw std::runtime_error("each translation must be of length 3");
+                }
+
+                std::vector<RealType> h_quats = py_array_to_vector_with_cast<double, RealType>(quaternions);
+                std::vector<RealType> h_translations = py_array_to_vector_with_cast<double, RealType>(translations);
+
+                std::vector<std::vector<RealType>> weights = mover.compute_incremental_weights_host(
+                    N, coords.data(), box.data(), mol_idxs.data(), &h_quats[0], &h_translations[0]);
+                return weights;
+            },
+            py::arg("coords"),
+            py::arg("box"),
+            py::arg("mol_idxs"),
+            py::arg("quaternions"),
+            py::arg("translation"))
+        .def(
             "get_params",
             [](Class &mover) -> py::array_t<double, py::array::c_style> {
                 std::vector<double> flat_params = mover.get_params();
@@ -1645,7 +1690,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
         .def("last_raw_log_probability", &Class::raw_log_probability_host)
         .def("n_accepted", &Class::n_accepted)
         .def("n_proposed", &Class::n_proposed)
-        .def("acceptance_fraction", &Class::acceptance_fraction);
+        .def("acceptance_fraction", &Class::acceptance_fraction)
+        .def("batch_size", &Class::batch_size);
 }
 
 template <typename RealType>
@@ -1709,33 +1755,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
             py::arg("radius"),
             py::arg("seed"),
             py::arg("num_proposals_per_move"),
-            py::arg("interval"))
-        .def(
-            "move",
-            [](Class &mover,
-               const py::array_t<double, py::array::c_style> &coords,
-               const py::array_t<double, py::array::c_style> &box) -> py::tuple {
-                verify_coords_and_box(coords, box);
-                const int N = coords.shape()[0];
-                const int D = coords.shape()[1];
-
-                std::array<std::vector<double>, 2> result = mover.move_host(N, coords.data(), box.data());
-
-                py::array_t<double, py::array::c_style> out_x_buffer({N, D});
-                std::memcpy(
-                    out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(*result[0].data()));
-
-                py::array_t<double, py::array::c_style> box_buffer({D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(*result[1].data()));
-
-                return py::make_tuple(out_x_buffer, box_buffer);
-            },
-            py::arg("coords"),
-            py::arg("box"))
-        .def("last_log_probability", &Class::log_probability_host)
-        .def("n_accepted", &Class::n_accepted)
-        .def("n_proposed", &Class::n_proposed)
-        .def("acceptance_fraction", &Class::acceptance_fraction);
+            py::arg("interval"));
 }
 
 const py::array_t<double, py::array::c_style>
@@ -1836,7 +1856,7 @@ py::array_t<double, py::array::c_style> py_rotate_coords(
     const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &quaternions) {
     verify_coords(coords);
 
-    size_t quaternions_ndims = coords.ndim();
+    size_t quaternions_ndims = quaternions.ndim();
     if (quaternions_ndims != 2) {
         throw std::runtime_error("quaternions dimensions must be 2");
     }
@@ -1858,25 +1878,43 @@ template <typename RealType>
 py::array_t<double, py::array::c_style> py_rotate_and_translate_mol(
     const py::array_t<double, py::array::c_style> &coords,
     const py::array_t<double, py::array::c_style> &box,
-    const py::array_t<double, py::array::c_style> &quaternion,
-    const py::array_t<double, py::array::c_style> &translation) {
-    verify_coords(coords);
+    const py::array_t<double, py::array::c_style> &quaternions,
+    const py::array_t<double, py::array::c_style> &translations) {
+    verify_coords_and_box(coords, box);
 
-    if (quaternion.size() != 4) {
-        throw std::runtime_error("quaternion must be of size 4");
+    if (quaternions.ndim() != 2) {
+        throw std::runtime_error("quaternions dimensions must be 2");
+    }
+    if (quaternions.shape(1) != 4) {
+        throw std::runtime_error("quaternions must be of length 4");
     }
 
-    if (translation.size() != 3) {
-        throw std::runtime_error("translation must be of size 3");
+    if (translations.ndim() != 2) {
+        throw std::runtime_error("translations dimensions must be 2");
+    }
+    if (translations.shape(1) != 3) {
+        throw std::runtime_error("translations must be of size 3");
     }
 
-    std::vector<RealType> v_quaternion = py_array_to_vector_with_cast<double, RealType>(quaternion);
-    std::vector<RealType> v_translation = py_array_to_vector_with_cast<double, RealType>(translation);
+    if (quaternions.shape(0) != translations.shape(0)) {
+        throw std::runtime_error("Number of quaternions and translations must match");
+    }
+
+    std::vector<RealType> v_quaternions = py_array_to_vector_with_cast<double, RealType>(quaternions);
+    std::vector<RealType> v_translations = py_array_to_vector_with_cast<double, RealType>(translations);
+
+    const int batch_size = quaternions.shape(0);
 
     const int N = coords.shape(0);
-    py::array_t<double, py::array::c_style> py_rotated_coords({N, 3});
+    py::array_t<double, py::array::c_style> py_rotated_coords({batch_size, N, 3});
     rotate_coordinates_and_translate_mol_host<RealType>(
-        N, coords.data(), box.data(), &v_quaternion[0], &v_translation[0], py_rotated_coords.mutable_data());
+        N,
+        batch_size,
+        coords.data(),
+        box.data(),
+        &v_quaternions[0],
+        &v_translations[0],
+        py_rotated_coords.mutable_data());
     return py_rotated_coords;
 }
 

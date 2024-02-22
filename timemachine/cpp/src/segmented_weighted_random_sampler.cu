@@ -69,13 +69,13 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_device(
     cudaStream_t stream) {
     if (total_values > max_vals_per_segment_ * num_segments_) {
         throw std::runtime_error(
-            "total values is greater than buffer size:  total_values=" + std::to_string(total_values) +
-            ", buffer_size=" + std::to_string(max_vals_per_segment_ * num_segments_));
+            "SegmentedWeightedRandomerSampler::total values is greater than buffer size:  total_values=" +
+            std::to_string(total_values) + ", buffer_size=" + std::to_string(max_vals_per_segment_ * num_segments_));
     }
     if (num_segments != num_segments_) {
         throw std::runtime_error(
-            "number of segments don't match: num_segments=" + std::to_string(num_segments) +
-            ", num_segments_=" + std::to_string(num_segments_));
+            "SegmentedWeightedRandomerSampler::number of segments don't match: num_segments=" +
+            std::to_string(num_segments) + ", num_segments_=" + std::to_string(num_segments_));
     }
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int blocks = ceil_divide(total_values, tpb);

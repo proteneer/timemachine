@@ -4,8 +4,9 @@ from typing import List
 
 import numpy as np
 import pytest
-from common import prepare_single_topology_initial_state
+from common import assert_energy_arrays_match, convert_quaternion_for_scipy, prepare_single_topology_initial_state
 from numpy.typing import NDArray
+from scipy.spatial.transform import Rotation
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
@@ -18,6 +19,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
+from timemachine.md.exchange.exchange_mover import translate_coordinates
 from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -422,6 +424,79 @@ def test_moves_in_a_water_box(num_proposals_per_move, total_num_proposals, box_s
     verify_bias_deletion_moves(
         group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
     )
+
+
+@pytest.mark.parametrize(
+    "batch_size,samples,box_size",
+    [
+        (1, 1000, 3.0),
+        (2, 1000, 3.0),
+        (1000, 10, 3.0),
+    ],
+)
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-5, 1e-5), (np.float32, 8e-4, 2e-3)])
+@pytest.mark.parametrize("seed", [2023])
+def test_compute_incremental_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
+    """Verify that the incremental weights computed are valid for different collections of rotations/translations"""
+    proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
+    ff = Forcefield.load_default()
+    system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+
+    N = conf.shape[0]
+
+    # Re-image coords so that everything is imaged to begin with
+    conf = image_frame(group_idxs, conf, box)
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    bdem = klass(
+        N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move, 1, batch_size
+    )
+
+    ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
+
+    rng = np.random.default_rng(seed)
+
+    identity_mol_idxs = np.arange(len(group_idxs), dtype=np.int32)
+    # Compute the initial reference log weights
+    before_log_weights = ref_bdem.batch_log_weights(conf, box)
+    for _ in range(samples):
+        # Randomly select waters for sampling, no biasing here, just testing the incremental weights
+        selected_mols = rng.choice(identity_mol_idxs, size=batch_size)
+        quaternions = rng.normal(loc=0.0, scale=1.0, size=(batch_size, 4))
+        # Scale the translations
+        translations = rng.uniform(0, 1, size=(batch_size, 3)) * np.diagonal(box)
+
+        test_weight_batches = bdem.compute_incremental_weights(conf, box, selected_mols, quaternions, translations)
+        assert len(test_weight_batches) == batch_size
+        for test_weights, selected_mol, quat, translation in zip(
+            test_weight_batches, selected_mols, quaternions, translations
+        ):
+            moved_conf = conf.copy()
+            rotation = Rotation.from_quat(convert_quaternion_for_scipy(quat))
+            mol_idxs = group_idxs[selected_mol]
+            mol_conf = moved_conf[mol_idxs]
+            rotated_mol = rotation.apply(mol_conf)
+            updated_mol_conf = translate_coordinates(rotated_mol, translation)
+
+            ref_final_weights, trial_conf = ref_bdem.batch_log_weights_incremental(
+                conf, box, selected_mol, updated_mol_conf, before_log_weights
+            )
+            moved_conf[mol_idxs] = updated_mol_conf
+            np.testing.assert_equal(trial_conf, moved_conf)
+            # Janky re-use of assert_energy_arrays_match which is for energies, but functions for any fixed point
+            assert_energy_arrays_match(np.array(ref_final_weights), np.array(test_weights), atol=atol, rtol=rtol)
 
 
 @pytest.fixture(scope="module")
