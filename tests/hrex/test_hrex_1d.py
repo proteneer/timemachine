@@ -16,8 +16,8 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
-from timemachine.md.hrex import HREXDiagnostics, ReplicaIdx, StateIdx, run_hrex
-from timemachine.md.moves import MonteCarloMove
+from timemachine.md.hrex import HREXDiagnostics, NeighborSwapMove, ReplicaIdx, StateIdx, run_hrex
+from timemachine.md.moves import BatchedMixtureOfMoves, MixtureOfMoves, MonteCarloMove
 
 DEBUG = False
 
@@ -280,3 +280,45 @@ def plot_hrex_diagnostics(diagnostics: HREXDiagnostics):
     plot_hrex_replica_state_distribution(diagnostics.cumulative_replica_state_counts)
     plot_hrex_replica_state_distribution_heatmap(diagnostics.cumulative_replica_state_counts)
     plot_hrex_replica_state_distribution_convergence(diagnostics.cumulative_replica_state_counts)
+
+
+@pytest.mark.parametrize("num_states", [5])
+@pytest.mark.parametrize("swaps", [50_000])
+@pytest.mark.parametrize("seed", range(5))
+def test_batched_mixture_of_moves(num_states, seed, swaps):
+    replicas = np.random.uniform(size=num_states)
+    states = [gaussian(loc, 0.3) for loc in replicas]
+    state_idxs = [StateIdx(i) for i, _ in enumerate(states)]
+    replica_idxs = [ReplicaIdx(i) for i, _ in enumerate(replicas)]
+    neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
+
+    log_q_matrix = np.array(
+        [[states[state_idx].log_q(replicas[replica_idx]) for state_idx in state_idxs] for replica_idx in state_idxs]
+    )
+
+    def log_q(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
+        return log_q_matrix[replica_idx, state_idx]
+
+    # Add (0, 0) to the list of neighbor pairs considered for swap moves to ensure that performing a fixed number of
+    # neighbor swaps is aperiodic in cases where swap acceptance rates approach 100%
+    neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
+
+    move = MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
+    sequential_swaps = replica_idxs.copy()
+    for _ in range(swaps):
+        sequential_swaps = move.move(sequential_swaps)
+
+    seq_diagnostics = HREXDiagnostics([], list(zip(move.n_accepted_by_move, move.n_proposed_by_move)))
+
+    batched_move = BatchedMixtureOfMoves(swaps, [NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
+    _ = batched_move.move(replica_idxs.copy())
+
+    batched_diagnostics = HREXDiagnostics(
+        [], list(zip(batched_move.n_accepted_by_move, batched_move.n_proposed_by_move))
+    )
+
+    np.testing.assert_allclose(
+        seq_diagnostics.cumulative_swap_acceptance_rates,
+        batched_diagnostics.cumulative_swap_acceptance_rates,
+        atol=0.02,
+    )

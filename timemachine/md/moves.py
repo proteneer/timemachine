@@ -96,7 +96,7 @@ class MixtureOfMoves(CompoundMove[_State]):
 
 
 class BatchedMixtureOfMoves(MixtureOfMoves[_State]):
-    """Apply a single move uniformly selected from a list"""
+    """Apply a sequence of moves uniformly by generating the sequence order in a batch"""
 
     def __init__(self, batch_size: int, moves: Sequence[MonteCarloMove[_State]]):
         self.batch_size = batch_size
