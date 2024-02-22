@@ -36,7 +36,7 @@ void __global__ k_setup_proposals(
     const int batch_size,                      // Number of molecules to setup
     const int num_atoms_in_each_mol,           // number of atoms in each sample
     const int *__restrict__ mol_idx_per_batch, // [batch_size] The index of the molecules to sample
-    const int *__restrict__ target_atoms,      // [N, 3]
+    const int *__restrict__ atom_indices,      // [N]
     const int *__restrict__ mol_offsets,       // [num_target_mols]
     int *__restrict__ output_atom_idxs,        // [batch_size, num_atoms_in_each_mol]
     int *__restrict__ output_mol_offsets) {
@@ -46,14 +46,14 @@ void __global__ k_setup_proposals(
         int mol_start = mol_offsets[mol_idx];
 
         int mol_end = mol_offsets[mol_idx + 1];
-        output_mol_offsets[mol_idx] = target_atoms[mol_start];
-        output_mol_offsets[mol_idx + 1] = target_atoms[mol_end - 1] + 1;
+        output_mol_offsets[mol_idx] = atom_indices[mol_start];
+        output_mol_offsets[mol_idx + 1] = atom_indices[mol_end - 1] + 1;
         int num_atoms = mol_end - mol_start;
 
         assert(num_atoms == num_atoms_in_each_mol);
 
         for (int i = 0; i < num_atoms; i++) {
-            output_atom_idxs[idx * num_atoms_in_each_mol + i] = target_atoms[mol_start + i];
+            output_atom_idxs[idx * num_atoms_in_each_mol + i] = atom_indices[mol_start + i];
         }
         idx += gridDim.x * blockDim.x;
     }
@@ -423,7 +423,7 @@ void __global__ k_set_sampled_weight_block(
     const int batch_size,
     const int mol_size,
     const int num_weights,
-    const int *__restrict__ target_atoms, // [batch_size + 1]
+    const int *__restrict__ target_atoms, // [batch_size, mol_size]
     const RealType *__restrict__ per_atom_energies,
     const RealType inv_kT,                    // 1 / kT
     __int128 *__restrict__ intermediate_accum // [batch_size, ceil_divide(N, THREADS_PER_BLOCK)]
