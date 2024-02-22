@@ -60,7 +60,15 @@ def direct_space_pme(dij, qij, beta):
     return qij * erfc(beta * dij) / dij
 
 
-def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
+def nonbonded_block_unsummed(
+    xi: NDArray,
+    xj: NDArray,
+    box: NDArray,
+    params_i: NDArray,
+    params_j: NDArray,
+    beta: float,
+    cutoff: float,
+):
     """
     This is a modified version of `nonbonded` that computes a block of
     NxM interactions between two sets of particles x_i and x_j. It is assumed that
@@ -68,8 +76,7 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     include computing the interaction energy between the environment and a
     ligand.
 
-    This is mainly used for testing, as it does not support 4D decoupling or
-    alchemical semantics yet.
+    This is mainly used for testing.
 
     Parameters
     ----------
@@ -79,10 +86,10 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
         Coordinates
     box : Optional 3x3 np.ndarray
         Periodic boundary conditions
-    params_i : (N, 3) np.ndarray
-        3-Tuples of (charge, sigma, epsilons)
-    params_j : (M, 3) np.ndarray
-        3-Tuples of (charge, sigma, epsilons)
+    params_i : (N,4) np.ndarray
+        3-Tuples of (charge, sigma, epsilons, w_offset)
+    params_j : (M,4) np.ndarray
+        3-Tuples of (charge, sigma, epsilons, w_offset)
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
@@ -98,7 +105,13 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     ri = jnp.expand_dims(xi, axis=1)
     rj = jnp.expand_dims(xj, axis=0)
 
-    dij = jnp.linalg.norm(delta_r(ri, rj, box), axis=-1)
+    w_i = jnp.expand_dims(params_i[:, 3], axis=1)
+    w_j = jnp.expand_dims(params_j[:, 3], axis=0)
+
+    dij = delta_r(ri, rj, box)
+    dij = jnp.concatenate([dij, (w_i - w_j).reshape(*dij.shape[:-1], 1)], axis=-1)
+
+    dij = jnp.linalg.norm(dij, axis=-1)
     sig_i = jnp.expand_dims(params_i[:, 1], axis=1)
     sig_j = jnp.expand_dims(params_j[:, 1], axis=0)
     eps_i = jnp.expand_dims(params_i[:, 2], axis=1)

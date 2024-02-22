@@ -259,7 +259,7 @@ void TIBDExchangeMove<RealType>::move(
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // Don't scale the translations as they are computed to be within the region
-        this->compute_incremental_weights(
+        this->compute_incremental_weights_device(
             N,
             false,
             d_box,

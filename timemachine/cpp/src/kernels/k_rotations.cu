@@ -92,7 +92,7 @@ void __global__ k_rotate_and_translate_mols(
     const double *__restrict__ coords,         // [N, 3]
     const double *__restrict__ box,            // [3, 3]
     const int *__restrict__ samples,           // [batch_size]
-    const int *__restrict__ mol_offsets,       // [batch_size + 1]
+    const int *__restrict__ mol_offsets,       // [num_mols + 1]
     const RealType *__restrict__ quaternions,  // [batch_size, 4]
     const RealType *__restrict__ translations, // [batch_size, 3]
     double *__restrict__ coords_out            // [batch_size, num_atoms, 3]
@@ -165,9 +165,9 @@ void __global__ k_rotate_and_translate_mols(
             local_coords[1] += translation_x;
             local_coords[2] += translation_y;
             local_coords[3] += translation_z;
-            coords_out[(idx_in_batch * num_atoms) + (i * 3) + 0] = local_coords[1];
-            coords_out[(idx_in_batch * num_atoms) + (i * 3) + 1] = local_coords[2];
-            coords_out[(idx_in_batch * num_atoms) + (i * 3) + 2] = local_coords[3];
+            coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 0] = local_coords[1];
+            coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 1] = local_coords[2];
+            coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 2] = local_coords[3];
         }
 
         idx_in_batch += gridDim.x * blockDim.x;

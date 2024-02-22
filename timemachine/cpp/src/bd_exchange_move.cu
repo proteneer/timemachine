@@ -59,17 +59,18 @@ BDExchangeMove<RealType>::BDExchangeMove(
     : Mover(interval), N_(N), mol_size_(target_mols[0].size()), num_proposals_per_move_(num_proposals_per_move),
       steps_per_move_(num_proposals_per_move_ / batch_size), num_target_mols_(target_mols.size()),
       nb_beta_(static_cast<RealType>(nb_beta)), beta_(static_cast<RealType>(1.0 / (BOLTZ * temperature))),
-      cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), batch_size_(batch_size), num_attempted_(0),
+      cutoff_squared_(static_cast<RealType>(cutoff * cutoff)), batch_size_(batch_size),
+      num_intermediates_per_reduce_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)), num_attempted_(0),
       mol_potential_(N, target_mols, nb_beta, cutoff), sampler_(num_target_mols_, batch_size_, seed),
       logsumexp_(num_target_mols_, batch_size_), d_intermediate_coords_(batch_size_ * mol_size_ * 3), d_params_(params),
       d_mol_energy_buffer_(batch_size_ * num_target_mols_),
       d_sample_per_atom_energy_buffer_(batch_size_ * mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
-      d_log_weights_after_(num_target_mols_), d_lse_max_before_(1), d_lse_exp_sum_before_(1),
+      d_log_weights_after_(batch_size_ * num_target_mols_), d_lse_max_before_(1), d_lse_exp_sum_before_(1),
       d_lse_max_after_(batch_size_), d_lse_exp_sum_after_(batch_size_), d_samples_(batch_size_),
-      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * num_proposals_per_move_ * batch_size_)), d_num_accepted_(1),
+      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * num_proposals_per_move_)), d_num_accepted_(1),
       d_target_mol_atoms_(batch_size_ * mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
-      d_intermediate_sample_weights_(batch_size_ * ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)),
+      d_intermediate_sample_weights_(batch_size_ * num_intermediates_per_reduce_),
       d_sample_noise_(round_up_even(num_target_mols_ * num_proposals_per_move_)),
       d_sampling_intermediate_(num_target_mols_ * batch_size_), d_translations_(translation_buffer_size),
       d_sample_segments_offsets_(batch_size_ + 1) {
@@ -173,14 +174,12 @@ void BDExchangeMove<RealType>::move(
                 d_log_weights_before_.data,
                 d_log_weights_after_.data);
             gpuErrchk(cudaPeekAtLastError());
-        }
 
-        gpuErrchk(cudaMemcpyAsync(
-            d_log_weights_after_.data,
-            d_log_weights_before_.data,
-            d_log_weights_after_.size(),
-            cudaMemcpyDeviceToDevice,
-            stream));
+            // Copy the same weights repeatedly from the before weights to the after weights
+            k_copy_batch<RealType><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
+                num_target_mols_, batch_size_, d_log_weights_before_.data, d_log_weights_after_.data);
+            gpuErrchk(cudaPeekAtLastError());
+        }
 
         // We only ever sample a single molecule
         sampler_.sample_given_noise_device(
@@ -196,7 +195,7 @@ void BDExchangeMove<RealType>::move(
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // scale the translations as they are between [0, 1]
-        this->compute_incremental_weights(
+        this->compute_incremental_weights_device(
             N,
             true,
             d_box,
@@ -260,10 +259,15 @@ void BDExchangeMove<RealType>::compute_initial_weights(
         d_lse_max_before_.data,
         d_lse_exp_sum_before_.data,
         stream);
+
+    // Copy the same weights repeatedly from the before weights to the after weights
+    k_copy_batch<RealType><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
+        num_target_mols_, batch_size_, d_log_weights_before_.data, d_log_weights_after_.data);
+    gpuErrchk(cudaPeekAtLastError());
 }
 
 template <typename RealType>
-void BDExchangeMove<RealType>::compute_incremental_weights(
+void BDExchangeMove<RealType>::compute_incremental_weights_device(
     const int N,
     const bool scale,
     const double *d_box,            // [3, 3]
@@ -310,7 +314,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
 
     k_atom_by_atom_energies<<<atom_by_atom_grid, tpb, 0, stream>>>(
         N,
-        mol_size_,
+        mol_size_ * batch_size_,
         d_target_mol_atoms_.data,
         nullptr,
         d_coords,
@@ -324,10 +328,11 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
     // Subtract off the weights for the individual waters from the sampled water.
     // It modifies the sampled mol energy value, leaving it in an invalid state, which is why
     // we later call k_set_sampled_weight to set the weight of the sampled mol
-    k_adjust_weights<RealType, true><<<ceil_divide(num_target_mols_, tpb), tpb, 0, stream>>>(
+    k_adjust_weights<RealType, true><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
         N,
-        num_target_mols_,
+        batch_size_,
         mol_size_,
+        num_target_mols_,
         d_atom_idxs_.data,
         d_mol_offsets_.data,
         d_sample_per_atom_energy_buffer_.data,
@@ -337,7 +342,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
 
     k_atom_by_atom_energies<<<atom_by_atom_grid, tpb, 0, stream>>>(
         N,
-        mol_size_,
+        mol_size_ * batch_size_,
         d_target_mol_atoms_.data,
         d_intermediate_coords_.data,
         d_coords,
@@ -350,10 +355,11 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
 
     // Add in the new weights from the individual waters
     // the sampled weight continues to be garbage
-    k_adjust_weights<RealType, false><<<ceil_divide(num_target_mols_, tpb), tpb, 0, stream>>>(
+    k_adjust_weights<RealType, false><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
         N,
-        num_target_mols_,
+        batch_size_,
         mol_size_,
+        num_target_mols_,
         d_atom_idxs_.data,
         d_mol_offsets_.data,
         d_sample_per_atom_energy_buffer_.data,
@@ -363,21 +369,80 @@ void BDExchangeMove<RealType>::compute_incremental_weights(
 
     // Set the sampled weight to be the correct value
     k_set_sampled_weight_block<RealType, WEIGHT_THREADS_PER_BLOCK>
-        <<<static_cast<int>(d_intermediate_sample_weights_.length), WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
+        <<<dim3(num_intermediates_per_reduce_, batch_size_, 1), WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
             N,
+            batch_size_,
             mol_size_,
+            num_target_mols_,
             d_target_mol_atoms_.data,
             d_sample_per_atom_energy_buffer_.data,
             beta_, // 1 / kT
             d_intermediate_sample_weights_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    k_set_sampled_weight_reduce<RealType, WEIGHT_THREADS_PER_BLOCK><<<1, WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
-        static_cast<int>(d_intermediate_sample_weights_.length), // Number of intermediates
-        d_samples_.data,                                         // where to set the value
-        d_intermediate_sample_weights_.data,                     // intermediate fixed point weights
-        d_log_weights_after_.data);
+    k_set_sampled_weight_reduce<RealType, WEIGHT_THREADS_PER_BLOCK>
+        <<<dim3(1, batch_size_, 1), WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
+            batch_size_,
+            num_target_mols_,
+            num_intermediates_per_reduce_,       // Number of intermediates per sample in batch
+            d_samples_.data,                     // where to set the value
+            d_intermediate_sample_weights_.data, // intermediate fixed point weights
+            d_log_weights_after_.data);
     gpuErrchk(cudaPeekAtLastError());
+}
+
+template <typename RealType>
+std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental_weights_host(
+    const int N,
+    const double *h_coords, // [N, 3]
+    const double *h_box,    // [3, 3]
+    const int *h_mol_idxs,
+    const RealType *h_quaternions, // [batch_size_, 4]
+    const RealType *h_translations // [batch_size_, 3]
+) {
+    if (N != N_) {
+        throw std::runtime_error("N != N_");
+    }
+
+    DeviceBuffer<double> d_coords(N * 3);
+    DeviceBuffer<double> d_box(3 * 3);
+
+    d_coords.copy_from(h_coords);
+    d_box.copy_from(h_box);
+
+    d_quaternions_.copy_from(h_quaternions);
+    d_translations_.copy_from(h_translations);
+    d_samples_.copy_from(h_mol_idxs);
+
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+
+    // Setup the initial weights
+    this->compute_initial_weights(N, d_coords.data, d_box.data, stream);
+
+    this->compute_incremental_weights_device(
+        N,
+        false, // Never scale the translations here, expect the user to do that in python
+        d_box.data,
+        d_coords.data,
+        d_quaternions_.data,
+        d_translations_.data,
+        stream);
+
+    gpuErrchk(cudaStreamSynchronize(stream));
+
+    std::vector<RealType> h_log_weights_after(d_log_weights_after_.length);
+    d_log_weights_after_.copy_to(&h_log_weights_after[0]);
+
+    std::vector<int> h_sample_segments_offsets(d_sample_segments_offsets_.length);
+    d_sample_segments_offsets_.copy_to(&h_sample_segments_offsets[0]);
+
+    std::vector<std::vector<RealType>> h_output(this->batch_size_);
+    for (unsigned int i = 0; i < this->batch_size_; i++) {
+        int start = h_sample_segments_offsets[i];
+        int end = h_sample_segments_offsets[i + 1];
+        h_output[i] = std::vector<RealType>(h_log_weights_after.begin() + start, h_log_weights_after.begin() + end);
+    }
+    return h_output;
 }
 
 template <typename RealType> double BDExchangeMove<RealType>::raw_log_probability_host() {

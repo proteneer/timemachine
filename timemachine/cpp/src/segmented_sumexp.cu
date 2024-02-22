@@ -40,13 +40,13 @@ void SegmentedSumExp<RealType>::sum_device(
     cudaStream_t stream) {
     if (total_values > max_vals_per_segment_ * num_segments_) {
         throw std::runtime_error(
-            "total values is greater than buffer size:  total_values=" + std::to_string(total_values) +
+            "SegmentedSumExp::total values is greater than buffer size:  total_values=" + std::to_string(total_values) +
             ", buffer_size=" + std::to_string(max_vals_per_segment_ * num_segments_));
     }
-    if (num_segments != num_segments_) {
+    if (num_segments > num_segments_) {
         throw std::runtime_error(
-            "number of segments don't match: num_segments=" + std::to_string(num_segments) +
-            ", num_segments_=" + std::to_string(num_segments_));
+            "SegmentedSumExp::number of segments must be less than or equal: num_segments=" +
+            std::to_string(num_segments) + ", num_segments_=" + std::to_string(num_segments_));
     }
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
 

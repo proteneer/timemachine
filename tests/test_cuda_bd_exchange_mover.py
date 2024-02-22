@@ -1,9 +1,12 @@
 from dataclasses import replace
 from importlib import resources
+from typing import List
 
 import numpy as np
 import pytest
-from common import prepare_single_topology_initial_state
+from common import assert_energy_arrays_match, convert_quaternion_for_scipy, prepare_single_topology_initial_state
+from numpy.typing import NDArray
+from scipy.spatial.transform import Rotation
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
@@ -16,8 +19,79 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
-from timemachine.potentials import HarmonicBond, Nonbonded
+from timemachine.md.exchange.exchange_mover import translate_coordinates
+from timemachine.md.minimizer import check_force_norm
+from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+
+
+def verify_bias_deletion_moves(
+    mol_groups: List,
+    bdem,
+    ref_bdem: RefBDExchangeMove,
+    conf: NDArray,
+    box: NDArray,
+    total_num_proposals: int,
+    proposals_per_move: int,
+    rtol: float,
+    atol: float,
+):
+    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
+    accepted = 0
+    last_conf = conf
+    for step in range(total_num_proposals // proposals_per_move):
+        x_move, x_box = bdem.move(last_conf, box)
+        # The box will never change
+        np.testing.assert_array_equal(box, x_box)
+        num_moved = 0
+        new_pos = None
+        idx = -1
+        for i, mol_idxs in enumerate(ref_bdem.water_idxs_np):
+            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
+                num_moved += 1
+                new_pos = x_move[mol_idxs]
+                idx = i
+        if num_moved > 0:
+            accepted += 1
+            # The molecules should all be imaged in the home box
+            np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
+            # Verify that the probabilities and per mol energies agree when we do accept moves
+            # can only be done when we only attempt a single move per step
+            before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
+            if num_moved == 1:
+                # If only a single mol moved we can use incremental
+                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
+                    last_conf, x_box, idx, new_pos, before_log_weights
+                )
+                np.testing.assert_array_equal(tested, x_move)
+            else:
+                after_log_weights = ref_bdem.batch_log_weights(x_move, box)
+            ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
+            ref_prob = np.exp(ref_log_prob)
+            assert np.isfinite(ref_prob) and ref_prob > 0.0
+            # Only when proposals_per_move == 1 can we use the last log probability
+            if proposals_per_move == 1:
+                np.testing.assert_allclose(
+                    np.exp(bdem.last_log_probability()),
+                    ref_prob,
+                    rtol=rtol,
+                    atol=atol,
+                    err_msg=f"Step {step} failed",
+                )
+        elif num_moved == 0:
+            np.testing.assert_array_equal(last_conf, x_move)
+        assert proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
+
+        last_conf = x_move
+    assert bdem.n_proposed() == total_num_proposals
+    print(f"Accepted {accepted} of {total_num_proposals} moves")
+    assert accepted > 0, "No moves were made, nothing was tested"
+    if proposals_per_move == 1:
+        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
+        assert bdem.n_accepted() == accepted
+    else:
+        assert bdem.n_accepted() >= accepted
+        assert bdem.acceptance_fraction() >= accepted / total_num_proposals
 
 
 @pytest.mark.memcheck
@@ -132,39 +206,9 @@ def test_pair_of_waters_in_box(moves, precision, rtol, atol, seed):
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    last_conf = conf
-    accepted = 0
-    for _ in range(moves):
-        before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-        x_move, x_box = bdem.move(last_conf, box)
-        after_log_weights = ref_bdem.batch_log_weights(x_move, x_box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        for mol_idxs in group_idxs:
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-        if num_moved > 0 and proposals_per_move == 1:
-            accepted += 1
-            # Verify that the probabilities agree when we do accept moves
-            ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
-            ref_prob = np.exp(ref_log_prob)
-            assert np.isfinite(ref_prob) and ref_prob > 0.0
-            np.testing.assert_allclose(
-                np.exp(bdem.last_log_probability()),
-                ref_prob,
-                rtol=rtol,
-                atol=atol,
-            )
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(group_idxs, x_move, x_box), x_move)
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert num_moved <= 1, "More than one mol moved, something is wrong"
-        last_conf = x_move
-    # All moves are accepted, however the two waters could clash do to a proposal.
-    assert accepted == moves
+    verify_bias_deletion_moves(
+        group_idxs, bdem, ref_bdem, conf, box, proposals_per_move * moves, proposals_per_move, rtol, atol
+    )
 
 
 @pytest.mark.parametrize("precision", [np.float32])
@@ -172,6 +216,7 @@ def test_pair_of_waters_in_box(moves, precision, rtol, atol, seed):
 def test_bias_deletion_bulk_water_with_context(precision, seed):
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(4.0, ff.water_ff)
+    box += np.diag([0.1, 0.1, 0.1])
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
@@ -182,7 +227,9 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
     # only act on waters
     water_idxs = [group for group in all_group_idxs if len(group) == 3]
 
-    dt = 1.5e-3
+    dt = 2.5e-3
+
+    masses = apply_hmr(masses, bond_list)
 
     bound_impls = []
 
@@ -193,9 +240,9 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    proposals_per_move = 1000
+    proposals_per_move = 2000
     interval = 100
-    steps = 500
+    steps = interval * 40
     bdem = klass(
         conf.shape[0],
         water_idxs,
@@ -229,9 +276,14 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
         bound_impls,
         movers=[bdem, baro_impl],
     )
-    ctxt.multiple_steps(steps)
+    xs, boxes = ctxt.multiple_steps(steps)
     assert bdem.n_proposed() == (steps // interval) * proposals_per_move
     assert bdem.n_accepted() > 0
+
+    # Verify that the system is still stable
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(xs[-1], boxes[-1], True, False)
+        check_force_norm(-du_dx)
 
 
 @pytest.mark.parametrize("proposals_per_move", [1, 100])
@@ -294,19 +346,99 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
 
 
 @pytest.mark.parametrize(
-    "steps_per_move,moves,box_size",
+    "num_proposals_per_move,total_num_proposals,box_size",
     [
-        (1, 2500, 3.0),
-        (2500, 2500, 3.0),
-        (250000, 250000, 3.0),
+        pytest.param(1, 40000, 3.0, marks=pytest.mark.nightly(reason="slow")),
+        (5000, 40000, 3.0),
+        (10000, 250000, 3.0),
         # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
-        pytest.param(1, 2500, 6.0, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1, 10000, 6.0, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, atol, seed):
+def test_moves_in_a_water_box(num_proposals_per_move, total_num_proposals, box_size, precision, rtol, atol, seed):
     """Verify that the log acceptance probability between the reference and cuda implementation agree"""
+    ff = Forcefield.load_default()
+    system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
+    box += np.diag([0.1, 0.1, 0.1])
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    bond_list = get_bond_list(bond_pot)
+    group_idxs = get_group_indices(bond_list, conf.shape[0])
+
+    N = conf.shape[0]
+
+    # Re-image coords so that everything is imaged to begin with
+
+    dt = 2.5e-3
+
+    masses = apply_hmr(masses, bond_list)
+    bound_impls = []
+
+    for potential in bps:
+        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)
+
+    intg = LangevinIntegrator(DEFAULT_TEMP, dt, 1.0, np.array(masses), seed).impl()
+
+    barostat_interval = 5
+    baro = MonteCarloBarostat(
+        conf.shape[0],
+        DEFAULT_PRESSURE,
+        DEFAULT_TEMP,
+        group_idxs,
+        barostat_interval,
+        seed,
+    )
+
+    ctxt = custom_ops.Context(
+        conf,
+        np.zeros_like(conf),
+        box,
+        intg,
+        bound_impls,
+        movers=[baro.impl(bound_impls)],
+    )
+    xs, boxes = ctxt.multiple_steps(10_000)
+    conf = xs[-1]
+    box = boxes[-1]
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(conf, box, True, False)
+        check_force_norm(-du_dx)
+
+    conf = image_frame(group_idxs, conf, box)
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
+
+    ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
+
+    verify_bias_deletion_moves(
+        group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
+    )
+
+
+@pytest.mark.parametrize(
+    "batch_size,samples,box_size",
+    [
+        (1, 1000, 3.0),
+        (2, 1000, 3.0),
+        (1000, 10, 3.0),
+    ],
+)
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-5, 1e-5), (np.float32, 8e-4, 2e-3)])
+@pytest.mark.parametrize("seed", [2023])
+def test_compute_incremental_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
+    """Verify that the incremental weights computed are valid for different collections of rotations/translations"""
+    proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
@@ -328,70 +460,52 @@ def test_moves_in_a_water_box(steps_per_move, moves, box_size, precision, rtol, 
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
+    bdem = klass(
+        N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move, 1, batch_size
+    )
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    accepted = 0
-    last_conf = conf
-    for _ in range(moves // steps_per_move):
-        x_move, x_box = bdem.move(last_conf, box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        new_pos = None
-        idx = -1
-        for i, mol_idxs in enumerate(group_idxs):
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-                new_pos = x_move[mol_idxs]
-                idx = i
-        if num_moved > 0:
-            accepted += 1
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(group_idxs, x_move, x_box), x_move)
-            # Verify that the probabilities and per mol energies agree when we do accept moves
-            # can only be done when we only attempt a single move per step
-            if steps_per_move == 1:
-                before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
-                    last_conf, x_box, idx, new_pos, before_log_weights
-                )
-                np.testing.assert_array_equal(tested, x_move)
-                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
-                ref_prob = np.exp(ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
-                np.testing.assert_allclose(
-                    np.exp(bdem.last_log_probability()),
-                    ref_prob,
-                    rtol=rtol,
-                    atol=atol,
-                )
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-        last_conf = x_move
-    assert bdem.n_proposed() == moves
-    if moves < 10_000:
-        assert accepted > 0, "No moves were made, nothing was tested"
-    else:
-        assert bdem.n_accepted() > 10
-        assert bdem.acceptance_fraction() >= 0.0001
-    if steps_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
-        assert bdem.n_accepted() == accepted
-    else:
-        assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / moves
+    rng = np.random.default_rng(seed)
+
+    identity_mol_idxs = np.arange(len(group_idxs), dtype=np.int32)
+    # Compute the initial reference log weights
+    before_log_weights = ref_bdem.batch_log_weights(conf, box)
+    for _ in range(samples):
+        # Randomly select waters for sampling, no biasing here, just testing the incremental weights
+        selected_mols = rng.choice(identity_mol_idxs, size=batch_size)
+        quaternions = rng.normal(loc=0.0, scale=1.0, size=(batch_size, 4))
+        # Scale the translations
+        translations = rng.uniform(0, 1, size=(batch_size, 3)) * np.diagonal(box)
+
+        test_weight_batches = bdem.compute_incremental_weights(conf, box, selected_mols, quaternions, translations)
+        assert len(test_weight_batches) == batch_size
+        for test_weights, selected_mol, quat, translation in zip(
+            test_weight_batches, selected_mols, quaternions, translations
+        ):
+            moved_conf = conf.copy()
+            rotation = Rotation.from_quat(convert_quaternion_for_scipy(quat))
+            mol_idxs = group_idxs[selected_mol]
+            mol_conf = moved_conf[mol_idxs]
+            rotated_mol = rotation.apply(mol_conf)
+            updated_mol_conf = translate_coordinates(rotated_mol, translation)
+
+            ref_final_weights, trial_conf = ref_bdem.batch_log_weights_incremental(
+                conf, box, selected_mol, updated_mol_conf, before_log_weights
+            )
+            moved_conf[mol_idxs] = updated_mol_conf
+            np.testing.assert_equal(trial_conf, moved_conf)
+            # Janky re-use of assert_energy_arrays_match which is for energies, but functions for any fixed point
+            assert_energy_arrays_match(np.array(ref_final_weights), np.array(test_weights), atol=atol, rtol=rtol)
 
 
 @pytest.fixture(scope="module")
 def hif2a_complex():
     seed = 2023
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
-        complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_ligand), ff.protein_ff, ff.water_ff)
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
+    box += np.diag([0.1, 0.1, 0.1])
     bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
@@ -400,7 +514,7 @@ def hif2a_complex():
 
     # Equilibrate the system a bit before hand, which reduces clashes in the system which results greater differences
     # between the reference and test case.
-    dt = 1.5e-3
+    dt = 2.5e-3
     temperature = DEFAULT_TEMP
     pressure = DEFAULT_PRESSURE
 
@@ -431,20 +545,24 @@ def hif2a_complex():
         bound_impls,
         movers=[baro_impl],
     )
-    ctxt.multiple_steps(1000)
+    ctxt.multiple_steps(10000)
     conf = ctxt.get_x_t()
     box = ctxt.get_box()
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(conf, box, True, False)
+        check_force_norm(-du_dx)
     return complex_system, conf, box
 
 
-@pytest.mark.skip(reason="Needs further investigation to address flakiness")
 @pytest.mark.parametrize(
-    "steps_per_move,moves",
-    [(1, 500), (5000, 5000)],
+    "num_proposals_per_move, total_num_proposals",
+    [
+        (5000, 80000),
+    ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_with_complex(hif2a_complex, steps_per_move, moves, precision, rtol, atol, seed):
+def test_moves_with_complex(hif2a_complex, num_proposals_per_move, total_num_proposals, precision, rtol, atol, seed):
     complex_system, conf, box = hif2a_complex
     bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
@@ -468,71 +586,24 @@ def test_moves_with_complex(hif2a_complex, steps_per_move, moves, precision, rto
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
+    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    accepted = 0
-    last_conf = conf
-    for step in range(moves // steps_per_move):
-        x_move, x_box = bdem.move(last_conf, box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        new_pos = None
-        idx = -1
-        for i, mol_idxs in enumerate(water_idxs):
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-                new_pos = x_move[mol_idxs]
-                idx = i
-        if num_moved > 0:
-            accepted += 1
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
-            # Verify that the probabilities and per mol energies agree when we do accept moves
-            # can only be done when we only attempt a single move per step
-            if steps_per_move == 1:
-                before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
-                    last_conf, x_box, idx, new_pos, before_log_weights
-                )
-                np.testing.assert_array_equal(tested, x_move)
-                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
-                ref_prob = np.exp(ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
-                np.testing.assert_allclose(
-                    np.exp(bdem.last_log_probability()),
-                    ref_prob,
-                    rtol=rtol,
-                    atol=atol,
-                    err_msg=f"Step {step} failed",
-                )
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-
-        last_conf = x_move
-    assert bdem.n_proposed() == moves
-    assert accepted > 0, "No moves were made, nothing was tested"
-    if steps_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
-        assert bdem.n_accepted() == accepted
-    else:
-        assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / moves
+    verify_bias_deletion_moves(
+        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
+    )
 
 
 @pytest.fixture(scope="module")
 def hif2a_rbfe_state() -> InitialState:
     seed = 2023
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_ligand:
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         complex_system, complex_conf, box, _, num_water_atoms = builders.build_protein_system(
-            str(path_to_ligand), ff.protein_ff, ff.water_ff
+            str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
-
+    box += np.diag([0.1, 0.1, 0.1])
     host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     st = SingleTopology(mol_a, mol_b, core, ff)
@@ -580,20 +651,26 @@ def hif2a_rbfe_state() -> InitialState:
         bound_impls,
         movers=[baro_impl],
     )
-    ctxt.multiple_steps(1000)
+    ctxt.multiple_steps(10_000)
     conf = ctxt.get_x_t()
     box = ctxt.get_box()
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(conf, box, True, False)
+        check_force_norm(-du_dx)
     return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
 
 
-@pytest.mark.skip(reason="Needs further investigation to address flakiness")
 @pytest.mark.parametrize(
-    "steps_per_move,moves",
-    [pytest.param(1, 15000, marks=pytest.mark.nightly(reason="slow")), (15000, 15000)],
+    "num_proposals_per_move, total_num_proposals",
+    [
+        (20000, 200000),
+    ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_with_complex_and_ligand(hif2a_rbfe_state, steps_per_move, moves, precision, rtol, atol, seed):
+def test_bd_moves_with_complex_and_ligand(
+    hif2a_rbfe_state, num_proposals_per_move, total_num_proposals, precision, rtol, atol, seed
+):
     """Verify that when the water atoms are between the protein and ligand that the reference and cuda exchange mover agree"""
     initial_state = hif2a_rbfe_state
 
@@ -601,8 +678,11 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, steps_per_move, moves, 
     box = initial_state.box0
 
     bps = initial_state.potentials
+    summed_pot = next(bp for bp in bps if isinstance(bp.potential, SummedPotential))
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    water_params = summed_pot.potential.params_init[0]
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -617,64 +697,15 @@ def test_moves_with_complex_and_ligand(hif2a_rbfe_state, steps_per_move, moves, 
 
     N = conf.shape[0]
 
-    params = nb.params
-
     cutoff = nb.potential.cutoff
     klass = custom_ops.BDExchangeMove_f32
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, steps_per_move, 1)
+    bdem = klass(N, water_idxs, water_params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
 
-    ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
+    ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, water_params, water_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    accepted = 0
-    last_conf = conf
-    for step in range(moves // steps_per_move):
-        x_move, x_box = bdem.move(last_conf, box)
-        # The box will never change
-        np.testing.assert_array_equal(box, x_box)
-        num_moved = 0
-        new_pos = None
-        idx = -1
-        for i, mol_idxs in enumerate(water_idxs):
-            if not np.all(x_move[mol_idxs] == last_conf[mol_idxs]):
-                num_moved += 1
-                new_pos = x_move[mol_idxs]
-                idx = i
-        if num_moved > 0:
-            accepted += 1
-            # The molecules should all be imaged in the home box
-            np.testing.assert_allclose(image_frame(all_group_idxs, x_move, x_box), x_move)
-            # Verify that the probabilities and per mol energies agree when we do accept moves
-            # can only be done when we only attempt a single move per step
-            if steps_per_move == 1:
-                before_log_weights = ref_bdem.batch_log_weights(last_conf, box)
-                after_log_weights, tested = ref_bdem.batch_log_weights_incremental(
-                    last_conf, x_box, idx, new_pos, before_log_weights
-                )
-                np.testing.assert_array_equal(tested, x_move)
-                ref_log_prob = np.minimum(logsumexp(before_log_weights) - logsumexp(after_log_weights), 0.0)
-                ref_prob = np.exp(ref_log_prob)
-                assert np.isfinite(ref_prob) and ref_prob > 0.0
-                np.testing.assert_allclose(
-                    np.exp(bdem.last_log_probability()),
-                    ref_prob,
-                    rtol=rtol,
-                    atol=atol,
-                    err_msg=f"Step {step} failed",
-                )
-        elif num_moved == 0:
-            np.testing.assert_array_equal(last_conf, x_move)
-        assert steps_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
-
-        last_conf = x_move
-    assert bdem.n_proposed() == moves
-    assert accepted > 0, "No moves were made, nothing was tested"
-    if steps_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / moves)
-        assert bdem.n_accepted() == accepted
-    else:
-        assert bdem.n_accepted() >= accepted
-        assert bdem.acceptance_fraction() >= accepted / moves
+    verify_bias_deletion_moves(
+        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
+    )
