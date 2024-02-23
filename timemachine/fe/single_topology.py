@@ -994,8 +994,8 @@ class SingleTopology(AtomMapMixin):
         src_chiral_centers_in_mol_c = [self.a_to_c[x] for x in chiral_centers_in_mol_a]
         dst_chiral_centers_in_mol_c = [self.b_to_c[x] for x in chiral_centers_in_mol_b]
 
-        self.check_chiral_validity(src_chiral_centers_in_mol_c, src_chiral_restr_idx_set, src_bond_idxs)
-        self.check_chiral_validity(dst_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, dst_bond_idxs)
+        self.check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs)
+        self.check_chiral_validity(dst_chiral_centers_in_mol_c, src_chiral_restr_idx_set, dst_bond_idxs)
 
     def combine_masses(self, use_hmr=False):
         """
