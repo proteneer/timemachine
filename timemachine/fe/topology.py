@@ -5,6 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from timemachine import potentials
+from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
 from timemachine.fe import chiral_utils
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
@@ -388,13 +389,16 @@ class BaseTopology:
         combined_potential = potentials.PeriodicTorsion(combined_idxs)
         return combined_params, combined_potential
 
-    def setup_chiral_restraints(self, restraint_k=1000.0):
+    def setup_chiral_restraints(self, chiral_atom_restraint_k, chiral_bond_restraint_k):
         """
         Create chiral atom and bond potentials.
 
         Parameters
         ----------
-        restraint_k: float
+        chiral_atom_restraint_k: float
+            Force constant of the restraints
+
+        chiral_bond_restraint_k: float
             Force constant of the restraints
 
         Returns
@@ -408,7 +412,8 @@ class BaseTopology:
 
         # chiral atoms
         chiral_atom_restr_idxs = np.array(chiral_utils.setup_all_chiral_atom_restr_idxs(mol, conf))
-        chiral_atom_params = restraint_k * np.ones(len(chiral_atom_restr_idxs))
+
+        chiral_atom_params = chiral_atom_restraint_k * np.ones(len(chiral_atom_restr_idxs))
         assert len(chiral_atom_params) == len(chiral_atom_restr_idxs)  # TODO: can this be checked in Potential::bind ?
         chiral_atom_potential = potentials.ChiralAtomRestraint(chiral_atom_restr_idxs).bind(chiral_atom_params)
 
@@ -423,7 +428,7 @@ class BaseTopology:
                 assert ii not in chiral_bond_restr_idxs
             chiral_bond_restr_idxs.extend(idxs)
             chiral_bond_restr_signs.extend(signs)
-            chiral_bond_params.extend(restraint_k for _ in idxs)  # TODO: double-check this
+            chiral_bond_params.extend(chiral_bond_restraint_k for _ in idxs)  # TODO: double-check this
 
         chiral_bond_restr_idxs = np.array(chiral_bond_restr_idxs)
         chiral_bond_restr_signs = np.array(chiral_bond_restr_signs)
@@ -439,7 +444,10 @@ class BaseTopology:
         Setup an end-state with chiral restraints attached.
         """
         system = self.setup_end_state()
-        chiral_atom_potential, chiral_bond_potential = self.setup_chiral_restraints()
+        chiral_atom_potential, chiral_bond_potential = self.setup_chiral_restraints(
+            chiral_atom_restraint_k=DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
+            chiral_bond_restraint_k=DEFAULT_CHIRAL_BOND_RESTRAINT_K,
+        )
         system.chiral_atom = chiral_atom_potential
         system.chiral_bond = chiral_bond_potential
         return system

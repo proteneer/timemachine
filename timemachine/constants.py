@@ -21,6 +21,9 @@ DEFAULT_FF = "smirnoff_2_0_0_ccc.py"
 DEFAULT_PROTEIN_FF = "amber99sbildn"
 DEFAULT_WATER_FF = "amber14/tip3p"
 
+DEFAULT_CHIRAL_ATOM_RESTRAINT_K = 1000.0
+DEFAULT_CHIRAL_BOND_RESTRAINT_K = 999.9
+
 # thresholds
 MAX_FORCE_NORM = 50000.0  # used to check norms in the gradient computations
 
