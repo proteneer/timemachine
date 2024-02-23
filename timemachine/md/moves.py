@@ -96,7 +96,12 @@ class MixtureOfMoves(CompoundMove[_State]):
 
 
 class BatchedMixtureOfMoves(MixtureOfMoves[_State]):
-    """Repeatedly sample from a uniform mixture of moves"""
+    """Repeatedly sample from a uniform mixture of moves.
+
+    Has the same intended behavior as calling MixtureOfMoves multiple times. Added as a
+    performance optimization to avoid calling np.random.choice repeatedly, which can be expensive
+    as the number of moves gets large.
+    """
 
     def __init__(self, batch_size: int, moves: Sequence[MonteCarloMove[_State]]):
         self.batch_size = batch_size
