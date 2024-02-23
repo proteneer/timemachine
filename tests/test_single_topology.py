@@ -14,7 +14,11 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine import potentials
-from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
+from timemachine.constants import (
+    DEFAULT_ATOM_MAPPING_KWARGS,
+    DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
+    DEFAULT_CHIRAL_BOND_RESTRAINT_K,
+)
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.dummy import MultipleAnchorWarning
 from timemachine.fe.free_energy import HostConfig
@@ -26,6 +30,7 @@ from timemachine.fe.interpolate import (
 )
 from timemachine.fe.single_topology import (
     ChargePertubationError,
+    ChiralConversionError,
     CoreBondChangeWarning,
     SingleTopology,
     canonicalize_improper_idxs,
@@ -44,6 +49,120 @@ from timemachine.md import minimizer
 from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.potentials.jax_utils import pairwise_distances
 
+setup_chiral_dummy_interactions_from_ff = functools.partial(
+    setup_dummy_interactions_from_ff,
+    chiral_atom_k=DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
+    chiral_bond_k=DEFAULT_CHIRAL_BOND_RESTRAINT_K,
+)
+
+
+@pytest.mark.nocuda
+def test_setup_chiral_dummy_atoms():
+    """
+    Test that we setup the correct geometries for each of the 8 types specified in single topology
+    """
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    mol = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02232401393D
+
+  5  4  0  0  0  0            999 V2000
+    1.8515    0.0946    2.1705 F   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0043    0.5689    1.2025 C   0  0  2  0  0  0  0  0  0  0  0  0
+   -0.6276    0.0025    1.5238 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    1.5780   -0.0702   -0.5225 Br  0  0  0  0  0  0  0  0  0  0  0  0
+    1.0321    2.6887    1.2159 I   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+M  END
+$$$$"""
+    )
+
+    # First 3 tests, center is core
+    dg_0 = [0, 2, 3]
+    core_0 = [1]
+    idxs, params = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dg_0, root_anchor_atom=1, nbr_anchor_atom=None, core_atoms=core_0
+    )
+    chiral_atom_idxs = idxs[-1]
+    chiral_atom_params = params[-1]
+    np.testing.assert_array_equal(chiral_atom_idxs, [[1, 2, 0, 3]])
+    np.testing.assert_array_equal(chiral_atom_params, [DEFAULT_CHIRAL_ATOM_RESTRAINT_K])
+
+    dg_1 = [0, 3]
+    core_1 = [1, 2]
+    idxs, params = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dg_1, root_anchor_atom=1, nbr_anchor_atom=None, core_atoms=core_1
+    )
+    chiral_atom_idxs = idxs[-1]
+    chiral_atom_params = params[-1]
+    np.testing.assert_array_equal(chiral_atom_idxs, [[1, 2, 0, 3]])
+    np.testing.assert_array_equal(chiral_atom_params, [DEFAULT_CHIRAL_ATOM_RESTRAINT_K])
+
+    dg_2 = [0]
+    core_2 = [1, 2, 3]
+    idxs, params = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dg_2, root_anchor_atom=1, nbr_anchor_atom=None, core_atoms=core_2
+    )
+    chiral_atom_idxs = idxs[-1]
+    chiral_atom_params = params[-1]
+    np.testing.assert_array_equal(chiral_atom_idxs, [[1, 2, 0, 3]])
+    np.testing.assert_array_equal(chiral_atom_params, [DEFAULT_CHIRAL_ATOM_RESTRAINT_K])
+
+    # Next 3 tests, center is not core
+    dg_3 = [1, 2, 3]
+    core_3 = [0]
+    idxs, params = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dg_3, root_anchor_atom=0, nbr_anchor_atom=None, core_atoms=core_3
+    )
+    chiral_atom_idxs = idxs[-1]
+    chiral_atom_params = params[-1]
+    np.testing.assert_array_equal(chiral_atom_idxs, [[1, 2, 0, 3]])
+    np.testing.assert_array_equal(chiral_atom_params, [DEFAULT_CHIRAL_ATOM_RESTRAINT_K])
+
+    dg_4 = [1, 2]
+    core_4 = [0, 3]
+    idxs, params = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dg_4, root_anchor_atom=0, nbr_anchor_atom=None, core_atoms=core_4
+    )
+    chiral_atom_idxs = idxs[-1]
+    chiral_atom_params = params[-1]
+    np.testing.assert_array_equal(chiral_atom_idxs, [[1, 2, 0, 3]])
+    np.testing.assert_array_equal(chiral_atom_params, [DEFAULT_CHIRAL_ATOM_RESTRAINT_K])
+
+    dg_5 = [0, 1, 2, 3]
+    core_5 = [4]
+    idxs, params = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dg_5, root_anchor_atom=4, nbr_anchor_atom=None, core_atoms=core_5
+    )
+    chiral_atom_idxs = idxs[-1]
+    chiral_atom_params = params[-1]
+    np.testing.assert_array_equal(chiral_atom_idxs, [[1, 2, 0, 3], [1, 0, 2, 4], [1, 3, 0, 4], [1, 2, 3, 4]])
+    np.testing.assert_array_equal(chiral_atom_params, [DEFAULT_CHIRAL_ATOM_RESTRAINT_K] * 4)
+
+    # The next two should return empty
+    dg_6 = [1]
+    core_6 = [0, 2, 3]
+    idxs, params = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dg_6, root_anchor_atom=0, nbr_anchor_atom=None, core_atoms=core_6
+    )
+    chiral_atom_idxs = idxs[-1]
+    chiral_atom_params = params[-1]
+    np.testing.assert_array_equal(chiral_atom_idxs, [])
+    np.testing.assert_array_equal(chiral_atom_params, [])
+
+    dg_7 = []
+    core_7 = [0, 1, 2, 3]
+    idxs, params = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dg_7, root_anchor_atom=0, nbr_anchor_atom=None, core_atoms=core_7
+    )
+    chiral_atom_idxs = idxs[-1]
+    chiral_atom_params = params[-1]
+    np.testing.assert_array_equal(chiral_atom_idxs, [])
+    np.testing.assert_array_equal(chiral_atom_params, [])
+
 
 @pytest.mark.nocuda
 def test_phenol():
@@ -54,11 +173,16 @@ def test_phenol():
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
     AllChem.EmbedMolecule(mol, randomSeed=2022)
 
+    all_atoms_set = set([a for a in range(mol.GetNumAtoms())])
+
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
+    dg_0 = [6, 12]
+    core_0 = list(all_atoms_set.difference(dg_0))
+
     # set [O,H] as the dummy group
-    all_idxs, _ = setup_dummy_interactions_from_ff(
-        ff, mol, dummy_group=[6, 12], root_anchor_atom=5, nbr_anchor_atom=None
+    all_idxs, _ = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dummy_group=dg_0, root_anchor_atom=5, nbr_anchor_atom=None, core_atoms=core_0
     )
     bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
@@ -68,7 +192,9 @@ def test_phenol():
     assert set(chiral_atom_idxs) == set()
 
     # set [O,H] as the dummy group but allow an extra angle
-    all_idxs, _ = setup_dummy_interactions_from_ff(ff, mol, dummy_group=[6, 12], root_anchor_atom=5, nbr_anchor_atom=0)
+    all_idxs, _ = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dummy_group=dg_0, root_anchor_atom=5, nbr_anchor_atom=0, core_atoms=core_0
+    )
     bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
     assert set(bond_idxs) == set([(5, 6), (6, 12)])
@@ -76,8 +202,13 @@ def test_phenol():
     assert set(improper_idxs) == set()
     assert set(chiral_atom_idxs) == set()
 
+    dg_1 = [12]
+    core_1 = list(all_atoms_set.difference(dg_1))
+
     # set [H] as the dummy group, without neighbor anchor atom
-    all_idxs, _ = setup_dummy_interactions_from_ff(ff, mol, dummy_group=[12], root_anchor_atom=6, nbr_anchor_atom=None)
+    all_idxs, _ = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dummy_group=dg_1, root_anchor_atom=6, nbr_anchor_atom=None, core_atoms=core_1
+    )
     bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
     assert set(bond_idxs) == set([(6, 12)])
@@ -86,7 +217,9 @@ def test_phenol():
     assert set(chiral_atom_idxs) == set()
 
     # set [H] as the dummy group, with neighbor anchor atom
-    all_idxs, _ = setup_dummy_interactions_from_ff(ff, mol, dummy_group=[12], root_anchor_atom=6, nbr_anchor_atom=5)
+    all_idxs, _ = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dummy_group=dg_1, root_anchor_atom=6, nbr_anchor_atom=5, core_atoms=core_1
+    )
     bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
     assert set(bond_idxs) == set([(6, 12)])
@@ -95,7 +228,9 @@ def test_phenol():
     assert set(chiral_atom_idxs) == set()
 
     with pytest.raises(single_topology.MissingAngleError):
-        all_idxs, _ = setup_dummy_interactions_from_ff(ff, mol, dummy_group=[12], root_anchor_atom=6, nbr_anchor_atom=4)
+        all_idxs, _ = setup_chiral_dummy_interactions_from_ff(
+            ff, mol, dummy_group=dg_1, root_anchor_atom=6, nbr_anchor_atom=4, core_atoms=core_1
+        )
 
 
 @pytest.mark.nocuda
@@ -106,11 +241,15 @@ def test_methyl_chiral_atom_idxs():
     mol = Chem.AddHs(Chem.MolFromSmiles("C"))
     AllChem.EmbedMolecule(mol, randomSeed=2022)
 
+    dg = [1, 2, 3, 4]
+    all_atoms_set = set([a for a in range(mol.GetNumAtoms())])
+    core_atoms = list(all_atoms_set.difference(dg))
+
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     # set [O,H] as the dummy group
-    all_idxs, _ = setup_dummy_interactions_from_ff(
-        ff, mol, dummy_group=[1, 2, 3, 4], root_anchor_atom=0, nbr_anchor_atom=None
+    all_idxs, _ = setup_chiral_dummy_interactions_from_ff(
+        ff, mol, dummy_group=dg, root_anchor_atom=0, nbr_anchor_atom=None, core_atoms=core_atoms
     )
     _, _, _, chiral_atom_idxs = all_idxs
 
@@ -281,12 +420,14 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
     simulations.
     """
 
+    seed = 2024
+
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)
 
     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
 
-    np.random.seed(2023)
+    np.random.seed(seed)
     np.random.shuffle(pairs)
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
@@ -314,10 +455,9 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
             assert_bond_idxs_are_canonical(system.nonbonded.potential.idxs)
             assert_bond_idxs_are_canonical(system.chiral_bond.potential.idxs)
             assert_chiral_atom_idxs_are_canonical(system.chiral_atom.potential.idxs)
-
             U_fn = jax.jit(system.get_U_fn())
             assert np.isfinite(U_fn(x0))
-            x_min = minimize_scipy(U_fn, x0)
+            x_min = minimize_scipy(U_fn, x0, seed=seed)
             assert np.all(np.isfinite(x_min))
             distance_cutoff = 2.5  # in nanometers
             assert get_max_distance(x_min) < distance_cutoff
@@ -1217,3 +1357,408 @@ def test_hif2a_plot_force_constants():
         all_axes[3].set_ylim(0, 1)
 
         plt.show()
+
+
+@pytest.mark.nightly(reason="Test setting up hif2a pairs for single topology.")
+@pytest.mark.nocuda
+def test_hif2a_pairs_setup_st():
+    """
+    Test that we can setup all-pairs single topology objects in hif2a.
+    """
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
+
+    pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
+    np.random.seed(2023)
+    np.random.shuffle(pairs)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    for mol_a, mol_b in pairs:
+        print(mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
+        core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+        SingleTopology(mol_a, mol_b, core, ff)  # Test that this doesn't not throw assertion
+
+
+@pytest.mark.nocuda
+def test_chiral_volume_spiro_failure():
+    # test that single topology throws an assertion when morphing
+    #
+    #    c   c        c   c
+    #   / \ / \      / \ / \
+    #  c   c   c -> c   c   c
+    #   \ . . /      \ / \ /
+    #    c   c        c   c
+    #    0 restrs    4 restrs
+    #
+    # (we need at least one restraint to be turned on to enable this)
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02222400143D
+
+  7  8  0  0  0  0            999 V2000
+    1.3547    1.2351    0.0997 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.2235    1.1005    0.7916 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0196   -0.0783    0.0627 C   0  0  2  0  0  0  0  0  0  0  0  0
+   -1.1709   -0.2545   -0.6537 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.3152   -1.3917    0.0257 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.1947   -1.2859    0.7396 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2208    0.1268   -0.6279 O   0  0  0  0  0  0  0  0  0  0  0  0
+  2  3  1  0  0  0  0
+  1  2  1  0  0  0  0
+  7  3  1  0  0  0  0
+  1  7  1  0  0  0  0
+  6  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  5  6  1  0  0  0  0
+  4  5  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02222400143D
+
+  7  6  0  0  0  0            999 V2000
+    1.3547    1.2351    0.0997 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.2235    1.1005    0.7916 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0196   -0.0783    0.0627 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.1709   -0.2545   -0.6537 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.3152   -1.3917    0.0257 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.1947   -1.2859    0.7396 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2208    0.1268   -0.6279 H   0  0  0  0  0  0  0  0  0  0  0  0
+  2  3  1  0  0  0  0
+  1  2  1  0  0  0  0
+  3  4  1  0  0  0  0
+  4  5  1  0  0  0  0
+  1  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6]])
+
+    with pytest.raises(ChiralConversionError):
+        SingleTopology(mol_a, mol_b, core, ff)
+
+    with pytest.raises(ChiralConversionError):
+        SingleTopology(mol_b, mol_a, core, ff)
+
+
+@pytest.mark.nocuda
+def test_chiral_methyl_to_nitrile():
+    # test that we do not turn off chiral atom restraints even if some of
+    # the angle terms are planar
+    #
+    #     H        H
+    #    .        /
+    # N#C-H -> F-C-H
+    #    .        \
+    #     H        H
+
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02232412343D
+
+  5  4  0  0  0  0            999 V2000
+    0.4146   -0.0001    0.4976 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.0830    0.0001    0.8564 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.5755   -0.0001   -1.0339 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0830    1.2574    1.0841 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0830   -1.2574    1.0841 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02232412343D
+
+  3  2  0  0  0  0            999 V2000
+    0.4146   -0.0001    0.4976 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.0830    0.0001    0.8564 N   0  0  0  0  0  0  0  0  0  0  0  0
+    0.5755   -0.0001   -1.0339 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  3  1  0  0  0  0
+  1  2  3  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    core = np.array([[0, 0], [1, 2]])
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, ff)
+    # chiral force constants should be on for all chiral terms at lambda=0 and lambda=1
+    vs_0 = st.setup_intermediate_state(0.0)
+    chiral_idxs_0 = vs_0.chiral_atom.potential.idxs
+    chiral_params_0 = vs_0.chiral_atom.params
+    assert len(chiral_idxs_0) == 4
+    assert np.sum(chiral_params_0 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4
+    vs_1 = st.setup_intermediate_state(1.0)
+
+    chiral_idxs_1 = vs_1.chiral_atom.potential.idxs
+    chiral_params_1 = vs_1.chiral_atom.params
+    assert len(chiral_idxs_0) == len(chiral_idxs_1)
+    assert np.sum(chiral_params_1 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4
+
+
+@pytest.mark.nocuda
+def test_chiral_methyl_to_nitrogen():
+    # test that we maintain all 4 chiral idxs when morphing N#N into CH3
+    #
+    #     H        H
+    #    /        /
+    # N#N-H -> F-C-H
+    #    \        \
+    #     H        H
+    #
+    # (we need at least one restraint to be turned on to enable this)
+
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02222400273D
+
+  5  4  0  0  0  0            999 V2000
+    0.1976    0.0344    0.3479 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.8624    0.0345    0.6018 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.3115    0.0344   -0.7361 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6707    0.9244    0.7630 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6707   -0.8555    0.7630 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+$$$$
+""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02222400253D
+
+  2  1  0  0  0  0            999 V2000
+    0.1976    0.0344    0.3479 N   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.8624    0.0345    0.6018 N   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  3  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    core = np.array([[0, 0], [4, 1]])
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    vs_0 = st.setup_intermediate_state(0.0)
+    chiral_idxs_0 = vs_0.chiral_atom.potential.idxs
+    chiral_params_0 = vs_0.chiral_atom.params
+    assert len(chiral_idxs_0) == 4
+    assert np.sum(chiral_params_0 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4
+
+    vs_1 = st.setup_intermediate_state(1.0)
+    chiral_idxs_1 = vs_1.chiral_atom.potential.idxs
+    chiral_params_1 = vs_1.chiral_atom.params
+    assert len(chiral_idxs_1) == 4
+    assert np.sum(chiral_params_1 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4
+
+    np.testing.assert_array_equal(chiral_idxs_0, chiral_idxs_1)
+
+
+@pytest.mark.nocuda
+def test_chiral_methyl_to_water():
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02222411113D
+
+  5  4  0  0  0  0            999 V2000
+   -1.1951   -0.2262   -0.1811 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.1566   -0.1865    0.0446 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4366    0.8050    0.4004 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6863   -0.4026   -0.8832 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4215   -0.9304    0.7960 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02222411123D
+
+  3  2  0  0  0  0            999 V2000
+   -1.1951   -0.2262   -0.1811 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.1566   -0.1865    0.0446 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4215   -0.9304    0.7960 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    core = np.array([[0, 0], [1, 1], [2, 2]])
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # chiral force constants should be on for all chiral terms at lambda=0 and lambda=1
+    vs_0 = st.setup_intermediate_state(0.0)
+    chiral_idxs_0 = vs_0.chiral_atom.potential.idxs
+    chiral_params_0 = vs_0.chiral_atom.params
+    assert len(chiral_idxs_0) == 4
+    assert np.sum(chiral_params_0 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4
+    vs_1 = st.setup_intermediate_state(1.0)
+
+    chiral_idxs_1 = vs_1.chiral_atom.potential.idxs
+    chiral_params_1 = vs_1.chiral_atom.params
+    assert len(chiral_idxs_0) == len(chiral_idxs_1)
+    assert np.sum(chiral_params_1 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4
+
+
+@pytest.mark.nocuda
+def test_chiral_methyl_to_ammonia():
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02232411003D
+
+  5  4  0  0  0  0            999 V2000
+    0.0402    0.0126    0.1841 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.2304   -0.7511    0.9383 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8502    0.0126   -0.5452 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0173    0.9900    0.6632 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.9024   -0.2011   -0.3198 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02232411003D
+
+  4  3  0  0  0  0            999 V2000
+    0.0402    0.0126    0.1841 N   0  0  0  0  0  0  0  0  0  0  0  0
+    0.2304   -0.7511    0.9383 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0173    0.9900    0.6632 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.9024   -0.2011   -0.3198 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3]])
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # chiral force constants should be on for all chiral terms at lambda=0 and lambda=1
+    vs_0 = st.setup_intermediate_state(0.0)
+    chiral_idxs_0 = vs_0.chiral_atom.potential.idxs
+    chiral_params_0 = vs_0.chiral_atom.params
+    assert len(chiral_idxs_0) == 4
+    assert np.sum(chiral_params_0 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4
+    vs_1 = st.setup_intermediate_state(1.0)
+
+    # Note that NH3 is categorized as achiral
+    chiral_idxs_1 = vs_1.chiral_atom.potential.idxs
+    chiral_params_1 = vs_1.chiral_atom.params
+    assert len(chiral_idxs_0) == len(chiral_idxs_1)
+    assert np.sum(chiral_params_1 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 3
+
+
+@pytest.mark.nocuda
+def test_chiral_core_ring_opening():
+    # test that chiral restraints are maintained for dummy atoms when we open/close a ring,
+    # at lambda=0, all 7 chiral restraints are turned on, but at lambda=1
+    # only 4 chiral restraints are turned on.
+
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02222400433D
+
+  6  6  0  0  0  0            999 V2000
+   -0.2397    1.3763    0.4334 C   0  0  2  0  0  0  0  0  0  0  0  0
+    0.2664   -0.0682    0.6077 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8332    1.6232   -0.6421 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3412    0.1809   -0.4674 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0336    1.9673    1.3258 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.2364    1.3849   -0.0078 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  1  2  1  0  0  0  0
+  4  2  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  6  1  0  0  0  0
+M  END
+$$$$
+""",
+        removeHs=False,
+    )  # closed ring
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02222400463D
+
+  7  6  0  0  0  0            999 V2000
+   -0.2397    1.3763    0.4334 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.2664   -0.0682    0.6077 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8332    1.6232   -0.6421 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3412    0.1809   -0.4674 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0336    1.9673    1.3258 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.2364    1.3849   -0.0078 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0787   -0.1553    0.4334 H   0  0  0  0  0  0  0  0  0  0  0  0
+  3  4  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  6  1  0  0  0  0
+  1  7  1  0  0  0  0
+  4  2  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )  # open ring
+
+    # map everything except a single hydrogen at the end
+    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5]])
+
+    # chiral force constants should be on for all 7 chiral
+    # terms at lambda=0
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, ff)
+    vs_0 = st.setup_intermediate_state(0.0)
+    chiral_idxs_0 = vs_0.chiral_atom.potential.idxs
+    chiral_params_0 = vs_0.chiral_atom.params
+    assert len(chiral_idxs_0) == 7
+    assert np.sum(chiral_params_0 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 7
+    vs_1 = st.setup_intermediate_state(1.0)
+
+    # chiral force constants should be on for all 4 of the 7
+    # chiral terms at lambda=1
+    chiral_idxs_1 = vs_1.chiral_atom.potential.idxs
+    chiral_params_1 = vs_1.chiral_atom.params
+    assert len(chiral_idxs_0) == len(chiral_idxs_1)
+
+    assert np.sum(chiral_params_1 == 0) == 3
+    assert np.sum(chiral_params_1 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4

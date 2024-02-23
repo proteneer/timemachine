@@ -3,7 +3,6 @@ from importlib import resources
 import numpy as np
 import pytest
 from rdkit import Chem
-from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping, interpolate, single_topology
@@ -264,65 +263,91 @@ def test_duplicate_idxs_period_pairs():
     """Check that parameter interpolation is able to handle torsion terms with duplicate ((i, j, k, l), period) pairs.
     E.g. if we only align on idxs and period, this will result in a DuplicateAlignmentKeysError."""
 
-    # CHEMBL3664148
-    mol_a = Chem.AddHs(Chem.MolFromSmiles("CNC(=O)c1cc2cc(Nc3nccc(-c4cn(C)cn4)n3)cc(Cl)c2[nH]1"))
-    AllChem.EmbedMolecule(mol_a)
+    # S-C(=O)-C-N
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02222413343D
 
-    # CHEMBL3668838
-    # has a subgroup matching a pattern with duplicate periods:
-    # https://github.com/proteneer/timemachine/blob/c88b42c8aeadaeb7979558f04cae961502fd2917/timemachine/ff/params/smirnoff_2_0_0_ccc.py#L480
-    mol_b = Chem.AddHs(Chem.MolFromSmiles("Cc1cc(Nc2nccc(-c3cn(C)cn3)n2)cc2cc(C(=O)NCc3nccs3)[nH]c12"))
-    AllChem.EmbedMolecule(mol_b)
-
-    core = np.array(
-        [
-            [26, 0],
-            [1, 1],
-            [2, 2],
-            [3, 3],
-            [6, 6],
-            [4, 7],
-            [5, 8],
-            [7, 9],
-            [8, 10],
-            [0, 11],
-            [12, 12],
-            [9, 13],
-            [10, 14],
-            [11, 15],
-            [13, 16],
-            [14, 17],
-            [15, 19],
-            [16, 20],
-            [17, 21],
-            [18, 22],
-            [19, 24],
-            [20, 25],
-            [21, 26],
-            [22, 27],
-            [23, 28],
-            [24, 29],
-            [25, 30],
-            [30, 35],
-            [31, 36],
-            [32, 37],
-            [33, 38],
-            [34, 39],
-            [37, 42],
-            [35, 43],
-            [36, 44],
-            [38, 45],
-            [39, 46],
-            [27, 47],
-            [28, 48],
-            [40, 49],
-            [41, 50],
-            [42, 51],
-        ]
+ 10  9  0  0  0  0            999 V2000
+   -0.1061    1.3412   -0.6918 S   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8678    0.1840    0.1637 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.1123    0.2851    0.0888 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.2538   -0.8982    0.9504 C   0  0  1  0  0  0  0  0  0  0  0  0
+   -0.0339   -2.0308    0.0700 N   0  0  2  0  0  0  0  0  0  0  0  0
+   -0.1850    2.1930    0.3696 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9367   -1.2300    1.7348 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.6721   -0.5618    1.4198 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4182   -2.7767    0.6529 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8664   -2.3616   -0.2827 H   0  0  0  0  0  0  0  0  0  0  0  0
+  2  4  1  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  2  0  0  0  0
+  4  5  1  0  0  0  0
+  1  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  4  8  1  0  0  0  0
+  5  9  1  0  0  0  0
+  5 10  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
     )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02222413353D
+
+ 10  9  0  0  0  0            999 V2000
+   -1.1655    2.3037   -0.7381 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.2084    0.6713    0.4687 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.9640    0.8139    0.3631 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.6578   -0.8554    1.5785 C   0  0  1  0  0  0  0  0  0  0  0  0
+   -1.0637   -2.4531    0.3365 N   0  0  2  0  0  0  0  0  0  0  0  0
+   -1.2768    3.5054    0.7592 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.3056   -1.3234    2.6851 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.9640   -0.3808    2.2407 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.6058   -3.5054    1.1588 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.2064   -2.9198   -0.1610 H   0  0  0  0  0  0  0  0  0  0  0  0
+  2  4  1  0  0  0  0
+  2  3  2  0  0  0  0
+  4  5  1  0  0  0  0
+  4  7  1  0  0  0  0
+  4  8  1  0  0  0  0
+  5  9  1  0  0  0  0
+  5 10  1  0  0  0  0
+  1  2  1  0  0  0  0
+  1  6  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    assert mol_a.GetNumAtoms() == mol_b.GetNumAtoms()
+    core = np.array([[a, a] for a in range(mol_a.GetNumAtoms())])
 
     ff = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, ff)
 
-    # should not raise DuplicateAlignmentKeysError
+    duplicate_torsion_idxs = (0, 1, 3, 4)
+
+    counts_kv_src = dict()
+    for idxs, p in zip(st.src_system.torsion.potential.idxs, st.src_system.torsion.params):
+        key = tuple(idxs)
+        if p[2] == 2.0:
+            if key not in counts_kv_src:
+                counts_kv_src[key] = 0
+            counts_kv_src[key] += 1  # store period
+
+    assert counts_kv_src[duplicate_torsion_idxs] == 2
+
+    counts_kv_dst = dict()
+    for idxs, p in zip(st.dst_system.torsion.potential.idxs, st.dst_system.torsion.params):
+        key = tuple(idxs)
+        if p[2] == 2.0:
+            if key not in counts_kv_dst:
+                counts_kv_dst[key] = 0
+            counts_kv_dst[key] += 1  # store period
+
+    assert duplicate_torsion_idxs not in counts_kv_dst
+
     st.setup_intermediate_state(0.5)
