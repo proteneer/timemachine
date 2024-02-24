@@ -12,7 +12,7 @@ from timemachine.constants import (
     DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
     DEFAULT_CHIRAL_BOND_RESTRAINT_K,
 )
-from timemachine.fe import topology, utils
+from timemachine.fe import chiral_utils, topology, utils
 from timemachine.fe.atom_mapping import get_cores
 from timemachine.fe.free_energy import HREXParams
 from timemachine.fe.rbfe import DEFAULT_HREX_PARAMS, run_vacuum
@@ -328,6 +328,69 @@ $$$$""",
     # should be indistinguishable under KS-test
     ks, pv = scipy.stats.ks_2samp(-ref_dist, test_dist)
     assert ks < 0.05 or pv > 0.10
+
+
+def test_chiral_inversions_cyclopropane():
+    # test that we can restrain the chirality of a tetrahedral molecule
+    # to its inverted state
+    mol = Chem.MolFromMolBlock(
+        """
+  Mrv2311 02242413153D
+
+  9  9  0  0  0  0            999 V2000
+    0.7639    1.3274   -0.0283 C   0  0  1  0  0  0  0  0  0  0  0  0
+    0.0002   -0.0007    0.0283 C   0  0  1  0  0  0  0  0  0  0  0  0
+    1.5323    0.0006   -0.0278 C   0  0  1  0  0  0  0  0  0  0  0  0
+    0.7322    1.8585   -0.9818 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7947    1.8957    0.9023 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4389   -0.2537    0.9952 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5119   -0.2962   -0.8891 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.9772   -0.2924   -0.9805 H   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0408   -0.2536    0.9034 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  1  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  3  8  1  0  0  0  0
+  3  9  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    ff = Forcefield.load_default()
+    s_top = topology.BaseTopology(mol, ff)
+    x0 = utils.get_romol_conf(mol)
+
+    perms = []
+    perms.extend(chiral_utils.setup_chiral_atom_restraints(mol, x0, 0))
+    perms.extend(chiral_utils.setup_chiral_atom_restraints(mol, x0, 1))
+    perms.extend(chiral_utils.setup_chiral_atom_restraints(mol, x0, 2))
+    perms = np.array(perms)
+
+    # # check initial chirality, all positive values initially
+    for p in perms:
+        vol = pyramidal_volume(*x0[p])
+        assert vol < 0
+
+    system = s_top.setup_end_state()
+    U_fn = system.get_U_fn()
+
+    vols_orig = []
+    # turn off minimizing to avoid accidentally swapping chiral states
+    frames = simulate_system(U_fn, x0, minimize=False)
+    for f in frames:
+        vols_orig.append([pyramidal_volume(*f[p]) for p in perms])
+
+    vols_orig = np.array(vols_orig).reshape(-1)
+
+    # with cos_angles=True, shows 4 and 239996
+    # with cos_angles=False, shows 3 and 239997
+    print("pos vols", np.sum(vols_orig > 0))
+    print("neg vols", np.sum(vols_orig <= 0))
 
 
 def test_chiral_spiro_cyclopentane():

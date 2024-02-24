@@ -132,7 +132,7 @@ def harmonic_angle(conf, params, box, angle_idxs, cos_angles=True):
     tb = top / bot
 
     # (ytz): we use the squared version so that the energy is strictly positive
-    if cos_angles:
+    if 0:
         energies = kas / 2 * jnp.power(tb - jnp.cos(a0s), 2)
     else:
         angle = jnp.arccos(tb)
