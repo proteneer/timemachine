@@ -328,6 +328,31 @@ def plot_fwd_reverse_predictions(
     return plot_png
 
 
+def plot_chiral_restraint_energies(
+    chiral_energies: NDArray,
+    annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
+    figsize: Tuple[float, float] = (13, 10),
+):
+    """Plot matrix of chiral restraint energies as a heatmap.
+
+    For use with the outputs of timemachine.fe.chiral_utils.make_chiral_flip_heatmaps.
+    """
+    n_states, n_frames = chiral_energies.shape
+    states = np.arange(n_states)
+    frames = np.arange(n_frames)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    p = ax.pcolormesh(frames, states, chiral_energies, vmin=0.0)
+
+    ax.set_xlabel("frame")
+    ax.set_ylabel("state")
+    ax.xaxis.get_major_locator().set_params(integer=True)
+    ax.yaxis.get_major_locator().set_params(integer=True)
+
+    fig.colorbar(p, label="chiral restraint energy")
+    fig.suptitle("Chiral Restraint Energies")
+
+
 def plot_hrex_transition_matrix(
     transition_probability: NDArray,
     figsize: Tuple[float, float] = (13, 10),
