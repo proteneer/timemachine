@@ -16,6 +16,8 @@ def plot_work(w_forward, w_reverse, axes):
     """histograms of +forward and -reverse works"""
 
     w_all = np.concatenate([+w_forward, -w_reverse])
+    # Tear out any non-finite works
+    w_all = w_all[np.isfinite(w_all)]
     a_min, a_max = np.amin(w_all), np.amax(w_all)
 
     axes.hist(+w_forward, alpha=0.5, label="fwd", density=True, bins=20, range=(a_min, a_max))
