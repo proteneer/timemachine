@@ -780,7 +780,7 @@ def run_sims_bisection(
             if min_overlap is not None:
                 overlap_info = f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} <= {min_overlap:.3g} "
             else:
-                overlap_info = f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} (min_overlap == None)"
+                overlap_info = f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} (min_overlap == None) "
 
             print(
                 f"Bisection iteration {iteration} (of {n_bisections}): "
