@@ -419,7 +419,21 @@ def make_chiral_restr_fxns(mol_a, mol_b, chiral_k: float = DEFAULT_CHIRAL_ATOM_R
 
 
 def xs_ab_from_xs(xs: NDArray, atom_map):
-    """map convert_single_topology_mols over xs"""
+    """map convert_single_topology_mols over xs
+
+    Parameters
+    ----------
+    xs: An array of coordinates
+        Coordinates containing the alchemical molecule constructed for RBFE
+    atom_map: timemachine.fe.single_topology.AtomMapMixin
+        Contains the atom map between the two end state molecules
+
+    Returns
+    -------
+    2-tuple
+        Returns a tuple of the mol_a and mol_b frames.
+
+    """
     # Import here to avoid circular, TBD Deboggle
     from timemachine.fe.cif_writer import convert_single_topology_mols
 
