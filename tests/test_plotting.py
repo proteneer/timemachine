@@ -1,7 +1,8 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from timemachine.fe.plots import plot_forward_and_reverse_ddg, plot_forward_and_reverse_dg
+from timemachine.fe.plots import plot_forward_and_reverse_ddg, plot_forward_and_reverse_dg, plot_work
 
 # Plotting code should not depend on CUDA
 pytestmark = [pytest.mark.nocuda]
@@ -45,3 +46,20 @@ def test_forward_and_reverse_dg_plot_validation():
 
     with pytest.raises(AssertionError, match="fewer samples than frames_per_step"):
         plot_forward_and_reverse_dg(dummy_ukln, frames_per_step=ukln_shape[-1] + 1)
+
+
+def test_plot_work_with_infs():
+    rng = np.random.default_rng(2024)
+
+    finite_values = rng.normal(loc=1000, scale=300, size=2000)
+
+    # With finite values all should be well
+    _, ax = plt.subplots()
+    plot_work(finite_values, -finite_values, ax)
+    plt.clf()
+
+    nonfinite_values = np.concatenate([[np.inf, -np.inf, np.nan], finite_values])
+
+    _, ax = plt.subplots()
+    plot_work(nonfinite_values, -nonfinite_values, ax)
+    plt.clf()
