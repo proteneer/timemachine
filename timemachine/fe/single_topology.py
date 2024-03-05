@@ -953,12 +953,10 @@ class SingleTopology(AtomMapMixin):
                 i, j, k, l = nbs
                 # (ytz): the ordering of i,j,k,l is random if we're reading directly from the mol graph,
                 # which can be inconsistent with the ordering used in the chiral volume definition.
-                flag_0 = dst_chiral_restr_idx_set.defines((c, i, j, k))
-                flag_1 = dst_chiral_restr_idx_set.defines((c, i, j, l))
-                flag_2 = dst_chiral_restr_idx_set.defines((c, i, k, l))
-                flag_3 = dst_chiral_restr_idx_set.defines((c, j, k, l))
+                nb_subsets = [(i, j, k), (i, j, l), (i, k, l), (j, k, l)]  # 4-choose-3 subsets
+                flags = [dst_chiral_restr_idx_set.defines((c, ii, jj, kk)) for (ii, jj, kk) in nb_subsets]
 
-                if not flag_0 and not flag_1 and not flag_2 and not flag_3:
+                if sum(flags) == 0:
                     raise ChiralConversionError(f"len(nbs) == 4 {c, i, j, k, l}")
 
             if len(nbs) == 3:
