@@ -108,7 +108,7 @@ ENV CMAKE_ARGS="-DCUDA_ARCH:STRING=${CUDA_ARCH}"
 
 COPY . /code/timemachine/
 WORKDIR /code/timemachine/
-RUN pip install --no-cache-dir -e .[test] && rm -rf ./build
+RUN pip install --no-cache-dir -e . && rm -rf ./build
 
 # Container with only cuda runtime, half the size of dev container
 FROM nvidia/cuda:11.7.1-runtime-ubuntu20.04 as timemachine
