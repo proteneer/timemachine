@@ -945,20 +945,18 @@ class SingleTopology(AtomMapMixin):
         return nbs
 
     def check_chiral_validity(self, src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):
-        # For every 4-connected chiral center, check and see if at least 3 of the 4 chiral volumes are
-        # defined at both end-states.
+        """Raise error unless, for every chiral center, at least 1 chiral volume is defined in both end-states."""
+
         for c in src_chiral_centers_in_mol_c:
             nbs = self.get_neighbors(c, src_bond_idxs)
             if len(nbs) == 4:
                 i, j, k, l = nbs
                 # (ytz): the ordering of i,j,k,l is random if we're reading directly from the mol graph,
                 # which can be inconsistent with the ordering used in the chiral volume definition.
-                flag_0 = dst_chiral_restr_idx_set.defines((c, i, j, k))
-                flag_1 = dst_chiral_restr_idx_set.defines((c, i, j, l))
-                flag_2 = dst_chiral_restr_idx_set.defines((c, i, k, l))
-                flag_3 = dst_chiral_restr_idx_set.defines((c, j, k, l))
+                nb_subsets = [(i, j, k), (i, j, l), (i, k, l), (j, k, l)]  # 4-choose-3 subsets
+                flags = [dst_chiral_restr_idx_set.defines((c, ii, jj, kk)) for (ii, jj, kk) in nb_subsets]
 
-                if not flag_0 and not flag_1 and not flag_2 and not flag_3:
+                if sum(flags) == 0:
                     raise ChiralConversionError(f"len(nbs) == 4 {c, i, j, k, l}")
 
             if len(nbs) == 3:
