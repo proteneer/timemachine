@@ -6,13 +6,9 @@ from collections import Counter
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-import openmm
-from openmm import app
-from openmm.app.forcefield import ForceField
 from rdkit import Chem
 
 from timemachine import constants
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
@@ -517,6 +513,13 @@ class EnvironmentBCCHandler(SerializableMixIn):
     """
 
     def __init__(self, patterns, params, protein_ff_name, water_ff_name, topology):
+        # Import here to avoid triggering failures with imports in cases without openmm
+        import openmm
+        from openmm import app
+        from openmm.app.forcefield import ForceField
+
+        from timemachine.ff.handlers import openmm_deserializer
+
         self.patterns = patterns
         self.params = np.array(params)
         self.env_ff = ForceField(protein_ff_name, water_ff_name)
