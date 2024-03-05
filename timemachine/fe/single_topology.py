@@ -945,8 +945,8 @@ class SingleTopology(AtomMapMixin):
         return nbs
 
     def check_chiral_validity(self, src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):
-        # For every 4-connected chiral center, check and see if at least 3 of the 4 chiral volumes are
-        # defined at both end-states.
+        """Raise error unless, for every chiral center, at least 1 chiral volume is defined in both end-states."""
+
         for c in src_chiral_centers_in_mol_c:
             nbs = self.get_neighbors(c, src_bond_idxs)
             if len(nbs) == 4:
