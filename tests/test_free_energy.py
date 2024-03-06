@@ -307,6 +307,7 @@ def test_run_sims_bisection_early_stopping(hif2a_ligand_pair_single_topology_lam
         n_bisections=n_bisections,
         temperature=DEFAULT_TEMP,
         verbose=False,
+        prune_windows=True,
     )
 
     # runs all n_bisections iterations by default

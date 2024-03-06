@@ -680,6 +680,7 @@ def run_sims_bisection(
     temperature: float,
     min_overlap: Optional[float] = None,
     verbose: bool = True,
+    prune_windows: bool = False,
 ) -> Tuple[List[PairBarResult], List[Trajectory]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
     with the lowest BAR overlap and sample the new state with MD.
@@ -706,6 +707,9 @@ def run_sims_bisection(
 
     verbose: bool, optional
         Whether to print diagnostic information
+
+    prune_windows: bool, optional
+        Prune windows that produce an overlap greater than the min_overlap provided
 
     Returns
     -------
@@ -799,6 +803,19 @@ def run_sims_bisection(
                 f"The minimum BAR overlap was {np.min(result.overlaps)}.",
                 MinOverlapWarning,
             )
+
+    if prune_windows:
+        if min_overlap is None:
+            warn("Unable to prune since min_overlap is None")
+        elif not np.all(np.array(result.overlaps) > min_overlap):
+            print("Skipping pruning, not all overlaps great enough")
+        else:
+            current_lamb_idx = 0
+            # pruned_results[results[current_lamb_idx]]
+            # pruned_lambdas = [lambdas[current_lamb_idx]]
+            for i in reversed(range(1, len(lambdas))):
+                overlap = get_bar_result(lambdas[current_lamb_idx], lambdas[i])
+                print(f"{current_lamb_idx} -> {i}: {overlap}")
 
     trajectories = [get_samples(lamb) for lamb in lambdas]
 
