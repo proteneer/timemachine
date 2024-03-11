@@ -15,9 +15,6 @@
 
 namespace timemachine {
 
-// NOISE_PER_STEP is the uniform generated per step that is used for deciding the targeted move as well as the acceptance
-// in the metropolis hasting check.
-static const int NOISE_PER_STEP = 2;
 // Each step will have 6 values for a translation, first 3 is the inner translation and second 3 is outer translation
 static const int TIBD_TRANSLATIONS_PER_STEP_XYZXYZ = 6;
 
@@ -46,13 +43,12 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
           num_proposals_per_move,
           interval,
           batch_size,
-          round_up_even(TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * num_proposals_per_move)),
+          TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * num_proposals_per_move),
       radius_(static_cast<RealType>(radius)), inner_volume_(static_cast<RealType>((4.0 / 3.0) * M_PI * pow(radius, 3))),
       d_rand_states_(DEFAULT_THREADS_PER_BLOCK), d_inner_mols_count_(1), d_identify_indices_(this->num_target_mols_),
       d_partitioned_indices_(this->num_target_mols_), d_temp_storage_buffer_(0), d_center_(3),
-      d_uniform_noise_buffer_(round_up_even(NOISE_PER_STEP * this->steps_per_move_ * this->batch_size_)),
-      d_targeting_inner_vol_(this->batch_size_), d_ligand_idxs_(ligand_idxs),
-      d_src_log_weights_(this->num_target_mols_ * this->batch_size_),
+      d_uniform_noise_buffer_(num_proposals_per_move), d_targeting_inner_vol_(this->batch_size_),
+      d_ligand_idxs_(ligand_idxs), d_src_log_weights_(this->num_target_mols_ * this->batch_size_),
       d_dest_log_weights_(this->num_target_mols_ * this->batch_size_), d_inner_flags_(this->num_target_mols_),
       d_box_volume_(1), d_selected_translation_(this->batch_size_ * 3),
       d_sample_after_segment_offsets_(this->d_sample_segments_offsets_.length),
@@ -61,15 +57,15 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
     }
-    if (d_uniform_noise_buffer_.length / NOISE_PER_STEP != this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
+    if (d_uniform_noise_buffer_.length != this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
         throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
 
-    // Add 3 to the seed provided to avoid correlating with the three other RNGs
+    // Add 4 to the seed provided to avoid correlating with the four other RNGs
     k_initialize_curand_states<<<
         ceil_divide(d_rand_states_.length, DEFAULT_THREADS_PER_BLOCK),
         DEFAULT_THREADS_PER_BLOCK,
-        0>>>(static_cast<int>(d_rand_states_.length), seed + 3, d_rand_states_.data);
+        0>>>(static_cast<int>(d_rand_states_.length), seed + 4, d_rand_states_.data);
     gpuErrchk(cudaPeekAtLastError());
 
     k_arange<<<ceil_divide(this->num_target_mols_, DEFAULT_THREADS_PER_BLOCK), DEFAULT_THREADS_PER_BLOCK, 0>>>(
@@ -165,7 +161,8 @@ void TIBDExchangeMove<RealType>::move(
     gpuErrchk(cudaPeekAtLastError());
 
     // Generate all noise upfront for all proposals within a move
-    // Using the translations RNG from the BDExchangeMove to generate noise for the targeting probability and the acceptance criteria
+    curandErrchk(templateCurandUniform(this->cr_rng_mh_, this->d_mh_noise_.data, this->d_mh_noise_.length));
+    // Using the translations RNG from the BDExchangeMove to generate noise for the targeting probability
     curandErrchk(templateCurandUniform(
         this->cr_rng_translations_, this->d_uniform_noise_buffer_.data, this->d_uniform_noise_buffer_.length));
     curandErrchk(
@@ -193,7 +190,7 @@ void TIBDExchangeMove<RealType>::move(
         k_decide_targeted_moves<<<sample_blocks, tpb, 0, stream>>>(
             this->batch_size_,
             this->num_target_mols_,
-            this->d_uniform_noise_buffer_.data + (step * NOISE_PER_STEP * this->batch_size_),
+            this->d_uniform_noise_buffer_.data + (step * this->batch_size_),
             d_inner_mols_count_.data,
             this->d_translations_.data + (step * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * this->batch_size_),
             d_targeting_inner_vol_.data,
@@ -237,7 +234,6 @@ void TIBDExchangeMove<RealType>::move(
             this->d_samples_.data,
             stream);
 
-        // this->logsumexp_.sum_device(src_count, d_src_log_weights_.data, this->d_lse_max_before_.data, stream);
         this->logsumexp_.sum_device(
             this->num_target_mols_ * this->batch_size_,
             this->batch_size_,
@@ -293,8 +289,7 @@ void TIBDExchangeMove<RealType>::move(
             d_inner_mols_count_.data,
             d_box_volume_.data,
             inner_volume_,
-            // Offset to get the last value for the acceptance criteria
-            this->d_uniform_noise_buffer_.data + (step * NOISE_PER_STEP) + (NOISE_PER_STEP - 1),
+            this->d_mh_noise_.data + (step * this->batch_size_),
             this->d_samples_.data,
             this->d_lse_max_before_.data,
             this->d_lse_exp_sum_before_.data,

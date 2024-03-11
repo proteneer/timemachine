@@ -14,9 +14,8 @@ namespace timemachine {
 // The number of threads per block for the setting of the final weight of the moved mol is low
 // if using the same number as in the rest of the kernels of DEFAULT_THREADS_PER_BLOCK
 static const int WEIGHT_THREADS_PER_BLOCK = 512;
-// The number of translations to generate each step. The first three values are a unit vector translation and the fourth
-// value is used for the metropolis hasting check
-static const int BD_TRANSLATIONS_PER_STEP_XYZW = 4;
+// The number of translations to generate each step.
+static const int BD_TRANSLATIONS_PER_STEP_XYZ = 3;
 
 template <typename RealType>
 BDExchangeMove<RealType>::BDExchangeMove(
@@ -41,7 +40,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
           num_proposals_per_move,
           interval,
           batch_size,
-          round_up_even(BD_TRANSLATIONS_PER_STEP_XYZW * num_proposals_per_move)) {}
+          BD_TRANSLATIONS_PER_STEP_XYZ * num_proposals_per_move) {}
 
 template <typename RealType>
 BDExchangeMove<RealType>::BDExchangeMove(
@@ -68,10 +67,11 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
       d_log_weights_after_(batch_size_ * num_target_mols_), d_lse_max_before_(1), d_lse_exp_sum_before_(1),
       d_lse_max_after_(batch_size_), d_lse_exp_sum_after_(batch_size_), d_samples_(batch_size_),
-      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * num_proposals_per_move_)), d_num_accepted_(1),
-      d_target_mol_atoms_(batch_size_ * mol_size_), d_target_mol_offsets_(num_target_mols_ + 1),
+      d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * num_proposals_per_move_)),
+      d_mh_noise_(num_proposals_per_move), d_num_accepted_(1), d_target_mol_atoms_(batch_size_ * mol_size_),
+      d_target_mol_offsets_(num_target_mols_ + 1),
       d_intermediate_sample_weights_(batch_size_ * num_intermediates_per_reduce_),
-      d_sample_noise_(round_up_even(num_target_mols_ * num_proposals_per_move_)),
+      d_sample_noise_(num_target_mols_ * num_proposals_per_move_),
       d_sampling_intermediate_(num_target_mols_ * batch_size_), d_translations_(translation_buffer_size),
       d_sample_segments_offsets_(batch_size_ + 1) {
 
@@ -107,6 +107,9 @@ BDExchangeMove<RealType>::BDExchangeMove(
     curandErrchk(curandCreateGenerator(&cr_rng_samples_, CURAND_RNG_PSEUDO_DEFAULT));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_samples_, seed + 2));
 
+    curandErrchk(curandCreateGenerator(&cr_rng_mh_, CURAND_RNG_PSEUDO_DEFAULT));
+    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_mh_, seed + 3));
+
     // Setup the sample segments
     // constant for BDExchangeMove since the sample size is always batches of num_target_mols_ weights
     std::vector<int> h_sample_segments(d_sample_segments_offsets_.length);
@@ -122,6 +125,7 @@ template <typename RealType> BDExchangeMove<RealType>::~BDExchangeMove() {
     curandErrchk(curandDestroyGenerator(cr_rng_quat_));
     curandErrchk(curandDestroyGenerator(cr_rng_translations_));
     curandErrchk(curandDestroyGenerator(cr_rng_samples_));
+    curandErrchk(curandDestroyGenerator(cr_rng_mh_));
 }
 
 template <typename RealType>
@@ -138,7 +142,7 @@ void BDExchangeMove<RealType>::move(
     if (this->step_ % this->interval_ != 0) {
         return;
     }
-    if (d_translations_.length / BD_TRANSLATIONS_PER_STEP_XYZW !=
+    if (d_translations_.length / BD_TRANSLATIONS_PER_STEP_XYZ !=
         this->d_quaternions_.length / this->QUATERNIONS_PER_STEP) {
         throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
@@ -147,6 +151,7 @@ void BDExchangeMove<RealType>::move(
     curandErrchk(curandSetStream(cr_rng_quat_, stream));
     curandErrchk(curandSetStream(cr_rng_translations_, stream));
     curandErrchk(curandSetStream(cr_rng_samples_, stream));
+    curandErrchk(curandSetStream(cr_rng_mh_, stream));
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
 
@@ -154,10 +159,9 @@ void BDExchangeMove<RealType>::move(
 
     // All of the noise is generated upfront
     curandErrchk(templateCurandNormal(cr_rng_quat_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
-    // The d_translation_ buffer contains uniform noise over [0, 1] containing [x,y,z,w] where [x,y,z] are a random
-    // translation and w is used in the metropolis-hastings check
     curandErrchk(templateCurandUniform(cr_rng_translations_, d_translations_.data, d_translations_.length));
     curandErrchk(templateCurandUniform(cr_rng_samples_, d_sample_noise_.data, d_sample_noise_.length));
+    curandErrchk(templateCurandUniform(cr_rng_mh_, d_mh_noise_.data, d_mh_noise_.length));
     for (int step = 0; step < steps_per_move_; step++) {
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (step > 0) {
@@ -165,8 +169,7 @@ void BDExchangeMove<RealType>::move(
             // Need the weights to sample a value and the log probs are just because they aren't expensive to copy
             k_store_accepted_log_probability<RealType><<<1, tpb, 0>>>(
                 num_target_mols_,
-                d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZW * batch_size_) +
-                    (BD_TRANSLATIONS_PER_STEP_XYZW - 1), // Offset to get the last value for the acceptance criteria
+                d_mh_noise_.data + (step * batch_size_),
                 d_lse_max_before_.data,
                 d_lse_exp_sum_before_.data,
                 d_lse_max_after_.data,
@@ -201,7 +204,7 @@ void BDExchangeMove<RealType>::move(
             d_box,
             d_coords,
             this->d_quaternions_.data + (step * QUATERNIONS_PER_STEP * batch_size_),
-            this->d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZW * batch_size_),
+            this->d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZ * batch_size_),
             stream);
 
         logsumexp_.sum_device(
@@ -215,8 +218,7 @@ void BDExchangeMove<RealType>::move(
 
         k_attempt_exchange_move<RealType><<<1, 1, 0, stream>>>(
             N,
-            d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZW * batch_size_) +
-                (BD_TRANSLATIONS_PER_STEP_XYZW - 1), // Offset to get the last value for the acceptance criteria
+            d_mh_noise_.data + (step * batch_size_),
             d_lse_max_before_.data,
             d_lse_exp_sum_before_.data,
             d_lse_max_after_.data,
