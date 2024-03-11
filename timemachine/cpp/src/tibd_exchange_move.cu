@@ -125,6 +125,7 @@ void TIBDExchangeMove<RealType>::move(
     curandErrchk(curandSetStream(this->cr_rng_quat_, stream));
     curandErrchk(curandSetStream(this->cr_rng_translations_, stream));
     curandErrchk(curandSetStream(this->cr_rng_samples_, stream));
+    curandErrchk(curandSetStream(this->cr_rng_mh_, stream));
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
