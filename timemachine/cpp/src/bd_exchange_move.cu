@@ -73,7 +73,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_intermediate_sample_weights_(batch_size_ * num_intermediates_per_reduce_),
       d_sample_noise_(num_target_mols_ * num_proposals_per_move_),
       d_sampling_intermediate_(num_target_mols_ * batch_size_), d_translations_(translation_buffer_size),
-      d_sample_segments_offsets_(batch_size_ + 1) {
+      d_sample_segments_offsets_(batch_size_ + 1), d_noise_offset_(1), p_noise_offset_(1) {
 
     if (num_proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
@@ -153,6 +153,9 @@ void BDExchangeMove<RealType>::move(
     curandErrchk(curandSetStream(cr_rng_samples_, stream));
     curandErrchk(curandSetStream(cr_rng_mh_, stream));
 
+    // Set the offset to 0
+    gpuErrchk(cudaMemsetAsync(d_noise_offset_.data, 0, d_noise_offset_.size(), stream));
+
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
@@ -162,14 +165,18 @@ void BDExchangeMove<RealType>::move(
     curandErrchk(templateCurandUniform(cr_rng_translations_, d_translations_.data, d_translations_.length));
     curandErrchk(templateCurandUniform(cr_rng_samples_, d_sample_noise_.data, d_sample_noise_.length));
     curandErrchk(templateCurandUniform(cr_rng_mh_, d_mh_noise_.data, d_mh_noise_.length));
-    for (int step = 0; step < steps_per_move_; step++) {
+    size_t step = 0;
+    // For the first pass just set the value to zero on the host
+    p_noise_offset_.data[0] = 0;
+    while (p_noise_offset_.data[0] < num_proposals_per_move_) {
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (step > 0) {
             // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
             // Need the weights to sample a value and the log probs are just because they aren't expensive to copy
-            k_store_accepted_log_probability<RealType><<<1, tpb, 0>>>(
+            k_store_accepted_log_probability<RealType><<<ceil_divide(num_target_mols_, tpb), tpb, 0>>>(
                 num_target_mols_,
-                d_mh_noise_.data + (step * batch_size_),
+                batch_size_,
+                d_selected_sample_.data,
                 d_lse_max_before_.data,
                 d_lse_exp_sum_before_.data,
                 d_lse_max_after_.data,
@@ -190,6 +197,7 @@ void BDExchangeMove<RealType>::move(
             batch_size_,
             d_sample_segments_offsets_.data,
             d_log_weights_before_.data,
+            // TBD: Need to get those redone
             d_sample_noise_.data + (step * num_target_mols_ * batch_size_),
             d_sampling_intermediate_.data,
             d_samples_.data,
@@ -217,14 +225,16 @@ void BDExchangeMove<RealType>::move(
             stream);
 
         k_select_first_valid_move<RealType><<<1, min(512, batch_size_), 0, stream>>>(
+            num_proposals_per_move_,
             num_target_mols_,
             batch_size_,
+            d_noise_offset_.data,
             d_samples_.data,
             d_lse_max_before_.data,
             d_lse_exp_sum_before_.data,
             d_lse_max_after_.data,
             d_lse_exp_sum_after_.data,
-            d_mh_noise_.data + (step * batch_size_),
+            d_mh_noise_.data,
             d_selected_sample_.data);
         gpuErrchk(cudaPeekAtLastError());
 
@@ -236,9 +246,15 @@ void BDExchangeMove<RealType>::move(
             d_target_mol_offsets_.data,
             d_intermediate_coords_.data,
             d_coords,
-            d_num_accepted_.data);
+            d_num_accepted_.data,
+            d_noise_offset_.data);
         gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaMemcpyAsync(
+            p_noise_offset_.data, d_noise_offset_.data, d_noise_offset_.size(), cudaMemcpyDeviceToHost, stream));
         num_attempted_++;
+        step++;
+        // Synchronize to get the new offset
+        gpuErrchk(cudaStreamSynchronize(stream));
     }
 }
 
@@ -426,6 +442,9 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
     d_samples_.copy_from(h_mol_idxs);
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
+
+    // Set the offset to 0
+    gpuErrchk(cudaMemsetAsync(d_noise_offset_.data, 0, d_noise_offset_.size(), stream));
 
     // Setup the initial weights
     this->compute_initial_weights(N, d_coords.data, d_box.data, stream);

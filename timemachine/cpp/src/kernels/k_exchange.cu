@@ -67,7 +67,8 @@ void __global__ k_accepted_exchange_move(
     const int *__restrict__ mol_offsets,           // [num_target_mols]
     const double *__restrict__ moved_coords,       // [batch_size, num_atoms_in_each_mol, 3]
     double *__restrict__ dest_coords,              // [N, 3]
-    size_t *__restrict__ num_accepted              // [1]
+    size_t *__restrict__ num_accepted,             // [1],
+    int *__restrict__ rand_offset                  // [1]
 ) {
     // Note that this kernel does not handle multiple proposals, expects that the proposals
     // have been reduced down to a single proposal beforehand.
@@ -77,12 +78,13 @@ void __global__ k_accepted_exchange_move(
     const int batch_idx = accepted_batched_move[0];
     // If the selected mol is not less then the total batch size, no proposal was accepted, we can exit immediately.
     if (batch_idx >= batch_size) {
-        // TBD: Increment the offset by batch size here
+        rand_offset[0] += batch_size;
         return;
     }
     const int mol_idx = mol_idx_per_batch[batch_idx];
     const int mol_start = mol_offsets[mol_idx];
-    // TBD: Increment the offset by batch_idx + 1 here
+    // Increment offset by the index + 1, IE if the zeroth item in the batch was accepted offset by 1
+    rand_offset[0] += batch_idx + 1;
     num_accepted[0]++;
 
     // If accepted, move the coords of the selected mol into place
@@ -211,44 +213,39 @@ template void __global__ k_attempt_exchange_move_targeted<double>(
 template <typename RealType>
 void __global__ k_store_accepted_log_probability(
     const int num_weights,
-    const RealType *__restrict__ rand,          // [1]
-    RealType *__restrict__ before_max,          // [1]
-    RealType *__restrict__ before_log_sum,      // [1]
-    const RealType *__restrict__ after_max,     // [1]
-    const RealType *__restrict__ after_log_sum, // [1]
-    RealType *__restrict__ before_weights,      // [num_weights]
-    const RealType *__restrict__ after_weights  // [num_weights]
+    const int batch_size,
+    const int *__restrict__ accepted_batched_move, // [1]
+    RealType *__restrict__ before_max,             // [1]
+    RealType *__restrict__ before_log_sum,         // [1]
+    const RealType *__restrict__ after_max,        // [batch_size]
+    const RealType *__restrict__ after_log_sum,    // [batch_size]
+    RealType *__restrict__ before_weights,         // [num_weights]
+    const RealType *__restrict__ after_weights     // [batch_size, num_weights]
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    assert(gridDim.x == 1);
-    if (blockIdx.x > 0) {
-        return; // Only one block can run this
-    }
 
-    RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final<RealType>(before_max[0], before_log_sum[0]));
-    RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final<RealType>(after_max[0], after_log_sum[0]));
-
-    RealType log_acceptance_prob = min(before_log_prob - after_log_prob, static_cast<RealType>(0.0));
-    const bool accepted = rand[0] < exp(log_acceptance_prob);
-    if (!accepted) {
+    const int batch_idx = accepted_batched_move[0];
+    // If the selected mol is not less then the total batch size, no proposal was accepted, we can exit immediately.
+    if (batch_idx >= batch_size) {
         return;
     }
-    __syncthreads();
+
     // Swap the values after all threads have computed the log probability
     if (idx == 0) {
-        before_max[0] = after_max[0];
-        before_log_sum[0] = after_log_sum[0];
+        before_max[0] = after_max[batch_idx];
+        before_log_sum[0] = after_log_sum[batch_idx];
     }
     // Copy over the weights
     while (idx < num_weights) {
-        before_weights[idx] = after_weights[idx];
+        before_weights[idx] = after_weights[batch_idx * num_weights + idx];
         idx += gridDim.x * blockDim.x;
     }
 }
 
 template void __global__ k_store_accepted_log_probability<float>(
     const int num_weights,
-    const float *__restrict__ rand,
+    const int batch_size,
+    const int *__restrict__ accepted_batched_move,
     float *__restrict__ before_max,
     float *__restrict__ before_log_sum,
     const float *__restrict__ after_max,
@@ -257,7 +254,8 @@ template void __global__ k_store_accepted_log_probability<float>(
     const float *__restrict__ after_weights);
 template void __global__ k_store_accepted_log_probability<double>(
     const int num_weights,
-    const double *__restrict__ rand,
+    const int batch_size,
+    const int *__restrict__ accepted_batched_move,
     double *__restrict__ before_max,
     double *__restrict__ before_log_sum,
     const double *__restrict__ after_max,
@@ -807,14 +805,16 @@ void __global__ k_adjust_sample_idxs(
 // for shifting the noise for backtracking
 template <typename RealType>
 void __global__ k_select_first_valid_move(
+    const int total_proposals,
     const int num_target_mols,
     const int batch_size,
+    const int *__restrict__ noise_offset,        // [1]
     const int *__restrict__ samples,             // [batch_size]
     const RealType *__restrict__ before_max,     // [1]
     const RealType *__restrict__ before_log_sum, // [1]
     const RealType *__restrict__ after_max,      // [batch_size]
     const RealType *__restrict__ after_log_sum,  // [batch_size]
-    const RealType *__restrict__ rand,           // [batch_size]
+    const RealType *__restrict__ rand,           // [total_proposals]
     int *__restrict__ accepted_sample            // [1]
 ) {
     __shared__ int selected_idx;
@@ -826,13 +826,17 @@ void __global__ k_select_first_valid_move(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const RealType before_log_prob =
         convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(before_max[0], before_log_sum[0]));
+    const int rand_offset = noise_offset[0];
     while (idx < batch_size) {
+        if (rand_offset + idx >= total_proposals) {
+            break;
+        }
 
         const RealType after_log_prob =
             convert_nan_to_inf<RealType>(compute_logsumexp_final<RealType>(after_max[idx], after_log_sum[idx]));
 
         const RealType log_acceptance_prob = min(before_log_prob - after_log_prob, static_cast<RealType>(0.0));
-        const bool accepted = rand[idx] < exp(log_acceptance_prob);
+        const bool accepted = rand[rand_offset + idx] < exp(log_acceptance_prob);
         if (accepted) {
             atomicMin(&selected_idx, idx);
             // Idx is increasing so the first accepted is the min value the thread can accept
@@ -849,26 +853,30 @@ void __global__ k_select_first_valid_move(
 }
 
 template void __global__ k_select_first_valid_move<float>(
+    const int total_proposals,
     const int num_target_mols,
     const int batch_size,
+    const int *__restrict__ rand_offset,      // [1]
     const int *__restrict__ samples,          // [batch_size]
     const float *__restrict__ before_max,     // [1]
     const float *__restrict__ before_log_sum, // [1]
     const float *__restrict__ after_max,      // [batch_size]
     const float *__restrict__ after_log_sum,  // [batch_size]
-    const float *__restrict__ rand,           // [batch_size]
+    const float *__restrict__ rand,           // [total_proposals]
     int *__restrict__ accepted_sample         // [1]
 );
 
 template void __global__ k_select_first_valid_move<double>(
+    const int total_proposals,
     const int num_target_mols,
     const int batch_size,
+    const int *__restrict__ rand_offset,       // [1]
     const int *__restrict__ samples,           // [batch_size]
     const double *__restrict__ before_max,     // [1]
     const double *__restrict__ before_log_sum, // [1]
     const double *__restrict__ after_max,      // [batch_size]
     const double *__restrict__ after_log_sum,  // [batch_size]
-    const double *__restrict__ rand,           // [batch_size]
+    const double *__restrict__ rand,           // [total_proposals]
     int *__restrict__ accepted_sample          // [1]
 );
 

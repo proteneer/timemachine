@@ -80,7 +80,8 @@ void __global__ k_accepted_exchange_move(
     const int *__restrict__ mol_offsets,           // [num_target_mols]
     const double *__restrict__ moved_coords,       // [batch_size, num_atoms_in_each_mol, 3]
     double *__restrict__ dest_coords,              // [N, 3]
-    size_t *__restrict__ num_accepted              // [1]
+    size_t *__restrict__ num_accepted,             // [1],
+    int *__restrict__ rand_offset                  // [1]
 );
 
 template <typename RealType>
@@ -108,13 +109,14 @@ void __global__ k_attempt_exchange_move_targeted(
 template <typename RealType>
 void __global__ k_store_accepted_log_probability(
     const int num_weights,
-    const RealType *__restrict__ rand,                  // [1]
-    RealType *__restrict__ before_log_sum_exp_max,      // [1]
-    RealType *__restrict__ before_log_sum_exp_sum,      // [1]
-    const RealType *__restrict__ after_log_sum_exp_max, // [batch_size]
-    const RealType *__restrict__ after_log_sum_exp_sum, // [batch_size]
-    RealType *__restrict__ before_weights,              // [num_weights]
-    const RealType *__restrict__ after_weights          // [num_weights]
+    const int batch_size,
+    const int *__restrict__ accepted_batched_move, // [1]
+    RealType *__restrict__ before_max,             // [1]
+    RealType *__restrict__ before_log_sum,         // [1]
+    const RealType *__restrict__ after_max,        // [batch_size]
+    const RealType *__restrict__ after_log_sum,    // [batch_size]
+    RealType *__restrict__ before_weights,         // [num_weights]
+    const RealType *__restrict__ after_weights     // [batch_size, num_weights]
 );
 
 template <typename RealType>
@@ -219,14 +221,16 @@ void __global__ k_adjust_sample_idxs(
 
 template <typename RealType>
 void __global__ k_select_first_valid_move(
+    const int total_proposals,
     const int num_target_mols,
     const int batch_size,
+    const int *__restrict__ rand_offset,         // [1]
     const int *__restrict__ samples,             // [batch_size]
     const RealType *__restrict__ before_max,     // [1]
     const RealType *__restrict__ before_log_sum, // [1]
     const RealType *__restrict__ after_max,      // [batch_size]
     const RealType *__restrict__ after_log_sum,  // [batch_size]
-    const RealType *__restrict__ rand,           // [batch_size]
+    const RealType *__restrict__ rand,           // [total_proposals]
     int *__restrict__ accepted_sample            // [1]
 );
 
