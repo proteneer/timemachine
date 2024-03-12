@@ -52,6 +52,7 @@ def verify_bias_deletion_moves(
                 new_pos = x_move[mol_idxs]
                 idx = i
         if num_moved > 0:
+            print(f"Accepted {num_moved} moves on step {step}")
             accepted += 1
             # The molecules should all be imaged in the home box
             np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
