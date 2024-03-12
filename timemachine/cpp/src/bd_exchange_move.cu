@@ -207,13 +207,7 @@ void BDExchangeMove<RealType>::move(
         // by different bias deletion movers (such as targeted insertion)
         // scale the translations as they are between [0, 1]
         this->compute_incremental_weights_device(
-            N,
-            true,
-            d_box,
-            d_coords,
-            this->d_quaternions_.data + (step * QUATERNIONS_PER_STEP * batch_size_),
-            this->d_translations_.data + (step * BD_TRANSLATIONS_PER_STEP_XYZ * batch_size_),
-            stream);
+            N, true, d_box, d_coords, this->d_quaternions_.data, this->d_translations_.data, stream);
 
         logsumexp_.sum_device(
             num_target_mols_ * batch_size_,
@@ -317,7 +311,9 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
 
     if (scale) {
         k_rotate_and_translate_mols<RealType, true><<<ceil_divide(batch_size_, tpb), tpb, 0, stream>>>(
+            num_proposals_per_move_,
             batch_size_,
+            d_noise_offset_.data,
             d_coords,
             d_box,
             d_samples_.data,
@@ -328,7 +324,9 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
         gpuErrchk(cudaPeekAtLastError());
     } else {
         k_rotate_and_translate_mols<RealType, false><<<ceil_divide(batch_size_, tpb), tpb, 0, stream>>>(
+            num_proposals_per_move_,
             batch_size_,
+            d_noise_offset_.data,
             d_coords,
             d_box,
             d_samples_.data,

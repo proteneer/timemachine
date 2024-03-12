@@ -88,7 +88,9 @@ void __global__ k_rotate_coordinates(
 
 template <typename RealType, bool SCALE>
 void __global__ k_rotate_and_translate_mols(
+    const int total_proposals,
     const int batch_size,
+    const int *__restrict__ offset,
     const double *__restrict__ coords,         // [N, 3]
     const double *__restrict__ box,            // [3, 3]
     const int *__restrict__ samples,           // [batch_size]
@@ -108,6 +110,11 @@ void __global__ k_rotate_and_translate_mols(
     const RealType inv_box_y = 1 / box_y;
     const RealType inv_box_z = 1 / box_z;
 
+    const int data_offset = offset[0];
+    // if (idx_in_batch == 0) {
+    //     printf("Data offset %d Total Proposals %d batch size %d\n", data_offset, total_proposals, batch_size);
+    // }
+
     while (idx_in_batch < batch_size) {
         int mol_sample = samples[idx_in_batch];
         int mol_start = mol_offsets[mol_sample];
@@ -115,17 +122,43 @@ void __global__ k_rotate_and_translate_mols(
         int num_atoms = mol_end - mol_start;
 
         RealType ref_quat[4];
-        ref_quat[0] = quaternions[idx_in_batch * 4 + 0];
-        ref_quat[1] = quaternions[idx_in_batch * 4 + 1];
-        ref_quat[2] = quaternions[idx_in_batch * 4 + 2];
-        ref_quat[3] = quaternions[idx_in_batch * 4 + 3];
+        ref_quat[0] = data_offset + idx_in_batch < total_proposals
+                          ? quaternions[(data_offset * batch_size * 4) + idx_in_batch * 4 + 0]
+                          : static_cast<RealType>(0.0);
+        ref_quat[1] = data_offset + idx_in_batch < total_proposals
+                          ? quaternions[(data_offset * batch_size * 4) + idx_in_batch * 4 + 1]
+                          : static_cast<RealType>(0.0);
+        ref_quat[2] = data_offset + idx_in_batch < total_proposals
+                          ? quaternions[(data_offset * batch_size * 4) + idx_in_batch * 4 + 2]
+                          : static_cast<RealType>(0.0);
+        ref_quat[3] = data_offset + idx_in_batch < total_proposals
+                          ? quaternions[(data_offset * batch_size * 4) + idx_in_batch * 4 + 3]
+                          : static_cast<RealType>(0.0);
 
-        RealType translation_x =
-            SCALE ? box_x * translations[idx_in_batch * 3 + 0] : translations[idx_in_batch * 3 + 0];
-        RealType translation_y =
-            SCALE ? box_y * translations[idx_in_batch * 3 + 1] : translations[idx_in_batch * 3 + 1];
-        RealType translation_z =
-            SCALE ? box_z * translations[idx_in_batch * 3 + 2] : translations[idx_in_batch * 3 + 2];
+        RealType translation_x;
+        RealType translation_y;
+        RealType translation_z;
+        if (SCALE) {
+            translation_x = data_offset + idx_in_batch < total_proposals
+                                ? box_x * translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 0]
+                                : static_cast<RealType>(0.0);
+            translation_y = data_offset + idx_in_batch < total_proposals
+                                ? box_y * translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 1]
+                                : static_cast<RealType>(0.0);
+            translation_z = data_offset + idx_in_batch < total_proposals
+                                ? box_z * translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 2]
+                                : static_cast<RealType>(0.0);
+        } else {
+            translation_x = data_offset + idx_in_batch < total_proposals
+                                ? translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 0]
+                                : static_cast<RealType>(0.0);
+            translation_y = data_offset + idx_in_batch < total_proposals
+                                ? translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 1]
+                                : static_cast<RealType>(0.0);
+            translation_z = data_offset + idx_in_batch < total_proposals
+                                ? translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 2]
+                                : static_cast<RealType>(0.0);
+        }
 
         // Image the translation in the home box
         translation_x -= box_x * floor(translation_x * inv_box_x);
@@ -178,12 +211,48 @@ template void __global__ k_rotate_coordinates<float>(int, int, const double *, c
 template void __global__ k_rotate_coordinates<double>(int, int, const double *, const double *, double *);
 
 template void __global__ k_rotate_and_translate_mols<float, false>(
-    int, const double *, const double *, const int *, const int *, const float *, const float *, double *);
+    const int,
+    const int,
+    const int *,
+    const double *,
+    const double *,
+    const int *,
+    const int *,
+    const float *,
+    const float *,
+    double *);
 template void __global__ k_rotate_and_translate_mols<float, true>(
-    int, const double *, const double *, const int *, const int *, const float *, const float *, double *);
+    const int,
+    const int,
+    const int *,
+    const double *,
+    const double *,
+    const int *,
+    const int *,
+    const float *,
+    const float *,
+    double *);
 template void __global__ k_rotate_and_translate_mols<double, false>(
-    int, const double *, const double *, const int *, const int *, const double *, const double *, double *);
+    const int,
+    const int,
+    const int *,
+    const double *,
+    const double *,
+    const int *,
+    const int *,
+    const double *,
+    const double *,
+    double *);
 template void __global__ k_rotate_and_translate_mols<double, true>(
-    int, const double *, const double *, const int *, const int *, const double *, const double *, double *);
+    const int,
+    const int,
+    const int *,
+    const double *,
+    const double *,
+    const int *,
+    const int *,
+    const double *,
+    const double *,
+    double *);
 
 } // namespace timemachine
