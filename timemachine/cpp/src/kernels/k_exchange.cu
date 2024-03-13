@@ -33,16 +33,30 @@ k_copy_batch<double>(const int N, const int batch_size, const double *__restrict
 // indices for each sample. Note that the output mol offsets are constructed so that the start of the mol is
 // the starting atom idx rather than the prefix sum of mol lengths that the mol_offsets is.
 void __global__ k_setup_proposals(
-    const int batch_size,                      // Number of molecules to setup
-    const int num_atoms_in_each_mol,           // number of atoms in each sample
+    const int total_proposals,
+    const int batch_size,            // Number of molecules to setup
+    const int num_atoms_in_each_mol, // number of atoms in each sample
+    const int *__restrict__ rand_offset,
     const int *__restrict__ mol_idx_per_batch, // [batch_size] The index of the molecules to sample
     const int *__restrict__ atom_indices,      // [N]
     const int *__restrict__ mol_offsets,       // [num_target_mols]
     int *__restrict__ output_atom_idxs,        // [batch_size, num_atoms_in_each_mol]
     int *__restrict__ output_mol_offsets) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int noise_offset = rand_offset[0];
     while (idx < batch_size) {
+        if (noise_offset + idx >= total_proposals) {
+            return;
+        }
         int mol_idx = mol_idx_per_batch[idx];
+        // printf(
+        //     "Mol idx %d - Idx %d - %d - %d - %d\n",
+        //     mol_idx,
+        //     idx,
+        //     noise_offset,
+        //     total_proposals,
+        //     batch_size
+        // );
         int mol_start = mol_offsets[mol_idx];
 
         int mol_end = mol_offsets[mol_idx + 1];
@@ -50,6 +64,9 @@ void __global__ k_setup_proposals(
         output_mol_offsets[mol_idx + 1] = atom_indices[mol_end - 1] + 1;
         int num_atoms = mol_end - mol_start;
 
+        // if (num_atoms != num_atoms_in_each_mol) {
+        //     printf("Num Atoms %d: %d %d %d\n", num_atoms, mol_idx, mol_start, mol_end);
+        // }
         assert(num_atoms == num_atoms_in_each_mol);
 
         for (int i = 0; i < num_atoms; i++) {
@@ -79,19 +96,29 @@ void __global__ k_accepted_exchange_move(
     // If the selected mol is not less then the total batch size, no proposal was accepted, we can exit immediately.
     if (batch_idx >= batch_size) {
         rand_offset[0] += batch_size;
+        // printf("Adding %d - 2\n", batch_size);
         return;
     }
     const int mol_idx = mol_idx_per_batch[batch_idx];
     const int mol_start = mol_offsets[mol_idx];
     // Increment offset by the index + 1, IE if the zeroth item in the batch was accepted offset by 1
     rand_offset[0] += batch_idx + 1;
-    num_accepted[0]++;
+    // printf("Adding %d %d\n", batch_idx + 1, batch_size);
+    if (threadIdx.x == 0) {
+        num_accepted[0]++;
+    }
 
     // If accepted, move the coords of the selected mol into place
+    // printf("Batch size %d, offset %d\n", batch_size, num_atoms_in_each_mol * batch_size * batch_idx);
     for (int i = 0; i < num_atoms_in_each_mol; i++) {
-        dest_coords[(mol_start + i) * 3 + 0] = moved_coords[num_atoms_in_each_mol * batch_size * batch_idx + i * 3 + 0];
-        dest_coords[(mol_start + i) * 3 + 1] = moved_coords[num_atoms_in_each_mol * batch_size * batch_idx + i * 3 + 1];
-        dest_coords[(mol_start + i) * 3 + 2] = moved_coords[num_atoms_in_each_mol * batch_size * batch_idx + i * 3 + 2];
+        // printf("Moving %d to %d\n", num_atoms_in_each_mol * batch_size * batch_idx + i * 3 + 0, (mol_start + i) * 3 + 0);
+        // printf("%f -> %f\n", dest_coords[(mol_start + i) * 3 + 0], moved_coords[num_atoms_in_each_mol * batch_size * batch_idx + i * 3 + 0]);
+        auto moved_x = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 0];
+        auto moved_y = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 1];
+        auto moved_z = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 2];
+        dest_coords[(mol_start + i) * 3 + 0] = moved_x;
+        dest_coords[(mol_start + i) * 3 + 1] = moved_y;
+        dest_coords[(mol_start + i) * 3 + 2] = moved_z;
     }
 }
 
