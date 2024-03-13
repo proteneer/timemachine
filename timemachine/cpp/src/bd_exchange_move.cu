@@ -147,6 +147,8 @@ void BDExchangeMove<RealType>::move(
         throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
 
+    // printf("Batch size %d %d\n", batch_size_, num_proposals_per_move_);
+
     // Set the stream for the generators
     curandErrchk(curandSetStream(cr_rng_quat_, stream));
     curandErrchk(curandSetStream(cr_rng_translations_, stream));
@@ -191,14 +193,14 @@ void BDExchangeMove<RealType>::move(
             gpuErrchk(cudaPeekAtLastError());
         }
 
-        // We only ever sample a single molecule
-        sampler_.sample_given_noise_device(
-            num_target_mols_ * batch_size_,
+        sampler_.sample_given_noise_and_offset_device(
+            num_target_mols_,
             batch_size_,
+            num_proposals_per_move_,
             d_sample_segments_offsets_.data,
             d_log_weights_before_.data,
-            // TBD: Need to get those redone
-            d_sample_noise_.data + (step * num_target_mols_ * batch_size_),
+            d_noise_offset_.data,
+            d_sample_noise_.data,
             d_sampling_intermediate_.data,
             d_samples_.data,
             stream);
@@ -245,11 +247,13 @@ void BDExchangeMove<RealType>::move(
         gpuErrchk(cudaPeekAtLastError());
         gpuErrchk(cudaMemcpyAsync(
             p_noise_offset_.data, d_noise_offset_.data, d_noise_offset_.size(), cudaMemcpyDeviceToHost, stream));
-        num_attempted_++;
         step++;
         // Synchronize to get the new offset
         gpuErrchk(cudaStreamSynchronize(stream));
+        // printf("Offset %d\n", p_noise_offset_.data[0]);
     }
+    // Number of attempts is always the batch size
+    num_attempted_ += num_proposals_per_move_;
 }
 
 template <typename RealType>
@@ -300,8 +304,10 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_ * batch_size_, 1);
 
     k_setup_proposals<<<ceil_divide(batch_size_, tpb), tpb, 0, stream>>>(
+        num_proposals_per_move_,
         batch_size_,
         mol_size_,
+        d_noise_offset_.data,
         d_samples_.data,
         d_atom_idxs_.data,
         d_mol_offsets_.data,

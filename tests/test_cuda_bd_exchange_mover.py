@@ -287,10 +287,10 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
         check_force_norm(-du_dx)
 
 
-@pytest.mark.parametrize("proposals_per_move", [1, 100])
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(1, 1), (10, 1), (2, 2), (100, 100)])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
-def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
+def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precision, seed):
     """Given one water the exchange mover should accept every move and the results should be deterministic given the same seed and number of proposals per move
 
 
@@ -310,7 +310,7 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
     # Select a single mol
-    group_idxs = all_group_idxs[:1]
+    group_idxs = all_group_idxs
 
     conf_idxs = np.array(group_idxs).reshape(-1)
 
@@ -330,7 +330,18 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
     # Reference that makes a single proposal per move
     bdem_a = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, 1, 1)
     # Test version that makes all proposals in a single move
-    bdem_b = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move, 1)
+    bdem_b = klass(
+        N,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        seed,
+        proposals_per_move,
+        1,
+        batch_size=batch_size,
+    )
 
     iterative_moved_coords = conf.copy()
     for _ in range(proposals_per_move):

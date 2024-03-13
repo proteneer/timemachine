@@ -116,23 +116,23 @@ void __global__ k_rotate_and_translate_mols(
     // }
 
     while (idx_in_batch < batch_size) {
-        int mol_sample = samples[idx_in_batch];
+        int mol_sample = data_offset + idx_in_batch < total_proposals ? samples[idx_in_batch] : 0;
         int mol_start = mol_offsets[mol_sample];
         int mol_end = mol_offsets[mol_sample + 1];
         int num_atoms = mol_end - mol_start;
 
         RealType ref_quat[4];
         ref_quat[0] = data_offset + idx_in_batch < total_proposals
-                          ? quaternions[(data_offset * batch_size * 4) + idx_in_batch * 4 + 0]
+                          ? quaternions[(data_offset * 4) + idx_in_batch * 4 + 0]
                           : static_cast<RealType>(0.0);
         ref_quat[1] = data_offset + idx_in_batch < total_proposals
-                          ? quaternions[(data_offset * batch_size * 4) + idx_in_batch * 4 + 1]
+                          ? quaternions[(data_offset * 4) + idx_in_batch * 4 + 1]
                           : static_cast<RealType>(0.0);
         ref_quat[2] = data_offset + idx_in_batch < total_proposals
-                          ? quaternions[(data_offset * batch_size * 4) + idx_in_batch * 4 + 2]
+                          ? quaternions[(data_offset * 4) + idx_in_batch * 4 + 2]
                           : static_cast<RealType>(0.0);
         ref_quat[3] = data_offset + idx_in_batch < total_proposals
-                          ? quaternions[(data_offset * batch_size * 4) + idx_in_batch * 4 + 3]
+                          ? quaternions[(data_offset * 4) + idx_in_batch * 4 + 3]
                           : static_cast<RealType>(0.0);
 
         RealType translation_x;
@@ -140,23 +140,23 @@ void __global__ k_rotate_and_translate_mols(
         RealType translation_z;
         if (SCALE) {
             translation_x = data_offset + idx_in_batch < total_proposals
-                                ? box_x * translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 0]
+                                ? box_x * translations[(data_offset * 3) + idx_in_batch * 3 + 0]
                                 : static_cast<RealType>(0.0);
             translation_y = data_offset + idx_in_batch < total_proposals
-                                ? box_y * translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 1]
+                                ? box_y * translations[(data_offset * 3) + idx_in_batch * 3 + 1]
                                 : static_cast<RealType>(0.0);
             translation_z = data_offset + idx_in_batch < total_proposals
-                                ? box_z * translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 2]
+                                ? box_z * translations[(data_offset * 3) + idx_in_batch * 3 + 2]
                                 : static_cast<RealType>(0.0);
         } else {
             translation_x = data_offset + idx_in_batch < total_proposals
-                                ? translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 0]
+                                ? translations[(data_offset * 3) + idx_in_batch * 3 + 0]
                                 : static_cast<RealType>(0.0);
             translation_y = data_offset + idx_in_batch < total_proposals
-                                ? translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 1]
+                                ? translations[(data_offset * 3) + idx_in_batch * 3 + 1]
                                 : static_cast<RealType>(0.0);
             translation_z = data_offset + idx_in_batch < total_proposals
-                                ? translations[(data_offset * batch_size * 3) + idx_in_batch * 3 + 2]
+                                ? translations[(data_offset * 3) + idx_in_batch * 3 + 2]
                                 : static_cast<RealType>(0.0);
         }
 
@@ -198,6 +198,7 @@ void __global__ k_rotate_and_translate_mols(
             local_coords[1] += translation_x;
             local_coords[2] += translation_y;
             local_coords[3] += translation_z;
+
             coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 0] = local_coords[1];
             coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 1] = local_coords[2];
             coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 2] = local_coords[3];

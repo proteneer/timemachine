@@ -226,7 +226,7 @@ void TIBDExchangeMove<RealType>::move(
             stream));
 
         this->sampler_.sample_given_noise_device(
-            this->num_target_mols_ * this->batch_size_,
+            this->num_target_mols_,
             this->batch_size_,
             this->d_sample_segments_offsets_.data,
             this->d_log_weights_before_.data,

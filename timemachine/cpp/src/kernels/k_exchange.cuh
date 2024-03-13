@@ -64,12 +64,14 @@ RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targete
 }
 
 void __global__ k_setup_proposals(
-    const int batch_size,
-    const int num_atoms_in_each_mol,
-    const int *__restrict__ mol_idx_per_batch,
-    const int *__restrict__ target_atoms,
-    const int *__restrict__ mol_offsets,
-    int *__restrict__ output_atom_idxs,
+    const int total_proposals,
+    const int batch_size,            // Number of molecules to setup
+    const int num_atoms_in_each_mol, // number of atoms in each sample
+    const int *__restrict__ rand_offset,
+    const int *__restrict__ mol_idx_per_batch, // [batch_size] The index of the molecules to sample
+    const int *__restrict__ atom_indices,      // [N]
+    const int *__restrict__ mol_offsets,       // [num_target_mols]
+    int *__restrict__ output_atom_idxs,        // [batch_size, num_atoms_in_each_mol]
     int *__restrict__ output_mol_offsets);
 
 void __global__ k_accepted_exchange_move(
