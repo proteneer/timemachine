@@ -59,6 +59,7 @@ protected:
 
     DeviceBuffer<int> d_samples_;            // [batch_size_] The indices of the molecules to make proposals for
     DeviceBuffer<RealType> d_quaternions_;   // Normal noise for uniform random rotations
+    DeviceBuffer<RealType> d_mh_noise_;      // Noise used in the metropolis hastings check
     DeviceBuffer<size_t> d_num_accepted_;    // [1]
     DeviceBuffer<int> d_target_mol_atoms_;   // [batch_size_, mol_size_]
     DeviceBuffer<int> d_target_mol_offsets_; // [num_target_mols + 1]
@@ -69,9 +70,11 @@ protected:
     DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
     DeviceBuffer<int> d_sample_segments_offsets_; // Segment offsets for the sampler // [batch_size + 1]
 
-    curandGenerator_t cr_rng_quat_;
-    curandGenerator_t cr_rng_translations_;
-    curandGenerator_t cr_rng_samples_;
+    // If the RNGs are changed, make sure to modify the seeding of TIBDExchangeMove translations RNG
+    curandGenerator_t cr_rng_quat_;         // Generate noise for quaternions
+    curandGenerator_t cr_rng_translations_; // Generate noise for translations
+    curandGenerator_t cr_rng_samples_;      // Generate noise for selecting waters
+    curandGenerator_t cr_rng_mh_;           // Generate noise for metropolis hastings
 
     void compute_initial_weights(const int N, double *d_coords, double *d_box, cudaStream_t stream);
 

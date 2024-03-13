@@ -52,6 +52,7 @@ def verify_bias_deletion_moves(
                 new_pos = x_move[mol_idxs]
                 idx = i
         if num_moved > 0:
+            print(f"Accepted {num_moved} moves on step {step}")
             accepted += 1
             # The molecules should all be imaged in the home box
             np.testing.assert_allclose(image_frame(mol_groups, x_move, x_box), x_move)
@@ -352,7 +353,7 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
         (5000, 40000, 3.0),
         (10000, 250000, 3.0),
         # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
-        pytest.param(1, 10000, 6.0, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1, 20000, 6.0, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
