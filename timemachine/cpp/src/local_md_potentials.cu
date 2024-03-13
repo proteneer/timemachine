@@ -119,7 +119,7 @@ void LocalMDPotentials::setup_from_idxs(
     gpuErrchk(cudaPeekAtLastError());
 
     // Generate values between (0, 1.0]
-    curandErrchk(curandGenerateUniform(cr_rng_, d_probability_buffer_.data, round_up_even(N_)));
+    curandErrchk(curandGenerateUniform(cr_rng_, d_probability_buffer_.data, d_probability_buffer_.length));
 
     std::mt19937 rng;
     rng.seed(seed);
