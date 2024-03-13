@@ -11,7 +11,7 @@ template <typename RealType>
 SegmentedWeightedRandomSampler<RealType>::SegmentedWeightedRandomSampler(
     const int max_vals_per_segment, const int num_segments, const int seed)
     : max_vals_per_segment_(max_vals_per_segment), num_segments_(num_segments), temp_storage_bytes_(0),
-      d_gumbel_(round_up_even(max_vals_per_segment_ * num_segments_)), d_arg_max_(num_segments_), d_argmax_storage_(0) {
+      d_gumbel_(max_vals_per_segment_ * num_segments_), d_arg_max_(num_segments_), d_argmax_storage_(0) {
 
     int *dummy_segments = nullptr;
     gpuErrchk(cub::DeviceSegmentedReduce::ArgMax(

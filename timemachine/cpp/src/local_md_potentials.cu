@@ -23,9 +23,9 @@ struct LessThan {
 LocalMDPotentials::LocalMDPotentials(
     const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps, bool freeze_reference, double temperature)
     : freeze_reference(freeze_reference), temperature(temperature), N_(N), temp_storage_bytes_(0), all_potentials_(bps),
-      d_restraint_pairs_(N_ * 2), d_bond_params_(N_ * 3), d_probability_buffer_(round_up_even(N_)), d_free_idxs_(N_),
-      d_temp_idxs_(N_), d_all_pairs_idxs_(N_), d_temp_storage_buffer_(0), d_row_idxs_(N_), d_col_idxs_(N_),
-      p_num_selected_(1), d_num_selected_buffer_(1) {
+      d_restraint_pairs_(N_ * 2), d_bond_params_(N_ * 3), d_probability_buffer_(N_), d_free_idxs_(N_), d_temp_idxs_(N_),
+      d_all_pairs_idxs_(N_), d_temp_storage_buffer_(0), d_row_idxs_(N_), d_col_idxs_(N_), p_num_selected_(1),
+      d_num_selected_buffer_(1) {
 
     if (temperature <= 0.0) {
         throw std::runtime_error("temperature must be greater than 0");
