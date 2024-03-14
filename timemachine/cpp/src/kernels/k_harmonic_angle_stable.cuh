@@ -2,6 +2,8 @@
 #include "../gpu_utils.cuh"
 #include "k_fixed_point.cuh"
 
+#include <cassert>
+
 namespace timemachine {
 
 template <typename RealType>
@@ -13,6 +15,8 @@ void __global__ k_harmonic_angle_stable(
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
     __int128 *__restrict__ u) {
+
+    assert(0);
 
     const auto a_idx = blockDim.x * blockIdx.x + threadIdx.x;
 

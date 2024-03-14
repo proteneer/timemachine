@@ -1,5 +1,9 @@
+#pragma once
+
 #include "../fixed_point.hpp"
 #include "k_fixed_point.cuh"
+
+#include "chiral_utils.cuh" // Vector, cross_product, etc.
 
 namespace timemachine {
 
@@ -28,58 +32,97 @@ void __global__ k_harmonic_angle(
     RealType nij = 0; // initialize your summed variables!
     RealType njk = 0; // initialize your summed variables!
     RealType top = 0;
-    // this is a little confusing
+    // first pass, compute the norms
     for (int d = 0; d < D; d++) {
         RealType vij = coords[j_idx * D + d] - coords[i_idx * D + d];
         RealType vjk = coords[j_idx * D + d] - coords[k_idx * D + d];
-
         rij[d] = vij;
         rjk[d] = vjk;
         nij += vij * vij;
         njk += vjk * vjk;
-
         top += vij * vjk;
     }
 
     nij = sqrt(nij);
     njk = sqrt(njk);
 
-    RealType nijk = nij * njk;
-    RealType n3ij = nij * nij * nij;
-    RealType n3jk = njk * njk * njk;
+    RealType hi = 0;
+    RealType lo = 0;
+
+    // second pass, compute the hi/lo values
+    for (int d = 0; d < D; d++) {
+        RealType vij = coords[j_idx * D + d] - coords[i_idx * D + d];
+        RealType vjk = coords[j_idx * D + d] - coords[k_idx * D + d];
+
+        RealType a = njk * vij - nij * vjk;
+        RealType b = njk * vij + nij * vjk;
+
+        hi += a * a;
+        lo += b * b;
+    }
+
+    RealType y = sqrt(hi);
+    RealType x = sqrt(lo);
+    RealType angle = 2 * atan2(y, x);
 
     int ka_idx = a_idx * 2 + 0;
     int a0_idx = a_idx * 2 + 1;
 
     RealType ka = params[ka_idx];
     RealType a0 = params[a0_idx];
+    RealType delta = angle - a0;
 
-    RealType delta = top / nijk - cos(a0);
+    auto a = Vector<RealType>({rij[0], rij[1], rij[2]});
+    auto b = Vector<RealType>({rjk[0], rjk[1], rjk[2]});
 
+    RealType a_norm = a.norm();
+    RealType b_norm = b.norm();
+
+    auto vtp_i = cross_product(a, cross_product(a, b));
+    auto vtp_k = cross_product(b, cross_product(b, a));
+
+    RealType prefactor = ka * delta;
+
+    // compute the derivative using the vector triple product
     if (du_dx) {
-        for (int d = 0; d < D; d++) {
-            RealType grad_i = ka * delta * (rij[d] * top / (n3ij * njk) + (-rjk[d]) / nijk);
-            atomicAdd(du_dx + i_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(grad_i));
 
-            RealType grad_j =
-                ka * delta *
-                ((-rij[d] * top / (n3ij * njk) + (-rjk[d]) * top / (nij * n3jk) + (rij[d] + rjk[d]) / nijk));
-            atomicAdd(du_dx + j_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(grad_j));
+        auto coeff_i = -prefactor * (1 / a_norm);
+        auto coeff_k = -prefactor * (1 / b_norm);
 
-            RealType grad_k = ka * delta * (-rij[d] / nijk + rjk[d] * top / (nij * n3jk));
-            atomicAdd(du_dx + k_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(grad_k));
-        }
+        // formal singularity, unremovable
+        Vector<RealType> grad_i = (vtp_i.norm() == 0) ? Vector<RealType>({0, 0, 0}) : vtp_i.unit();
+        Vector<RealType> grad_k = (vtp_k.norm() == 0) ? Vector<RealType>({0, 0, 0}) : vtp_k.unit();
+
+        RealType dx_i = coeff_i * grad_i.x;
+        RealType dy_i = coeff_i * grad_i.y;
+        RealType dz_i = coeff_i * grad_i.z;
+
+        atomicAdd(du_dx + i_idx * D + 0, FLOAT_TO_FIXED_BONDED<RealType>(dx_i));
+        atomicAdd(du_dx + i_idx * D + 1, FLOAT_TO_FIXED_BONDED<RealType>(dy_i));
+        atomicAdd(du_dx + i_idx * D + 2, FLOAT_TO_FIXED_BONDED<RealType>(dz_i));
+
+        RealType dx_k = coeff_k * grad_k.x;
+        RealType dy_k = coeff_k * grad_k.y;
+        RealType dz_k = coeff_k * grad_k.z;
+
+        atomicAdd(du_dx + k_idx * D + 0, FLOAT_TO_FIXED_BONDED<RealType>(dx_k));
+        atomicAdd(du_dx + k_idx * D + 1, FLOAT_TO_FIXED_BONDED<RealType>(dy_k));
+        atomicAdd(du_dx + k_idx * D + 2, FLOAT_TO_FIXED_BONDED<RealType>(dz_k));
+
+        atomicAdd(du_dx + j_idx * D + 0, FLOAT_TO_FIXED_BONDED<RealType>(-dx_i - dx_k));
+        atomicAdd(du_dx + j_idx * D + 1, FLOAT_TO_FIXED_BONDED<RealType>(-dy_i - dy_k));
+        atomicAdd(du_dx + j_idx * D + 2, FLOAT_TO_FIXED_BONDED<RealType>(-dz_i - dz_k));
     }
 
     if (du_dp) {
         RealType dka_grad = delta * delta / 2;
         atomicAdd(du_dp + ka_idx, FLOAT_TO_FIXED_BONDED(dka_grad));
-        RealType da0_grad = delta * ka * sin(a0);
+        RealType da0_grad = -delta * ka;
         atomicAdd(du_dp + a0_idx, FLOAT_TO_FIXED_BONDED(da0_grad));
     }
 
     if (u) {
-        u[a_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(ka / 2 * delta * delta);
+        u[a_idx] = FLOAT_TO_FIXED_ENERGY<RealType>((ka / 2) * delta * delta);
     }
 }
 
