@@ -1,3 +1,5 @@
+#pragma once
+
 namespace timemachine {
 
 template <typename RealType> __device__ struct Matrix {

@@ -245,7 +245,7 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
         bound_impls,
         movers=[baro_impl],
     )
-    ctxt.multiple_steps(1000)
+    ctxt.multiple_steps(5000)
     conf = ctxt.get_x_t()
     box = ctxt.get_box()
 
@@ -284,6 +284,11 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
 
     test_mol_energies = u_test(conf, box, params)
     ref_mol_energies = u_ref(conf, box, params)
+
+    # for idx, (x,y) in enumerate(zip(test_mol_energies, ref_mol_energies)):
+    #     if np.abs(x-y) > 1e-3:
+    #         print(idx, x, y, x-y)
+
     np.testing.assert_allclose(test_mol_energies, ref_mol_energies, rtol=rtol, atol=atol)
 
     test_mol_unitless = (1 / DEFAULT_KT) * test_mol_energies
