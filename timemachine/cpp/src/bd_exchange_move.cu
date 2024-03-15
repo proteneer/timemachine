@@ -157,6 +157,16 @@ void BDExchangeMove<RealType>::move(
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
+    // Compute logsumexp of energies once upfront to get log probabilities
+    logsumexp_.sum_device(
+        num_target_mols_,
+        1,
+        d_sample_segments_offsets_.data,
+        d_log_weights_before_.data,
+        d_lse_max_before_.data,
+        d_lse_exp_sum_before_.data,
+        stream);
+
     // All of the noise is generated upfront
     curandErrchk(templateCurandNormal(cr_rng_quat_, d_quaternions_.data, d_quaternions_.length, 0.0, 1.0));
     curandErrchk(templateCurandUniform(cr_rng_translations_, d_translations_.data, d_translations_.length));
@@ -410,16 +420,6 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
 
     // Setup the initial weights
     this->compute_initial_weights(N, d_coords.data, d_box.data, stream);
-
-    // Compute logsumexp of energies once upfront to get log probabilities
-    logsumexp_.sum_device(
-        num_target_mols_,
-        1,
-        d_sample_segments_offsets_.data,
-        d_log_weights_before_.data,
-        d_lse_max_before_.data,
-        d_lse_exp_sum_before_.data,
-        stream);
 
     this->compute_incremental_weights_device(
         N,
