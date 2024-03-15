@@ -252,16 +252,6 @@ void BDExchangeMove<RealType>::compute_initial_weights(
         num_target_mols_, beta_, d_mol_energy_buffer_.data, d_log_weights_before_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    // Compute logsumexp of energies once upfront to get log probabilities
-    logsumexp_.sum_device(
-        num_target_mols_,
-        1,
-        d_sample_segments_offsets_.data,
-        d_log_weights_before_.data,
-        d_lse_max_before_.data,
-        d_lse_exp_sum_before_.data,
-        stream);
-
     // Copy the same weights repeatedly from the before weights to the after weights
     k_copy_batch<RealType><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
         num_target_mols_, batch_size_, d_log_weights_before_.data, d_log_weights_after_.data);
@@ -420,6 +410,16 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
 
     // Setup the initial weights
     this->compute_initial_weights(N, d_coords.data, d_box.data, stream);
+
+    // Compute logsumexp of energies once upfront to get log probabilities
+    logsumexp_.sum_device(
+        num_target_mols_,
+        1,
+        d_sample_segments_offsets_.data,
+        d_log_weights_before_.data,
+        d_lse_max_before_.data,
+        d_lse_exp_sum_before_.data,
+        stream);
 
     this->compute_incremental_weights_device(
         N,
