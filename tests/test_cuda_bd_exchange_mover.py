@@ -310,7 +310,7 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
     # Select a single mol
-    group_idxs = all_group_idxs[:1]
+    group_idxs = all_group_idxs
 
     conf_idxs = np.array(group_idxs).reshape(-1)
 
