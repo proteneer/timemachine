@@ -74,8 +74,8 @@ void __global__ k_harmonic_angle(
     auto a = Vector<RealType>({rji[0], rji[1], rji[2]});
     auto b = Vector<RealType>({rjk[0], rjk[1], rjk[2]});
 
-    RealType a_norm = a.norm();
-    RealType b_norm = b.norm();
+    RealType a_norm = nji;
+    RealType b_norm = njk;
 
     // no_fma used to maintain bitwise reversibility wrt i and k
     auto vtp_i = cross_product_no_fma(a, cross_product_no_fma(a, b));

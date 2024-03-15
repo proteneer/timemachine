@@ -7,12 +7,12 @@ def kahan_angle_stable(ci, cj, ck, eps):
     """
     rji = ci - cj
     rjk = ck - cj
-    nji = jnp.sqrt(jnp.sum(rji * rji, axis=-1) + eps**2)
-    njk = jnp.sqrt(jnp.sum(rjk * rjk, axis=-1) + eps**2)
-
+    rji = jnp.hstack([ci - cj, jnp.expand_dims(eps, axis=-1)])
+    rjk = jnp.hstack([ck - cj, jnp.expand_dims(eps, axis=-1)])
+    nji = jnp.linalg.norm(rji, axis=-1)
+    njk = jnp.linalg.norm(rjk, axis=-1)
     nji = jnp.expand_dims(nji, axis=-1)
     njk = jnp.expand_dims(njk, axis=-1)
-
     y = jnp.linalg.norm(njk * rji - nji * rjk, axis=-1)
     x = jnp.linalg.norm(njk * rji + nji * rjk, axis=-1)
     angle = 2 * jnp.arctan2(y, x)
