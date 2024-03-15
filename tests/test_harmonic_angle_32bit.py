@@ -11,6 +11,8 @@ from timemachine.potentials.bonded import kahan_angle
 
 
 def test_nitrile_stability():
+    # test that running a nitrile simulation is numerically stable
+    # and that the average angle is greater than 3 rads.
     mol = Chem.MolFromMolBlock(
         """
   Mrv2311 03142420142D
@@ -59,33 +61,26 @@ $$$$""",
     protein_idxs = np.array([], dtype=np.int32)
     init_state = InitialState(bps, intg, baro, x0, v0, box, lamb, ligand_idxs, protein_idxs)
 
-    import matplotlib.pyplot as plt
-
-    x_vals = np.linspace(2.8, np.pi, 100)
-    k0, a0 = bps[-1].params[0]
-
-    print(k0, a0)
-    from timemachine.constants import DEFAULT_KT
-
-    def q_fn(x):
-        return np.exp(-1 / DEFAULT_KT * (k0 / 2 * (x - a0) ** 2))
-
-    from scipy.integrate import quad
-
-    Z = quad(q_fn, 0, np.pi)[0]
-
-    def p_fn(x):
-        return q_fn(x) / Z
-
-    y_vals = [p_fn(x) for x in x_vals]
-
-    plt.plot(x_vals, y_vals)
+    # (ytz): leave for plotting
+    # import matplotlib.pyplot as plt
+    # x_vals = np.linspace(2.2, np.pi, 100)
+    # k0, a0 = bps[-1].params[0]
+    # from timemachine.constants import DEFAULT_KT
+    # def q_fn(x):
+    #     return np.exp(-1 / DEFAULT_KT * (k0 / 2 * (x - a0) ** 2))
+    # from scipy.integrate import quad
+    # Z = quad(q_fn, 0, np.pi)[0]
+    # def p_fn(x):
+    #     return q_fn(x) / Z
+    # y_vals = [p_fn(x) for x in x_vals]
+    # plt.plot(x_vals, y_vals)
 
     ctxt = get_context(init_state)
-    ctxt.multiple_steps(50_000)  # burn_in
-    xs, boxes = ctxt.multiple_steps(n_steps=500_000, store_x_interval=1000)
+    ctxt.multiple_steps(10_000)  # burn_in
+    xs, _ = ctxt.multiple_steps(n_steps=100_000, store_x_interval=1000)
     angles = []
     for x in xs:
         angles.append(kahan_angle(x[0], x[1], x[2]))
-    plt.hist(angles, bins=10, density=True)  # ugh probability distributions don't overlap
-    plt.show()
+
+    assert np.mean(angles) > 3.0
+    assert np.amax(np.abs(xs)) < 15.0  # no coordinates blew-up

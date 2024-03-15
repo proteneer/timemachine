@@ -27,20 +27,20 @@ void __global__ k_harmonic_angle(
     int j_idx = angle_idxs[a_idx * D + 1];
     int k_idx = angle_idxs[a_idx * D + 2];
 
-    RealType rij[D];
-    RealType rjk[D];
+    RealType rji[D];  // vector from j to i
+    RealType rjk[D];  // vector from j to k
     RealType nij = 0; // initialize your summed variables!
     RealType njk = 0; // initialize your summed variables!
     RealType top = 0;
     // first pass, compute the norms
     for (int d = 0; d < D; d++) {
-        RealType vij = coords[j_idx * D + d] - coords[i_idx * D + d];
-        RealType vjk = coords[j_idx * D + d] - coords[k_idx * D + d];
-        rij[d] = vij;
+        RealType vji = coords[i_idx * D + d] - coords[j_idx * D + d];
+        RealType vjk = coords[k_idx * D + d] - coords[j_idx * D + d];
+        rji[d] = vji;
         rjk[d] = vjk;
-        nij += vij * vij;
+        nij += vji * vji;
         njk += vjk * vjk;
-        top += vij * vjk;
+        top += vji * vjk;
     }
 
     nij = sqrt(nij);
@@ -51,12 +51,10 @@ void __global__ k_harmonic_angle(
 
     // second pass, compute the hi/lo values
     for (int d = 0; d < D; d++) {
-        RealType vij = coords[j_idx * D + d] - coords[i_idx * D + d];
-        RealType vjk = coords[j_idx * D + d] - coords[k_idx * D + d];
-
-        RealType a = njk * vij - nij * vjk;
-        RealType b = njk * vij + nij * vjk;
-
+        RealType vji = coords[i_idx * D + d] - coords[j_idx * D + d];
+        RealType vjk = coords[k_idx * D + d] - coords[j_idx * D + d];
+        RealType a = njk * vji - nij * vjk;
+        RealType b = njk * vji + nij * vjk;
         hi += a * a;
         lo += b * b;
     }
@@ -72,7 +70,7 @@ void __global__ k_harmonic_angle(
     RealType a0 = params[a0_idx];
     RealType delta = angle - a0;
 
-    auto a = Vector<RealType>({rij[0], rij[1], rij[2]});
+    auto a = Vector<RealType>({rji[0], rji[1], rji[2]});
     auto b = Vector<RealType>({rjk[0], rjk[1], rjk[2]});
 
     RealType a_norm = a.norm();
@@ -86,8 +84,8 @@ void __global__ k_harmonic_angle(
     // compute the derivative using the vector triple product
     if (du_dx) {
 
-        auto coeff_i = -prefactor * (1 / a_norm);
-        auto coeff_k = -prefactor * (1 / b_norm);
+        auto coeff_i = prefactor * (1 / a_norm);
+        auto coeff_k = prefactor * (1 / b_norm);
 
         // formal singularity, unremovable
         Vector<RealType> grad_i = (vtp_i.norm() == 0) ? Vector<RealType>({0, 0, 0}) : vtp_i.unit();

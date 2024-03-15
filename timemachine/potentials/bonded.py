@@ -81,12 +81,12 @@ def kahan_angle(ci, cj, ck):
     """
     Compute the angle given three points, i,j,k, as defined by the vector j->i, j->k
     """
-    vij = ci - cj
-    vjk = ck - cj
-    nij = jnp.linalg.norm(vij, axis=-1, keepdims=True)
-    njk = jnp.linalg.norm(vjk, axis=-1, keepdims=True)
-    y = jnp.linalg.norm(njk * vij - nij * vjk, axis=-1)
-    x = jnp.linalg.norm(njk * vij + nij * vjk, axis=-1)
+    rji = ci - cj
+    rjk = ck - cj
+    nij = jnp.linalg.norm(rji, axis=-1, keepdims=True)
+    njk = jnp.linalg.norm(rjk, axis=-1, keepdims=True)
+    y = jnp.linalg.norm(njk * rji - nij * rjk, axis=-1)
+    x = jnp.linalg.norm(njk * rji + nij * rjk, axis=-1)
     angle = 2 * jnp.arctan2(y, x)
     return angle
 

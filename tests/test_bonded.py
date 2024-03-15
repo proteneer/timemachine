@@ -257,10 +257,10 @@ class TestBonded(GradientTest):
             ck = conf[angle_idxs[:, 2]]
             kas = params[:, 0]
             a0s = params[:, 1]
-            vij = ci - cj
-            vjk = ck - cj
-            top = jnp.sum(jnp.multiply(vij, vjk), -1)
-            bot = jnp.linalg.norm(vij, axis=-1) * jnp.linalg.norm(vjk, axis=-1)
+            rji = ci - cj
+            rjk = ck - cj
+            top = jnp.sum(jnp.multiply(rji, rjk), -1)
+            bot = jnp.linalg.norm(rji, axis=-1) * jnp.linalg.norm(rjk, axis=-1)
             tb = top / bot
             angle = jnp.arccos(tb)
             energies = kas / 2 * jnp.power(angle - a0s, 2)
