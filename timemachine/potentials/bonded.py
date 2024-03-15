@@ -83,10 +83,10 @@ def kahan_angle(ci, cj, ck):
     """
     rji = ci - cj
     rjk = ck - cj
-    nij = jnp.linalg.norm(rji, axis=-1, keepdims=True)
+    nji = jnp.linalg.norm(rji, axis=-1, keepdims=True)
     njk = jnp.linalg.norm(rjk, axis=-1, keepdims=True)
-    y = jnp.linalg.norm(njk * rji - nij * rjk, axis=-1)
-    x = jnp.linalg.norm(njk * rji + nij * rjk, axis=-1)
+    y = jnp.linalg.norm(njk * rji - nji * rjk, axis=-1)
+    x = jnp.linalg.norm(njk * rji + nji * rjk, axis=-1)
     angle = 2 * jnp.arctan2(y, x)
     return angle
 

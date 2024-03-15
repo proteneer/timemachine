@@ -64,6 +64,15 @@ template <typename RealType> __device__ Vector<RealType> cross_product(Vector<Re
     return Vector<RealType>({cx, cy, cz});
 }
 
+template <typename RealType> __device__ Vector<RealType> cross_product_no_fma(Vector<RealType> a, Vector<RealType> b) {
+
+    RealType cx = rsub_rn(a.y * b.z, a.z * b.y);
+    RealType cy = rsub_rn(a.z * b.x, a.x * b.z);
+    RealType cz = rsub_rn(a.x * b.y, a.y * b.x);
+
+    return Vector<RealType>({cx, cy, cz});
+}
+
 template <typename RealType>
 __device__ void cross_jac(Vector<RealType> a, Vector<RealType> b, Matrix<RealType> &jac_a, Matrix<RealType> &jac_b) {
 

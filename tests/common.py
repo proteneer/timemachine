@@ -308,6 +308,9 @@ class GradientTest(unittest.TestCase):
             else:
                 assert test_du_dx is None
             if compute_du_dp:
+                # print(ref_du_dp)
+                # print(test_du_dp)
+                # print(np.abs(ref_du_dp-test_du_dp))
                 np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
             else:
                 assert test_du_dp is None

@@ -112,6 +112,10 @@ float __device__ __forceinline__ radd_rn(float a, float b) { return __fadd_rn(a,
 
 double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn(a, b); }
 
+float __device__ __forceinline__ rsub_rn(float a, float b) { return __fsub_rn(a, b); }
+
+double __device__ __forceinline__ rsub_rn(double a, double b) { return __dsub_rn(a, b); }
+
 // If this were not int128s, we could do __shfl_down_sync, but only supports up to 64 values
 // For more details reference the PDF in the docstring for k_accumulate_energy
 template <unsigned int THREADS_PER_BLOCK>

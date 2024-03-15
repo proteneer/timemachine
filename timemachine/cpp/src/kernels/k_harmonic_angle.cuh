@@ -29,7 +29,7 @@ void __global__ k_harmonic_angle(
 
     RealType rji[D];  // vector from j to i
     RealType rjk[D];  // vector from j to k
-    RealType nij = 0; // initialize your summed variables!
+    RealType nji = 0; // initialize your summed variables!
     RealType njk = 0; // initialize your summed variables!
     RealType top = 0;
     // first pass, compute the norms
@@ -38,12 +38,12 @@ void __global__ k_harmonic_angle(
         RealType vjk = coords[k_idx * D + d] - coords[j_idx * D + d];
         rji[d] = vji;
         rjk[d] = vjk;
-        nij += vji * vji;
+        nji += vji * vji;
         njk += vjk * vjk;
         top += vji * vjk;
     }
 
-    nij = sqrt(nij);
+    nji = sqrt(nji);
     njk = sqrt(njk);
 
     RealType hi = 0;
@@ -53,8 +53,9 @@ void __global__ k_harmonic_angle(
     for (int d = 0; d < D; d++) {
         RealType vji = coords[i_idx * D + d] - coords[j_idx * D + d];
         RealType vjk = coords[k_idx * D + d] - coords[j_idx * D + d];
-        RealType a = njk * vji - nij * vjk;
-        RealType b = njk * vji + nij * vjk;
+        // rsub/radds are used to maintain bitwise reversibility wrt i and k
+        RealType a = rsub_rn(njk * vji, nji * vjk);
+        RealType b = radd_rn(njk * vji, nji * vjk);
         hi += a * a;
         lo += b * b;
     }
@@ -76,8 +77,9 @@ void __global__ k_harmonic_angle(
     RealType a_norm = a.norm();
     RealType b_norm = b.norm();
 
-    auto vtp_i = cross_product(a, cross_product(a, b));
-    auto vtp_k = cross_product(b, cross_product(b, a));
+    // no_fma used to maintain bitwise reversibility wrt i and k
+    auto vtp_i = cross_product_no_fma(a, cross_product_no_fma(a, b));
+    auto vtp_k = cross_product_no_fma(b, cross_product_no_fma(b, a));
 
     RealType prefactor = ka * delta;
 

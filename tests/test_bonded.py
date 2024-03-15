@@ -308,19 +308,19 @@ class TestBonded(GradientTest):
             # even the angle computation itself is not guaranteed to be identical (let alone energies and forces).
             # this isn't a deal breaker, but was just a nice to have.
 
-            # test_potential = HarmonicAngle(angle_idxs)
-            # test_potential_rev = HarmonicAngle(angle_idxs[:, ::-1])
+            test_potential = HarmonicAngle(angle_idxs)
+            test_potential_rev = HarmonicAngle(angle_idxs[:, ::-1])
 
-            # test_potential_impl = test_potential.to_gpu(precision).unbound_impl
-            # test_potential_rev_impl = test_potential_rev.to_gpu(precision).unbound_impl
+            test_potential_impl = test_potential.to_gpu(precision).unbound_impl
+            test_potential_rev_impl = test_potential_rev.to_gpu(precision).unbound_impl
 
-            # test_du_dx, test_du_dp, test_u = test_potential_impl.execute(x, params, box, 1, 1, 1)
+            test_du_dx, test_du_dp, test_u = test_potential_impl.execute(x, params, box, 1, 1, 1)
 
-            # test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute(x, params, box, 1, 1, 1)
+            test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute(x, params, box, 1, 1, 1)
 
-            # np.testing.assert_array_equal(test_u, test_u_rev)
-            # np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
-            # np.testing.assert_array_equal(test_du_dx, test_du_dx_rev) we lose this when we use the cross product
+            np.testing.assert_array_equal(test_u, test_u_rev)
+            np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)  # we lose this when we use the cross product
 
     def test_periodic_torsion(self, n_particles=64, n_torsions=25, dim=3):
         """Randomly connect quadruples of particles, then validate the resulting PeriodicTorsion force"""
