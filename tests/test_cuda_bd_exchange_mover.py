@@ -212,9 +212,10 @@ def test_pair_of_waters_in_box(moves, precision, rtol, atol, seed):
     )
 
 
+@pytest.mark.parametrize("batch_size", [1, 200])
 @pytest.mark.parametrize("precision", [np.float32])
 @pytest.mark.parametrize("seed", [2023])
-def test_bias_deletion_bulk_water_with_context(precision, seed):
+def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(4.0, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
@@ -254,6 +255,7 @@ def test_bias_deletion_bulk_water_with_context(precision, seed):
         seed,
         proposals_per_move,
         interval,
+        batch_size=batch_size,
     )
 
     intg = LangevinIntegrator(DEFAULT_TEMP, dt, 1.0, np.array(masses), seed).impl()
@@ -358,18 +360,20 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
 
 
 @pytest.mark.parametrize(
-    "num_proposals_per_move,total_num_proposals,box_size",
+    "num_proposals_per_move,total_num_proposals,batch_size,box_size",
     [
-        pytest.param(1, 40000, 3.0, marks=pytest.mark.nightly(reason="slow")),
-        (5000, 40000, 3.0),
-        (10000, 250000, 3.0),
+        pytest.param(1, 40000, 1, 3.0, marks=pytest.mark.nightly(reason="slow")),
+        (10000, 40000, 5, 3.0),
+        (10000, 250000, 200, 3.0),
         # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
-        pytest.param(1, 20000, 6.0, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1, 20000, 1, 6.0, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_in_a_water_box(num_proposals_per_move, total_num_proposals, box_size, precision, rtol, atol, seed):
+def test_moves_in_a_water_box(
+    num_proposals_per_move, total_num_proposals, batch_size, box_size, precision, rtol, atol, seed
+):
     """Verify that the log acceptance probability between the reference and cuda implementation agree"""
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
@@ -429,7 +433,18 @@ def test_moves_in_a_water_box(num_proposals_per_move, total_num_proposals, box_s
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
+    bdem = klass(
+        N,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        seed,
+        num_proposals_per_move,
+        1,
+        batch_size=batch_size,
+    )
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
@@ -567,14 +582,16 @@ def hif2a_complex():
 
 
 @pytest.mark.parametrize(
-    "num_proposals_per_move, total_num_proposals",
+    "num_proposals_per_move,total_num_proposals,batch_size",
     [
-        (5000, 80000),
+        (5000, 80000, 200),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_with_complex(hif2a_complex, num_proposals_per_move, total_num_proposals, precision, rtol, atol, seed):
+def test_moves_with_complex(
+    hif2a_complex, num_proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed
+):
     complex_system, conf, box = hif2a_complex
     bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
@@ -598,7 +615,18 @@ def test_moves_with_complex(hif2a_complex, num_proposals_per_move, total_num_pro
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
+    bdem = klass(
+        N,
+        water_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        seed,
+        num_proposals_per_move,
+        1,
+        batch_size=batch_size,
+    )
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 
@@ -673,15 +701,15 @@ def hif2a_rbfe_state() -> InitialState:
 
 
 @pytest.mark.parametrize(
-    "num_proposals_per_move, total_num_proposals",
+    "num_proposals_per_move, total_num_proposals, batch_size",
     [
-        (20000, 200000),
+        (20000, 200000, 200),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
 def test_bd_moves_with_complex_and_ligand(
-    hif2a_rbfe_state, num_proposals_per_move, total_num_proposals, precision, rtol, atol, seed
+    hif2a_rbfe_state, num_proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed
 ):
     """Verify that when the water atoms are between the protein and ligand that the reference and cuda exchange mover agree"""
     initial_state = hif2a_rbfe_state
@@ -714,7 +742,18 @@ def test_bd_moves_with_complex_and_ligand(
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    bdem = klass(N, water_idxs, water_params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, num_proposals_per_move, 1)
+    bdem = klass(
+        N,
+        water_idxs,
+        water_params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        seed,
+        num_proposals_per_move,
+        1,
+        batch_size=batch_size,
+    )
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, water_params, water_idxs, DEFAULT_TEMP)
 
