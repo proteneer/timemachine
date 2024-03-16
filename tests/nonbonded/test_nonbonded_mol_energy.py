@@ -2,7 +2,7 @@ from importlib import resources
 
 import numpy as np
 import pytest
-from common import assert_energy_arrays_match
+from common import GradientTest, assert_energy_arrays_match
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_KT, DEFAULT_PRESSURE, DEFAULT_TEMP
@@ -245,13 +245,19 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
         bound_impls,
         movers=[baro_impl],
     )
-    ctxt.multiple_steps(1000)
-    conf = ctxt.get_x_t()
-    box = ctxt.get_box()
+    xs, boxes = ctxt.multiple_steps(1000)
+    conf = xs[-1]
+    box = boxes[-1]
 
     for bp in bound_impls:
         du_dx, _ = bp.execute(conf, box, True, False)
         minimizer.check_force_norm(-du_dx)
+
+    for bp in bps:
+        print(bp.potential)
+        GradientTest().compare_forces(
+            conf, bp.params, box, bp.potential, bp.potential.to_gpu(precision), rtol, atol=atol
+        )
 
     # only act on waters
     water_groups = [group for group in all_group_idxs if len(group) == 3]
