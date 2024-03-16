@@ -112,7 +112,6 @@ def test_harmonic_angle_stable_jax():
     grad_fn = jax.grad(bonded_stable.harmonic_angle_stable, argnums=(0,))
     g = grad_fn(coords, params, angle_idxs)
     assert (np.abs(g) < 1e7).all()
-    print(g)
 
     grad_fn = jax.grad(bonded.harmonic_angle, argnums=(0,))
     g = grad_fn(coords, params, None, angle_idxs)

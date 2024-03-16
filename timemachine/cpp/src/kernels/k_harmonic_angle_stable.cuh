@@ -98,9 +98,7 @@ void __global__ k_harmonic_angle_stable(
     auto coeff_i = prefactor * (1 / a_norm);
     auto coeff_k = prefactor * (1 / b_norm);
 
-    // compute the derivative using the vector triple product
     if (du_dx) {
-        // formal singularity, unremovable
         RealType grad_i[3];
         RealType grad_k[3];
 
