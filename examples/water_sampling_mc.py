@@ -19,6 +19,8 @@ from timemachine.fe.free_energy import image_frames
 from timemachine.ff import Forcefield
 from timemachine.lib import custom_ops
 from timemachine.md.barostat.moves import NPTMove
+from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
+from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDExchangeMove
 from timemachine.md.moves import MonteCarloMove
 from timemachine.md.states import CoordsVelBox
 
@@ -71,6 +73,7 @@ def test_exchange():
     parser.add_argument("--iterations", type=int, help="Number of iterations", default=1000000)
     parser.add_argument("--equilibration_steps", type=int, help="Number of equilibration steps", default=50000)
     parser.add_argument("--seed", default=2024, type=int, help="Random seed")
+    parser.add_argument("--use_reference", action="store_true", help="Use the reference ExchangeMoves")
     parser.add_argument(
         "--save_last_frame", type=str, help="Store last frame as a npz file, used to verify bitwise determinism"
     )
@@ -129,33 +132,46 @@ def test_exchange():
     exchange_interval = 1
     # tibd optimized
     if args.insertion_type == "targeted":
-        exc_mover = custom_ops.TIBDExchangeMove_f32(
-            initial_state.x0.shape[0],
-            initial_state.ligand_idxs,
-            water_idxs,
-            nb_water_ligand_params,
-            DEFAULT_TEMP,
-            nb_beta,
-            nb_cutoff,
-            DEFAULT_BB_RADIUS,
-            seed,
-            args.mc_steps_per_batch,
-            exchange_interval,
-        )
         assert mol is not None, "Requires a mol for targeted exchange"
+        if args.use_reference:
+            exc_mover = RefTIBDExchangeMove(
+                nb_beta,
+                nb_cutoff,
+                nb_water_ligand_params,
+                water_idxs,
+                DEFAULT_TEMP,
+                initial_state.ligand_idxs,
+                DEFAULT_BB_RADIUS,
+            )
+        else:
+            exc_mover = custom_ops.TIBDExchangeMove_f32(
+                initial_state.x0.shape[0],
+                initial_state.ligand_idxs,
+                water_idxs,
+                nb_water_ligand_params,
+                DEFAULT_TEMP,
+                nb_beta,
+                nb_cutoff,
+                DEFAULT_BB_RADIUS,
+                seed,
+                args.mc_steps_per_batch,
+                exchange_interval,
+            )
     elif args.insertion_type == "untargeted":
-        # vanilla reference
-        exc_mover = custom_ops.BDExchangeMove_f32(
-            initial_state.x0.shape[0],
-            water_idxs,
-            nb_water_ligand_params,
-            DEFAULT_TEMP,
-            nb_beta,
-            nb_cutoff,
-            seed,
-            args.mc_steps_per_batch,
-            exchange_interval,
-        )
+        if args.use_reference:
+            exc_mover = RefBDExchangeMove(nb_beta, nb_cutoff, nb_water_ligand_params, water_idxs, DEFAULT_TEMP)
+        else:
+            exc_mover = custom_ops.BDExchangeMove_f32(
+                initial_state.x0.shape[0],
+                water_idxs,
+                nb_water_ligand_params,
+                DEFAULT_TEMP,
+                nb_beta,
+                nb_cutoff,
+                seed,
+                args.mc_steps_per_batch,
+                exchange_interval,
+            )
 
     cur_box = initial_state.box0
     cur_x_t = initial_state.x0
