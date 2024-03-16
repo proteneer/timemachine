@@ -97,11 +97,6 @@ def harmonic_angle(conf, params, box, angle_idxs):
 
     This implements a harmonic angle potential:
         V(t) = k*(t - t0)^2
-            if cos_angles=False
-        or
-        V(t) = k*(cos(t)-cos(t0))^2
-            if cos_angles=True
-
 
     Parameters:
     -----------

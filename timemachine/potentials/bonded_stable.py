@@ -32,7 +32,6 @@ def harmonic_angle_stable(conf, params, angle_idxs):
 
     This reduces to the exact expression when :math:`\epsilon = 0`; When :math:`\epsilon > 0`, this avoids the
     singularities in the exact expression as :math:`r_{ij}` or :math:`r_{kj}` approach zero.
-    (Note: this approximation is applied for either setting of `cos_angles`)
 
     Parameters:
     -----------
