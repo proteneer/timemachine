@@ -170,7 +170,7 @@ void BDExchangeMove<RealType>::move(
             k_store_accepted_log_probability<RealType><<<1, tpb, 0>>>(
                 num_target_mols_,
                 // Decrement step by one to use the same noise as previously
-                d_mh_noise_.data + (step - 1 * batch_size_),
+                d_mh_noise_.data + ((step - 1) * batch_size_),
                 d_lse_max_before_.data,
                 d_lse_exp_sum_before_.data,
                 d_lse_max_after_.data,
