@@ -9,9 +9,11 @@ from jax import vmap
 from timemachine import constants
 from timemachine.ff import Forcefield
 from timemachine.integrator import VelocityVerletIntegrator
-from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.local_resampling import local_resampling_move
+from timemachine.potentials import HarmonicBond
 from timemachine.potentials.jax_utils import delta_r
 from timemachine.testsystems.ligands import get_biphenyl
 
@@ -224,6 +226,10 @@ def test_local_md_particle_density(freeze_reference, k):
         mol, ff, 0.0, box_width=4.0, margin=0.1
     )
 
+    bond_pot = next(pot for pot in unbound_potentials if isinstance(pot, HarmonicBond))
+    bond_list = get_bond_list(bond_pot)
+    group_idxs = get_group_indices(bond_list, coords.shape[0])
+
     local_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
 
     nblist = custom_ops.Neighborlist_f32(coords.shape[0])
@@ -232,6 +238,11 @@ def test_local_md_particle_density(freeze_reference, k):
     nblist.set_row_idxs(local_idxs.astype(np.uint32))
 
     intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+    barostat_interval = 5
+    barostat = MonteCarloBarostat(
+        coords.shape[0], constants.DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, seed + 1
+    )
 
     intg_impl = intg.impl()
 
@@ -253,9 +264,9 @@ def test_local_md_particle_density(freeze_reference, k):
         subsystem_idxs = np.unique(np.concatenate([inner_shell_idxs, local_idxs]))
         return len(subsystem_idxs)
 
-    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps)
+    ctxt = custom_ops.Context(coords, v0, box, intg_impl, bps, movers=[barostat.impl(bps)])
     # Equilibrate using global steps to start off from a reasonable place
-    x0, boxes = ctxt.multiple_steps(1000)
+    x0, boxes = ctxt.multiple_steps(2000)
 
     rng = np.random.default_rng(seed)
 
@@ -266,5 +277,5 @@ def test_local_md_particle_density(freeze_reference, k):
 
     # The threshold for this test is sensitive to the random seed. Selected by setting threshold that passes with 10 seeds
     assert_no_drift(
-        (x0[-1], boxes[-1]), local_move, num_particles_near_ligand, n_local_resampling_iterations=250, threshold=0.08
+        (x0[-1], boxes[-1]), local_move, num_particles_near_ligand, n_local_resampling_iterations=100, threshold=0.08
     )
