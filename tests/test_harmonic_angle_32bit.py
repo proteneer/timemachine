@@ -4,7 +4,7 @@ from rdkit import Chem
 from timemachine.fe import model_utils
 from timemachine.fe.free_energy import InitialState, get_context
 from timemachine.fe.topology import BaseTopology
-from timemachine.fe.utils import get_romol_conf
+from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator
 from timemachine.potentials.bonded import kahan_angle
@@ -49,7 +49,7 @@ $$$$""",
     vs = top.setup_end_state()
     bps = vs.get_U_fns()
     print("bps", bps)
-    masses = [a.GetMass() for a in mol.GetAtoms()]
+    masses = get_mol_masses(mol)
     masses = model_utils.apply_hmr(masses, [[0, 1], [1, 2]])
     intg = LangevinIntegrator(300.0, 1.0e-3, 1.0, masses, seed=2024)
     baro = None
