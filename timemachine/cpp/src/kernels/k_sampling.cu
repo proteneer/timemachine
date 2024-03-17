@@ -41,11 +41,11 @@ template void __global__ k_setup_gumbel_max_trick<double>(
 template <typename RealType>
 void __global__ k_setup_gumbel_max_trick_with_offset(
     const int num_segments,
-    const int vals_per_segment,
+    const int total_values,
     const int max_offset,
     const int *__restrict__ noise_offset,     // [1]
     const int *__restrict__ segment_offsets,  // [num_segments]
-    const RealType *__restrict__ log_weights, // [num_segments, vals_per_segment]
+    const RealType *__restrict__ log_weights, // [total_values]
     const RealType *__restrict__ gumbel_noise,
     RealType *__restrict__ prepared_gumbel) {
     const int segment_idx = blockIdx.y;
@@ -61,12 +61,12 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
 
     const int segment_start = segment_offsets[segment_idx];
     const int N = segment_offsets[segment_idx + 1] - segment_start;
-    // In the case of the offset the values per segment need to match up to compute gumbel offset correclty.
-    assert(N == vals_per_segment);
+    // In the case of the offset the values per segment need to match up to compute gumbel offset correctly.
+    assert(N % total_values == 0);
 
-    const int gumbel_offset = rand_offset * vals_per_segment + segment_start;
+    const int gumbel_offset = rand_offset * N + segment_start;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    while (idx < vals_per_segment) {
+    while (idx < N) {
         const RealType weight = log_weights[idx];
         assert(!isnan(weight));
 
@@ -82,7 +82,7 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
 
 template void __global__ k_setup_gumbel_max_trick_with_offset<float>(
     const int num_segments,
-    const int vals_per_segment,
+    const int total_values,
     const int max_offset,
     const int *__restrict__ noise_offset,
     const int *__restrict__ segment_offsets, // [blockDim.y]
@@ -92,7 +92,7 @@ template void __global__ k_setup_gumbel_max_trick_with_offset<float>(
 
 template void __global__ k_setup_gumbel_max_trick_with_offset<double>(
     const int num_segments,
-    const int vals_per_segment,
+    const int total_values,
     const int max_offset,
     const int *__restrict__ noise_offset,
     const int *__restrict__ segment_offsets, // [blockDim.y]

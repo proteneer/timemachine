@@ -14,7 +14,7 @@ void __global__ k_setup_gumbel_max_trick(
 
 template <typename RealType>
 void __global__ k_setup_gumbel_max_trick_with_offset(
-    const int num_segments,
+    const int total_values,
     const int vals_per_segment,
     const int max_offset,
     const int *__restrict__ noise_offset,     // [1]

@@ -34,10 +34,10 @@ template <typename RealType> SegmentedWeightedRandomSampler<RealType>::~Segmente
 
 template <typename RealType>
 void SegmentedWeightedRandomSampler<RealType>::sample_device(
-    const int vals_per_segment,
+    const int total_values,
     const int num_segments,
     const int *d_segment_offsets,        // [num_segments + 1]
-    const RealType *d_log_probabilities, // [vals_per_segment]
+    const RealType *d_log_probabilities, // [total_values]
     int *d_samples,                      // [num_segments]
     cudaStream_t stream) {
     // Perform sampling using the gumbel-max-trick like cupy
@@ -47,7 +47,7 @@ void SegmentedWeightedRandomSampler<RealType>::sample_device(
 
     // Use the noise both as the noise and the buffer for the gumbel noise, does change the values in d_gumbel
     this->sample_given_noise_device(
-        vals_per_segment,
+        total_values,
         num_segments,
         d_segment_offsets,
         d_log_probabilities,
@@ -59,17 +59,17 @@ void SegmentedWeightedRandomSampler<RealType>::sample_device(
 
 template <typename RealType>
 void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_device(
-    const int vals_per_segment,
+    const int total_values,
     const int num_segments,
     const int *d_segment_offsets,        // [num_segments]
-    const RealType *d_log_probabilities, // [num_segments, vals_per_segment]
-    const RealType *d_noise,             // [num_segments, vals_per_segment]
-    RealType *d_gumbel_noise,            // [num_segments, vals_per_segment] Buffer to store the gumbel distribution
+    const RealType *d_log_probabilities, // [total_values]
+    const RealType *d_noise,             // [total_values]
+    RealType *d_gumbel_noise,            // [total_values] Buffer to store the gumbel distribution
     int *d_samples,                      // [num_segments]
     cudaStream_t stream) {
 
     this->sample_given_noise_and_offset_device(
-        vals_per_segment,
+        total_values,
         num_segments,
         0, // Max offset can be safely ignored
         d_segment_offsets,
@@ -83,17 +83,16 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_device(
 
 template <typename RealType>
 void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_and_offset_device(
-    const int vals_per_segment,
+    const int total_values,
     const int num_segments,
     const int max_offset,
     const int *d_segment_offsets,        // [num_segments]
-    const RealType *d_log_probabilities, // [num_segments, vals_per_segment]
-    const int *d_noise_offset,           // [num_segments, vals_per_segment]
-    const RealType *d_noise,             // [num_segments, vals_per_segment]
-    RealType *d_gumbel_noise,            // [num_segments, vals_per_segment] Buffer to store the gumbel distribution
+    const RealType *d_log_probabilities, // [total_values]
+    const int *d_noise_offset,           // [total_values]
+    const RealType *d_noise,             // [total_values]
+    RealType *d_gumbel_noise,            // [total_values] Buffer to store the gumbel distribution
     int *d_samples,                      // [num_segments]
     cudaStream_t stream) {
-    const int total_values = vals_per_segment * num_segments;
     if (total_values > max_vals_per_segment_ * num_segments_) {
         throw std::runtime_error(
             "SegmentedWeightedRandomerSampler::total values is greater than buffer size:  vals_per_segment * "
@@ -110,17 +109,17 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_and_offset_dev
             "SegmentedWeightedRandomerSampler::when providing a noise offset, max offset must be greater than 0");
     }
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
-    const int blocks = ceil_divide(total_values, tpb);
 
+    const int blocks = ceil_divide(total_values, tpb);
     if (d_noise_offset == nullptr) {
         k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(
             total_values, d_log_probabilities, d_noise, d_gumbel_noise);
         gpuErrchk(cudaPeekAtLastError());
     } else {
-        dim3 dimGrid(ceil_divide(vals_per_segment, tpb), num_segments, 1);
+        dim3 dimGrid(blocks, num_segments, 1);
         k_setup_gumbel_max_trick_with_offset<<<dimGrid, tpb, 0, stream>>>(
             num_segments,
-            vals_per_segment,
+            total_values,
             max_offset,
             d_noise_offset,
             d_segment_offsets,
@@ -184,7 +183,7 @@ SegmentedWeightedRandomSampler<RealType>::sample_host(const std::vector<std::vec
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
     this->sample_device(
-        h_segments[num_segments] / num_segments,
+        h_segments[num_segments],
         num_segments,
         d_segment_offsets.data,
         d_log_probs.data,
