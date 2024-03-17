@@ -1686,7 +1686,17 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                 mover.set_params(py_array_to_vector(params));
             },
             py::arg("params"))
-        .def("last_log_probability", &Class::log_probability_host)
+        .def(
+            "last_log_probability",
+            &Class::log_probability_host,
+            R"pbdoc(
+        Returns the last log probability.
+
+        Only meaningful/valid when batch_size == 1 and num_proposals_per_move == 1 else
+        the value is simply the first value in the buffer which in the case of a batch size greater than
+        1 is the first proposal in the batch and in the case of num_proposals_per_move greater than 1
+        the probability of the last move, which may or may not have been accepted.
+        )pbdoc")
         .def("last_raw_log_probability", &Class::raw_log_probability_host)
         .def("n_accepted", &Class::n_accepted)
         .def("n_proposed", &Class::n_proposed)

@@ -481,11 +481,12 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
 
 template <typename RealType> double BDExchangeMove<RealType>::raw_log_probability_host() {
     std::vector<RealType> h_log_exp_before(2);
-    std::vector<RealType> h_log_exp_after(2);
+    // In the case of batch size > 1 need to increase the amount of data copied
+    std::vector<RealType> h_log_exp_after(2 * batch_size_);
     d_lse_max_before_.copy_to(&h_log_exp_before[0]);
     d_lse_exp_sum_before_.copy_to(&h_log_exp_before[1]);
     d_lse_max_after_.copy_to(&h_log_exp_after[0]);
-    d_lse_exp_sum_after_.copy_to(&h_log_exp_after[1]);
+    d_lse_exp_sum_after_.copy_to(&h_log_exp_after[batch_size_]);
 
     RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(h_log_exp_before[0], h_log_exp_before[1]));
     RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(h_log_exp_after[0], h_log_exp_after[1]));
