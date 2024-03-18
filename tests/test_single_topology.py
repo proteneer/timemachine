@@ -625,6 +625,7 @@ def test_setup_intermediate_state_not_unreasonably_slow(arbitrary_transformation
     assert elapsed_time / n_states <= 1.0
 
 
+@pytest.mark.nocuda
 def test_setup_intermediate_bonded_term(arbitrary_transformation):
     """Tests that the current vectorized implementation _setup_intermediate_bonded_term is consistent with the previous
     implementation"""
@@ -661,6 +662,7 @@ def test_setup_intermediate_bonded_term(arbitrary_transformation):
         np.testing.assert_array_equal(bonded_ref.params, bonded_test.params)
 
 
+@pytest.mark.nocuda
 def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
     """Tests that the current vectorized implementation _setup_intermediate_nonbonded_term is consistent with the
     previous implementation"""
@@ -1100,6 +1102,7 @@ def test_handle_ring_opening_closing_symmetric(interpolation_fn, k, lambda_inter
 
 
 # https://github.com/python/mypy/issues/12617
+@pytest.mark.nocuda
 @given(nonzero_force_constants, st.lists(lambdas, min_size=3, max_size=3, unique=True).map(sorted))  # type: ignore
 @seed(2022)
 def test_handle_ring_opening_closing_pin_to_end_states(k, lambdas):
