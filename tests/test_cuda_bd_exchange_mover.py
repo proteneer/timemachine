@@ -293,14 +293,14 @@ def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
 def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precision, seed):
-    """Given one water the exchange mover should accept every move and the results should be deterministic given the same seed and number of proposals per move
+    """The exchange mover should accept every move and the results should be deterministic given the same seed and number of proposals per move
 
 
     There are three forms of determinism we require:
     * Constructing an exchange move produces the same results every time
     * Calling an exchange move with one proposals per move or K proposals per move produce the same state.
       * It is difficult to test each move when there are K proposals per move so we need to know that it matches the single proposals per move case
-    * TBD: When we attempt K proposals in a batch (each proposal is made up of K proposals) it produces the same as the serial version
+    * When we attempt K proposals in a batch (each proposal is made up of K proposals) it produces the same as the serial version
     """
     ff = Forcefield.load_default()
     system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
@@ -309,20 +309,13 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
-
-    # Select a single mol
-    group_idxs = all_group_idxs
-
-    conf_idxs = np.array(group_idxs).reshape(-1)
-
-    conf = conf[conf_idxs]
+    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
     box = np.eye(3) * 100.0
 
     N = conf.shape[0]
 
-    params = nb.params[conf_idxs]
+    params = nb.params
 
     cutoff = nb.potential.cutoff
     klass = custom_ops.BDExchangeMove_f32
@@ -348,15 +341,89 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     iterative_moved_coords = conf.copy()
     for _ in range(proposals_per_move):
         iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
-        assert not np.all(conf == iterative_moved_coords)  # We should move every time since its a single mol
+        assert not np.all(conf == iterative_moved_coords)
     batch_moved_coords, _ = bdem_b.move(conf, box)
-    # Moves should be deterministic regardless the number of steps taken per move
-    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
     assert bdem_a.n_accepted() > 0
     assert bdem_a.n_proposed() == proposals_per_move
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
+
+    # Moves should be deterministic regardless the number of steps taken per move
+    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
+
+
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(2, 2), (100, 100)])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("seed", [2024])
+def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, precision, seed):
+    """Verify that if we run with the same batch size but either call `move()` repeatedly or just
+    increase the number of proposals per move in the constructor that the results should be identical
+    """
+    ff = Forcefield.load_default()
+    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+
+    rng = np.random.default_rng(seed)
+
+    box = np.eye(3) * 100.0
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    iterations = rng.integers(2, 5)
+
+    # Reference that makes proposals_per_move proposals per move() call
+    bdem_a = klass(
+        N,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        seed,
+        proposals_per_move,
+        1,
+        batch_size=batch_size,
+    )
+    # Test version that makes all proposals in a single move() call
+    bdem_b = klass(
+        N,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        seed,
+        proposals_per_move * iterations,
+        1,
+        batch_size=batch_size,
+    )
+
+    iterative_moved_coords = conf.copy()
+    for _ in range(iterations):
+        iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
+        assert not np.all(conf == iterative_moved_coords)
+    batch_moved_coords, _ = bdem_b.move(conf, box)
+
+    assert bdem_a.n_accepted() > 0
+    assert bdem_a.n_proposed() == proposals_per_move * iterations
+    assert bdem_a.n_accepted() == bdem_b.n_accepted()
+    assert bdem_a.n_proposed() == bdem_b.n_proposed()
+
+    # Moves should be deterministic regardless the number of steps taken per move
+    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 
 @pytest.mark.parametrize(
