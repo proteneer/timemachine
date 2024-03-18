@@ -192,7 +192,7 @@ void BDExchangeMove<RealType>::move(
         }
 
         sampler_.sample_given_noise_and_offset_device(
-            num_target_mols_,
+            num_target_mols_ * batch_size_,
             batch_size_,
             num_proposals_per_move_,
             d_sample_segments_offsets_.data,

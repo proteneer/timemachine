@@ -62,7 +62,7 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
     const int segment_start = segment_offsets[segment_idx];
     const int N = segment_offsets[segment_idx + 1] - segment_start;
     // In the case of the offset the values per segment need to match up to compute gumbel offset correctly.
-    assert(N % total_values == 0);
+    assert(total_values % N == 0);
 
     const int gumbel_offset = rand_offset * N + segment_start;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
