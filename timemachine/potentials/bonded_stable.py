@@ -5,8 +5,6 @@ def kahan_angle_stable(ci, cj, ck, eps):
     """
     Compute the angle given three points, i,j,k, as defined by the vector j->i, j->k
     """
-    rji = ci - cj
-    rjk = ck - cj
     rji = jnp.hstack([ci - cj, jnp.expand_dims(eps, axis=-1)])
     rjk = jnp.hstack([ck - cj, jnp.expand_dims(eps, axis=-1)])
     nji = jnp.linalg.norm(rji, axis=-1)
