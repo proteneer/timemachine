@@ -63,8 +63,8 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_device(
     const int num_segments,
     const int *d_segment_offsets,        // [num_segments]
     const RealType *d_log_probabilities, // [total_values]
-    const double *d_noise,               // [total_values]
-    double *d_gumbel_noise,              // [total_values] Buffer to store the gumbel distribution
+    const float *d_noise,                // [total_values]
+    float *d_gumbel_noise,               // [total_values] Buffer to store the gumbel distribution
     int *d_samples,                      // [num_segments]
     cudaStream_t stream) {
 
@@ -89,8 +89,8 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_and_offset_dev
     const int *d_segment_offsets,        // [num_segments]
     const RealType *d_log_probabilities, // [total_values]
     const int *d_noise_offset,           // [total_values]
-    const double *d_noise,               // [total_values]
-    double *d_gumbel_noise,              // [total_values] Buffer to store the gumbel distribution
+    const float *d_noise,                // [total_values]
+    float *d_gumbel_noise,               // [total_values] Buffer to store the gumbel distribution
     int *d_samples,                      // [num_segments]
     cudaStream_t stream) {
     if (total_values > max_vals_per_segment_ * num_segments_) {

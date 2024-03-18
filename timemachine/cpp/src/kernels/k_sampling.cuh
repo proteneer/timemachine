@@ -9,8 +9,8 @@ template <typename RealType>
 void __global__ k_setup_gumbel_max_trick(
     const int N,
     const RealType *__restrict__ log_weights,
-    const double *__restrict__ gumbel_noise,
-    double *__restrict__ prepared_gumbel);
+    const float *__restrict__ gumbel_noise,
+    float *__restrict__ prepared_gumbel);
 
 template <typename RealType>
 void __global__ k_setup_gumbel_max_trick_with_offset(
@@ -20,8 +20,8 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
     const int *__restrict__ noise_offset,     // [1]
     const int *__restrict__ segment_offsets,  // [blockDim.y]
     const RealType *__restrict__ log_weights, // [max_offset, vals_per_segment]
-    const double *__restrict__ gumbel_noise,
-    double *__restrict__ prepared_gumbel);
+    const float *__restrict__ gumbel_noise,
+    float *__restrict__ prepared_gumbel);
 
 template <typename T>
 void __global__

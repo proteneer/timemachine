@@ -10,8 +10,8 @@ template <typename RealType>
 void __global__ k_setup_gumbel_max_trick(
     const int N,
     const RealType *__restrict__ log_weights,
-    const double *__restrict__ gumbel_noise,
-    double *__restrict__ prepared_gumbel) {
+    const float *__restrict__ gumbel_noise,
+    float *__restrict__ prepared_gumbel) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx >= N) {
@@ -21,7 +21,7 @@ void __global__ k_setup_gumbel_max_trick(
     const RealType weight = log_weights[idx];
     assert(!isnan(weight));
 
-    const double gumbel_rand = -log(-log(gumbel_noise[idx]));
+    const float gumbel_rand = -log(-log(gumbel_noise[idx]));
 
     prepared_gumbel[idx] = weight + gumbel_rand;
 }
@@ -29,14 +29,14 @@ void __global__ k_setup_gumbel_max_trick(
 template void __global__ k_setup_gumbel_max_trick<float>(
     const int N,
     const float *__restrict__ log_weights,
-    const double *__restrict__ gumbel_noise,
-    double *__restrict__ prepared_gumbel);
+    const float *__restrict__ gumbel_noise,
+    float *__restrict__ prepared_gumbel);
 
 template void __global__ k_setup_gumbel_max_trick<double>(
     const int N,
     const double *__restrict__ log_weights,
-    const double *__restrict__ gumbel_noise,
-    double *__restrict__ prepared_gumbel);
+    const float *__restrict__ gumbel_noise,
+    float *__restrict__ prepared_gumbel);
 
 template <typename RealType>
 void __global__ k_setup_gumbel_max_trick_with_offset(
@@ -46,8 +46,8 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
     const int *__restrict__ noise_offset,     // [1]
     const int *__restrict__ segment_offsets,  // [num_segments]
     const RealType *__restrict__ log_weights, // [total_values]
-    const double *__restrict__ gumbel_noise,
-    double *__restrict__ prepared_gumbel) {
+    const float *__restrict__ gumbel_noise,
+    float *__restrict__ prepared_gumbel) {
     const int segment_idx = blockIdx.y;
 
     if (segment_idx >= num_segments) {
@@ -71,7 +71,7 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
         assert(!isnan(weight));
 
         // If the idx in the batch segments is beyond the max offset return a negative infinity to avoid sampling the weight
-        const double gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
+        const float gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
 
         prepared_gumbel[segment_start + idx] = weight + gumbel_rand;
 
@@ -86,8 +86,8 @@ template void __global__ k_setup_gumbel_max_trick_with_offset<float>(
     const int *__restrict__ noise_offset,
     const int *__restrict__ segment_offsets, // [blockDim.y]
     const float *__restrict__ log_weights,
-    const double *__restrict__ gumbel_noise,
-    double *__restrict__ prepared_gumbel);
+    const float *__restrict__ gumbel_noise,
+    float *__restrict__ prepared_gumbel);
 
 template void __global__ k_setup_gumbel_max_trick_with_offset<double>(
     const int num_segments,
@@ -96,8 +96,8 @@ template void __global__ k_setup_gumbel_max_trick_with_offset<double>(
     const int *__restrict__ noise_offset,
     const int *__restrict__ segment_offsets, // [blockDim.y]
     const double *__restrict__ log_weights,
-    const double *__restrict__ gumbel_noise,
-    double *__restrict__ prepared_gumbel);
+    const float *__restrict__ gumbel_noise,
+    float *__restrict__ prepared_gumbel);
 
 template <typename T>
 void __global__

@@ -295,10 +295,10 @@ template <typename RealType>
 void BDExchangeMove<RealType>::compute_incremental_weights_device(
     const int N,
     const bool scale,
-    const double *d_box,          // [3, 3]
-    const double *d_coords,       // [N, 3]
-    const double *d_quaternions,  // [batch_size_, 4]
-    const double *d_translations, // [batch_size_, 3]
+    const double *d_box,         // [3, 3]
+    const double *d_coords,      // [N, 3]
+    const float *d_quaternions,  // [batch_size_, 4]
+    const float *d_translations, // [batch_size_, 3]
     cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), mol_size_ * batch_size_, 1);
@@ -316,7 +316,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
     gpuErrchk(cudaPeekAtLastError());
 
     if (scale) {
-        k_rotate_and_translate_mols<true><<<ceil_divide(batch_size_, tpb), tpb, 0, stream>>>(
+        k_rotate_and_translate_mols<RealType, true><<<ceil_divide(batch_size_, tpb), tpb, 0, stream>>>(
             num_proposals_per_move_,
             batch_size_,
             d_noise_offset_.data,
@@ -329,7 +329,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
             d_intermediate_coords_.data);
         gpuErrchk(cudaPeekAtLastError());
     } else {
-        k_rotate_and_translate_mols<false><<<ceil_divide(batch_size_, tpb), tpb, 0, stream>>>(
+        k_rotate_and_translate_mols<RealType, false><<<ceil_divide(batch_size_, tpb), tpb, 0, stream>>>(
             num_proposals_per_move_,
             batch_size_,
             d_noise_offset_.data,
@@ -428,8 +428,8 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
     const double *h_coords, // [N, 3]
     const double *h_box,    // [3, 3]
     const int *h_mol_idxs,
-    const double *h_quaternions, // [batch_size_, 4]
-    const double *h_translations // [batch_size_, 3]
+    const float *h_quaternions, // [batch_size_, 4]
+    const float *h_translations // [batch_size_, 3]
 ) {
     if (N != N_) {
         throw std::runtime_error("N != N_");

@@ -1656,8 +1656,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                     throw std::runtime_error("each translation must be of length 3");
                 }
 
-                std::vector<double> h_quats = py_array_to_vector_with_cast<double, double>(quaternions);
-                std::vector<double> h_translations = py_array_to_vector_with_cast<double, double>(translations);
+                std::vector<float> h_quats = py_array_to_vector_with_cast<double, float>(quaternions);
+                std::vector<float> h_translations = py_array_to_vector_with_cast<double, float>(translations);
 
                 std::vector<std::vector<RealType>> weights = mover.compute_incremental_weights_host(
                     N, coords.data(), box.data(), mol_idxs.data(), &h_quats[0], &h_translations[0]);

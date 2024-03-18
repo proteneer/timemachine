@@ -60,16 +60,16 @@ protected:
 
     DeviceBuffer<int> d_samples_;            // [batch_size_] The indices of the molecules to make proposals for
     DeviceBuffer<int> d_selected_sample_;    // [1] The mol selected from the batch
-    DeviceBuffer<double> d_quaternions_;     // Normal noise for uniform random rotations
-    DeviceBuffer<double> d_mh_noise_;        // Noise used in the metropolis hastings check
+    DeviceBuffer<float> d_quaternions_;      // Normal noise for uniform random rotations
+    DeviceBuffer<float> d_mh_noise_;         // Noise used in the metropolis hastings check
     DeviceBuffer<size_t> d_num_accepted_;    // [1]
     DeviceBuffer<int> d_target_mol_atoms_;   // [batch_size_, mol_size_]
     DeviceBuffer<int> d_target_mol_offsets_; // [num_target_mols + 1]
     DeviceBuffer<__int128> d_intermediate_sample_weights_; // [batch_size, num_intermediates_per_reduce_]
-    DeviceBuffer<double> d_sample_noise_;                  // Noise to use for selecting molecules
-    DeviceBuffer<double>
-        d_sampling_intermediate_;         // [batch_size_, num_target_mols_] Intermediate buffer for weighted sampling
-    DeviceBuffer<double> d_translations_; // Uniform noise for translation + the check
+    DeviceBuffer<float> d_sample_noise_;                   // Noise to use for selecting molecules
+    DeviceBuffer<float>
+        d_sampling_intermediate_;        // [batch_size_, num_target_mols_] Intermediate buffer for weighted sampling
+    DeviceBuffer<float> d_translations_; // Uniform noise for translation + the check
     DeviceBuffer<int> d_sample_segments_offsets_; // Segment offsets for the sampler // [batch_size + 1]
     DeviceBuffer<int> d_noise_offset_;            // [1]  Offset into noise
 
@@ -114,8 +114,8 @@ public:
         const bool scale,
         const double *d_box,
         const double *d_coords,
-        const double *d_quaternions,
-        const double *d_translations,
+        const float *d_quaternions,
+        const float *d_translations,
         cudaStream_t stream);
 
     // compute_incremental_weights_host is used for testing the computation of incremental weights
@@ -126,8 +126,8 @@ public:
         const double *h_coords,
         const double *h_box,
         const int *mol_idxs,
-        const double *h_quaternions,
-        const double *h_translations);
+        const float *h_quaternions,
+        const float *h_translations);
 
     ~BDExchangeMove();
 
