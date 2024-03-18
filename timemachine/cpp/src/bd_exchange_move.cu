@@ -147,8 +147,6 @@ void BDExchangeMove<RealType>::move(
         throw std::runtime_error("bug in the code: buffers with random values don't match in batch size");
     }
 
-    // printf("Batch size %d %d\n", batch_size_, num_proposals_per_move_);
-
     // Set the stream for the generators
     curandErrchk(curandSetStream(cr_rng_quat_, stream));
     curandErrchk(curandSetStream(cr_rng_translations_, stream));
@@ -250,7 +248,6 @@ void BDExchangeMove<RealType>::move(
         step++;
         // Synchronize to get the new offset
         gpuErrchk(cudaStreamSynchronize(stream));
-        // printf("Offset %d\n", p_noise_offset_.data[0]);
     }
     // Number of attempts is always the batch size
     num_attempted_ += num_proposals_per_move_;

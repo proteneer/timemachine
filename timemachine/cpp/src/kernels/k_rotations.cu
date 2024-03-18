@@ -111,9 +111,6 @@ void __global__ k_rotate_and_translate_mols(
     const RealType inv_box_z = 1 / box_z;
 
     const int data_offset = offset[0];
-    // if (idx_in_batch == 0) {
-    //     printf("Data offset %d Total Proposals %d batch size %d\n", data_offset, total_proposals, batch_size);
-    // }
 
     while (idx_in_batch < batch_size) {
         int mol_sample = data_offset + idx_in_batch < total_proposals ? samples[idx_in_batch] : 0;
