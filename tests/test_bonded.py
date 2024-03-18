@@ -280,10 +280,8 @@ class TestBonded(GradientTest):
             np.testing.assert_almost_equal(test_u, ref_u)
 
     def test_harmonic_angle(self, n_particles=64, n_angles=25, dim=3):
-        # def test_harmonic_angle(self, n_particles=3, n_angles=1, dim=3):
         """Randomly connect triples of particles, then validate the resulting HarmonicAngle force"""
         np.random.seed(125)
-        # np.random.seed(126)
 
         x = self.get_random_coords(n_particles, dim)
 
@@ -320,7 +318,7 @@ class TestBonded(GradientTest):
 
             np.testing.assert_array_equal(test_u, test_u_rev)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
-            np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)  # we lose this when we use the cross product
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
 
     def test_periodic_torsion(self, n_particles=64, n_torsions=25, dim=3):
         """Randomly connect quadruples of particles, then validate the resulting PeriodicTorsion force"""
