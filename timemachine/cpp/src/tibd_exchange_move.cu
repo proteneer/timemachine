@@ -129,14 +129,6 @@ void TIBDExchangeMove<RealType>::move(
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
-    // Copy the before log weights to the after weights, we will adjust incrementally afterwards
-    gpuErrchk(cudaMemcpyAsync(
-        this->d_log_weights_after_.data,
-        this->d_log_weights_before_.data,
-        this->d_log_weights_after_.size(),
-        cudaMemcpyDeviceToDevice,
-        stream));
-
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int mol_blocks = ceil_divide(this->num_target_mols_, tpb);
     const int sample_blocks = ceil_divide(this->batch_size_, tpb);
