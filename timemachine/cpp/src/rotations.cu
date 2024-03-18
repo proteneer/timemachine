@@ -31,14 +31,13 @@ void rotate_coordinates_host(
     d_out.copy_to(output);
 }
 
-template <typename RealType>
 void rotate_coordinates_and_translate_mol_host(
     const int N,
     const int batch_size,
     const double *mol_coords,
     const double *box,
-    const RealType *quaternion,
-    const RealType *translation,
+    const double *quaternion,
+    const double *translation,
     double *output) {
     DeviceBuffer<double> d_coords(N * 3);
     d_coords.copy_from(mol_coords);
@@ -46,10 +45,10 @@ void rotate_coordinates_and_translate_mol_host(
     DeviceBuffer<double> d_box(3 * 3);
     d_box.copy_from(box);
 
-    DeviceBuffer<RealType> d_quaternion(batch_size * 4);
+    DeviceBuffer<double> d_quaternion(batch_size * 4);
     d_quaternion.copy_from(quaternion);
 
-    DeviceBuffer<RealType> d_translation(batch_size * 3);
+    DeviceBuffer<double> d_translation(batch_size * 3);
     d_translation.copy_from(translation);
 
     int mol_offsets[2] = {0, N};
@@ -68,7 +67,7 @@ void rotate_coordinates_and_translate_mol_host(
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
 
-    k_rotate_and_translate_mols<RealType, true><<<ceil_divide(batch_size, tpb), tpb, 0, stream>>>(
+    k_rotate_and_translate_mols<true><<<ceil_divide(batch_size, tpb), tpb, 0, stream>>>(
         batch_size,
         batch_size,
         d_offset.data,
@@ -85,10 +84,5 @@ void rotate_coordinates_and_translate_mol_host(
 
 template void rotate_coordinates_host<float>(const int, const int, const double *, const float *, double *);
 template void rotate_coordinates_host<double>(const int, const int, const double *, const double *, double *);
-
-template void rotate_coordinates_and_translate_mol_host<float>(
-    const int, const int, const double *, const double *, const float *, const float *, double *);
-template void rotate_coordinates_and_translate_mol_host<double>(
-    const int, const int, const double *, const double *, const double *, const double *, double *);
 
 } // namespace timemachine

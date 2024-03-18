@@ -63,8 +63,8 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_device(
     const int num_segments,
     const int *d_segment_offsets,        // [num_segments]
     const RealType *d_log_probabilities, // [total_values]
-    const RealType *d_noise,             // [total_values]
-    RealType *d_gumbel_noise,            // [total_values] Buffer to store the gumbel distribution
+    const double *d_noise,               // [total_values]
+    double *d_gumbel_noise,              // [total_values] Buffer to store the gumbel distribution
     int *d_samples,                      // [num_segments]
     cudaStream_t stream) {
 
@@ -89,8 +89,8 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_and_offset_dev
     const int *d_segment_offsets,        // [num_segments]
     const RealType *d_log_probabilities, // [total_values]
     const int *d_noise_offset,           // [total_values]
-    const RealType *d_noise,             // [total_values]
-    RealType *d_gumbel_noise,            // [total_values] Buffer to store the gumbel distribution
+    const double *d_noise,               // [total_values]
+    double *d_gumbel_noise,              // [total_values] Buffer to store the gumbel distribution
     int *d_samples,                      // [num_segments]
     cudaStream_t stream) {
     if (total_values > max_vals_per_segment_ * num_segments_) {
@@ -112,12 +112,12 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_and_offset_dev
 
     const int blocks = ceil_divide(total_values, tpb);
     if (d_noise_offset == nullptr) {
-        k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(
-            total_values, d_log_probabilities, d_noise, d_gumbel_noise);
+        k_setup_gumbel_max_trick<RealType>
+            <<<blocks, tpb, 0, stream>>>(total_values, d_log_probabilities, d_noise, d_gumbel_noise);
         gpuErrchk(cudaPeekAtLastError());
     } else {
         dim3 dimGrid(blocks, num_segments, 1);
-        k_setup_gumbel_max_trick_with_offset<<<dimGrid, tpb, 0, stream>>>(
+        k_setup_gumbel_max_trick_with_offset<RealType><<<dimGrid, tpb, 0, stream>>>(
             num_segments,
             total_values,
             max_offset,

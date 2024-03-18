@@ -41,7 +41,6 @@
 #include "segmented_weighted_random_sampler.hpp"
 #include "set_utils.hpp"
 #include "summed_potential.hpp"
-#include "tibd_exchange_move.hpp"
 #include "translations.hpp"
 #include "verlet_integrator.hpp"
 
@@ -1657,8 +1656,8 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
                     throw std::runtime_error("each translation must be of length 3");
                 }
 
-                std::vector<RealType> h_quats = py_array_to_vector_with_cast<double, RealType>(quaternions);
-                std::vector<RealType> h_translations = py_array_to_vector_with_cast<double, RealType>(translations);
+                std::vector<double> h_quats = py_array_to_vector_with_cast<double, double>(quaternions);
+                std::vector<double> h_translations = py_array_to_vector_with_cast<double, double>(translations);
 
                 std::vector<std::vector<RealType>> weights = mover.compute_incremental_weights_host(
                     N, coords.data(), box.data(), mol_idxs.data(), &h_quats[0], &h_translations[0]);
@@ -1704,69 +1703,69 @@ template <typename RealType> void declare_bias_deletion_exchange_move(py::module
         .def("batch_size", &Class::batch_size);
 }
 
-template <typename RealType>
-void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const char *typestr) {
+// template <typename RealType>
+// void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const char *typestr) {
 
-    using Class = TIBDExchangeMove<RealType>;
-    std::string pyclass_name = std::string("TIBDExchangeMove_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, BDExchangeMove<RealType>, Mover>(
-        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(
-            py::init([](const int N,
-                        const std::vector<int> &ligand_idxs,
-                        const std::vector<std::vector<int>> &target_mols,
-                        const py::array_t<double, py::array::c_style> &params,
-                        const double temperature,
-                        const double nb_beta,
-                        const double cutoff,
-                        const double radius,
-                        const int seed,
-                        const int num_proposals_per_move,
-                        const int interval) {
-                size_t params_dim = params.ndim();
-                if (params_dim != 2) {
-                    throw std::runtime_error("parameters dimensions must be 2");
-                }
-                if (params.shape(0) != N) {
-                    throw std::runtime_error("Number of parameters must match N");
-                }
-                if (ligand_idxs.size() == 0) {
-                    throw std::runtime_error("must provide at least one atom for the ligand indices");
-                }
-                if (target_mols.size() == 0) {
-                    throw std::runtime_error("must provide at least one molecule");
-                }
-                if (interval <= 0) {
-                    throw std::runtime_error("must provide interval greater than 0");
-                }
-                std::vector<double> v_params = py_array_to_vector(params);
-                return new Class(
-                    N,
-                    ligand_idxs,
-                    target_mols,
-                    v_params,
-                    temperature,
-                    nb_beta,
-                    cutoff,
-                    radius,
-                    seed,
-                    num_proposals_per_move,
-                    interval,
-                    1 // batch_size must be 1 for now
-                );
-            }),
-            py::arg("N"),
-            py::arg("ligand_idxs"),
-            py::arg("target_mols"),
-            py::arg("params"),
-            py::arg("temperature"),
-            py::arg("nb_beta"),
-            py::arg("cutoff"),
-            py::arg("radius"),
-            py::arg("seed"),
-            py::arg("num_proposals_per_move"),
-            py::arg("interval"));
-}
+//     using Class = TIBDExchangeMove<RealType>;
+//     std::string pyclass_name = std::string("TIBDExchangeMove_") + typestr;
+//     py::class_<Class, std::shared_ptr<Class>, BDExchangeMove<RealType>, Mover>(
+//         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+//         .def(
+//             py::init([](const int N,
+//                         const std::vector<int> &ligand_idxs,
+//                         const std::vector<std::vector<int>> &target_mols,
+//                         const py::array_t<double, py::array::c_style> &params,
+//                         const double temperature,
+//                         const double nb_beta,
+//                         const double cutoff,
+//                         const double radius,
+//                         const int seed,
+//                         const int num_proposals_per_move,
+//                         const int interval) {
+//                 size_t params_dim = params.ndim();
+//                 if (params_dim != 2) {
+//                     throw std::runtime_error("parameters dimensions must be 2");
+//                 }
+//                 if (params.shape(0) != N) {
+//                     throw std::runtime_error("Number of parameters must match N");
+//                 }
+//                 if (ligand_idxs.size() == 0) {
+//                     throw std::runtime_error("must provide at least one atom for the ligand indices");
+//                 }
+//                 if (target_mols.size() == 0) {
+//                     throw std::runtime_error("must provide at least one molecule");
+//                 }
+//                 if (interval <= 0) {
+//                     throw std::runtime_error("must provide interval greater than 0");
+//                 }
+//                 std::vector<double> v_params = py_array_to_vector(params);
+//                 return new Class(
+//                     N,
+//                     ligand_idxs,
+//                     target_mols,
+//                     v_params,
+//                     temperature,
+//                     nb_beta,
+//                     cutoff,
+//                     radius,
+//                     seed,
+//                     num_proposals_per_move,
+//                     interval,
+//                     1 // batch_size must be 1 for now
+//                 );
+//             }),
+//             py::arg("N"),
+//             py::arg("ligand_idxs"),
+//             py::arg("target_mols"),
+//             py::arg("params"),
+//             py::arg("temperature"),
+//             py::arg("nb_beta"),
+//             py::arg("cutoff"),
+//             py::arg("radius"),
+//             py::arg("seed"),
+//             py::arg("num_proposals_per_move"),
+//             py::arg("interval"));
+// }
 
 const py::array_t<double, py::array::c_style>
 py_rmsd_align(const py::array_t<double, py::array::c_style> &x1, const py::array_t<double, py::array::c_style> &x2) {
@@ -1861,72 +1860,72 @@ py::tuple py_inner_outer_mols(
     return py::make_tuple(inner_and_outer[0], inner_and_outer[1]);
 }
 
-template <typename RealType>
-py::array_t<double, py::array::c_style> py_rotate_coords(
-    const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &quaternions) {
-    verify_coords(coords);
+// template <typename RealType>
+// py::array_t<double, py::array::c_style> py_rotate_coords(
+//     const py::array_t<double, py::array::c_style> &coords, const py::array_t<double, py::array::c_style> &quaternions) {
+//     verify_coords(coords);
 
-    size_t quaternions_ndims = quaternions.ndim();
-    if (quaternions_ndims != 2) {
-        throw std::runtime_error("quaternions dimensions must be 2");
-    }
-    if (quaternions.shape(quaternions_ndims - 1) != 4) {
-        throw std::runtime_error("quaternions must have a shape that is 4 dimensional");
-    }
+//     size_t quaternions_ndims = quaternions.ndim();
+//     if (quaternions_ndims != 2) {
+//         throw std::runtime_error("quaternions dimensions must be 2");
+//     }
+//     if (quaternions.shape(quaternions_ndims - 1) != 4) {
+//         throw std::runtime_error("quaternions must have a shape that is 4 dimensional");
+//     }
 
-    std::vector<RealType> v_quaternions = py_array_to_vector_with_cast<double, RealType>(quaternions);
+//     std::vector<RealType> v_quaternions = py_array_to_vector_with_cast<double, RealType>(quaternions);
 
-    const int N = coords.shape(0);
-    const int num_rotations = quaternions.shape(0);
-    py::array_t<double, py::array::c_style> py_rotated_coords({N, num_rotations, 3});
-    rotate_coordinates_host<RealType>(
-        N, num_rotations, coords.data(), &v_quaternions[0], py_rotated_coords.mutable_data());
-    return py_rotated_coords;
-}
+//     const int N = coords.shape(0);
+//     const int num_rotations = quaternions.shape(0);
+//     py::array_t<double, py::array::c_style> py_rotated_coords({N, num_rotations, 3});
+//     rotate_coordinates_host<RealType>(
+//         N, num_rotations, coords.data(), &v_quaternions[0], py_rotated_coords.mutable_data());
+//     return py_rotated_coords;
+// }
 
-template <typename RealType>
-py::array_t<double, py::array::c_style> py_rotate_and_translate_mol(
-    const py::array_t<double, py::array::c_style> &coords,
-    const py::array_t<double, py::array::c_style> &box,
-    const py::array_t<double, py::array::c_style> &quaternions,
-    const py::array_t<double, py::array::c_style> &translations) {
-    verify_coords_and_box(coords, box);
+// template <typename RealType>
+// py::array_t<double, py::array::c_style> py_rotate_and_translate_mol(
+//     const py::array_t<double, py::array::c_style> &coords,
+//     const py::array_t<double, py::array::c_style> &box,
+//     const py::array_t<double, py::array::c_style> &quaternions,
+//     const py::array_t<double, py::array::c_style> &translations) {
+//     verify_coords_and_box(coords, box);
 
-    if (quaternions.ndim() != 2) {
-        throw std::runtime_error("quaternions dimensions must be 2");
-    }
-    if (quaternions.shape(1) != 4) {
-        throw std::runtime_error("quaternions must be of length 4");
-    }
+//     if (quaternions.ndim() != 2) {
+//         throw std::runtime_error("quaternions dimensions must be 2");
+//     }
+//     if (quaternions.shape(1) != 4) {
+//         throw std::runtime_error("quaternions must be of length 4");
+//     }
 
-    if (translations.ndim() != 2) {
-        throw std::runtime_error("translations dimensions must be 2");
-    }
-    if (translations.shape(1) != 3) {
-        throw std::runtime_error("translations must be of size 3");
-    }
+//     if (translations.ndim() != 2) {
+//         throw std::runtime_error("translations dimensions must be 2");
+//     }
+//     if (translations.shape(1) != 3) {
+//         throw std::runtime_error("translations must be of size 3");
+//     }
 
-    if (quaternions.shape(0) != translations.shape(0)) {
-        throw std::runtime_error("Number of quaternions and translations must match");
-    }
+//     if (quaternions.shape(0) != translations.shape(0)) {
+//         throw std::runtime_error("Number of quaternions and translations must match");
+//     }
 
-    std::vector<RealType> v_quaternions = py_array_to_vector_with_cast<double, RealType>(quaternions);
-    std::vector<RealType> v_translations = py_array_to_vector_with_cast<double, RealType>(translations);
+//     std::vector<RealType> v_quaternions = py_array_to_vector_with_cast<double, RealType>(quaternions);
+//     std::vector<RealType> v_translations = py_array_to_vector_with_cast<double, RealType>(translations);
 
-    const int batch_size = quaternions.shape(0);
+//     const int batch_size = quaternions.shape(0);
 
-    const int N = coords.shape(0);
-    py::array_t<double, py::array::c_style> py_rotated_coords({batch_size, N, 3});
-    rotate_coordinates_and_translate_mol_host<RealType>(
-        N,
-        batch_size,
-        coords.data(),
-        box.data(),
-        &v_quaternions[0],
-        &v_translations[0],
-        py_rotated_coords.mutable_data());
-    return py_rotated_coords;
-}
+//     const int N = coords.shape(0);
+//     py::array_t<double, py::array::c_style> py_rotated_coords({batch_size, N, 3});
+//     rotate_coordinates_and_translate_mol_host<RealType>(
+//         N,
+//         batch_size,
+//         coords.data(),
+//         box.data(),
+//         &v_quaternions[0],
+//         &v_translations[0],
+//         py_rotated_coords.mutable_data());
+//     return py_rotated_coords;
+// }
 
 template <typename RealType>
 py::array_t<RealType, py::array::c_style> py_translations_inside_and_outside_sphere_host(
@@ -2030,8 +2029,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_bias_deletion_exchange_move<double>(m, "f64");
     declare_bias_deletion_exchange_move<float>(m, "f32");
 
-    declare_targeted_insertion_bias_deletion_exchange_move<double>(m, "f64");
-    declare_targeted_insertion_bias_deletion_exchange_move<float>(m, "f32");
+    // declare_targeted_insertion_bias_deletion_exchange_move<double>(m, "f64");
+    // declare_targeted_insertion_bias_deletion_exchange_move<float>(m, "f32");
 
     declare_context(m);
 
@@ -2045,34 +2044,34 @@ PYBIND11_MODULE(custom_ops, m) {
         &py_accumulate_energy,
         "Function for testing accumulating energy in a block reduce",
         py::arg("x"));
-    m.def(
-        "rotate_coords_f32",
-        &py_rotate_coords<float>,
-        "Function for testing rotation of coordinates in CUDA",
-        py::arg("coords"),
-        py::arg("quaternions"));
-    m.def(
-        "rotate_coords_f64",
-        &py_rotate_coords<double>,
-        "Function for testing rotation of coordinates in CUDA",
-        py::arg("coords"),
-        py::arg("quaternions"));
-    m.def(
-        "rotate_and_translate_mol_f32",
-        &py_rotate_and_translate_mol<float>,
-        "Function for testing kernel for rotating and translating a mol in CUDA",
-        py::arg("coords"),
-        py::arg("box"),
-        py::arg("quaternion"),
-        py::arg("translation"));
-    m.def(
-        "rotate_and_translate_mol_f64",
-        &py_rotate_and_translate_mol<double>,
-        "Function for testing kernel for rotating and translating a mol in CUDA",
-        py::arg("coords"),
-        py::arg("box"),
-        py::arg("quaternion"),
-        py::arg("translation"));
+    // m.def(
+    //     "rotate_coords_f32",
+    //     &py_rotate_coords<float>,
+    //     "Function for testing rotation of coordinates in CUDA",
+    //     py::arg("coords"),
+    //     py::arg("quaternions"));
+    // m.def(
+    //     "rotate_coords_f64",
+    //     &py_rotate_coords<double>,
+    //     "Function for testing rotation of coordinates in CUDA",
+    //     py::arg("coords"),
+    //     py::arg("quaternions"));
+    // m.def(
+    //     "rotate_and_translate_mol_f32",
+    //     &py_rotate_and_translate_mol<float>,
+    //     "Function for testing kernel for rotating and translating a mol in CUDA",
+    //     py::arg("coords"),
+    //     py::arg("box"),
+    //     py::arg("quaternion"),
+    //     py::arg("translation"));
+    // m.def(
+    //     "rotate_and_translate_mol_f64",
+    //     &py_rotate_and_translate_mol<double>,
+    //     "Function for testing kernel for rotating and translating a mol in CUDA",
+    //     py::arg("coords"),
+    //     py::arg("box"),
+    //     py::arg("quaternion"),
+    //     py::arg("translation"));
     m.def(
         "atom_by_atom_energies_f32",
         &py_atom_by_atom_energies<float>,

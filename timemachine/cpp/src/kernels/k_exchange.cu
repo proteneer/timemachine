@@ -129,7 +129,7 @@ void __global__ k_attempt_exchange_move_targeted(
     const int *__restrict__ inner_count,  // [1]
     const RealType *__restrict__ box_vol, // [1]
     const RealType inner_volume,
-    const RealType *__restrict__ rand,           // [1]
+    const double *__restrict__ rand,             // [1]
     const int *__restrict__ samples,             // [1]
     const RealType *__restrict__ before_max,     // [1]
     const RealType *__restrict__ before_log_sum, // [1]
@@ -204,7 +204,7 @@ template void __global__ k_attempt_exchange_move_targeted<float>(
     const int *__restrict__ inner_count,
     const float *__restrict__ box_vol,
     const float inner_volume,
-    const float *__restrict__ rand,
+    const double *__restrict__ rand,
     const int *__restrict__ samples,
     const float *__restrict__ before_max,
     const float *__restrict__ before_log_sum,
@@ -654,7 +654,7 @@ template <typename RealType>
 void __global__ k_decide_targeted_moves(
     const int batch_size,
     const int num_target_mols,
-    const RealType *__restrict__ rand,         // [batch_size]
+    const double *__restrict__ rand,           // [batch_size]
     const int *__restrict__ inner_count,       // [1]
     const RealType *__restrict__ translations, // [batch_size, 2, 3] first translation is inside, second is outer
     int *__restrict__ targeting_inner_volume,  // [batch_size]
@@ -704,7 +704,7 @@ void __global__ k_decide_targeted_moves(
 template void __global__ k_decide_targeted_moves<float>(
     const int batch_size,
     const int num_target_mols,
-    const float *__restrict__ rand,
+    const double *__restrict__ rand,
     const int *__restrict__ inner_count,
     const float *__restrict__ translations,
     int *__restrict__ targeting_inner_volume,
@@ -841,7 +841,7 @@ void __global__ k_select_first_valid_move(
     const RealType *__restrict__ before_log_sum, // [1]
     const RealType *__restrict__ after_max,      // [batch_size]
     const RealType *__restrict__ after_log_sum,  // [batch_size]
-    const RealType *__restrict__ rand,           // [total_proposals]
+    const double *__restrict__ rand,             // [total_proposals]
     int *__restrict__ accepted_sample            // [1]
 ) {
     __shared__ int selected_idx;
@@ -889,7 +889,7 @@ template void __global__ k_select_first_valid_move<float>(
     const float *__restrict__ before_log_sum, // [1]
     const float *__restrict__ after_max,      // [batch_size]
     const float *__restrict__ after_log_sum,  // [batch_size]
-    const float *__restrict__ rand,           // [total_proposals]
+    const double *__restrict__ rand,          // [total_proposals]
     int *__restrict__ accepted_sample         // [1]
 );
 

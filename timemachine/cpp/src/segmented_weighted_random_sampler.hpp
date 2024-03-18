@@ -18,7 +18,7 @@ private:
     size_t temp_storage_bytes_;
 
     // Stores both the initial uniform random values and the final gumbel distribution
-    DeviceBuffer<RealType> d_gumbel_;
+    DeviceBuffer<double> d_gumbel_;
     DeviceBuffer<cub::KeyValuePair<int, RealType>> d_arg_max_;
 
     DeviceBuffer<char> d_argmax_storage_;
@@ -43,8 +43,8 @@ public:
         const int num_segments,
         const int *d_segment_offsets,
         const RealType *d_log_probabilities,
-        const RealType *d_noise,
-        RealType *d_gumbel_dist, // Buffer to store the gumbel distribution
+        const double *d_noise,
+        double *d_gumbel_dist, // Buffer to store the gumbel distribution
         int *d_samples,
         cudaStream_t stream);
 
@@ -55,8 +55,8 @@ public:
         const int *d_segment_offsets,        // [num_segments]
         const RealType *d_log_probabilities, // [num_segments, vals_per_segment]
         const int *d_noise_offset,           // [num_segments, vals_per_segment]
-        const RealType *d_noise,             // [num_segments, vals_per_segment]
-        RealType *d_gumbel_noise,            // [num_segments, vals_per_segment] Buffer to store the gumbel distribution
+        const double *d_noise,               // [num_segments, vals_per_segment]
+        double *d_gumbel_noise,              // [num_segments, vals_per_segment] Buffer to store the gumbel distribution
         int *d_samples,                      // [num_segments]
         cudaStream_t stream);
 

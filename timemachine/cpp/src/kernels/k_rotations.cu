@@ -86,78 +86,74 @@ void __global__ k_rotate_coordinates(
     rotated_coords[(coord_idx * n_rotations * 3) + (rotation_idx * 3) + 2] = local_coords[3];
 }
 
-template <typename RealType, bool SCALE>
+template <bool SCALE>
 void __global__ k_rotate_and_translate_mols(
     const int total_proposals,
     const int batch_size,
     const int *__restrict__ offset,
-    const double *__restrict__ coords,         // [N, 3]
-    const double *__restrict__ box,            // [3, 3]
-    const int *__restrict__ samples,           // [batch_size]
-    const int *__restrict__ mol_offsets,       // [num_mols + 1]
-    const RealType *__restrict__ quaternions,  // [batch_size, 4]
-    const RealType *__restrict__ translations, // [batch_size, 3]
-    double *__restrict__ coords_out            // [batch_size, num_atoms, 3]
+    const double *__restrict__ coords,       // [N, 3]
+    const double *__restrict__ box,          // [3, 3]
+    const int *__restrict__ samples,         // [batch_size]
+    const int *__restrict__ mol_offsets,     // [num_mols + 1]
+    const double *__restrict__ quaternions,  // [batch_size, 4]
+    const double *__restrict__ translations, // [batch_size, 3]
+    double *__restrict__ coords_out          // [batch_size, num_atoms, 3]
 ) {
 
     int idx_in_batch = blockIdx.x * blockDim.x + threadIdx.x;
 
-    const RealType box_x = box[0 * 3 + 0];
-    const RealType box_y = box[1 * 3 + 1];
-    const RealType box_z = box[2 * 3 + 2];
+    const double box_x = box[0 * 3 + 0];
+    const double box_y = box[1 * 3 + 1];
+    const double box_z = box[2 * 3 + 2];
 
-    const RealType inv_box_x = 1 / box_x;
-    const RealType inv_box_y = 1 / box_y;
-    const RealType inv_box_z = 1 / box_z;
+    const double inv_box_x = 1 / box_x;
+    const double inv_box_y = 1 / box_y;
+    const double inv_box_z = 1 / box_z;
 
     const int data_offset = offset[0];
-    // if (idx_in_batch == 0) {
-    //     printf("Data offset %d Total Proposals %d batch size %d\n", data_offset, total_proposals, batch_size);
-    // }
-
     while (idx_in_batch < batch_size) {
         int mol_sample = data_offset + idx_in_batch < total_proposals ? samples[idx_in_batch] : 0;
         int mol_start = mol_offsets[mol_sample];
         int mol_end = mol_offsets[mol_sample + 1];
         int num_atoms = mol_end - mol_start;
 
-        RealType ref_quat[4];
+        double ref_quat[4];
         ref_quat[0] = data_offset + idx_in_batch < total_proposals
                           ? quaternions[(data_offset * 4) + idx_in_batch * 4 + 0]
-                          : static_cast<RealType>(0.0);
+                          : static_cast<double>(0.0);
         ref_quat[1] = data_offset + idx_in_batch < total_proposals
                           ? quaternions[(data_offset * 4) + idx_in_batch * 4 + 1]
-                          : static_cast<RealType>(0.0);
+                          : static_cast<double>(0.0);
         ref_quat[2] = data_offset + idx_in_batch < total_proposals
                           ? quaternions[(data_offset * 4) + idx_in_batch * 4 + 2]
-                          : static_cast<RealType>(0.0);
+                          : static_cast<double>(0.0);
         ref_quat[3] = data_offset + idx_in_batch < total_proposals
                           ? quaternions[(data_offset * 4) + idx_in_batch * 4 + 3]
-                          : static_cast<RealType>(0.0);
+                          : static_cast<double>(0.0);
 
-        RealType translation_x;
-        RealType translation_y;
-        RealType translation_z;
+        double translation_x;
+        double translation_y;
+        double translation_z;
         if (SCALE) {
             translation_x = data_offset + idx_in_batch < total_proposals
                                 ? box_x * translations[(data_offset * 3) + idx_in_batch * 3 + 0]
-                                : static_cast<RealType>(0.0);
+                                : static_cast<double>(0.0);
             translation_y = data_offset + idx_in_batch < total_proposals
                                 ? box_y * translations[(data_offset * 3) + idx_in_batch * 3 + 1]
-                                : static_cast<RealType>(0.0);
+                                : static_cast<double>(0.0);
             translation_z = data_offset + idx_in_batch < total_proposals
                                 ? box_z * translations[(data_offset * 3) + idx_in_batch * 3 + 2]
-                                : static_cast<RealType>(0.0);
+                                : static_cast<double>(0.0);
         } else {
             translation_x = data_offset + idx_in_batch < total_proposals
                                 ? translations[(data_offset * 3) + idx_in_batch * 3 + 0]
-                                : static_cast<RealType>(0.0);
+                                : static_cast<double>(0.0);
             translation_y = data_offset + idx_in_batch < total_proposals
                                 ? translations[(data_offset * 3) + idx_in_batch * 3 + 1]
-                                : static_cast<RealType>(0.0);
+                                : static_cast<double>(0.0);
             translation_z = data_offset + idx_in_batch < total_proposals
                                 ? translations[(data_offset * 3) + idx_in_batch * 3 + 2]
-                                : static_cast<RealType>(0.0);
+                                : static_cast<double>(0.0);
         }
 
         // Image the translation in the home box
@@ -169,17 +165,17 @@ void __global__ k_rotate_and_translate_mols(
         unsigned long long centroid_accum_y = 0;
         unsigned long long centroid_accum_z = 0;
         for (int i = 0; i < num_atoms; i++) {
-            centroid_accum_x += FLOAT_TO_FIXED<RealType>(coords[(mol_start + i) * 3 + 0]);
-            centroid_accum_y += FLOAT_TO_FIXED<RealType>(coords[(mol_start + i) * 3 + 1]);
-            centroid_accum_z += FLOAT_TO_FIXED<RealType>(coords[(mol_start + i) * 3 + 2]);
+            centroid_accum_x += FLOAT_TO_FIXED<double>(coords[(mol_start + i) * 3 + 0]);
+            centroid_accum_y += FLOAT_TO_FIXED<double>(coords[(mol_start + i) * 3 + 1]);
+            centroid_accum_z += FLOAT_TO_FIXED<double>(coords[(mol_start + i) * 3 + 2]);
         }
 
-        RealType centroid_x = FIXED_TO_FLOAT<RealType>(centroid_accum_x) / static_cast<RealType>(num_atoms);
-        RealType centroid_y = FIXED_TO_FLOAT<RealType>(centroid_accum_y) / static_cast<RealType>(num_atoms);
-        RealType centroid_z = FIXED_TO_FLOAT<RealType>(centroid_accum_z) / static_cast<RealType>(num_atoms);
+        double centroid_x = FIXED_TO_FLOAT<double>(centroid_accum_x) / static_cast<double>(num_atoms);
+        double centroid_y = FIXED_TO_FLOAT<double>(centroid_accum_y) / static_cast<double>(num_atoms);
+        double centroid_z = FIXED_TO_FLOAT<double>(centroid_accum_z) / static_cast<double>(num_atoms);
 
-        RealType quat[4];
-        RealType local_coords[4];
+        double quat[4];
+        double local_coords[4];
         for (int i = 0; i < num_atoms; i++) {
             // Load in the quaternion from the reference buffer
             quat[0] = ref_quat[0];
@@ -211,29 +207,7 @@ void __global__ k_rotate_and_translate_mols(
 template void __global__ k_rotate_coordinates<float>(int, int, const double *, const float *, double *);
 template void __global__ k_rotate_coordinates<double>(int, int, const double *, const double *, double *);
 
-template void __global__ k_rotate_and_translate_mols<float, false>(
-    const int,
-    const int,
-    const int *,
-    const double *,
-    const double *,
-    const int *,
-    const int *,
-    const float *,
-    const float *,
-    double *);
-template void __global__ k_rotate_and_translate_mols<float, true>(
-    const int,
-    const int,
-    const int *,
-    const double *,
-    const double *,
-    const int *,
-    const int *,
-    const float *,
-    const float *,
-    double *);
-template void __global__ k_rotate_and_translate_mols<double, false>(
+template void __global__ k_rotate_and_translate_mols<false>(
     const int,
     const int,
     const int *,
@@ -244,7 +218,7 @@ template void __global__ k_rotate_and_translate_mols<double, false>(
     const double *,
     const double *,
     double *);
-template void __global__ k_rotate_and_translate_mols<double, true>(
+template void __global__ k_rotate_and_translate_mols<true>(
     const int,
     const int,
     const int *,
