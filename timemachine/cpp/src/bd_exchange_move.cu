@@ -165,12 +165,11 @@ void BDExchangeMove<RealType>::move(
     curandErrchk(templateCurandUniform(cr_rng_translations_, d_translations_.data, d_translations_.length));
     curandErrchk(templateCurandUniform(cr_rng_samples_, d_sample_noise_.data, d_sample_noise_.length));
     curandErrchk(templateCurandUniform(cr_rng_mh_, d_mh_noise_.data, d_mh_noise_.length));
-    size_t step = 0;
     // For the first pass just set the value to zero on the host
     p_noise_offset_.data[0] = 0;
     while (p_noise_offset_.data[0] < num_proposals_per_move_) {
         // Run only after the first pass, to maintain meaningful `log_probability_host` values
-        if (step > 0) {
+        if (p_noise_offset_.data[0] > 0) {
             // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
             // Need the weights to sample a value and the log probs are just because they aren't expensive to copy
             k_store_accepted_log_probability<RealType><<<ceil_divide(num_target_mols_, tpb), tpb, 0>>>(
@@ -245,7 +244,6 @@ void BDExchangeMove<RealType>::move(
         gpuErrchk(cudaPeekAtLastError());
         gpuErrchk(cudaMemcpyAsync(
             p_noise_offset_.data, d_noise_offset_.data, d_noise_offset_.size(), cudaMemcpyDeviceToHost, stream));
-        step++;
         // Synchronize to get the new offset
         gpuErrchk(cudaStreamSynchronize(stream));
     }
