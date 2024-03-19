@@ -69,9 +69,9 @@ void __global__ k_rotate_coordinates(
 
     RealType local_coords[4];
     local_coords[0] = 0; // Prepend a zero to the local coords
-    local_coords[1] = coords[coord_idx * 3 + 0];
-    local_coords[2] = coords[coord_idx * 3 + 1];
-    local_coords[3] = coords[coord_idx * 3 + 2];
+    local_coords[1] = static_cast<RealType>(coords[coord_idx * 3 + 0]);
+    local_coords[2] = static_cast<RealType>(coords[coord_idx * 3 + 1]);
+    local_coords[3] = static_cast<RealType>(coords[coord_idx * 3 + 2]);
 
     RealType quat[4];
     quat[0] = quaternions[rotation_idx * 4 + 0];
@@ -144,9 +144,9 @@ void __global__ k_rotate_and_translate_mols(
         unsigned long long centroid_accum_y = 0;
         unsigned long long centroid_accum_z = 0;
         for (int i = 0; i < num_atoms; i++) {
-            centroid_accum_x += FLOAT_TO_FIXED<RealType>(coords[(mol_start + i) * 3 + 0]);
-            centroid_accum_y += FLOAT_TO_FIXED<RealType>(coords[(mol_start + i) * 3 + 1]);
-            centroid_accum_z += FLOAT_TO_FIXED<RealType>(coords[(mol_start + i) * 3 + 2]);
+            centroid_accum_x += FLOAT_TO_FIXED<RealType>(static_cast<RealType>(coords[(mol_start + i) * 3 + 0]));
+            centroid_accum_y += FLOAT_TO_FIXED<RealType>(static_cast<RealType>(coords[(mol_start + i) * 3 + 1]));
+            centroid_accum_z += FLOAT_TO_FIXED<RealType>(static_cast<RealType>(coords[(mol_start + i) * 3 + 2]));
         }
 
         RealType centroid_x = FIXED_TO_FLOAT<RealType>(centroid_accum_x) / static_cast<RealType>(num_atoms);
@@ -163,9 +163,9 @@ void __global__ k_rotate_and_translate_mols(
             quat[3] = ref_quat[3];
 
             local_coords[0] = 0;
-            local_coords[1] = coords[(mol_start + i) * 3 + 0] - centroid_x;
-            local_coords[2] = coords[(mol_start + i) * 3 + 1] - centroid_y;
-            local_coords[3] = coords[(mol_start + i) * 3 + 2] - centroid_z;
+            local_coords[1] = static_cast<RealType>(coords[(mol_start + i) * 3 + 0]) - centroid_x;
+            local_coords[2] = static_cast<RealType>(coords[(mol_start + i) * 3 + 1]) - centroid_y;
+            local_coords[3] = static_cast<RealType>(coords[(mol_start + i) * 3 + 2]) - centroid_z;
 
             rotate_coordinates_by_quaternion(local_coords, quat);
 
