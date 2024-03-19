@@ -222,7 +222,7 @@ void __global__ k_adjust_sample_idxs(
 );
 
 template <typename RealType>
-void __global__ k_select_first_valid_move(
+void __global__ k_accept_first_valid_move(
     const int total_proposals,
     const int num_target_mols,
     const int batch_size,

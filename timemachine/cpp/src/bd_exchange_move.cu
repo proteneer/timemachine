@@ -214,7 +214,7 @@ void BDExchangeMove<RealType>::move(
             d_lse_exp_sum_after_.data,
             stream);
 
-        k_select_first_valid_move<RealType><<<1, min(512, batch_size_), 0, stream>>>(
+        k_accept_first_valid_move<RealType><<<1, min(512, batch_size_), 0, stream>>>(
             num_proposals_per_move_,
             num_target_mols_,
             batch_size_,

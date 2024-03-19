@@ -810,12 +810,12 @@ void __global__ k_adjust_sample_idxs(
     }
 }
 
-// k_select_first_valid_move selects the first sample within a batch of samples. Use AtomicMin to
+// k_accept_first_valid_move selects the first sample within a batch of samples. Use AtomicMin to
 // find the lowest index sample that was selected, then store that sample in accepted sample field. If no sample is
 // accepted store N in the accepted sample, indicating no valid sample. The accepted sample can also be used as the offset
 // for shifting the noise for backtracking
 template <typename RealType>
-void __global__ k_select_first_valid_move(
+void __global__ k_accept_first_valid_move(
     const int total_proposals,
     const int num_target_mols,
     const int batch_size,
@@ -863,7 +863,7 @@ void __global__ k_select_first_valid_move(
     }
 }
 
-template void __global__ k_select_first_valid_move<float>(
+template void __global__ k_accept_first_valid_move<float>(
     const int total_proposals,
     const int num_target_mols,
     const int batch_size,
@@ -877,7 +877,7 @@ template void __global__ k_select_first_valid_move<float>(
     int *__restrict__ accepted_sample         // [1]
 );
 
-template void __global__ k_select_first_valid_move<double>(
+template void __global__ k_accept_first_valid_move<double>(
     const int total_proposals,
     const int num_target_mols,
     const int batch_size,
