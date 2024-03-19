@@ -1,8 +1,9 @@
+import jax
 import numpy as np
 import pytest
 from common import GradientTest
 
-from timemachine.potentials import HarmonicAngle, HarmonicAngleStable
+from timemachine.potentials import HarmonicAngle, HarmonicAngleStable, bonded, bonded_stable
 
 
 def generate_system(n_particles, n_angles, seed):
@@ -56,7 +57,7 @@ def test_harmonic_angle_stable_bitwise_symmetric(n_particles, n_angles, precisio
 
 @pytest.mark.parametrize("n_particles", [64])
 @pytest.mark.parametrize("n_angles", [25])
-@pytest.mark.parametrize("precision,rtol", [(np.float32, 2e-5), (np.float64, 1e-9)])
+@pytest.mark.parametrize("precision,rtol", [(np.float64, 1e-9), (np.float32, 2.5e-5)])
 @pytest.mark.parametrize("seed", [2022])
 def test_harmonic_angle_stable_reduces_to_harmonic_angle(n_particles, n_angles, precision, rtol, seed):
     "Check that the stable functional form is equivalent to the standard one at eps = 0"
@@ -99,3 +100,19 @@ def test_harmonic_angle_finite_force_with_vanishing_bond_length(potential, param
     du_dx, _, _ = impl.execute(coords, params, box, 1, 0, 0)
     print(du_dx)
     assert (np.abs(du_dx) < 1e7).all()
+
+
+def test_harmonic_angle_stable_jax():
+    "Check that forces do not blow up when a bond has length close to zero"
+
+    angle_idxs = np.array([(0, 1, 2)])
+    coords = np.array([(0, 0, 0), (1e-9, 0, 0), (0, 1, 0)])
+    params = np.array([(1, 1, 0.001)])
+
+    grad_fn = jax.grad(bonded_stable.harmonic_angle_stable, argnums=(0,))
+    g = grad_fn(coords, params, angle_idxs)
+    assert (np.abs(g) < 1e7).all()
+
+    grad_fn = jax.grad(bonded.harmonic_angle, argnums=(0,))
+    g = grad_fn(coords, params, None, angle_idxs)
+    assert (np.abs(g) > 1e7).any()

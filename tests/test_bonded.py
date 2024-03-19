@@ -1,3 +1,4 @@
+import jax.numpy as jnp
 import numpy as np
 import pytest
 from common import GradientTest
@@ -14,6 +15,8 @@ from timemachine.potentials import (
 )
 
 pytestmark = [pytest.mark.memcheck]
+
+from timemachine.potentials.bonded import harmonic_angle
 
 
 class TestBonded(GradientTest):
@@ -244,6 +247,38 @@ class TestBonded(GradientTest):
             # we assert finite-ness of the forces.
             self.compare_forces(x, params, box, potential, potential.to_gpu(precision), rtol)
 
+    def test_harmonic_angle_jax_impl(self, n_particles=64, n_angles=25, dim=3):
+        # test that implementation of the harmonic angle using kahan's trick
+        # is consistent with the simple, original implementation
+
+        def original_harmonic_angle(conf, params, box, angle_idxs):
+            ci = conf[angle_idxs[:, 0]]
+            cj = conf[angle_idxs[:, 1]]
+            ck = conf[angle_idxs[:, 2]]
+            kas = params[:, 0]
+            a0s = params[:, 1]
+            rji = ci - cj
+            rjk = ck - cj
+            top = jnp.sum(jnp.multiply(rji, rjk), -1)
+            bot = jnp.linalg.norm(rji, axis=-1) * jnp.linalg.norm(rjk, axis=-1)
+            tb = top / bot
+            angle = jnp.arccos(tb)
+            energies = kas / 2 * jnp.power(angle - a0s, 2)
+            return jnp.sum(energies, -1)  # reduce over all angles
+
+        for _ in range(25):
+            x = self.get_random_coords(n_particles, dim)
+            atom_idxs = np.arange(n_particles)
+            params = np.random.rand(n_angles, 2).astype(np.float64)
+            angle_idxs = []
+            for _ in range(n_angles):
+                angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
+            angle_idxs = np.array(angle_idxs, dtype=np.int32) if n_angles else np.zeros((0, 3), dtype=np.int32)
+            box = np.eye(3) * 100
+            test_u = harmonic_angle(x, params, box, angle_idxs)
+            ref_u = original_harmonic_angle(x, params, box, angle_idxs)
+            np.testing.assert_almost_equal(test_u, ref_u)
+
     def test_harmonic_angle(self, n_particles=64, n_angles=25, dim=3):
         """Randomly connect triples of particles, then validate the resulting HarmonicAngle force"""
         np.random.seed(125)
@@ -266,7 +301,11 @@ class TestBonded(GradientTest):
         for precision, rtol in relative_tolerance_at_precision.items():
             self.compare_forces(x, params, box, potential, potential.to_gpu(precision), rtol)
 
-            # test bitwise commutativity
+            # (ytz): leave these tests here, we lost bitwise identical energies and forces
+            # when the ordering of atoms [ijk] is swapped to [jki] during the refactor to use the Kahan trick.
+            # even the angle computation itself is not guaranteed to be identical (let alone energies and forces).
+            # this isn't a deal breaker, but was just a nice to have.
+
             test_potential = HarmonicAngle(angle_idxs)
             test_potential_rev = HarmonicAngle(angle_idxs[:, ::-1])
 
@@ -278,8 +317,8 @@ class TestBonded(GradientTest):
             test_du_dx_rev, test_du_dp_rev, test_u_rev = test_potential_rev_impl.execute(x, params, box, 1, 1, 1)
 
             np.testing.assert_array_equal(test_u, test_u_rev)
-            np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
             np.testing.assert_array_equal(test_du_dp, test_du_dp_rev)
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_rev)
 
     def test_periodic_torsion(self, n_particles=64, n_torsions=25, dim=3):
         """Randomly connect quadruples of particles, then validate the resulting PeriodicTorsion force"""

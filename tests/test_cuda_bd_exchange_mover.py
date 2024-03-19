@@ -446,9 +446,9 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
 @pytest.mark.parametrize(
     "num_proposals_per_move,total_num_proposals,batch_size,box_size",
     [
-        pytest.param(1, 40000, 1, 3.0, marks=pytest.mark.nightly(reason="slow")),
-        (10000, 40000, 5, 3.0),
-        (10000, 250000, 200, 3.0),
+        pytest.param(1, 40000, 4.0, marks=pytest.mark.nightly(reason="slow")),
+        (5000, 40000, 4.0),
+        (10000, 250000, 4.0),
         # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
         pytest.param(1, 20000, 1, 6.0, marks=pytest.mark.nightly(reason="slow")),
     ],
