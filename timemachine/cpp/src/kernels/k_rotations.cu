@@ -1,3 +1,4 @@
+#include "assert.h"
 #include "k_fixed_point.cuh"
 #include "k_rotations.cuh"
 #include "stdio.h"
@@ -117,6 +118,7 @@ void __global__ k_rotate_and_translate_mols(
         int mol_start = mol_offsets[mol_sample];
         int mol_end = mol_offsets[mol_sample + 1];
         int num_atoms = mol_end - mol_start;
+        assert(num_atoms > 0);
 
         RealType ref_quat[4];
         ref_quat[0] = data_offset + idx_in_batch < total_proposals
