@@ -82,7 +82,7 @@ void __global__ k_accepted_exchange_move(
     assert(idx == 0);
 
     const int batch_idx = accepted_batched_move[0];
-    // If the selected mol is not less then the total batch size, no proposal was accepted, we can exit immediately.
+    // If the selected batch idx is not less then the total batch size, no proposal was accepted, we can exit immediately.
     if (batch_idx >= batch_size) {
         rand_offset[0] += batch_size;
         return;
