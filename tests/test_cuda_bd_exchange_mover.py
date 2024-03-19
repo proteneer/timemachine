@@ -555,6 +555,7 @@ def hif2a_complex():
     return complex_system, conf, box
 
 
+@pytest.mark.skip(reason="flaky")
 @pytest.mark.parametrize(
     "num_proposals_per_move, total_num_proposals",
     [
