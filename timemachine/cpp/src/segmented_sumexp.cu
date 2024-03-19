@@ -16,12 +16,12 @@ SegmentedSumExp<RealType>::SegmentedSumExp(const int max_vals_per_segment, const
     int *dummy_offsets = nullptr;
     RealType *dummy_in = nullptr;
     size_t max_storage_bytes = 0;
-    cub::DeviceSegmentedReduce::Max(
-        dummy_temp, max_storage_bytes, dummy_in, dummy_in, num_segments_, dummy_offsets, dummy_offsets);
+    gpuErrchk(cub::DeviceSegmentedReduce::Max(
+        dummy_temp, max_storage_bytes, dummy_in, dummy_in, num_segments_, dummy_offsets, dummy_offsets));
 
     size_t sum_storage_bytes = 0;
-    cub::DeviceSegmentedReduce::Sum(
-        dummy_temp, sum_storage_bytes, dummy_in, dummy_in, num_segments_, dummy_offsets, dummy_offsets);
+    gpuErrchk(cub::DeviceSegmentedReduce::Sum(
+        dummy_temp, sum_storage_bytes, dummy_in, dummy_in, num_segments_, dummy_offsets, dummy_offsets));
 
     // Allocate the larger of the two intermediate values, as we need to run both max and sum
     temp_storage_bytes_ = max(max_storage_bytes, sum_storage_bytes);
