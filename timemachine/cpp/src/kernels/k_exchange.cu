@@ -34,7 +34,7 @@ k_copy_batch<double>(const int N, const int batch_size, const double *__restrict
 // the starting atom idx rather than the prefix sum of mol lengths that the mol_offsets is.
 void __global__ k_setup_proposals(
     const int total_proposals,
-    const int batch_size,            // Number of molecules to setup
+    const int batch_size,            // Number of proposals to setup
     const int num_atoms_in_each_mol, // number of atoms in each sample
     const int *__restrict__ rand_offset,
     const int *__restrict__ mol_idx_per_batch, // [batch_size] The index of the molecules to sample
@@ -82,14 +82,14 @@ void __global__ k_accepted_exchange_move(
     assert(idx == 0);
 
     const int batch_idx = accepted_batched_move[0];
-    // If the selected batch idx is not less then the total batch size, no proposal was accepted, we can exit immediately.
+    // If the selected batch idx is not less than the total batch size, no proposal was accepted, we can exit immediately.
     if (batch_idx >= batch_size) {
         rand_offset[0] += batch_size;
         return;
     }
     const int mol_idx = mol_idx_per_batch[batch_idx];
     const int mol_start = mol_offsets[mol_idx];
-    // Increment offset by the index + 1, IE if the zeroth item in the batch was accepted offset by 1
+    // Increment offset by the index + 1, IE the Nth item in the batch being accepted results in incrementing by N + 1
     rand_offset[0] += batch_idx + 1;
     if (threadIdx.x == 0) {
         num_accepted[0]++;
@@ -236,7 +236,7 @@ void __global__ k_store_accepted_log_probability(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     const int batch_idx = accepted_batched_move[0];
-    // If the selected mol is not less then the total batch size, no proposal was accepted, we can exit immediately.
+    // If the selected mol is not less than the total batch size, no proposal was accepted, we can exit immediately.
     if (batch_idx >= batch_size) {
         return;
     }
