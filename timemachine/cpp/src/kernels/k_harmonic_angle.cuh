@@ -1,9 +1,11 @@
+#pragma once
+
 #include "../fixed_point.hpp"
 #include "k_fixed_point.cuh"
 
 namespace timemachine {
 
-template <typename RealType, int D>
+template <typename RealType>
 void __global__ k_harmonic_angle(
     const int A,                        // number of bonds
     const double *__restrict__ coords,  // [N, 3]
@@ -19,34 +21,9 @@ void __global__ k_harmonic_angle(
         return;
     }
 
-    int i_idx = angle_idxs[a_idx * D + 0];
-    int j_idx = angle_idxs[a_idx * D + 1];
-    int k_idx = angle_idxs[a_idx * D + 2];
-
-    RealType rij[D];
-    RealType rjk[D];
-    RealType nij = 0; // initialize your summed variables!
-    RealType njk = 0; // initialize your summed variables!
-    RealType top = 0;
-    // this is a little confusing
-    for (int d = 0; d < D; d++) {
-        RealType vij = coords[j_idx * D + d] - coords[i_idx * D + d];
-        RealType vjk = coords[j_idx * D + d] - coords[k_idx * D + d];
-
-        rij[d] = vij;
-        rjk[d] = vjk;
-        nij += vij * vij;
-        njk += vjk * vjk;
-
-        top += vij * vjk;
-    }
-
-    nij = sqrt(nij);
-    njk = sqrt(njk);
-
-    RealType nijk = nij * njk;
-    RealType n3ij = nij * nij * nij;
-    RealType n3jk = njk * njk * njk;
+    int i_idx = angle_idxs[a_idx * 3 + 0];
+    int j_idx = angle_idxs[a_idx * 3 + 1];
+    int k_idx = angle_idxs[a_idx * 3 + 2];
 
     int ka_idx = a_idx * 2 + 0;
     int a0_idx = a_idx * 2 + 1;
@@ -54,32 +31,107 @@ void __global__ k_harmonic_angle(
     RealType ka = params[ka_idx];
     RealType a0 = params[a0_idx];
 
-    RealType delta = top / nijk - cos(a0);
+    RealType rji[3];  // vector from j to i
+    RealType rjk[3];  // vector from j to k
+    RealType nji = 0; // initialize your summed variables!
+    RealType njk = 0; // initialize your summed variables!
+    // first pass, compute the norms
+    for (int d = 0; d < 3; d++) {
+        RealType vji = coords[i_idx * 3 + d] - coords[j_idx * 3 + d];
+        RealType vjk = coords[k_idx * 3 + d] - coords[j_idx * 3 + d];
+        rji[d] = vji;
+        rjk[d] = vjk;
+        nji += vji * vji;
+        njk += vjk * vjk;
+    }
+
+    nji = sqrt(nji);
+    njk = sqrt(njk);
+
+    RealType hi = 0;
+    RealType lo = 0;
+
+    // second pass, compute the hi/lo values
+    for (int d = 0; d < 3; d++) {
+        RealType vji = rji[d]; // coords[i_idx * 3 + d] - coords[j_idx * 3 + d];
+        RealType vjk = rjk[d]; // coords[k_idx * 3 + d] - coords[j_idx * 3 + d];
+        // rsub/radds are used to maintain bitwise reversibility wrt i and k
+        RealType a = rsub_rn(njk * vji, nji * vjk);
+        RealType b = radd_rn(njk * vji, nji * vjk);
+        hi += a * a;
+        lo += b * b;
+    }
+
+    RealType y = sqrt(hi);
+    RealType x = sqrt(lo);
+    RealType angle = 2 * atan2(y, x);
+    RealType delta = angle - a0;
+
+    auto a = rji;
+    auto b = rjk;
+    RealType a_norm = nji;
+    RealType b_norm = njk;
+
+    // use the identity: a x (b x c) = b(a.c) - c(a.b)
+    RealType a_dot_b = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    RealType a_dot_a = a[0] * a[0] + a[1] * a[1] + a[2] * a[2];
+    RealType b_dot_b = b[0] * b[0] + b[1] * b[1] + b[2] * b[2];
+
+    RealType aab[3];
+    RealType bba[3];
+
+    for (int d = 0; d < 3; d++) {
+        aab[d] = a[d] * a_dot_b - b[d] * a_dot_a;
+        bba[d] = b[d] * a_dot_b - a[d] * b_dot_b;
+    }
+
+    RealType aab_norm = sqrt(aab[0] * aab[0] + aab[1] * aab[1] + aab[2] * aab[2]);
+    RealType bba_norm = sqrt(bba[0] * bba[0] + bba[1] * bba[1] + bba[2] * bba[2]);
+    RealType prefactor = ka * delta;
+
+    auto coeff_i = prefactor * (1 / a_norm);
+    auto coeff_k = prefactor * (1 / b_norm);
 
     if (du_dx) {
-        for (int d = 0; d < D; d++) {
-            RealType grad_i = ka * delta * (rij[d] * top / (n3ij * njk) + (-rjk[d]) / nijk);
-            atomicAdd(du_dx + i_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(grad_i));
+        RealType grad_i[3];
+        RealType grad_k[3];
 
-            RealType grad_j =
-                ka * delta *
-                ((-rij[d] * top / (n3ij * njk) + (-rjk[d]) * top / (nij * n3jk) + (rij[d] + rjk[d]) / nijk));
-            atomicAdd(du_dx + j_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(grad_j));
-
-            RealType grad_k = ka * delta * (-rij[d] / nijk + rjk[d] * top / (nij * n3jk));
-            atomicAdd(du_dx + k_idx * D + d, FLOAT_TO_FIXED_BONDED<RealType>(grad_k));
+        for (int d = 0; d < 3; d++) {
+            grad_i[d] = (aab_norm == 0) ? 0 : aab[d] / aab_norm;
+            grad_k[d] = (bba_norm == 0) ? 0 : bba[d] / bba_norm;
         }
+
+        RealType dx_i = coeff_i * grad_i[0];
+        RealType dy_i = coeff_i * grad_i[1];
+        RealType dz_i = coeff_i * grad_i[2];
+
+        atomicAdd(du_dx + i_idx * 3 + 0, FLOAT_TO_FIXED_BONDED<RealType>(dx_i));
+        atomicAdd(du_dx + i_idx * 3 + 1, FLOAT_TO_FIXED_BONDED<RealType>(dy_i));
+        atomicAdd(du_dx + i_idx * 3 + 2, FLOAT_TO_FIXED_BONDED<RealType>(dz_i));
+
+        RealType dx_k = coeff_k * grad_k[0];
+        RealType dy_k = coeff_k * grad_k[1];
+        RealType dz_k = coeff_k * grad_k[2];
+
+        atomicAdd(du_dx + k_idx * 3 + 0, FLOAT_TO_FIXED_BONDED<RealType>(dx_k));
+        atomicAdd(du_dx + k_idx * 3 + 1, FLOAT_TO_FIXED_BONDED<RealType>(dy_k));
+        atomicAdd(du_dx + k_idx * 3 + 2, FLOAT_TO_FIXED_BONDED<RealType>(dz_k));
+
+        atomicAdd(du_dx + j_idx * 3 + 0, FLOAT_TO_FIXED_BONDED<RealType>(-dx_i - dx_k));
+        atomicAdd(du_dx + j_idx * 3 + 1, FLOAT_TO_FIXED_BONDED<RealType>(-dy_i - dy_k));
+        atomicAdd(du_dx + j_idx * 3 + 2, FLOAT_TO_FIXED_BONDED<RealType>(-dz_i - dz_k));
     }
 
     if (du_dp) {
         RealType dka_grad = delta * delta / 2;
         atomicAdd(du_dp + ka_idx, FLOAT_TO_FIXED_BONDED(dka_grad));
-        RealType da0_grad = delta * ka * sin(a0);
+
+        RealType da0_grad = -delta * ka;
         atomicAdd(du_dp + a0_idx, FLOAT_TO_FIXED_BONDED(da0_grad));
     }
 
     if (u) {
-        u[a_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(ka / 2 * delta * delta);
+        u[a_idx] = FLOAT_TO_FIXED_ENERGY<RealType>((ka / 2) * delta * delta);
     }
 }
 

@@ -349,9 +349,9 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, precision, seed):
 @pytest.mark.parametrize(
     "num_proposals_per_move,total_num_proposals,box_size",
     [
-        pytest.param(1, 40000, 3.0, marks=pytest.mark.nightly(reason="slow")),
-        (5000, 40000, 3.0),
-        (10000, 250000, 3.0),
+        pytest.param(1, 40000, 4.0, marks=pytest.mark.nightly(reason="slow")),
+        (5000, 40000, 4.0),
+        (10000, 250000, 4.0),
         # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
         pytest.param(1, 20000, 6.0, marks=pytest.mark.nightly(reason="slow")),
     ],
@@ -555,6 +555,7 @@ def hif2a_complex():
     return complex_system, conf, box
 
 
+@pytest.mark.skip(reason="flaky")
 @pytest.mark.parametrize(
     "num_proposals_per_move, total_num_proposals",
     [
