@@ -85,7 +85,7 @@ def verify_bias_deletion_moves(
 
         last_conf = x_move
     assert bdem.n_proposed() == total_num_proposals
-    print(f"Accepted { bdem.n_accepted()} of {total_num_proposals} moves")
+    print(f"Accepted {bdem.n_accepted()} of {total_num_proposals} moves")
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)

@@ -21,8 +21,8 @@ protected:
     DeviceBuffer<curandState_t> d_rand_states_;
 
     DeviceBuffer<int> d_inner_mols_count_;    // [1]
-    DeviceBuffer<int> d_identify_indices_;    // [num_target_mols_]
-    DeviceBuffer<int> d_partitioned_indices_; // [num_target_mols_]
+    DeviceBuffer<int> d_identify_indices_;    // [this->num_target_mols_]
+    DeviceBuffer<int> d_partitioned_indices_; // [this->num_target_mols_]
     DeviceBuffer<char> d_temp_storage_buffer_;
     size_t temp_storage_bytes_;
 
@@ -33,16 +33,19 @@ protected:
     DeviceBuffer<int> d_targeting_inner_vol_;       // [1]
 
     DeviceBuffer<int> d_ligand_idxs_;
-    DeviceBuffer<RealType> d_src_log_weights_;  // [num_target_mols_ * this->batch_size_]
-    DeviceBuffer<RealType> d_dest_log_weights_; // [num_target_mols_ * this->batch_size_]
-    DeviceBuffer<int> d_inner_flags_;           // [num_target_mols_]
+    DeviceBuffer<RealType> d_src_log_weights_;  // [this->num_target_mols_ * this->batch_size_]
+    DeviceBuffer<RealType> d_dest_log_weights_; // [this->num_target_mols_ * this->batch_size_]
+    DeviceBuffer<int> d_inner_flags_;           // [this->num_target_mols_]
     DeviceBuffer<RealType> d_box_volume_;       // [1]
 
 private:
-    DeviceBuffer<RealType> d_selected_translation_;    // [this->batch_size_, 3] The translation selected to run
+    DeviceBuffer<RealType> d_selected_translations_;   // [this->batch_size_, 3] The translation selected to run
     DeviceBuffer<int> d_sample_after_segment_offsets_; // [this->batch_size_ + 1]
     DeviceBuffer<int> d_weights_before_counts_;        // [this->batch_size_]
     DeviceBuffer<int> d_weights_after_counts_;         // [this->batch_size_]
+
+    DeviceBuffer<RealType> d_lse_max_src_;     // [this->batch_size, this->num_target_mols_]
+    DeviceBuffer<RealType> d_lse_exp_sum_src_; // [this->batch_size, this->num_target_mols_]
 
 public:
     TIBDExchangeMove(
@@ -57,7 +60,7 @@ public:
         const int seed,
         const int proposals_per_move,
         const int interval,
-        const int proposals_per_step);
+        const int batch_size);
 
     ~TIBDExchangeMove();
 

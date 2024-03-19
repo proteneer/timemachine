@@ -7,6 +7,7 @@
 #include "kernels/k_nonbonded.cuh"
 #include "kernels/k_probability.cuh"
 #include "kernels/k_rotations.cuh"
+#include "kernels/k_sampling.cuh"
 #include "kernels/k_translations.cuh"
 #include "math_utils.cuh"
 #include "mol_utils.hpp"
@@ -50,9 +51,11 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       d_uniform_noise_buffer_(num_proposals_per_move), d_targeting_inner_vol_(this->batch_size_),
       d_ligand_idxs_(ligand_idxs), d_src_log_weights_(this->num_target_mols_ * this->batch_size_),
       d_dest_log_weights_(this->num_target_mols_ * this->batch_size_), d_inner_flags_(this->num_target_mols_),
-      d_box_volume_(1), d_selected_translation_(this->batch_size_ * 3),
+      d_box_volume_(1),
+      d_selected_translations_(this->num_proposals_per_move_ * 3), // TBD: Duplicating some jank... sad
       d_sample_after_segment_offsets_(this->d_sample_segments_offsets_.length),
-      d_weights_before_counts_(this->batch_size_), d_weights_after_counts_(this->batch_size_) {
+      d_weights_before_counts_(this->batch_size_), d_weights_after_counts_(this->batch_size_),
+      d_lse_max_src_(this->batch_size_), d_lse_exp_sum_src_(this->batch_size_) {
 
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
@@ -127,6 +130,10 @@ void TIBDExchangeMove<RealType>::move(
     curandErrchk(curandSetStream(this->cr_rng_samples_, stream));
     curandErrchk(curandSetStream(this->cr_rng_mh_, stream));
 
+    // Set the offset to 0
+    gpuErrchk(cudaMemsetAsync(this->d_noise_offset_.data, 0, this->d_noise_offset_.size(), stream));
+    gpuErrchk(cudaMemsetAsync(this->d_sampler_noise_offset_.data, 0, this->d_sampler_noise_offset_.size(), stream));
+
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
@@ -163,10 +170,42 @@ void TIBDExchangeMove<RealType>::move(
     curandErrchk(
         templateCurandUniform(this->cr_rng_samples_, this->d_sample_noise_.data, this->d_sample_noise_.length));
     k_generate_translations_inside_and_outside_sphere<<<1, d_rand_states_.length, 0, stream>>>(
-        this->steps_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, this->d_translations_.data);
+        this->num_proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, this->d_translations_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    for (int step = 0; step < this->steps_per_move_; step++) {
+    /* --Algorithm Description--
+    * Targeted Insertion Biased Deletion algorithm is as follows
+    *
+    * 1. Generate all random noise upfront to ensure bitwise identical results regardless of batch size
+    * 2. Compute the initial weights of each of the molecules (no batching)
+    * 3. Copy the initial weights (d_log_weights_before_) to the proposal weight buffers (d_log_weights_after_),
+    *    duplicating the values for each proposal in the batch
+    * 4. Flag the target molecules that are inside and outside the target region
+    * 5. Set up the proposals determining if they should be targeting the inner region or the outer region
+    * 6. Construct the offsets for the initial weights (d_src_log_weights_) and after (d_log_weights_after_) log weights
+    * 7. Separate out the weights (targeting inner region only looks at outer mols) associated with each proposal
+    * 8. For each proposal in the batch sample a weight index from the initial weights, aiming to select indexes with high energies
+    * 9. Compute the logexpsum (using SegmentedSumExp and compute_logsumexp_final) of each proposal's initial weights.
+    * 10. Remap the indexes selected in 8. back to molecule indexes to be able to determine which coordinates to modify in the next
+    *     step.
+    * 11. Generate the proposals for all of the sampled molecules in the batch, rotating and translating the mols to the new
+    *    positions.
+    * 12. For each proposal in the batch separate out the proposals weights into the after log weights.
+    * 13. Compute the logexpsum (using SegmentedSumExp and compute_logsumexp_final) of each proposal's after log weights.
+    * 14. Find the first proposal in the batch that was accepted with the metropolis hasting check
+    * 15. If a move was accepted, update the new proposed coordinates and increment the noise offset (d_noise_offset_)
+    *     by the value in the batch that was accepted.
+    *
+    * NOTE: The noise offset is used to determine where in the noise buffers the kernels should look. If a kernel is expecting to
+    *       access data beyond the total number of proposals, the kernels leave the buffers untouched. This offset to to
+    *       ensure that with a batch size of 1 or 1000 the sequence of proposals is bitwise identical, by using the same noise for
+    *       each proposal in the sequence.
+    * NOTE: Each proposal has its own initial weights that are the weights of the region where molecules are being deleted from.
+    */
+
+    // For the first pass just set the value to zero on the host
+    *this->p_noise_offset_.data = 0;
+    while (*this->p_noise_offset_.data < this->num_proposals_per_move_) {
         // To ensure determinism between running 1 step per move or K steps per move we have to partition each pass
         // Ordering is consistent, with the tail reversed.
         // https://nvlabs.github.io/cub/structcub_1_1_device_partition.html#a47515ec2a15804719db1b8f3b3124e43
@@ -181,26 +220,20 @@ void TIBDExchangeMove<RealType>::move(
             stream));
 
         k_decide_targeted_moves<<<sample_blocks, tpb, 0, stream>>>(
+            this->num_proposals_per_move_,
             this->batch_size_,
             this->num_target_mols_,
-            this->d_uniform_noise_buffer_.data + (step * this->batch_size_),
+            this->d_noise_offset_.data,
+            this->d_uniform_noise_buffer_.data,
             d_inner_mols_count_.data,
-            this->d_translations_.data + (step * TIBD_TRANSLATIONS_PER_STEP_XYZXYZ * this->batch_size_),
+            this->d_translations_.data,
             d_targeting_inner_vol_.data,
             d_weights_before_counts_.data,
             d_weights_after_counts_.data,
-            d_selected_translation_.data);
+            d_selected_translations_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        k_separate_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
-            this->num_target_mols_,
-            d_targeting_inner_vol_.data,
-            d_inner_mols_count_.data,
-            d_partitioned_indices_.data,
-            this->d_log_weights_before_.data,
-            d_src_log_weights_.data);
-        gpuErrchk(cudaPeekAtLastError());
-
+        // TBD: Combine the two inclusive sums into a single large inclusive sum
         gpuErrchk(cub::DeviceScan::InclusiveSum(
             d_temp_storage_buffer_.data,
             temp_storage_bytes_,
@@ -217,12 +250,34 @@ void TIBDExchangeMove<RealType>::move(
             this->batch_size_,
             stream));
 
-        this->sampler_.sample_given_noise_device(
+        k_separate_weights_for_targeted<RealType><<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
+            this->batch_size_,
             this->num_target_mols_,
+            this->d_sample_segments_offsets_.data,
+            d_targeting_inner_vol_.data,
+            d_inner_mols_count_.data,
+            d_partitioned_indices_.data,
+            this->d_log_weights_before_.data,
+            d_src_log_weights_.data);
+        gpuErrchk(cudaPeekAtLastError());
+
+        // Have to construct the gumbel buffer directly here to get the sampler to be bitwise deterministic
+        // refer to k_setup_gumbel_max_trick_targeted_insertion impl documentation.
+        k_setup_gumbel_max_trick_targeted_insertion<RealType>
+            <<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
+                this->batch_size_,
+                this->num_target_mols_,
+                static_cast<int>(this->d_sample_noise_.length),
+                this->d_sampler_noise_offset_.data,
+                this->d_sample_segments_offsets_.data,
+                d_src_log_weights_.data,
+                this->d_sample_noise_.data,
+                this->d_sampling_intermediate_.data);
+        gpuErrchk(cudaPeekAtLastError());
+
+        this->sampler_.sample_given_gumbel_noise_device(
             this->batch_size_,
             this->d_sample_segments_offsets_.data,
-            d_src_log_weights_.data,
-            this->d_sample_noise_.data + (step * this->num_target_mols_ * this->batch_size_),
             this->d_sampling_intermediate_.data,
             this->d_samples_.data,
             stream);
@@ -232,8 +287,8 @@ void TIBDExchangeMove<RealType>::move(
             this->batch_size_,
             this->d_sample_segments_offsets_.data,
             d_src_log_weights_.data,
-            this->d_lse_max_before_.data,
-            this->d_lse_exp_sum_before_.data,
+            d_lse_max_src_.data,
+            d_lse_exp_sum_src_.data,
             stream);
 
         // Selected an index from the src weights, need to remap the samples idx to the mol indices
@@ -247,19 +302,15 @@ void TIBDExchangeMove<RealType>::move(
 
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
-        // Don't scale the translations as they are computed to be within the region
+        // Don't scale the translations as they are computed to be within the targeted region
         this->compute_incremental_weights_device(
-            N,
-            false,
-            d_box,
-            d_coords,
-            this->d_quaternions_.data + (step * this->QUATERNIONS_PER_STEP),
-            this->d_selected_translation_.data,
-            stream);
+            N, false, d_box, d_coords, this->d_quaternions_.data, this->d_selected_translations_.data, stream);
 
-        k_setup_destination_weights_for_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
+        k_setup_destination_weights_for_targeted<RealType><<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
+            this->batch_size_,
             this->num_target_mols_,
             this->d_samples_.data,
+            d_sample_after_segment_offsets_.data,
             d_targeting_inner_vol_.data,
             d_inner_mols_count_.data,
             d_partitioned_indices_.data,
@@ -270,34 +321,57 @@ void TIBDExchangeMove<RealType>::move(
         this->logsumexp_.sum_device(
             this->num_target_mols_ * this->batch_size_,
             this->batch_size_,
-            this->d_sample_after_segment_offsets_.data,
+            d_sample_after_segment_offsets_.data,
             d_dest_log_weights_.data,
             this->d_lse_max_after_.data,
             this->d_lse_exp_sum_after_.data,
             stream);
 
-        k_attempt_exchange_move_targeted<RealType><<<ceil_divide(this->num_target_mols_, tpb), tpb, 0, stream>>>(
+        k_accept_first_valid_move_targeted<RealType><<<1, min(512, this->batch_size_), 0, stream>>>(
+            this->num_proposals_per_move_,
             this->num_target_mols_,
+            this->batch_size_,
+            inner_volume_,
             d_targeting_inner_vol_.data,
             d_inner_mols_count_.data,
             d_box_volume_.data,
-            inner_volume_,
-            this->d_mh_noise_.data + (step * this->batch_size_),
+            this->d_noise_offset_.data,
             this->d_samples_.data,
-            this->d_lse_max_before_.data,
-            this->d_lse_exp_sum_before_.data,
+            d_lse_max_src_.data,
+            d_lse_exp_sum_src_.data,
             this->d_lse_max_after_.data,
             this->d_lse_exp_sum_after_.data,
+            this->d_mh_noise_.data,
+            this->d_selected_sample_.data);
+        gpuErrchk(cudaPeekAtLastError());
+
+        k_store_exchange_move_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
+            this->batch_size_,
+            this->num_target_mols_,
+            this->d_selected_sample_.data,
+            this->d_samples_.data,
             this->d_target_mol_offsets_.data,
+            this->d_sample_segments_offsets_.data,
             this->d_intermediate_coords_.data,
             d_coords,
             this->d_log_weights_before_.data,
             this->d_log_weights_after_.data,
+            this->d_noise_offset_.data,
+            this->d_sampler_noise_offset_.data,
             d_inner_flags_.data,
             this->d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
-        this->num_attempted_++;
+
+        gpuErrchk(cudaMemcpyAsync(
+            this->p_noise_offset_.data,
+            this->d_noise_offset_.data,
+            this->d_noise_offset_.size(),
+            cudaMemcpyDeviceToHost,
+            stream));
+        // Synchronize to get the new offset
+        gpuErrchk(cudaStreamSynchronize(stream));
     }
+    this->num_attempted_ += this->num_proposals_per_move_;
 }
 
 template <typename RealType>
@@ -330,18 +404,18 @@ TIBDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const
 }
 
 template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probability_host() {
-    std::vector<RealType> h_log_exp_before(2);
-    std::vector<RealType> h_log_exp_after(2);
-    this->d_lse_max_before_.copy_to(&h_log_exp_before[0]);
-    this->d_lse_exp_sum_before_.copy_to(&h_log_exp_before[1]);
+    std::vector<RealType> h_log_exp_src(2 * this->batch_size_);
+    std::vector<RealType> h_log_exp_after(2 * this->batch_size_);
+    d_lse_max_src_.copy_to(&h_log_exp_src[0]);
+    d_lse_exp_sum_src_.copy_to(&h_log_exp_src[this->batch_size_]);
     this->d_lse_max_after_.copy_to(&h_log_exp_after[0]);
-    this->d_lse_exp_sum_after_.copy_to(&h_log_exp_after[1]);
+    this->d_lse_exp_sum_after_.copy_to(&h_log_exp_after[this->batch_size_]);
 
-    int h_targeting_inner_vol[1];
+    int h_targeting_inner_vol[this->batch_size_];
     d_targeting_inner_vol_.copy_to(h_targeting_inner_vol);
 
-    int local_inner_count[1];
-    d_inner_mols_count_.copy_to(local_inner_count);
+    int h_local_inner_count[1];
+    d_inner_mols_count_.copy_to(h_local_inner_count);
 
     RealType h_box_vol;
     d_box_volume_.copy_to(&h_box_vol);
@@ -352,12 +426,12 @@ template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probabil
         h_targeting_inner_vol[0],
         inner_volume_,
         outer_vol,
-        local_inner_count[0],
+        h_local_inner_count[0],
         this->num_target_mols_,
-        &h_log_exp_before[0],
-        &h_log_exp_before[1],
+        &h_log_exp_src[0],
+        &h_log_exp_src[this->batch_size_],
         &h_log_exp_after[0],
-        &h_log_exp_after[1]);
+        &h_log_exp_after[this->batch_size_]);
 
     return static_cast<double>(raw_log_acceptance);
 }
