@@ -83,6 +83,7 @@ def verify_targeted_moves(
                 new_pos = x_move[mol_idxs]
                 idx = i
         if num_moved > 0:
+            print(f"Accepted {num_moved} moves on step {step}")
             accepted += 1
         if num_moved == 1:
             # The molecules should all be imaged in the home box
@@ -121,6 +122,7 @@ def verify_targeted_moves(
             # can only be done when we only attempt a single move per step
             if proposals_per_move == 1:
                 raw_test_log_prob = bdem.last_raw_log_probability()
+                # print("Raw test log prob", raw_test_log_prob)
                 # Verify that the raw, without min(x, 0.0), probabilities match coarsely
                 np.testing.assert_allclose(
                     np.exp(raw_test_log_prob),
@@ -472,11 +474,13 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
         verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, proposals_per_move, rtol, atol)
 
 
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(20000, 1), (20000, 200)])
 @pytest.mark.parametrize("radius", [1.3])
 @pytest.mark.parametrize("precision", [np.float32])
 @pytest.mark.parametrize("seed", [2023])
-def test_targeted_insertion_brd4_rbfe_with_context(brd4_rbfe_state, radius, precision, seed):
-    proposals_per_move = 20000
+def test_targeted_insertion_brd4_rbfe_with_context(
+    brd4_rbfe_state, proposals_per_move, batch_size, radius, precision, seed
+):
     # Interval has to be large enough to resolve clashes in the MD steps
     interval = 800
     steps = interval * 10
@@ -525,6 +529,7 @@ def test_targeted_insertion_brd4_rbfe_with_context(brd4_rbfe_state, radius, prec
         seed,
         proposals_per_move,
         interval,
+        batch_size=batch_size,
     )
 
     ctxt = custom_ops.Context(
@@ -544,12 +549,102 @@ def test_targeted_insertion_brd4_rbfe_with_context(brd4_rbfe_state, radius, prec
         check_force_norm(-du_dx)
 
 
-@pytest.mark.memcheck
 @pytest.mark.parametrize("radius", [1.0])
-@pytest.mark.parametrize("proposals_per_move", [1, 100])
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(2, 2), (100, 100), (512, 512), (2000, 1000)])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("seed", [2024])
+def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, batch_size, precision, seed):
+    """Verify that if we run with the same batch size but either call `move()` repeatedly or just
+    increase the number of proposals per move in the constructor that the results should be identical
+    """
+    rng = np.random.default_rng(seed)
+    ff = Forcefield.load_default()
+    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+
+    # Get first two mols as the ones two move
+    group_idxs = all_group_idxs[:2]
+
+    center_group = all_group_idxs[2]
+
+    all_group_idxs = all_group_idxs[:3]
+
+    conf_idxs = np.array(all_group_idxs).reshape(-1)
+
+    conf = conf[conf_idxs]
+
+    box = np.eye(3) * 100.0
+
+    # Re-image coords so that everything is imaged to begin with
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+
+    params = nb.params[conf_idxs]
+
+    cutoff = nb.potential.cutoff
+
+    klass = custom_ops.TIBDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.TIBDExchangeMove_f64
+
+    iterations = rng.integers(2, 5)
+
+    # Reference that makes proposals_per_move proposals per move() call
+    bdem_a = klass(
+        N,
+        center_group,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        1,
+    )
+
+    bdem_b = klass(
+        N,
+        center_group,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move * iterations,
+        1,
+        batch_size=batch_size,
+    )
+
+    iterative_moved_coords = conf.copy()
+    for _ in range(iterations):
+        iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
+        assert not np.all(conf == iterative_moved_coords)
+    batch_moved_coords, _ = bdem_b.move(conf, box)
+
+    assert bdem_a.n_accepted() > 0
+    assert bdem_a.n_proposed() == proposals_per_move * iterations
+    assert bdem_a.n_accepted() == bdem_b.n_accepted()
+    assert bdem_a.n_proposed() == bdem_b.n_proposed()
+
+    # Moves should be deterministic regardless the number of steps taken per move
+    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
+
+
+@pytest.mark.parametrize("radius", [1.0])
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(5, 1), (100, 1), (5, 5), (100, 100)])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
-def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision, seed):
+def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_size, precision, seed):
     """Given one water the exchange mover should accept every move and the results should be deterministic if the seed and proposals per move are the same.
 
 
@@ -619,6 +714,7 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision
         seed,
         proposals_per_move,
         1,
+        batch_size=batch_size,
     )
 
     iterative_moved_coords = conf.copy()
@@ -626,29 +722,32 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision
         iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
         assert not np.all(conf == iterative_moved_coords)  # We should move every time since its a single mol
     batch_moved_coords, _ = bdem_b.move(conf, box)
-    # Moves should be deterministic regardless the number of steps taken per move
-    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
-
+    # Where the batch size is 1 the last log probabilities should match exactly
+    if batch_size == 1:
+        assert bdem_a.last_log_probability() == bdem_b.last_log_probability()
     assert bdem_a.n_accepted() > 0
     assert bdem_a.n_proposed() == proposals_per_move
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
+    # Moves should be deterministic regardless the number of steps taken per move
+    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
+
 
 @pytest.mark.parametrize("radius", [1.2])
 @pytest.mark.parametrize(
-    "proposals_per_move,total_num_proposals,box_size",
+    "proposals_per_move,total_num_proposals,batch_size,,box_size",
     [
-        (1, 500, 4.0),
-        (500, 10000, 4.0),
+        (1, 500, 1, 4.0),
+        (500, 10000, 250, 4.0),
         # The 5.7nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
-        pytest.param(1, 5000, 5.7, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1, 5000, 1, 5.7, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 2e-5, 2e-5), (np.float32, 5e-3, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
 def test_targeted_moves_in_bulk_water(
-    radius, proposals_per_move, total_num_proposals, box_size, precision, rtol, atol, seed
+    radius, proposals_per_move, total_num_proposals, batch_size, box_size, precision, rtol, atol, seed
 ):
     """Given bulk water molecules with one of them treated as the targeted region"""
     ff = Forcefield.load_default()
@@ -692,6 +791,7 @@ def test_targeted_moves_in_bulk_water(
         seed,
         proposals_per_move,
         1,
+        batch_size=batch_size,
     )
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
@@ -702,15 +802,18 @@ def test_targeted_moves_in_bulk_water(
 
 @pytest.mark.parametrize("radius", [1.2])
 @pytest.mark.parametrize(
-    "proposals_per_move, total_num_proposals",
+    "proposals_per_move,total_num_proposals, batch_size",
     [
-        pytest.param(1, 40000, marks=pytest.mark.nightly(reason="slow")),
-        pytest.param(5000, 40000, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1, 40000, 1, marks=pytest.mark.nightly(reason="slow")),
+        (10000, 40000, 1),
+        (10000, 40000, 250),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals, precision, rtol, atol, seed):
+def test_moves_with_three_waters(
+    radius, proposals_per_move, batch_size, total_num_proposals, precision, rtol, atol, seed
+):
     """Given three water molecules with one of them treated as the targeted region."""
     ff = Forcefield.load_default()
     system, host_conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
@@ -755,6 +858,7 @@ def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals
         seed,
         proposals_per_move,
         1,
+        batch_size=batch_size,
     )
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
@@ -766,8 +870,8 @@ def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals
 
 @pytest.mark.parametrize("radius", [0.95])
 @pytest.mark.parametrize(
-    "proposals_per_move,total_num_proposals",
-    [(10_000, 200_000)],
+    "proposals_per_move,batch_size,total_num_proposals",
+    [(10_000, 1, 200_000), (10_000, 200, 200_000)],
 )
 @pytest.mark.parametrize(
     "precision,rtol,atol",
@@ -775,7 +879,7 @@ def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals
 )
 @pytest.mark.parametrize("seed", [2023])
 def test_targeted_moves_with_complex_and_ligand_in_brd4(
-    brd4_rbfe_state, radius, proposals_per_move, total_num_proposals, precision, rtol, atol, seed
+    brd4_rbfe_state, radius, proposals_per_move, batch_size, total_num_proposals, precision, rtol, atol, seed
 ):
     """Verify that when the water atoms are between the protein and ligand that the reference and cuda exchange mover agree.
 
@@ -821,6 +925,7 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
         seed,
         proposals_per_move,
         1,
+        batch_size=batch_size,
     )
 
     ref_bdem = RefTIBDExchangeMove(

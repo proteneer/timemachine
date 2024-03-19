@@ -85,7 +85,7 @@ def verify_bias_deletion_moves(
 
         last_conf = x_move
     assert bdem.n_proposed() == total_num_proposals
-    print(f"Accepted { bdem.n_accepted()} of {total_num_proposals} moves")
+    print(f"Accepted {bdem.n_accepted()} of {total_num_proposals} moves")
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
@@ -437,6 +437,9 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     assert bdem_a.n_proposed() == proposals_per_move
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
+
+    if batch_size == 1:
+        assert bdem_a.last_log_probability() == bdem_b.last_log_probability()
 
     # Moves should be deterministic regardless the number of steps taken per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)

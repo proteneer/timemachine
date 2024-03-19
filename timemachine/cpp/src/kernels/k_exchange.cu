@@ -71,10 +71,12 @@ void __global__ k_accepted_exchange_move(
     const int *__restrict__ accepted_batched_move, // [1]
     const int *__restrict__ mol_idx_per_batch,     // [batch_size]
     const int *__restrict__ mol_offsets,           // [num_target_mols]
+    const int *__restrict__ segment_offsets,       // [batch_size + 1]
     const double *__restrict__ moved_coords,       // [batch_size, num_atoms_in_each_mol, 3]
     double *__restrict__ dest_coords,              // [N, 3]
-    size_t *__restrict__ num_accepted,             // [1],
-    int *__restrict__ rand_offset                  // [1]
+    size_t *__restrict__ num_accepted,             // [1]
+    int *__restrict__ rand_offset,                 // [1]
+    int *__restrict__ segment_noise_offset         // [1]
 ) {
     // Note that this kernel does not handle multiple proposals, expects that the proposals
     // have been reduced down to a single proposal beforehand.
@@ -85,13 +87,15 @@ void __global__ k_accepted_exchange_move(
     // If the selected batch idx is not less than the total batch size, no proposal was accepted, we can exit immediately.
     if (batch_idx >= batch_size) {
         rand_offset[0] += batch_size;
+        segment_noise_offset[0] += segment_offsets[batch_size];
         return;
     }
     const int mol_idx = mol_idx_per_batch[batch_idx];
     const int mol_start = mol_offsets[mol_idx];
-    // Increment offset by the index + 1, IE the Nth item in the batch being accepted results in incrementing by N + 1
-    rand_offset[0] += batch_idx + 1;
     if (idx == 0) {
+        // Increment offset by the index + 1, IE the Nth item in the batch being accepted results in incrementing by N + 1
+        rand_offset[0] += batch_idx + 1;
+        segment_noise_offset[0] += segment_offsets[batch_idx + 1];
         num_accepted[0]++;
     }
 
@@ -104,119 +108,112 @@ void __global__ k_accepted_exchange_move(
 }
 
 template <typename RealType>
-void __global__ k_attempt_exchange_move_targeted(
+void __global__ k_store_exchange_move_targeted(
+    const int batch_size,
     const int num_target_mols,
-    const int *__restrict__ targeting_inner_volume,
-    const int *__restrict__ inner_count,  // [1]
-    const RealType *__restrict__ box_vol, // [1]
-    const RealType inner_volume,
-    const RealType *__restrict__ rand,           // [1]
-    const int *__restrict__ samples,             // [1]
-    const RealType *__restrict__ before_max,     // [1]
-    const RealType *__restrict__ before_log_sum, // [1]
-    const RealType *__restrict__ after_max,      // [1]
-    const RealType *__restrict__ after_log_sum,  // [1]
-    const int *__restrict__ mol_offsets,         // [num_mols + 1]
-    const double *__restrict__ moved_coords,     // [num_atoms_in_each_mol, 3]
-    double *__restrict__ dest_coords,            // [N, 3]
-    RealType *__restrict__ before_weights,       // [num_target_mols]
-    RealType *__restrict__ after_weights,        // [num_target_mols]
-    int *__restrict__ inner_flags,               // [num_target_mols]
-    size_t *__restrict__ num_accepted            // [1]
+    const int *__restrict__ accepted_batched_move, // [1]
+    const int *__restrict__ mol_idx_per_batch,     // [batch_size]
+    const int *__restrict__ mol_offsets,           // [num_mols + 1]
+    const int *__restrict__ segment_offsets,       // [batch_size + 1]
+    const double *__restrict__ moved_coords,       // [num_atoms_in_each_mol, 3]
+    double *__restrict__ dest_coords,              // [N, 3]
+    RealType *__restrict__ before_weights,         // [num_target_mols]
+    RealType *__restrict__ after_weights,          // [num_target_mols]
+    int *__restrict__ rand_offset,                 // [1]
+    int *__restrict__ segment_noise_offset,        // [1]
+    int *__restrict__ inner_flags,                 // [num_target_mols]
+    size_t *__restrict__ num_accepted              // [1]
 ) {
+    // Note that this kernel does not handle multiple proposals, expects that the proposals
+    // have been reduced down to a single proposal beforehand.
     int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    int targeting_inner = targeting_inner_volume[0];
+    const int batch_idx = accepted_batched_move[0];
+    // If the selected batch idx is not less than the total batch size, no proposal was accepted, we can exit immediately.
+    const bool accepted = batch_idx < batch_size;
 
-    const RealType outer_vol = box_vol[0] - inner_volume;
-
-    const int local_inner_count = inner_count[0];
-
-    const int moved_mol_idx = samples[0];
-    const int mol_start = mol_offsets[moved_mol_idx];
-    const int mol_end = mol_offsets[moved_mol_idx + 1];
+    const int mol_idx = accepted ? mol_idx_per_batch[batch_idx] : 0;
+    const int mol_start = accepted ? mol_offsets[mol_idx] : 0;
+    const int mol_end = accepted ? mol_offsets[mol_idx + 1] : 0;
     const int num_atoms_in_each_mol = mol_end - mol_start;
 
-    const RealType raw_log_acceptance = compute_raw_log_probability_targeted<RealType>(
-        targeting_inner,
-        inner_volume,
-        outer_vol,
-        local_inner_count,
-        num_target_mols,
-        before_max,
-        before_log_sum,
-        after_max,
-        after_log_sum);
-
-    RealType log_acceptance_prob = min(raw_log_acceptance, static_cast<RealType>(0.0));
-
-    const bool accepted = rand[0] < exp(log_acceptance_prob);
-    if (atom_idx == 0 && accepted) {
-        num_accepted[0]++;
-        // XOR 1 to flip the flag from 0 to 1 or 1 to 0
-        inner_flags[moved_mol_idx] ^= 1;
+    // Increment offset by the index + 1, IE the Nth item in the batch being accepted results in incrementing by N + 1
+    if (atom_idx == 0) {
+        if (accepted) {
+            rand_offset[0] += batch_idx + 1;
+            segment_noise_offset[0] += batch_idx + 1;
+            num_accepted[0]++;
+            // XOR 1 to flip the flag from 0 to 1 or 1 to 0
+            inner_flags[mol_idx] ^= 1;
+        } else {
+            rand_offset[0] += batch_size;
+            segment_noise_offset[0] += batch_size;
+        }
     }
+
+    // How many weights are going to be copied
+    // If accepted copy the num_target_mol weights to the before weights
+    // if not accepted need to copy the before weights to all of the after weights
+    const int weights_copy_count = accepted ? num_target_mols : num_target_mols * batch_size;
 
     // If accepted, move the coords into place
     // Always copy the weights, either copying from before to after or after to before
-    while (atom_idx < num_target_mols || atom_idx < num_atoms_in_each_mol) {
+    while (atom_idx < weights_copy_count || atom_idx < num_atoms_in_each_mol) {
         if (accepted && atom_idx < num_atoms_in_each_mol) {
-            dest_coords[(mol_start + atom_idx) * 3 + 0] = moved_coords[atom_idx * 3 + 0];
-            dest_coords[(mol_start + atom_idx) * 3 + 1] = moved_coords[atom_idx * 3 + 1];
-            dest_coords[(mol_start + atom_idx) * 3 + 2] = moved_coords[atom_idx * 3 + 2];
+            dest_coords[(mol_start + atom_idx) * 3 + 0] =
+                moved_coords[num_atoms_in_each_mol * batch_idx * 3 + atom_idx * 3 + 0];
+            dest_coords[(mol_start + atom_idx) * 3 + 1] =
+                moved_coords[num_atoms_in_each_mol * batch_idx * 3 + atom_idx * 3 + 1];
+            dest_coords[(mol_start + atom_idx) * 3 + 2] =
+                moved_coords[num_atoms_in_each_mol * batch_idx * 3 + atom_idx * 3 + 2];
         }
         // If accepted store the after weights as before weights else copy the before weights to the after weights
         // so the next iteration can incrementally update the weights. The copying of the before to the after is
         // to avoid an additional memcpy kernel.
-        if (atom_idx < num_target_mols) {
+
+        if (atom_idx < weights_copy_count) {
             if (accepted) {
-                before_weights[atom_idx] = after_weights[atom_idx];
+                before_weights[atom_idx] = after_weights[batch_idx * num_target_mols + atom_idx];
             } else {
-                after_weights[atom_idx] = before_weights[atom_idx];
+                after_weights[atom_idx] = before_weights[atom_idx % num_target_mols];
             }
         }
         atom_idx += gridDim.x * blockDim.x;
     }
 }
 
-template void __global__ k_attempt_exchange_move_targeted<float>(
+template void __global__ k_store_exchange_move_targeted<float>(
+    const int batch_size,
     const int num_target_mols,
-    const int *__restrict__ targeting_inner_volume,
-    const int *__restrict__ inner_count,
-    const float *__restrict__ box_vol,
-    const float inner_volume,
-    const float *__restrict__ rand,
-    const int *__restrict__ samples,
-    const float *__restrict__ before_max,
-    const float *__restrict__ before_log_sum,
-    const float *__restrict__ after_max,
-    const float *__restrict__ after_log_sum,
-    const int *__restrict__ mol_offsets,
-    const double *__restrict__ moved_coords,
-    double *__restrict__ dest_coords,
-    float *__restrict__ before_weights,
-    float *__restrict__ after_weights,
-    int *__restrict__ inner_flags,
-    size_t *__restrict__ num_accepted);
-template void __global__ k_attempt_exchange_move_targeted<double>(
+    const int *__restrict__ accepted_batched_move, // [1]
+    const int *__restrict__ mol_idx_per_batch,     // [batch_size]
+    const int *__restrict__ mol_offsets,           // [num_mols + 1]
+    const int *__restrict__ segment_offsets,       // [batch_size + 1]
+    const double *__restrict__ moved_coords,       // [num_atoms_in_each_mol, 3]
+    double *__restrict__ dest_coords,              // [N, 3]
+    float *__restrict__ before_weights,            // [num_target_mols]
+    float *__restrict__ after_weights,             // [num_target_mols]
+    int *__restrict__ rand_offset,                 // [1]
+    int *__restrict__ segment_noise_offset,        // [1]
+    int *__restrict__ inner_flags,                 // [num_target_mols]
+    size_t *__restrict__ num_accepted              // [1]
+);
+template void __global__ k_store_exchange_move_targeted<double>(
+    const int batch_size,
     const int num_target_mols,
-    const int *__restrict__ targeting_inner_volume,
-    const int *__restrict__ inner_count,
-    const double *__restrict__ box_vol,
-    const double inner_volume,
-    const double *__restrict__ rand,
-    const int *__restrict__ samples,
-    const double *__restrict__ before_max,
-    const double *__restrict__ before_log_sum,
-    const double *__restrict__ after_max,
-    const double *__restrict__ after_log_sum,
-    const int *__restrict__ mol_offsets,
-    const double *__restrict__ moved_coords,
-    double *__restrict__ dest_coords,
-    double *__restrict__ before_weights,
-    double *__restrict__ after_weights,
-    int *__restrict__ inner_flags,
-    size_t *__restrict__ num_accepted);
+    const int *__restrict__ accepted_batched_move, // [1]
+    const int *__restrict__ mol_idx_per_batch,     // [batch_size]
+    const int *__restrict__ mol_offsets,           // [num_mols + 1]
+    const int *__restrict__ segment_offsets,       // [batch_size + 1]
+    const double *__restrict__ moved_coords,       // [num_atoms_in_each_mol, 3]
+    double *__restrict__ dest_coords,              // [N, 3]
+    double *__restrict__ before_weights,           // [num_target_mols]
+    double *__restrict__ after_weights,            // [num_target_mols]
+    int *__restrict__ rand_offset,                 // [1]
+    int *__restrict__ segment_noise_offset,        // [1]
+    int *__restrict__ inner_flags,                 // [num_target_mols]
+    size_t *__restrict__ num_accepted              // [1]
+);
 
 template <typename RealType>
 void __global__ k_store_accepted_log_probability(
@@ -633,8 +630,10 @@ template void __global__ k_flag_mols_inner_outer<double>(
 
 template <typename RealType>
 void __global__ k_decide_targeted_moves(
+    const int total_proposals,
     const int batch_size,
     const int num_target_mols,
+    const int *__restrict__ noise_offset,      // [1]
     const RealType *__restrict__ rand,         // [batch_size]
     const int *__restrict__ inner_count,       // [1]
     const RealType *__restrict__ translations, // [batch_size, 2, 3] first translation is inside, second is outer
@@ -647,8 +646,9 @@ void __global__ k_decide_targeted_moves(
 
     const int count_inside = inner_count[0];
     const int count_outside = num_target_mols - count_inside;
+    const int rand_offset = noise_offset[0];
     int flag;
-    while (idx < batch_size) {
+    while (idx < batch_size && rand_offset + idx < total_proposals) {
         if (count_inside == 0 && count_outside == 0) {
             assert(0);
         } else if (count_inside > 0 && count_outside == 0) {
@@ -658,7 +658,7 @@ void __global__ k_decide_targeted_moves(
 
         } else if (count_inside > 0 && count_outside > 0) {
             // TBD determine if accessing rand in if matters
-            if (rand[idx] < static_cast<RealType>(0.5)) {
+            if (rand[rand_offset + idx] < static_cast<RealType>(0.5)) {
                 flag = 1;
             } else {
                 flag = 0;
@@ -666,25 +666,34 @@ void __global__ k_decide_targeted_moves(
         } else {
             assert(0);
         }
-        output_translation[idx * 3 + 0] =
-            flag == 1 ? translations[idx * (3 * 2) + 0] : translations[idx * (3 * 2) + 3 + 0];
-        output_translation[idx * 3 + 1] =
-            flag == 1 ? translations[idx * (3 * 2) + 1] : translations[idx * (3 * 2) + 3 + 1];
-        output_translation[idx * 3 + 2] =
-            flag == 1 ? translations[idx * (3 * 2) + 2] : translations[idx * (3 * 2) + 3 + 2];
+        // Have to offset the output translations to handle the noise offset
+        // TBD: Clean this up eventually
+        // The inner translation is the first three values, the outer translations is the next three.
+        output_translation[rand_offset * 3 + idx * 3 + 0] =
+            flag == 1 ? translations[rand_offset * (3 * 2) + idx * (3 * 2) + 0]
+                      : translations[rand_offset * (3 * 2) + idx * (3 * 2) + 3 + 0];
+        output_translation[rand_offset * 3 + idx * 3 + 1] =
+            flag == 1 ? translations[rand_offset * (3 * 2) + idx * (3 * 2) + 1]
+                      : translations[rand_offset * (3 * 2) + idx * (3 * 2) + 3 + 1];
+        output_translation[rand_offset * 3 + idx * 3 + 2] =
+            flag == 1 ? translations[rand_offset * (3 * 2) + idx * (3 * 2) + 2]
+                      : translations[rand_offset * (3 * 2) + idx * (3 * 2) + 3 + 2];
 
         // Will look at the src weights
         src_weights_counts[idx] = flag == 1 ? count_outside : count_inside;
         // The target weights will be the count of the target region + 1, the new mol being inserted
         target_weights_counts[idx] = flag == 1 ? count_inside + 1 : count_outside + 1;
         targeting_inner_volume[idx] = flag;
+
         idx += gridDim.x * blockDim.x;
     }
 }
 
 template void __global__ k_decide_targeted_moves<float>(
+    const int total_proposals,
     const int batch_size,
     const int num_target_mols,
+    const int *__restrict__ noise_offset,
     const float *__restrict__ rand,
     const int *__restrict__ inner_count,
     const float *__restrict__ translations,
@@ -693,8 +702,10 @@ template void __global__ k_decide_targeted_moves<float>(
     int *__restrict__ target_weights_counts,
     float *__restrict__ output_translation);
 template void __global__ k_decide_targeted_moves<double>(
+    const int total_proposals,
     const int batch_size,
     const int num_target_mols,
+    const int *__restrict__ noise_offset,
     const double *__restrict__ rand,
     const int *__restrict__ inner_count,
     const double *__restrict__ translations,
@@ -707,86 +718,116 @@ template void __global__ k_decide_targeted_moves<double>(
 // to a new buffer the weights associated with the source molecules.
 template <typename RealType>
 void __global__ k_separate_weights_for_targeted(
+    const int batch_size,
     const int num_target_mols,
-    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ weight_offsets,         // [batch_size + 1]
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ partitioned_indices,    // [inner_count]
+    const int *__restrict__ partitioned_indices,    // [num_target_mols]
     const RealType *__restrict__ weights,           // [num_target_mols]
-    RealType *__restrict__ output_weights) {
+    RealType *__restrict__ output_weights           // [batch_size, num_target_mols]
+) {
+    const int idx_in_batch = blockIdx.y;
+    if (idx_in_batch >= batch_size) {
+        return;
+    }
+
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const int target_inner = targeting_inner_volume[0];
-    const int local_inner_count = inner_count[0];
+    const int local_inner_count = inner_count[0];           // Constant across batch size
+    const int weights_start = weight_offsets[idx_in_batch]; // Where to start adding the weights
+    // const int weights_end = weight_offsets[idx_in_batch + 1];
+    const int target_inner = targeting_inner_volume[idx_in_batch];
     const int outer_count = num_target_mols - local_inner_count;
     const int count = target_inner == 1 ? outer_count : local_inner_count;
     const int offset = target_inner == 1 ? local_inner_count : 0;
     while (idx < count) {
-        output_weights[idx] = weights[partitioned_indices[idx + offset]];
+        output_weights[weights_start + idx] = weights[partitioned_indices[idx + offset]];
 
         idx += gridDim.x * blockDim.x;
     }
 }
 
 template void __global__ k_separate_weights_for_targeted<float>(
+    const int batch_size,
     const int num_target_mols,
-    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ weight_offsets,         // [batch_size + 1]
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ partitioned_indices,    // [inner_count]
+    const int *__restrict__ partitioned_indices,    // [num_target_mols]
     const float *__restrict__ weights,              // [num_target_mols]
     float *__restrict__ output_weights);
 template void __global__ k_separate_weights_for_targeted<double>(
+    const int batch_size,
     const int num_target_mols,
-    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ weight_offsets,         // [batch_size + 1]
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ partitioned_indices,    // [inner_count]
+    const int *__restrict__ partitioned_indices,    // [num_target_mols]
     const double *__restrict__ weights,             // [num_target_mols]
     double *__restrict__ output_weights);
 
 template <typename RealType>
 void __global__ k_setup_destination_weights_for_targeted(
+    const int batch_size,
     const int num_target_mols,
-    const int *__restrict__ samples,                // [1]
-    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ samples,                // [batch_size]
+    const int *__restrict__ weight_offsets,         // [batch_size + 1]
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ partitioned_indices,    // [inner_count]
-    const RealType *__restrict__ weights,           // [num_target_mols]
-    RealType *__restrict__ output_weights           // [num_target_mols] Only access up to count + 1
+    const int *__restrict__ partitioned_indices,    // [num_target_mols]
+    const RealType *__restrict__ weights,           // [batch_size, num_target_mols]
+    RealType *__restrict__ output_weights           // [batch_size, num_target_mols]
 ) {
+    const int idx_in_batch = blockIdx.y;
+    if (idx_in_batch >= batch_size) {
+        return;
+    }
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const int target_inner = targeting_inner_volume[0];
     const int local_inner_count = inner_count[0];
-    const int outer_count = num_target_mols - local_inner_count;
-    const int count = target_inner == 1 ? local_inner_count : outer_count;
+
+    const int target_inner = targeting_inner_volume[idx_in_batch];
+    const int weights_start = weight_offsets[idx_in_batch]; // Where to start adding the weights
+    // const int weights_end = weight_offsets[idx_in_batch + 1];
+
+    const int count = target_inner == 1 ? local_inner_count : num_target_mols - local_inner_count;
     const int offset = target_inner == 1 ? 0 : local_inner_count;
     // Handle the sampled molecule being moved from one region to another by appending
     // the sampled mol's weight to the target region's weight.
     if (idx == 0) {
-        int sample_idx = samples[idx];
-        output_weights[count + idx] = weights[sample_idx];
+        int sample_idx = samples[idx_in_batch];
+        output_weights[weights_start + count + idx] = weights[idx_in_batch * num_target_mols + sample_idx];
     }
     while (idx < count) {
-        output_weights[idx] = weights[partitioned_indices[idx + offset]];
+        output_weights[weights_start + idx] =
+            weights[idx_in_batch * num_target_mols + partitioned_indices[idx + offset]];
 
         idx += gridDim.x * blockDim.x;
     }
 }
 
 template void __global__ k_setup_destination_weights_for_targeted<float>(
+    const int batch_size,
     const int num_target_mols,
     const int *__restrict__ samples,                // [1]
-    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ weight_offsets,         // [batch_size + 1]
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ partitioned_indices,    // [inner_count]
+    const int *__restrict__ partitioned_indices,    // [num_target_mols]
     const float *__restrict__ weights,              // [num_target_mols]
-    float *__restrict__ output_weights);
+    float *__restrict__ output_weights              // [batch_size, num_target_mols]
+);
 
 template void __global__ k_setup_destination_weights_for_targeted<double>(
+    const int batch_size,
     const int num_target_mols,
     const int *__restrict__ samples,                // [1]
-    const int *__restrict__ targeting_inner_volume, // [1]
+    const int *__restrict__ weight_offsets,         // [batch_size + 1]
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ partitioned_indices,    // [inner_count]
+    const int *__restrict__ partitioned_indices,    // [num_target_mols]
     const double *__restrict__ weights,             // [num_target_mols]
-    double *__restrict__ output_weights);
+    double *__restrict__ output_weights             // [batch_size, num_target_mols]
+);
 
 void __global__ k_adjust_sample_idxs(
     const int batch_size,
@@ -797,11 +838,12 @@ void __global__ k_adjust_sample_idxs(
 ) {
     const int local_inner_count = inner_count[0];
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    // At the moment we only have one sample
+
     while (idx < batch_size) {
         const int target_inner = targeting_inner_volume[idx];
         const int offset = target_inner == 1 ? local_inner_count : 0;
-        sample_idxs[idx] = partitioned_indices[sample_idxs[idx] + offset];
+        const int before = sample_idxs[idx];
+        sample_idxs[idx] = partitioned_indices[before + offset];
 
         idx += gridDim.x * blockDim.x;
     }
@@ -886,6 +928,104 @@ template void __global__ k_accept_first_valid_move<double>(
     const double *__restrict__ after_log_sum,  // [batch_size]
     const double *__restrict__ rand,           // [total_proposals]
     int *__restrict__ accepted_sample          // [1]
+);
+
+template <typename RealType>
+void __global__ k_accept_first_valid_move_targeted(
+    const int total_proposals,
+    const int num_target_mols,
+    const int batch_size,
+    const RealType inner_volume,
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
+    const int *__restrict__ inner_count,            // [1]
+    const RealType *__restrict__ box_vol,           // [1]
+    const int *__restrict__ noise_offset,           // [1]
+    const int *__restrict__ samples,                // [batch_size]
+    const RealType *__restrict__ before_max,        // [batch_size]
+    const RealType *__restrict__ before_log_sum,    // [batch_size]
+    const RealType *__restrict__ after_max,         // [batch_size]
+    const RealType *__restrict__ after_log_sum,     // [batch_size]
+    const RealType *__restrict__ rand,              // [total_proposals]
+    int *__restrict__ accepted_sample               // [1]
+) {
+    __shared__ int selected_idx;
+    assert(blockIdx.x == 0);
+    if (threadIdx.x == 0) {
+        selected_idx = batch_size;
+    }
+    __syncthreads();
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int rand_offset = noise_offset[0];
+    const int local_inner_count = inner_count[0];
+    const RealType outer_vol = box_vol[0] - inner_volume;
+
+    while (idx < batch_size) {
+        if (rand_offset + idx >= total_proposals) {
+            break;
+        }
+
+        const RealType raw_log_acceptance = compute_raw_log_probability_targeted<RealType>(
+            targeting_inner_volume[idx],
+            inner_volume,
+            outer_vol,
+            local_inner_count,
+            num_target_mols,
+            before_max + idx,
+            before_log_sum + idx,
+            after_max + idx,
+            after_log_sum + idx);
+
+        const RealType log_acceptance_prob = min(raw_log_acceptance, static_cast<RealType>(0.0));
+        const bool accepted = rand[rand_offset + idx] < exp(log_acceptance_prob);
+        if (accepted) {
+            atomicMin(&selected_idx, idx);
+            // Idx is increasing so the first accepted is the min value the thread can accept
+            // making it safe to break early.
+            break;
+        }
+
+        idx += gridDim.x * blockDim.x;
+    }
+    __syncthreads();
+    if (threadIdx.x == 0) {
+        accepted_sample[0] = selected_idx;
+    }
+}
+
+template void __global__ k_accept_first_valid_move_targeted<float>(
+    const int total_proposals,
+    const int num_target_mols,
+    const int batch_size,
+    const float inner_volume,
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
+    const int *__restrict__ inner_count,            // [1]
+    const float *__restrict__ box_vol,              // [1]
+    const int *__restrict__ noise_offset,           // [1]
+    const int *__restrict__ samples,                // [batch_size]
+    const float *__restrict__ before_max,           // [1]
+    const float *__restrict__ before_log_sum,       // [1]
+    const float *__restrict__ after_max,            // [batch_size]
+    const float *__restrict__ after_log_sum,        // [batch_size]
+    const float *__restrict__ rand,                 // [total_proposals]
+    int *__restrict__ accepted_sample               // [1]
+);
+
+template void __global__ k_accept_first_valid_move_targeted<double>(
+    const int total_proposals,
+    const int num_target_mols,
+    const int batch_size,
+    const double inner_volume,
+    const int *__restrict__ targeting_inner_volume, // [batch_size]
+    const int *__restrict__ inner_count,            // [1]
+    const double *__restrict__ box_vol,             // [1]
+    const int *__restrict__ noise_offset,           // [1]
+    const int *__restrict__ samples,                // [batch_size]
+    const double *__restrict__ before_max,          // [1]
+    const double *__restrict__ before_log_sum,      // [1]
+    const double *__restrict__ after_max,           // [batch_size]
+    const double *__restrict__ after_log_sum,       // [batch_size]
+    const double *__restrict__ rand,                // [total_proposals]
+    int *__restrict__ accepted_sample               // [1]
 );
 
 } // namespace timemachine

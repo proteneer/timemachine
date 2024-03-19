@@ -72,6 +72,7 @@ protected:
     DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
     DeviceBuffer<int> d_sample_segments_offsets_; // Segment offsets for the sampler // [batch_size + 1]
     DeviceBuffer<int> d_noise_offset_;            // [1]  Offset into noise
+    DeviceBuffer<int> d_sampler_noise_offset_;    // [1]  Offset into noise used by the sampler
 
     PinnedHostBuffer<int> p_noise_offset_; // [1]
 
