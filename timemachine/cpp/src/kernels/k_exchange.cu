@@ -91,7 +91,7 @@ void __global__ k_accepted_exchange_move(
     const int mol_start = mol_offsets[mol_idx];
     // Increment offset by the index + 1, IE the Nth item in the batch being accepted results in incrementing by N + 1
     rand_offset[0] += batch_idx + 1;
-    if (threadIdx.x == 0) {
+    if (idx == 0) {
         num_accepted[0]++;
     }
 
