@@ -154,6 +154,28 @@ void BDExchangeMove<RealType>::move(
     gpuErrchk(cudaMemsetAsync(d_noise_offset_.data, 0, d_noise_offset_.size(), stream));
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
+    /* --Algorithm Description--
+    * Bias Deletion is done in several steps
+    * 1. Generate all random noise upfront to ensure identical results regardless of batch size
+    * 2. Compute the initial weights of each of the molecules (no batching)
+    * 3. Copy the initial weights (d_log_weights_before_) to the proposal weight buffers (d_log_weights_after_),
+    *    duplicating the values for each proposal in the batch
+    * 4. For each proposal in the batch sample a molecule from the initial weights, aiming to select molecules more likely
+    *    to accept a proposal.
+    * 5. Generate the proposals for all of the sampled molecules in the batch, rotating and translating the mols to the new
+    *    positions.
+    * 6. Compute the weights for each of the proposals in the batch
+    * 7. Compute the expsum of each set of proposal weights
+    * 8. Find the first proposal in the batch that was accepted
+    * 9. If a move was accepted, accepted the new proposed coordinates and increment the noise offset (d_noise_offset_)
+    *    by the value in the batch that was accepted.
+    * 10. If running another move, copy the accepted weights, if any, to the initial weights buffer. Return to 4
+    *
+    * NOTE: The noise offset is used to determine where in the noise the kernels should look. If a kernel is expecting to
+    *       access data beyond the total number of proposals, the kernels leave the buffers untouched. This offset to to
+    *       ensure that with a batch size of 1 or 1000 the sequence of proposals is identical, by using the same noise for
+    *       each proposal in the sequence.
+    */
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
