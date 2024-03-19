@@ -249,7 +249,7 @@ void BDExchangeMove<RealType>::move(
         // Synchronize to get the new offset
         gpuErrchk(cudaStreamSynchronize(stream));
     }
-    // Number of attempts is always the batch size
+    // Number of attempts is always the number of proposals per moves
     num_attempted_ += num_proposals_per_move_;
 }
 
