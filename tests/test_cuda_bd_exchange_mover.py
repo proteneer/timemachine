@@ -361,7 +361,8 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
         assert not np.all(conf == iterative_moved_coords)
     batch_moved_coords, _ = bdem_b.move(conf, box)
 
-    assert bdem_a.n_accepted() > 0
+    # Typically this should accept at least half the number of moves as proposals
+    assert bdem_a.n_accepted() >= max(proposals_per_move // 2, 1)
     assert bdem_a.n_proposed() == proposals_per_move
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
