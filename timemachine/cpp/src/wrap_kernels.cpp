@@ -1551,7 +1551,7 @@ template <typename RealType> void declare_segmented_sum_exp(py::module &m, const
         )pbdoc");
 }
 
-template <typename RealType> void declare_bias_deletion_exchange_move(py::module &m, const char *typestr) {
+template <typename RealType> void declare_biased_deletion_exchange_move(py::module &m, const char *typestr) {
 
     using Class = BDExchangeMove<RealType>;
     std::string pyclass_name = std::string("BDExchangeMove_") + typestr;
@@ -2027,8 +2027,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded_mol_energy<double>(m, "f64");
     declare_nonbonded_mol_energy<float>(m, "f32");
 
-    declare_bias_deletion_exchange_move<double>(m, "f64");
-    declare_bias_deletion_exchange_move<float>(m, "f32");
+    declare_biased_deletion_exchange_move<double>(m, "f64");
+    declare_biased_deletion_exchange_move<float>(m, "f32");
 
     declare_targeted_insertion_bias_deletion_exchange_move<double>(m, "f64");
     declare_targeted_insertion_bias_deletion_exchange_move<float>(m, "f32");
