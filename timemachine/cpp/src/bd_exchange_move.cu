@@ -81,9 +81,6 @@ BDExchangeMove<RealType>::BDExchangeMove(
     if (mol_size_ == 0) {
         throw std::runtime_error("must provide non-empty molecule indices");
     }
-    if (num_proposals_per_move_ % batch_size_ != 0) {
-        throw std::runtime_error("num_proposals_per_move must be a multiple of batch size");
-    }
     verify_mols_contiguous(target_mols);
     for (int i = 0; i < target_mols.size(); i++) {
         if (target_mols[i].size() != mol_size_) {

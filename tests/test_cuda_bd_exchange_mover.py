@@ -170,10 +170,13 @@ def test_bd_exchange_get_set_params(precision):
 
 
 @pytest.mark.memcheck
-@pytest.mark.parametrize("moves", [1, 2, 10])
+@pytest.mark.parametrize(
+    "proposals_per_move,total_num_proposals,batch_size",
+    [(1, 1, 1), (1, 10, 1), (10, 10, 10), (1000, 10000, 1000), (1000, 10000, 333)],
+)
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-7, 5e-7), (np.float32, 1e-6, 2e-6)])
 @pytest.mark.parametrize("seed", [2023])
-def test_pair_of_waters_in_box(moves, precision, rtol, atol, seed):
+def test_pair_of_waters_in_box(proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed):
     """Given two waters in a large box most moves should be accepted. This is a useful test for verifying memory doesn't leak"""
     ff = Forcefield.load_default()
     system, host_conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
@@ -202,13 +205,23 @@ def test_pair_of_waters_in_box(moves, precision, rtol, atol, seed):
     if precision == np.float64:
         klass = custom_ops.BDExchangeMove_f64
 
-    proposals_per_move = 1
-    bdem = klass(N, group_idxs, params, DEFAULT_TEMP, nb.potential.beta, cutoff, seed, proposals_per_move, 1)
+    bdem = klass(
+        N,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        seed,
+        proposals_per_move,
+        1,
+        batch_size=batch_size,
+    )
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
     verify_bias_deletion_moves(
-        group_idxs, bdem, ref_bdem, conf, box, proposals_per_move * moves, proposals_per_move, rtol, atol
+        group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
     )
 
 
@@ -289,7 +302,8 @@ def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
         check_force_norm(-du_dx)
 
 
-@pytest.mark.parametrize("proposals_per_move, batch_size", [(1, 1), (10, 1), (2, 2), (100, 100)])
+@pytest.mark.memcheck
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(1, 1), (10, 1), (2, 2), (100, 100), (1000, 333)])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
 def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precision, seed):
@@ -353,7 +367,7 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 
-@pytest.mark.parametrize("proposals_per_move, batch_size", [(2, 2), (100, 100)])
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(2, 2), (100, 100), (512, 512), (2000, 1000)])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2024])
 def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, precision, seed):
@@ -651,7 +665,7 @@ def hif2a_complex():
 @pytest.mark.parametrize(
     "num_proposals_per_move,total_num_proposals,batch_size",
     [
-        (5000, 80000, 200),
+        (10000, 200000, 1000),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
