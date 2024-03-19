@@ -97,12 +97,9 @@ void __global__ k_accepted_exchange_move(
 
     // If accepted, move the coords of the selected mol into place
     for (int i = 0; i < num_atoms_in_each_mol; i++) {
-        auto moved_x = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 0];
-        auto moved_y = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 1];
-        auto moved_z = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 2];
-        dest_coords[(mol_start + i) * 3 + 0] = moved_x;
-        dest_coords[(mol_start + i) * 3 + 1] = moved_y;
-        dest_coords[(mol_start + i) * 3 + 2] = moved_z;
+        dest_coords[(mol_start + i) * 3 + 0] = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 0];
+        dest_coords[(mol_start + i) * 3 + 1] = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 1];
+        dest_coords[(mol_start + i) * 3 + 2] = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 2];
     }
 }
 
