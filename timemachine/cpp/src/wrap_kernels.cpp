@@ -1568,6 +1568,9 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
                         const int interval,
                         const int batch_size) {
                 size_t params_dim = params.ndim();
+                if (num_proposals_per_move <= 0) {
+                    throw std::runtime_error("proposals per move must be greater than 0");
+                }
                 if (params_dim != 2) {
                     throw std::runtime_error("parameters dimensions must be 2");
                 }
@@ -1582,6 +1585,9 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
                 }
                 if (batch_size <= 0) {
                     throw std::runtime_error("must provide batch size greater than 0");
+                }
+                if (batch_size > num_proposals_per_move) {
+                    throw std::runtime_error("number of proposals per move must be greater than batch size");
                 }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(

@@ -140,6 +140,20 @@ def test_bd_exchange_validation(precision):
     with pytest.raises(RuntimeError, match="must provide batch size greater than 0"):
         klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1, batch_size=-1)
 
+    with pytest.raises(RuntimeError, match="number of proposals per move must be greater than batch size"):
+        klass(
+            N,
+            group_idxs,
+            params,
+            DEFAULT_TEMP,
+            beta,
+            cutoff,
+            seed,
+            proposals_per_move,
+            1,
+            batch_size=proposals_per_move + 1,
+        )
+
     klass(N, group_idxs, params, DEFAULT_TEMP, beta, cutoff, seed, proposals_per_move, 1)
 
 
