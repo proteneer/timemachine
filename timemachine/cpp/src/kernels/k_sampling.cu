@@ -70,7 +70,6 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
         const RealType weight = log_weights[idx];
         assert(!isnan(weight));
 
-        // If the idx in the batch segments is beyond the max offset return a negative infinity to avoid sampling the weight
         const RealType gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
 
         prepared_gumbel[segment_start + idx] = weight + gumbel_rand;
