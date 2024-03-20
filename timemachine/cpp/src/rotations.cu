@@ -56,9 +56,11 @@ void rotate_coordinates_and_translate_mol_host(
     DeviceBuffer<int> d_mol_offsets(2);
     d_mol_offsets.copy_from(mol_offsets);
 
+    DeviceBuffer<int> d_offset(1);
     DeviceBuffer<int> d_samples(batch_size);
     // Set the sample to the first (0 index)
     gpuErrchk(cudaMemset(d_samples.data, 0, d_samples.size()));
+    gpuErrchk(cudaMemset(d_offset.data, 0, d_offset.size()));
 
     DeviceBuffer<double> d_out(d_coords.length * batch_size);
 
@@ -68,6 +70,8 @@ void rotate_coordinates_and_translate_mol_host(
 
     k_rotate_and_translate_mols<RealType, true><<<ceil_divide(batch_size, tpb), tpb, 0, stream>>>(
         batch_size,
+        batch_size,
+        d_offset.data,
         d_coords.data,
         d_box.data,
         d_samples.data,
