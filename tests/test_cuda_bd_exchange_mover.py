@@ -85,7 +85,7 @@ def verify_bias_deletion_moves(
 
         last_conf = x_move
     assert bdem.n_proposed() == total_num_proposals
-    print(f"Accepted {accepted} of {total_num_proposals} moves")
+    print(f"Accepted { bdem.n_accepted()} of {total_num_proposals} moves")
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
@@ -239,6 +239,63 @@ def test_pair_of_waters_in_box(proposals_per_move, total_num_proposals, batch_si
 
     verify_bias_deletion_moves(
         group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
+    )
+
+
+@pytest.mark.memcheck
+@pytest.mark.parametrize(
+    "proposals_per_move,total_num_proposals,batch_size",
+    [(10000, 100000, 333)],
+)
+@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-7, 5e-7), (np.float32, 1e-6, 2e-6)])
+@pytest.mark.parametrize("seed", [2023])
+def test_sampling_single_water_in_bulk(
+    proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed
+):
+    """Sample a single water in a box of water. Useful to verify that we are hitting the tail end of buffers"""
+    ff = Forcefield.load_default()
+    system, conf, box, _ = builders.build_water_system(2.5, ff.water_ff)
+    box += np.diag([0.1, 0.1, 0.1])
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+
+    # Randomly select a water to sample
+    rng = np.random.default_rng(seed)
+    water_idx = rng.integers(len(all_group_idxs))
+    water_idxs = [all_group_idxs[water_idx]]
+
+    # Re-image coords so that everything is imaged to begin with
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    bdem = klass(
+        N,
+        water_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        seed,
+        proposals_per_move,
+        1,
+        batch_size=batch_size,
+    )
+
+    ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
+
+    verify_bias_deletion_moves(
+        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
     )
 
 
