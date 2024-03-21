@@ -64,26 +64,27 @@ RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targete
 }
 
 void __global__ k_setup_proposals(
-    const int total_proposals,
-    const int batch_size,            // Number of molecules to setup
-    const int num_atoms_in_each_mol, // number of atoms in each sample
-    const int *__restrict__ rand_offset,
-    const int *__restrict__ mol_idx_per_batch, // [batch_size] The index of the molecules to sample
-    const int *__restrict__ atom_indices,      // [N]
-    const int *__restrict__ mol_offsets,       // [num_target_mols]
-    int *__restrict__ output_atom_idxs,        // [batch_size, num_atoms_in_each_mol]
-    int *__restrict__ output_mol_offsets);
-
-void __global__ k_accepted_exchange_move(
     const int batch_size,
     const int num_atoms_in_each_mol,
-    const int *__restrict__ accepted_batched_move, // [1]
-    const int *__restrict__ mol_idx_per_batch,     // [batch_size]
-    const int *__restrict__ mol_offsets,           // [num_target_mols]
-    const double *__restrict__ moved_coords,       // [batch_size, num_atoms_in_each_mol, 3]
-    double *__restrict__ dest_coords,              // [N, 3]
-    size_t *__restrict__ num_accepted,             // [1],
-    int *__restrict__ rand_offset                  // [1]
+    const int *__restrict__ mol_idx_per_batch,
+    const int *__restrict__ target_atoms,
+    const int *__restrict__ mol_offsets,
+    int *__restrict__ output_atom_idxs,
+    int *__restrict__ output_mol_offsets);
+
+template <typename RealType>
+void __global__ k_attempt_exchange_move(
+    const int N,
+    const RealType *__restrict__ rand,           // [1]
+    const RealType *__restrict__ before_max,     // [1]
+    const RealType *__restrict__ before_log_sum, // [1]
+    const RealType *__restrict__ after_max,      // [1]
+    const RealType *__restrict__ after_log_sum,  // [1]
+    const int *__restrict__ mol_offsets,         // [num_mols + 1]
+    const int *__restrict__ selected_mol,        // [1]
+    const double *__restrict__ moved_coords,     // [num_atoms_in_each_mol, 3]
+    double *__restrict__ dest_coords,            // [N, 3]
+    size_t *__restrict__ num_accepted            // [1]
 );
 
 template <typename RealType>
@@ -111,14 +112,13 @@ void __global__ k_attempt_exchange_move_targeted(
 template <typename RealType>
 void __global__ k_store_accepted_log_probability(
     const int num_weights,
-    const int batch_size,
-    const int *__restrict__ accepted_batched_move, // [1]
-    RealType *__restrict__ before_max,             // [1]
-    RealType *__restrict__ before_log_sum,         // [1]
-    const RealType *__restrict__ after_max,        // [batch_size]
-    const RealType *__restrict__ after_log_sum,    // [batch_size]
-    RealType *__restrict__ before_weights,         // [num_weights]
-    const RealType *__restrict__ after_weights     // [batch_size, num_weights]
+    const RealType *__restrict__ rand,                  // [1]
+    RealType *__restrict__ before_log_sum_exp_max,      // [1]
+    RealType *__restrict__ before_log_sum_exp_sum,      // [1]
+    const RealType *__restrict__ after_log_sum_exp_max, // [batch_size]
+    const RealType *__restrict__ after_log_sum_exp_sum, // [batch_size]
+    RealType *__restrict__ before_weights,              // [num_weights]
+    const RealType *__restrict__ after_weights          // [num_weights]
 );
 
 template <typename RealType>
@@ -219,21 +219,6 @@ void __global__ k_adjust_sample_idxs(
     const int *__restrict__ inner_count,            // [1]
     const int *__restrict__ partitioned_indices,    // [inner_count]
     int *__restrict__ sample_idxs                   // [batch_size]
-);
-
-template <typename RealType>
-void __global__ k_accept_first_valid_move(
-    const int total_proposals,
-    const int num_target_mols,
-    const int batch_size,
-    const int *__restrict__ rand_offset,         // [1]
-    const int *__restrict__ samples,             // [batch_size]
-    const RealType *__restrict__ before_max,     // [1]
-    const RealType *__restrict__ before_log_sum, // [1]
-    const RealType *__restrict__ after_max,      // [batch_size]
-    const RealType *__restrict__ after_log_sum,  // [batch_size]
-    const RealType *__restrict__ rand,           // [total_proposals]
-    int *__restrict__ accepted_sample            // [1]
 );
 
 } // namespace timemachine

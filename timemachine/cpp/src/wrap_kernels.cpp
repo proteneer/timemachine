@@ -1551,7 +1551,7 @@ template <typename RealType> void declare_segmented_sum_exp(py::module &m, const
         )pbdoc");
 }
 
-template <typename RealType> void declare_biased_deletion_exchange_move(py::module &m, const char *typestr) {
+template <typename RealType> void declare_bias_deletion_exchange_move(py::module &m, const char *typestr) {
 
     using Class = BDExchangeMove<RealType>;
     std::string pyclass_name = std::string("BDExchangeMove_") + typestr;
@@ -1568,9 +1568,6 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
                         const int interval,
                         const int batch_size) {
                 size_t params_dim = params.ndim();
-                if (num_proposals_per_move <= 0) {
-                    throw std::runtime_error("proposals per move must be greater than 0");
-                }
                 if (params_dim != 2) {
                     throw std::runtime_error("parameters dimensions must be 2");
                 }
@@ -1585,9 +1582,6 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
                 }
                 if (batch_size <= 0) {
                     throw std::runtime_error("must provide batch size greater than 0");
-                }
-                if (batch_size > num_proposals_per_move) {
-                    throw std::runtime_error("number of proposals per move must be greater than batch size");
                 }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(
@@ -1692,17 +1686,7 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
                 mover.set_params(py_array_to_vector(params));
             },
             py::arg("params"))
-        .def(
-            "last_log_probability",
-            &Class::log_probability_host,
-            R"pbdoc(
-        Returns the last log probability.
-
-        Only meaningful/valid when batch_size == 1 and num_proposals_per_move == 1 else
-        the value is simply the first value in the buffer which in the case of a batch size greater than
-        1 is the first proposal in the batch and in the case of num_proposals_per_move greater than 1
-        the probability of the last move, which may or may not have been accepted.
-        )pbdoc")
+        .def("last_log_probability", &Class::log_probability_host)
         .def("last_raw_log_probability", &Class::raw_log_probability_host)
         .def("n_accepted", &Class::n_accepted)
         .def("n_proposed", &Class::n_proposed)
@@ -2033,8 +2017,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded_mol_energy<double>(m, "f64");
     declare_nonbonded_mol_energy<float>(m, "f32");
 
-    declare_biased_deletion_exchange_move<double>(m, "f64");
-    declare_biased_deletion_exchange_move<float>(m, "f32");
+    declare_bias_deletion_exchange_move<double>(m, "f64");
+    declare_bias_deletion_exchange_move<float>(m, "f32");
 
     declare_targeted_insertion_bias_deletion_exchange_move<double>(m, "f64");
     declare_targeted_insertion_bias_deletion_exchange_move<float>(m, "f32");

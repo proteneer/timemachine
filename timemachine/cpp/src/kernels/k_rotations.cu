@@ -1,4 +1,3 @@
-#include "assert.h"
 #include "k_fixed_point.cuh"
 #include "k_rotations.cuh"
 #include "stdio.h"
@@ -69,9 +68,9 @@ void __global__ k_rotate_coordinates(
 
     RealType local_coords[4];
     local_coords[0] = 0; // Prepend a zero to the local coords
-    local_coords[1] = static_cast<RealType>(coords[coord_idx * 3 + 0]);
-    local_coords[2] = static_cast<RealType>(coords[coord_idx * 3 + 1]);
-    local_coords[3] = static_cast<RealType>(coords[coord_idx * 3 + 2]);
+    local_coords[1] = coords[coord_idx * 3 + 0];
+    local_coords[2] = coords[coord_idx * 3 + 1];
+    local_coords[3] = coords[coord_idx * 3 + 2];
 
     RealType quat[4];
     quat[0] = quaternions[rotation_idx * 4 + 0];
@@ -89,9 +88,7 @@ void __global__ k_rotate_coordinates(
 
 template <typename RealType, bool SCALE>
 void __global__ k_rotate_and_translate_mols(
-    const int total_proposals,
     const int batch_size,
-    const int *__restrict__ offset,
     const double *__restrict__ coords,         // [N, 3]
     const double *__restrict__ box,            // [3, 3]
     const int *__restrict__ samples,           // [batch_size]
@@ -111,29 +108,24 @@ void __global__ k_rotate_and_translate_mols(
     const RealType inv_box_y = 1 / box_y;
     const RealType inv_box_z = 1 / box_z;
 
-    const int data_offset = offset[0];
-
-    while (idx_in_batch < batch_size && data_offset + idx_in_batch < total_proposals) {
+    while (idx_in_batch < batch_size) {
         int mol_sample = samples[idx_in_batch];
         int mol_start = mol_offsets[mol_sample];
         int mol_end = mol_offsets[mol_sample + 1];
         int num_atoms = mol_end - mol_start;
-        assert(num_atoms > 0);
 
         RealType ref_quat[4];
-        ref_quat[0] = quaternions[(data_offset * 4) + idx_in_batch * 4 + 0];
-        ref_quat[1] = quaternions[(data_offset * 4) + idx_in_batch * 4 + 1];
-        ref_quat[2] = quaternions[(data_offset * 4) + idx_in_batch * 4 + 2];
-        ref_quat[3] = quaternions[(data_offset * 4) + idx_in_batch * 4 + 3];
+        ref_quat[0] = quaternions[idx_in_batch * 4 + 0];
+        ref_quat[1] = quaternions[idx_in_batch * 4 + 1];
+        ref_quat[2] = quaternions[idx_in_batch * 4 + 2];
+        ref_quat[3] = quaternions[idx_in_batch * 4 + 3];
 
-        RealType translation_x = translations[(data_offset * 3) + idx_in_batch * 3 + 0];
-        RealType translation_y = translations[(data_offset * 3) + idx_in_batch * 3 + 1];
-        RealType translation_z = translations[(data_offset * 3) + idx_in_batch * 3 + 2];
-        if (SCALE) {
-            translation_x *= box_x;
-            translation_y *= box_y;
-            translation_z *= box_z;
-        }
+        RealType translation_x =
+            SCALE ? box_x * translations[idx_in_batch * 3 + 0] : translations[idx_in_batch * 3 + 0];
+        RealType translation_y =
+            SCALE ? box_y * translations[idx_in_batch * 3 + 1] : translations[idx_in_batch * 3 + 1];
+        RealType translation_z =
+            SCALE ? box_z * translations[idx_in_batch * 3 + 2] : translations[idx_in_batch * 3 + 2];
 
         // Image the translation in the home box
         translation_x -= box_x * floor(translation_x * inv_box_x);
@@ -144,9 +136,9 @@ void __global__ k_rotate_and_translate_mols(
         unsigned long long centroid_accum_y = 0;
         unsigned long long centroid_accum_z = 0;
         for (int i = 0; i < num_atoms; i++) {
-            centroid_accum_x += FLOAT_TO_FIXED<RealType>(static_cast<RealType>(coords[(mol_start + i) * 3 + 0]));
-            centroid_accum_y += FLOAT_TO_FIXED<RealType>(static_cast<RealType>(coords[(mol_start + i) * 3 + 1]));
-            centroid_accum_z += FLOAT_TO_FIXED<RealType>(static_cast<RealType>(coords[(mol_start + i) * 3 + 2]));
+            centroid_accum_x += FLOAT_TO_FIXED<RealType>(coords[(mol_start + i) * 3 + 0]);
+            centroid_accum_y += FLOAT_TO_FIXED<RealType>(coords[(mol_start + i) * 3 + 1]);
+            centroid_accum_z += FLOAT_TO_FIXED<RealType>(coords[(mol_start + i) * 3 + 2]);
         }
 
         RealType centroid_x = FIXED_TO_FLOAT<RealType>(centroid_accum_x) / static_cast<RealType>(num_atoms);
@@ -163,9 +155,9 @@ void __global__ k_rotate_and_translate_mols(
             quat[3] = ref_quat[3];
 
             local_coords[0] = 0;
-            local_coords[1] = static_cast<RealType>(coords[(mol_start + i) * 3 + 0]) - centroid_x;
-            local_coords[2] = static_cast<RealType>(coords[(mol_start + i) * 3 + 1]) - centroid_y;
-            local_coords[3] = static_cast<RealType>(coords[(mol_start + i) * 3 + 2]) - centroid_z;
+            local_coords[1] = coords[(mol_start + i) * 3 + 0] - centroid_x;
+            local_coords[2] = coords[(mol_start + i) * 3 + 1] - centroid_y;
+            local_coords[3] = coords[(mol_start + i) * 3 + 2] - centroid_z;
 
             rotate_coordinates_by_quaternion(local_coords, quat);
 
@@ -173,10 +165,9 @@ void __global__ k_rotate_and_translate_mols(
             local_coords[1] += translation_x;
             local_coords[2] += translation_y;
             local_coords[3] += translation_z;
-
-            coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 0] = static_cast<double>(local_coords[1]);
-            coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 1] = static_cast<double>(local_coords[2]);
-            coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 2] = static_cast<double>(local_coords[3]);
+            coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 0] = local_coords[1];
+            coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 1] = local_coords[2];
+            coords_out[(idx_in_batch * num_atoms * 3) + (i * 3) + 2] = local_coords[3];
         }
 
         idx_in_batch += gridDim.x * blockDim.x;
@@ -187,48 +178,12 @@ template void __global__ k_rotate_coordinates<float>(int, int, const double *, c
 template void __global__ k_rotate_coordinates<double>(int, int, const double *, const double *, double *);
 
 template void __global__ k_rotate_and_translate_mols<float, false>(
-    const int,
-    const int,
-    const int *,
-    const double *,
-    const double *,
-    const int *,
-    const int *,
-    const float *,
-    const float *,
-    double *);
+    int, const double *, const double *, const int *, const int *, const float *, const float *, double *);
 template void __global__ k_rotate_and_translate_mols<float, true>(
-    const int,
-    const int,
-    const int *,
-    const double *,
-    const double *,
-    const int *,
-    const int *,
-    const float *,
-    const float *,
-    double *);
+    int, const double *, const double *, const int *, const int *, const float *, const float *, double *);
 template void __global__ k_rotate_and_translate_mols<double, false>(
-    const int,
-    const int,
-    const int *,
-    const double *,
-    const double *,
-    const int *,
-    const int *,
-    const double *,
-    const double *,
-    double *);
+    int, const double *, const double *, const int *, const int *, const double *, const double *, double *);
 template void __global__ k_rotate_and_translate_mols<double, true>(
-    const int,
-    const int,
-    const int *,
-    const double *,
-    const double *,
-    const int *,
-    const int *,
-    const double *,
-    const double *,
-    double *);
+    int, const double *, const double *, const int *, const int *, const double *, const double *, double *);
 
 } // namespace timemachine

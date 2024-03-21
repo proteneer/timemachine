@@ -25,16 +25,13 @@ void __global__ k_rotate_coordinates(
 // at the translation as the final step, if SCALE=true then the translation that is provided will be scaled by the box vectors.
 template <typename RealType, bool SCALE>
 void __global__ k_rotate_and_translate_mols(
-    const int total_proposals,
     const int batch_size,
-    const int *__restrict__ offset,
     const double *__restrict__ coords,         // [N, 3]
     const double *__restrict__ box,            // [3, 3]
     const int *__restrict__ samples,           // [batch_size]
-    const int *__restrict__ mol_offsets,       // [num_mols + 1]
+    const int *__restrict__ mol_offsets,       // [batch_size + 1]
     const RealType *__restrict__ quaternions,  // [batch_size, 4]
     const RealType *__restrict__ translations, // [batch_size, 3]
-    double *__restrict__ coords_out            // [batch_size, num_atoms, 3]
-);
+    double *__restrict__ coords_out);
 
 } // namespace timemachine

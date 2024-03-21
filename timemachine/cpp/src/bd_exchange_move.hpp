@@ -3,7 +3,6 @@
 #include "device_buffer.hpp"
 #include "mover.hpp"
 #include "nonbonded_mol_energy.hpp"
-#include "pinned_host_buffer.hpp"
 #include "segmented_sumexp.hpp"
 #include "segmented_weighted_random_sampler.hpp"
 #include <array>
@@ -59,7 +58,6 @@ protected:
     DeviceBuffer<RealType> d_lse_exp_sum_after_;  // [batch_size_]
 
     DeviceBuffer<int> d_samples_;            // [batch_size_] The indices of the molecules to make proposals for
-    DeviceBuffer<int> d_selected_sample_;    // [1] The mol selected from the batch
     DeviceBuffer<RealType> d_quaternions_;   // Normal noise for uniform random rotations
     DeviceBuffer<RealType> d_mh_noise_;      // Noise used in the metropolis hastings check
     DeviceBuffer<size_t> d_num_accepted_;    // [1]
@@ -71,9 +69,6 @@ protected:
         d_sampling_intermediate_;           // [batch_size_, num_target_mols_] Intermediate buffer for weighted sampling
     DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
     DeviceBuffer<int> d_sample_segments_offsets_; // Segment offsets for the sampler // [batch_size + 1]
-    DeviceBuffer<int> d_noise_offset_;            // [1]  Offset into noise
-
-    PinnedHostBuffer<int> p_noise_offset_; // [1]
 
     // If the RNGs are changed, make sure to modify the seeding of TIBDExchangeMove translations RNG
     curandGenerator_t cr_rng_quat_;         // Generate noise for quaternions
