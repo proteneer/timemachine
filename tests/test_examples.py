@@ -288,6 +288,9 @@ def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
 
 @pytest.mark.parametrize("insertion_type", ["untargeted"])
 def test_water_sampling_mc_bulk_water(insertion_type):
+    reference_data_path = EXAMPLES_DIR.parent / "tests" / "data" / f"reference_bulk_water_{insertion_type}.npz"
+    assert reference_data_path.is_file()
+    reference_data = np.load(reference_data_path)
     with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
         config = dict(
             out_cif="bulk.cif",
@@ -298,12 +301,21 @@ def test_water_sampling_mc_bulk_water(insertion_type):
             equilibration_steps=5000,
             insertion_type=insertion_type,
             use_hmr=1,
+            save_last_frame="comp_frame.npz",
         )
+
     with temporary_working_dir() as temp_dir:
         # expect running this script to write summary_result_result_{mol_name}_*.pkl files
         proc = run_example("water_sampling_mc.py", get_cli_args(config), cwd=temp_dir)
         assert proc.returncode == 0
         assert (Path(temp_dir) / config["out_cif"]).is_file()
+        last_frame = Path(temp_dir) / config["save_last_frame"]
+        assert last_frame.is_file()
+
+        test_data = np.load(last_frame)
+        assert test_data.files == reference_data.files
+        for key in reference_data.files:
+            np.testing.assert_array_equal(test_data[key], reference_data[key])
 
 
 @pytest.mark.parametrize("insertion_type", ["targeted", "untargeted"])
