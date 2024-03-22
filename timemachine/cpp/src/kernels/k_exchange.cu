@@ -147,9 +147,6 @@ void __global__ k_attempt_exchange_move_targeted(
         before_log_sum,
         after_max,
         after_log_sum);
-    if (atom_idx == 0) {
-        printf("Raw Log Prob %f\n", raw_log_acceptance);
-    }
 
     RealType log_acceptance_prob = min(raw_log_acceptance, static_cast<RealType>(0.0));
 
