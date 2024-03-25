@@ -811,11 +811,31 @@ def run_sims_bisection(
             print("Skipping pruning, not all overlaps great enough")
         else:
             current_lamb_idx = 0
-            # pruned_results[results[current_lamb_idx]]
-            # pruned_lambdas = [lambdas[current_lamb_idx]]
-            for i in reversed(range(1, len(lambdas))):
-                overlap = get_bar_result(lambdas[current_lamb_idx], lambdas[i])
-                print(f"{current_lamb_idx} -> {i}: {overlap}")
+            last_lamb_idx = current_lamb_idx
+            # pruned_results = [results[current_lamb_idx]]
+            pruned_lambdas = [lambdas[current_lamb_idx]]
+            while current_lamb_idx < len(lambdas) - 1:
+                for i in reversed(range(1, len(lambdas))):
+                    # print(len(results), len(lambdas), i)
+                    if i <= current_lamb_idx:
+                        continue
+                    if i - current_lamb_idx == 1:
+                        pruned_lambdas.append(lambdas[i])
+                        break
+                    bar_res = get_bar_result(lambdas[current_lamb_idx], lambdas[i])
+                    print(f"{current_lamb_idx} -> {i}: {bar_res.overlap}")
+                    if bar_res.overlap >= min_overlap:
+                        print("Here we go!", current_lambda_idx, i)
+                        pruned_lambdas.append(lambdas[i])
+                        current_lamb_idx = i
+                        break
+                if current_lamb_idx == last_lamb_idx:
+                    current_lamb_idx += 1
+                last_lamb_idx = current_lamb_idx
+            print(len(lambdas), lambdas)
+            print(len(pruned_lambdas), pruned_lambdas)
+            # results.append(compute_intermediate_result(pruned_lambdas))
+
 
     trajectories = [get_samples(lamb) for lamb in lambdas]
 
