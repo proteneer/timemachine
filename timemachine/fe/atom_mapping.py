@@ -353,6 +353,9 @@ def _deduplicate_all_cores_and_bonds(all_cores, all_bonds):
     return cores, bonds
 
 
+import warnings
+
+
 def _get_cores_impl(
     mol_a,
     mol_b,
@@ -372,6 +375,8 @@ def _get_cores_impl(
     if initial_mapping is None:
         initial_mapping = np.zeros((0, 2))
 
+    warnings.warn("Ring cutoff is deprecated and no longer used.")
+
     mol_a, perm, initial_mapping = reorder_atoms_by_degree_and_initial_mapping(mol_a, initial_mapping)
 
     bonds_a = get_romol_bonds(mol_a)
@@ -387,28 +392,63 @@ def _get_cores_impl(
     for src, dst in initial_mapping:
         initial_mapping_kv[src] = dst
 
+    dijs = np.zeros((mol_a.GetNumAtoms(), mol_b.GetNumAtoms()))
+
+    for idx, a_xyz in enumerate(conf_a):
+        for jdx, b_xyz in enumerate(conf_b):
+            dijs[idx][jdx] = np.linalg.norm(a_xyz - b_xyz)
+
+    mol_a_nearest_nb = np.argmin(dijs, axis=1)
+    mol_b_nearest_nb = np.argmin(dijs, axis=0)
+
+    mol_a_cutoffs = np.zeros(mol_a.GetNumAtoms())
+    mol_b_cutoffs = np.zeros(mol_b.GetNumAtoms())
+
+    def is_terminal(mol, i):
+        return mol.GetAtomWithIdx(i).GetDegree() == 1
+
+    for idx, a_xyz in enumerate(conf_a):
+        atom_i = mol_a.GetAtomWithIdx(idx)
+        for jdx, b_xyz in enumerate(conf_b):
+            atom_j = mol_b.GetAtomWithIdx(jdx)
+            if (
+                mol_a_nearest_nb[idx] == jdx
+                and mol_b_nearest_nb[jdx] == idx
+                and dijs[idx][jdx] < 0.05  # nanometers
+                and (is_terminal(mol_a, idx) == is_terminal(mol_b, jdx))
+            ):
+                mol_a_cutoffs[idx] = 0.05
+                mol_b_cutoffs[jdx] = 0.05
+            else:
+                cutoff = ring_cutoff if (atom_i.IsInRing() or atom_j.IsInRing()) else chain_cutoff
+                mol_a_cutoffs[idx] = cutoff
+                mol_b_cutoffs[jdx] = cutoff
+
     for idx, a_xyz in enumerate(conf_a):
         if idx < len(initial_mapping):
             priority_idxs.append([initial_mapping_kv[idx]])  # used to initialize marcs and nothing else
         else:
             atom_i = mol_a.GetAtomWithIdx(idx)
-            dijs = []
+            atom_dijs = []
 
             allowed_idxs = set()
             for jdx, b_xyz in enumerate(conf_b):
                 atom_j = mol_b.GetAtomWithIdx(jdx)
                 dij = np.linalg.norm(a_xyz - b_xyz)
-                dijs.append(dij)
+                atom_dijs.append(dij)
 
                 if ring_matches_ring_only and (atom_i.IsInRing() != atom_j.IsInRing()):
                     continue
 
-                cutoff = ring_cutoff if (atom_i.IsInRing() or atom_j.IsInRing()) else chain_cutoff
+                # cutoff = ring_cutoff if (atom_i.IsInRing() or atom_j.IsInRing()) else chain_cutoff
+                cutoff_a = mol_a_cutoffs[idx]
+                cutoff_b = mol_b_cutoffs[jdx]
+                cutoff = min(cutoff_a, cutoff_b)
                 if dij < cutoff:
                     allowed_idxs.add(jdx)
 
             final_idxs = []
-            for idx in np.argsort(dijs, kind="stable"):
+            for idx in np.argsort(atom_dijs, kind="stable"):
                 if idx in allowed_idxs:
                     final_idxs.append(idx)
 

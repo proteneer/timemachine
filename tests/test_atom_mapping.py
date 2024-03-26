@@ -1117,8 +1117,8 @@ def test_truncated_mols():
     TEST_ATOM_MAPPING_KWARGS = copy.deepcopy(DEFAULT_ATOM_MAPPING_KWARGS)
 
     # useful for testing larger cutoff settings
-    # TEST_ATOM_MAPPING_KWARGS["ring_cutoff"] = 0.4
-    # TEST_ATOM_MAPPING_KWARGS["chain_cutoff"] = 0.4
+    TEST_ATOM_MAPPING_KWARGS["ring_cutoff"] = 0.3
+    TEST_ATOM_MAPPING_KWARGS["chain_cutoff"] = 0.3
 
     for i in range(n_mols):
         for j in range(i + 1, n_mols):
@@ -1168,44 +1168,45 @@ def test_truncated_mols():
             hybrid_core_sizes.append(len(core_hybrid))
 
     # useful diagnostics
-    # import matplotlib.pyplot as plt
-    # plt.subplot(231)
-    # plt.title("with Hs visits")
-    # plt.hist(with_h_visits, label=f"mean={np.mean(with_h_visits):.2f}", bins=20)
-    # plt.xlabel("total visits")
-    # plt.legend()
+    import matplotlib.pyplot as plt
 
-    # # plt.show()
-
-    # plt.subplot(232)
-    # plt.title("without Hs visits")
-    # plt.hist(without_h_visits, label=f"mean={np.mean(without_h_visits):.2f}", bins=20)
-    # plt.xlabel("total visits")
-    # plt.legend()
-    # # plt.show()
-
-    # plt.subplot(233)
-    # plt.title("hybrid visits")
-    # plt.hist(hybrid_visits, label=f"mean={np.mean(hybrid_visits):.2f}", bins=20)
-    # plt.xlabel("total visits")
-    # plt.legend()
-
-    # plt.subplot(234)
-    # plt.title("with Hs core sizes")
-    # plt.hist(with_h_core_sizes, label=f"mean={np.mean(with_h_core_sizes):.2f}", bins=20)
-    # plt.xlabel("core_size")
-    # plt.legend()
-
-    # plt.subplot(235)
-    # plt.title("without Hs core sizes")
-    # plt.hist(without_h_core_sizes, label=f"mean={np.mean(without_h_core_sizes):.2f}", bins=20)
-    # plt.xlabel("core_size")
-    # plt.legend()
-
-    # plt.subplot(236)
-    # plt.title("hybrid core sizes")
-    # plt.hist(hybrid_core_sizes, label=f"mean={np.mean(hybrid_core_sizes):.2f}", bins=20)
-    # plt.xlabel("core_size")
-    # plt.legend()
+    plt.subplot(231)
+    plt.title("with Hs visits")
+    plt.hist(with_h_visits, label=f"mean={np.mean(with_h_visits):.2f}", bins=20)
+    plt.xlabel("total visits")
+    plt.legend()
 
     # plt.show()
+
+    plt.subplot(232)
+    plt.title("without Hs visits")
+    plt.hist(without_h_visits, label=f"mean={np.mean(without_h_visits):.2f}", bins=20)
+    plt.xlabel("total visits")
+    plt.legend()
+    # plt.show()
+
+    plt.subplot(233)
+    plt.title("hybrid visits")
+    plt.hist(hybrid_visits, label=f"mean={np.mean(hybrid_visits):.2f}", bins=20)
+    plt.xlabel("total visits")
+    plt.legend()
+
+    plt.subplot(234)
+    plt.title("with Hs core sizes")
+    plt.hist(with_h_core_sizes, label=f"mean={np.mean(with_h_core_sizes):.2f}", bins=20)
+    plt.xlabel("core_size")
+    plt.legend()
+
+    plt.subplot(235)
+    plt.title("without Hs core sizes")
+    plt.hist(without_h_core_sizes, label=f"mean={np.mean(without_h_core_sizes):.2f}", bins=20)
+    plt.xlabel("core_size")
+    plt.legend()
+
+    plt.subplot(236)
+    plt.title("hybrid core sizes")
+    plt.hist(hybrid_core_sizes, label=f"mean={np.mean(hybrid_core_sizes):.2f}", bins=20)
+    plt.xlabel("core_size")
+    plt.legend()
+
+    plt.show()
