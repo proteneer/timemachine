@@ -77,6 +77,12 @@ def test_exchange():
     parser.add_argument(
         "--save_last_frame", type=str, help="Store last frame as a npz file, used to verify bitwise determinism"
     )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=1,
+        help="Batch size to generate proposals for the MC moves, not used for reference case",
+    )
 
     args = parser.parse_args()
 
@@ -156,6 +162,7 @@ def test_exchange():
                 seed,
                 args.mc_steps_per_batch,
                 exchange_interval,
+                batch_size=args.batch_size,
             )
     elif args.insertion_type == "untargeted":
         if args.use_reference:
@@ -171,6 +178,7 @@ def test_exchange():
                 seed,
                 args.mc_steps_per_batch,
                 exchange_interval,
+                batch_size=args.batch_size,
             )
 
     cur_box = initial_state.box0
@@ -206,7 +214,8 @@ def test_exchange():
     equilibration_steps = args.equilibration_steps
     # equilibrate using the npt mover
     npt_mover.n_steps = equilibration_steps
-    xvb_t = npt_mover.move(xvb_t)
+    if equilibration_steps > 0:
+        xvb_t = npt_mover.move(xvb_t)
     print("done")
 
     # TBD: cache the minimized and equilibrated initial structure later on to iterate faster.
@@ -245,7 +254,8 @@ def test_exchange():
             writer.write_frame(xvb_t.coords * 10)
 
         # run MD
-        xvb_t = npt_mover.move(xvb_t)
+        if args.md_steps_per_batch > 0:
+            xvb_t = npt_mover.move(xvb_t)
 
     writer.close()
     if args.save_last_frame:
@@ -269,9 +279,6 @@ if __name__ == "__main__":
 
     # start with 6 waters, with hmr, using espaloma charges, 10k mc steps, 10k md steps, targeted insertion:
     # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_6_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_espaloma.sdf --out_cif traj_6_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
-
-    # start with 0 waters, with hmr, using zero charges, 10k mc steps, 10k md steps, targeted insertion:
-    # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_neutral.sdf --out_cif traj_0_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
 
     # running in bulk, 10k mc steps, 10k md steps, untargeted insertion
     # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --out_cif bulk.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type untargeted --use_hmr 1
