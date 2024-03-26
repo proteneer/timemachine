@@ -229,7 +229,7 @@ void TIBDExchangeMove<RealType>::move(
             this->num_target_mols_,
             this->batch_size_,
             this->d_sample_segments_offsets_.data,
-            this->d_log_weights_before_.data,
+            d_src_log_weights_.data,
             this->d_sample_noise_.data + (step * this->num_target_mols_ * this->batch_size_),
             this->d_sampling_intermediate_.data,
             this->d_samples_.data,
