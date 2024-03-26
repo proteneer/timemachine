@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from common import prepare_single_topology_initial_state
 from numpy.typing import NDArray
+from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping
@@ -25,12 +26,22 @@ from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 
 
-def compute_ref_raw_log_prob(ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j, coords, box, new_coords):
+def compute_ref_raw_log_prob(
+    ref_exchange, water_idx, vi_mols, vj_mols, vol_i, vol_j, coords, box, sampled_mol_idx, new_coords
+):
     """Modified from timemachine.md.exchange.exchange_mover.TIBDExchangeMove.swap_vi_into_vj
     to support not resampling"""
     coords = coords.copy()
     log_weights_before_full = ref_exchange.batch_log_weights(coords, box)
     log_weights_before = log_weights_before_full[vi_mols]
+
+    # Verify that the probability of moving the specific water is not highly unlikely
+    src_idx = np.argwhere(vi_mols == sampled_mol_idx).reshape(-1)
+    log_probs_before = log_weights_before - logsumexp(log_weights_before)
+    probs_before = np.exp(log_probs_before)
+    assert (
+        probs_before[src_idx] > 0.01
+    ), f"Probably of moving water {src_idx} incredibly low, average is {np.mean(probs_before)}"
 
     vj_plus_one_idxs = np.concatenate([[water_idx], vj_mols])
     log_weights_after_full, trial_coords = ref_exchange.batch_log_weights_incremental(
@@ -81,19 +92,26 @@ def verify_targeted_moves(
 
             center = np.mean(last_conf[ref_bdem.ligand_idxs], axis=0)
 
-            inner, outer = get_water_groups(last_conf, box, center, ref_bdem.water_idxs_np, ref_bdem.radius)
-            if idx in inner:
-                vi_mols = inner
+            inner_before, outer_before = get_water_groups(
+                last_conf, box, center, ref_bdem.water_idxs_np, ref_bdem.radius
+            )
+            inner_after, outer_after = get_water_groups(x_move, box, center, ref_bdem.water_idxs_np, ref_bdem.radius)
+            assert np.abs(len(inner_before) - len(inner_after)) == 1
+            assert np.abs(len(outer_before) - len(outer_after)) == 1
+            if idx in inner_before:
+                assert idx in outer_after
+                vi_mols = inner_before
                 vol_i = vol_inner
-                vj_mols = outer
+                vj_mols = outer_before
                 vol_j = vol_outer
             else:
-                vi_mols = outer
+                assert idx in inner_after
+                vi_mols = outer_before
                 vol_i = vol_outer
-                vj_mols = inner
+                vj_mols = inner_before
                 vol_j = vol_inner
             tested, raw_ref_log_prob = compute_ref_raw_log_prob(
-                ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, new_pos
+                ref_bdem, idx, vi_mols, vj_mols, vol_i, vol_j, last_conf, box, idx, new_pos
             )
             np.testing.assert_array_equal(tested, x_move)
             ref_prob = np.exp(raw_ref_log_prob)
