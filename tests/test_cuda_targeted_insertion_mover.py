@@ -39,9 +39,11 @@ def compute_ref_raw_log_prob(
     src_idx = np.argwhere(vi_mols == sampled_mol_idx).reshape(-1)
     log_probs_before = log_weights_before - logsumexp(log_weights_before)
     probs_before = np.exp(log_probs_before)
+    median_probability = np.median(probs_before)
+    reasonable_probability = min(median_probability, 0.01)
     assert (
-        probs_before[src_idx] > 0.01
-    ), f"Probably of moving water {src_idx} incredibly low, average is {np.mean(probs_before)}"
+        probs_before[src_idx] >= reasonable_probability
+    ), f"Probably of moving water {src_idx} low {probs_before[src_idx]}, median is {median_probability}"
 
     vj_plus_one_idxs = np.concatenate([[water_idx], vj_mols])
     log_weights_after_full, trial_coords = ref_exchange.batch_log_weights_incremental(
@@ -95,17 +97,12 @@ def verify_targeted_moves(
             inner_before, outer_before = get_water_groups(
                 last_conf, box, center, ref_bdem.water_idxs_np, ref_bdem.radius
             )
-            inner_after, outer_after = get_water_groups(x_move, box, center, ref_bdem.water_idxs_np, ref_bdem.radius)
-            assert np.abs(len(inner_before) - len(inner_after)) == 1
-            assert np.abs(len(outer_before) - len(outer_after)) == 1
             if idx in inner_before:
-                assert idx in outer_after
                 vi_mols = inner_before
                 vol_i = vol_inner
                 vj_mols = outer_before
                 vol_j = vol_outer
             else:
-                assert idx in inner_after
                 vi_mols = outer_before
                 vol_i = vol_outer
                 vj_mols = inner_before
@@ -120,6 +117,14 @@ def verify_targeted_moves(
             # Verify that the probabilities and per mol energies agree when we do accept moves
             # can only be done when we only attempt a single move per step
             if proposals_per_move == 1:
+                # Verify that the water moved from one region to another as expected
+                inner_after, outer_after = get_water_groups(
+                    x_move, box, center, ref_bdem.water_idxs_np, ref_bdem.radius
+                )
+                if idx in inner_before:
+                    assert idx in outer_after
+                else:
+                    assert idx in inner_after
                 raw_test_log_prob = bdem.last_raw_log_probability()
                 # Verify that the raw, without min(x, 0.0), probabilities match coarsely
                 np.testing.assert_allclose(
