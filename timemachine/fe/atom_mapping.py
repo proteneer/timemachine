@@ -415,7 +415,8 @@ def _get_cores_impl(
                 mol_a_nearest_nb[idx] == jdx
                 and mol_b_nearest_nb[jdx] == idx
                 and dijs[idx][jdx] < 0.05  # nanometers
-                and (is_terminal(mol_a, idx) == is_terminal(mol_b, jdx))
+                and not is_terminal(mol_a, idx)
+                and not is_terminal(mol_b, jdx)
             ):
                 mol_a_cutoffs[idx] = min(mol_a_cutoffs[idx], 0.05)
                 mol_b_cutoffs[jdx] = min(mol_b_cutoffs[jdx], 0.05)
