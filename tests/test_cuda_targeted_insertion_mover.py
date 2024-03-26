@@ -663,16 +663,10 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
 
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
-    # Get first two mols as the ones two move
-    group_idxs = all_group_idxs[:2]
+    group_idxs = all_group_idxs[1:]
 
-    center_group = all_group_idxs[2]
-
-    all_group_idxs = all_group_idxs[:3]
-
-    conf_idxs = np.array(all_group_idxs).reshape(-1)
-
-    conf = conf[conf_idxs]
+    # Target the first water
+    center_group = all_group_idxs[0]
 
     box = np.eye(3) * 100.0
 
@@ -681,7 +675,7 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
 
     N = conf.shape[0]
 
-    params = nb.params[conf_idxs]
+    params = nb.params
 
     cutoff = nb.potential.cutoff
     klass = custom_ops.TIBDExchangeMove_f32
