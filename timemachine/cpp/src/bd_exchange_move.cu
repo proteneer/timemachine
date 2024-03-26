@@ -505,7 +505,8 @@ template <typename RealType> double BDExchangeMove<RealType>::raw_log_probabilit
     d_lse_exp_sum_after_.copy_to(&h_log_exp_after[batch_size_]);
 
     RealType before_log_prob = convert_nan_to_inf(compute_logsumexp_final(h_log_exp_before[0], h_log_exp_before[1]));
-    RealType after_log_prob = convert_nan_to_inf(compute_logsumexp_final(h_log_exp_after[0], h_log_exp_after[1]));
+    RealType after_log_prob =
+        convert_nan_to_inf(compute_logsumexp_final(h_log_exp_after[0], h_log_exp_after[batch_size_]));
 
     return static_cast<double>(before_log_prob - after_log_prob);
 }
