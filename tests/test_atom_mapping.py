@@ -1117,8 +1117,8 @@ def test_truncated_mols():
     TEST_ATOM_MAPPING_KWARGS = copy.deepcopy(DEFAULT_ATOM_MAPPING_KWARGS)
 
     # useful for testing larger cutoff settings
-    TEST_ATOM_MAPPING_KWARGS["ring_cutoff"] = 0.3
-    TEST_ATOM_MAPPING_KWARGS["chain_cutoff"] = 0.3
+    TEST_ATOM_MAPPING_KWARGS["ring_cutoff"] = 0.2
+    TEST_ATOM_MAPPING_KWARGS["chain_cutoff"] = 0.2
 
     for i in range(n_mols):
         for j in range(i + 1, n_mols):

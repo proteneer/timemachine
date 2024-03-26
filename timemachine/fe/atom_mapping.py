@@ -401,8 +401,8 @@ def _get_cores_impl(
     mol_a_nearest_nb = np.argmin(dijs, axis=1)
     mol_b_nearest_nb = np.argmin(dijs, axis=0)
 
-    mol_a_cutoffs = np.zeros(mol_a.GetNumAtoms())
-    mol_b_cutoffs = np.zeros(mol_b.GetNumAtoms())
+    mol_a_cutoffs = np.ones(mol_a.GetNumAtoms()) * np.inf
+    mol_b_cutoffs = np.ones(mol_b.GetNumAtoms()) * np.inf
 
     def is_terminal(mol, i):
         return mol.GetAtomWithIdx(i).GetDegree() == 1
@@ -417,12 +417,12 @@ def _get_cores_impl(
                 and dijs[idx][jdx] < 0.05  # nanometers
                 and (is_terminal(mol_a, idx) == is_terminal(mol_b, jdx))
             ):
-                mol_a_cutoffs[idx] = 0.05
-                mol_b_cutoffs[jdx] = 0.05
+                mol_a_cutoffs[idx] = min(mol_a_cutoffs[idx], 0.05)
+                mol_b_cutoffs[jdx] = min(mol_b_cutoffs[jdx], 0.05)
             else:
                 cutoff = ring_cutoff if (atom_i.IsInRing() or atom_j.IsInRing()) else chain_cutoff
-                mol_a_cutoffs[idx] = cutoff
-                mol_b_cutoffs[jdx] = cutoff
+                mol_a_cutoffs[idx] = min(mol_a_cutoffs[idx], cutoff)
+                mol_b_cutoffs[jdx] = min(mol_b_cutoffs[jdx], cutoff)
 
     for idx, a_xyz in enumerate(conf_a):
         if idx < len(initial_mapping):
