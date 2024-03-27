@@ -1711,7 +1711,7 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
 }
 
 template <typename RealType>
-void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const char *typestr) {
+void declare_targeted_insertion_biased_deletion_exchange_move(py::module &m, const char *typestr) {
 
     using Class = TIBDExchangeMove<RealType>;
     std::string pyclass_name = std::string("TIBDExchangeMove_") + typestr;
@@ -1728,8 +1728,12 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                         const double radius,
                         const int seed,
                         const int num_proposals_per_move,
-                        const int interval) {
+                        const int interval,
+                        const int batch_size) {
                 size_t params_dim = params.ndim();
+                if (num_proposals_per_move <= 0) {
+                    throw std::runtime_error("proposals per move must be greater than 0");
+                }
                 if (params_dim != 2) {
                     throw std::runtime_error("parameters dimensions must be 2");
                 }
@@ -1745,6 +1749,12 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                 if (interval <= 0) {
                     throw std::runtime_error("must provide interval greater than 0");
                 }
+                if (batch_size <= 0) {
+                    throw std::runtime_error("must provide batch size greater than 0");
+                }
+                if (batch_size > num_proposals_per_move) {
+                    throw std::runtime_error("number of proposals per move must be greater than batch size");
+                }
                 std::vector<double> v_params = py_array_to_vector(params);
                 return new Class(
                     N,
@@ -1758,8 +1768,7 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
                     seed,
                     num_proposals_per_move,
                     interval,
-                    1 // batch_size must be 1 for now
-                );
+                    batch_size);
             }),
             py::arg("N"),
             py::arg("ligand_idxs"),
@@ -1771,7 +1780,8 @@ void declare_targeted_insertion_bias_deletion_exchange_move(py::module &m, const
             py::arg("radius"),
             py::arg("seed"),
             py::arg("num_proposals_per_move"),
-            py::arg("interval"));
+            py::arg("interval"),
+            py::arg("batch_size") = 1);
 }
 
 const py::array_t<double, py::array::c_style>
@@ -2036,8 +2046,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_biased_deletion_exchange_move<double>(m, "f64");
     declare_biased_deletion_exchange_move<float>(m, "f32");
 
-    declare_targeted_insertion_bias_deletion_exchange_move<double>(m, "f64");
-    declare_targeted_insertion_bias_deletion_exchange_move<float>(m, "f32");
+    declare_targeted_insertion_biased_deletion_exchange_move<double>(m, "f64");
+    declare_targeted_insertion_biased_deletion_exchange_move<float>(m, "f32");
 
     declare_context(m);
 

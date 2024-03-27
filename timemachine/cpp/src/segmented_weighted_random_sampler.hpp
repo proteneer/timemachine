@@ -48,6 +48,17 @@ public:
         int *d_samples,
         cudaStream_t stream);
 
+    // Sometimes it is necessary to setup custom gumbel noise for the samples, such as in the case of TIBD where the noise
+    // needs to be reused in a specific way to ensure bitwise determinism
+    void sample_given_gumbel_noise_device(
+        const int num_segments,
+        const int *d_segment_offsets,   // [num_segments + 1]
+        const RealType *d_gumbel_noise, // [total_values]
+        int *d_samples,
+        cudaStream_t stream);
+
+    // sample_given_noise_and_offset_device is useful when sampling using a fixed pool of noise and the noise may need
+    // to be reused by controlling the `d_noise_offset`.
     void sample_given_noise_and_offset_device(
         const int vals_per_segment,
         const int num_segments,
