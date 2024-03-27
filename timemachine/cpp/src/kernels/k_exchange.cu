@@ -71,12 +71,10 @@ void __global__ k_accepted_exchange_move(
     const int *__restrict__ accepted_batched_move, // [1]
     const int *__restrict__ mol_idx_per_batch,     // [batch_size]
     const int *__restrict__ mol_offsets,           // [num_target_mols]
-    const int *__restrict__ segment_offsets,       // [batch_size + 1]
     const double *__restrict__ moved_coords,       // [batch_size, num_atoms_in_each_mol, 3]
     double *__restrict__ dest_coords,              // [N, 3]
-    size_t *__restrict__ num_accepted,             // [1]
-    int *__restrict__ rand_offset,                 // [1]
-    int *__restrict__ segment_noise_offset         // [1]
+    size_t *__restrict__ num_accepted,             // [1],
+    int *__restrict__ rand_offset                  // [1]
 ) {
     // Note that this kernel does not handle multiple proposals, expects that the proposals
     // have been reduced down to a single proposal beforehand.
@@ -87,15 +85,13 @@ void __global__ k_accepted_exchange_move(
     // If the selected batch idx is not less than the total batch size, no proposal was accepted, we can exit immediately.
     if (batch_idx >= batch_size) {
         rand_offset[0] += batch_size;
-        segment_noise_offset[0] += segment_offsets[batch_size];
         return;
     }
     const int mol_idx = mol_idx_per_batch[batch_idx];
     const int mol_start = mol_offsets[mol_idx];
+    // Increment offset by the index + 1, IE the Nth item in the batch being accepted results in incrementing by N + 1
+    rand_offset[0] += batch_idx + 1;
     if (idx == 0) {
-        // Increment offset by the index + 1, IE the Nth item in the batch being accepted results in incrementing by N + 1
-        rand_offset[0] += batch_idx + 1;
-        segment_noise_offset[0] += segment_offsets[batch_idx + 1];
         num_accepted[0]++;
     }
 
@@ -120,7 +116,6 @@ void __global__ k_store_exchange_move_targeted(
     RealType *__restrict__ before_weights,         // [num_target_mols]
     RealType *__restrict__ after_weights,          // [batch_size, num_target_mols]
     int *__restrict__ rand_offset,                 // [1]
-    int *__restrict__ segment_noise_offset,        // [1]
     int *__restrict__ inner_flags,                 // [num_target_mols]
     size_t *__restrict__ num_accepted              // [1]
 ) {
@@ -141,13 +136,11 @@ void __global__ k_store_exchange_move_targeted(
     if (atom_idx == 0) {
         if (accepted) {
             rand_offset[0] += batch_idx + 1;
-            segment_noise_offset[0] += batch_idx + 1;
             num_accepted[0]++;
             // XOR 1 to flip the flag from 0 to 1 or 1 to 0
             inner_flags[mol_idx] ^= 1;
         } else {
             rand_offset[0] += batch_size;
-            segment_noise_offset[0] += batch_size;
         }
     }
 
@@ -201,7 +194,6 @@ template void __global__ k_store_exchange_move_targeted<float>(
     float *__restrict__ before_weights,            // [num_target_mols]
     float *__restrict__ after_weights,             // [num_target_mols]
     int *__restrict__ rand_offset,                 // [1]
-    int *__restrict__ segment_noise_offset,        // [1]
     int *__restrict__ inner_flags,                 // [num_target_mols]
     size_t *__restrict__ num_accepted              // [1]
 );
@@ -217,7 +209,6 @@ template void __global__ k_store_exchange_move_targeted<double>(
     double *__restrict__ before_weights,           // [num_target_mols]
     double *__restrict__ after_weights,            // [num_target_mols]
     int *__restrict__ rand_offset,                 // [1]
-    int *__restrict__ segment_noise_offset,        // [1]
     int *__restrict__ inner_flags,                 // [num_target_mols]
     size_t *__restrict__ num_accepted              // [1]
 );

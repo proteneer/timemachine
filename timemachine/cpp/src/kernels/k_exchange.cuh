@@ -80,12 +80,10 @@ void __global__ k_accepted_exchange_move(
     const int *__restrict__ accepted_batched_move, // [1]
     const int *__restrict__ mol_idx_per_batch,     // [batch_size]
     const int *__restrict__ mol_offsets,           // [num_target_mols]
-    const int *__restrict__ segment_offsets,       // [batch_size + 1]
     const double *__restrict__ moved_coords,       // [batch_size, num_atoms_in_each_mol, 3]
     double *__restrict__ dest_coords,              // [N, 3]
     size_t *__restrict__ num_accepted,             // [1]
-    int *__restrict__ rand_offset,                 // [1]
-    int *__restrict__ segment_noise_offset         // [1]
+    int *__restrict__ rand_offset                  // [1]
 );
 
 template <typename RealType>
@@ -101,7 +99,6 @@ void __global__ k_store_exchange_move_targeted(
     RealType *__restrict__ before_weights,         // [num_target_mols]
     RealType *__restrict__ after_weights,          // [num_target_mols]
     int *__restrict__ rand_offset,                 // [1]
-    int *__restrict__ segment_noise_offset,        // [1]
     int *__restrict__ inner_flags,                 // [num_target_mols]
     size_t *__restrict__ num_accepted              // [1]
 );

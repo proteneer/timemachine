@@ -132,7 +132,6 @@ void TIBDExchangeMove<RealType>::move(
 
     // Set the offset to 0
     gpuErrchk(cudaMemsetAsync(this->d_noise_offset_.data, 0, this->d_noise_offset_.size(), stream));
-    gpuErrchk(cudaMemsetAsync(this->d_sampler_noise_offset_.data, 0, this->d_sampler_noise_offset_.size(), stream));
 
     this->compute_initial_weights(N, d_coords, d_box, stream);
 
@@ -268,7 +267,7 @@ void TIBDExchangeMove<RealType>::move(
                 this->batch_size_,
                 this->num_target_mols_,
                 static_cast<int>(this->d_sample_noise_.length),
-                this->d_sampler_noise_offset_.data,
+                this->d_noise_offset_.data,
                 this->d_sample_segments_offsets_.data,
                 d_src_log_weights_.data,
                 this->d_sample_noise_.data,
@@ -357,7 +356,6 @@ void TIBDExchangeMove<RealType>::move(
             this->d_log_weights_before_.data,
             this->d_log_weights_after_.data,
             this->d_noise_offset_.data,
-            this->d_sampler_noise_offset_.data,
             d_inner_flags_.data,
             this->d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());

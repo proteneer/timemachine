@@ -73,7 +73,7 @@ BDExchangeMove<RealType>::BDExchangeMove(
       d_intermediate_sample_weights_(batch_size_ * num_intermediates_per_reduce_),
       d_sample_noise_(num_target_mols_ * num_proposals_per_move_),
       d_sampling_intermediate_(num_target_mols_ * batch_size_), d_translations_(translation_buffer_size),
-      d_sample_segments_offsets_(batch_size_ + 1), d_noise_offset_(1), d_sampler_noise_offset_(1), p_noise_offset_(1) {
+      d_sample_segments_offsets_(batch_size_ + 1), d_noise_offset_(1), p_noise_offset_(1) {
 
     if (num_proposals_per_move_ <= 0) {
         throw std::runtime_error("proposals per move must be greater than 0");
@@ -150,9 +150,8 @@ void BDExchangeMove<RealType>::move(
     curandErrchk(curandSetStream(cr_rng_samples_, stream));
     curandErrchk(curandSetStream(cr_rng_mh_, stream));
 
-    // Set the offsets to 0
+    // Set the offset to 0
     gpuErrchk(cudaMemsetAsync(d_noise_offset_.data, 0, d_noise_offset_.size(), stream));
-    gpuErrchk(cudaMemsetAsync(d_sampler_noise_offset_.data, 0, d_sampler_noise_offset_.size(), stream));
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     /* --Algorithm Description--
@@ -222,10 +221,10 @@ void BDExchangeMove<RealType>::move(
         sampler_.sample_given_noise_and_offset_device(
             num_target_mols_ * batch_size_,
             batch_size_,
-            static_cast<int>(d_sample_noise_.length),
+            num_proposals_per_move_,
             d_sample_segments_offsets_.data,
             d_log_weights_before_.data,
-            d_sampler_noise_offset_.data,
+            d_noise_offset_.data,
             d_sample_noise_.data,
             d_sampling_intermediate_.data,
             d_samples_.data,
@@ -266,12 +265,10 @@ void BDExchangeMove<RealType>::move(
             d_selected_sample_.data,
             d_samples_.data,
             d_target_mol_offsets_.data,
-            d_sample_segments_offsets_.data,
             d_intermediate_coords_.data,
             d_coords,
             d_num_accepted_.data,
-            d_noise_offset_.data,
-            d_sampler_noise_offset_.data);
+            d_noise_offset_.data);
         gpuErrchk(cudaPeekAtLastError());
         gpuErrchk(cudaMemcpyAsync(
             p_noise_offset_.data, d_noise_offset_.data, d_noise_offset_.size(), cudaMemcpyDeviceToHost, stream));

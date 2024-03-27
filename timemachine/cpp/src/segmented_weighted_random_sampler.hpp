@@ -31,7 +31,7 @@ public:
     ~SegmentedWeightedRandomSampler();
 
     void sample_device(
-        const int total_values,
+        const int vals_per_segment,
         const int num_segments,
         const int *d_segment_offsets,
         const RealType *d_log_probabilities,
@@ -39,7 +39,7 @@ public:
         cudaStream_t stream);
 
     void sample_given_noise_device(
-        const int total_values,
+        const int vals_per_segment,
         const int num_segments,
         const int *d_segment_offsets,
         const RealType *d_log_probabilities,
@@ -60,14 +60,14 @@ public:
     // sample_given_noise_and_offset_device is useful when sampling using a fixed pool of noise and the noise may need
     // to be reused by controlling the `d_noise_offset`. This offset should be the offset in the noise buffer
     void sample_given_noise_and_offset_device(
-        const int total_values,
+        const int vals_per_segment,
         const int num_segments,
         const int max_offset,
-        const int *d_segment_offsets,        // [num_segments + 1]
-        const RealType *d_log_probabilities, // [total_values]
-        const int *d_noise_offset,           // [total_values]
-        const RealType *d_noise,             // [total_values]
-        RealType *d_gumbel_noise,            // [total_values] Buffer to store the gumbel distribution
+        const int *d_segment_offsets,        // [num_segments]
+        const RealType *d_log_probabilities, // [num_segments, vals_per_segment]
+        const int *d_noise_offset,           // [num_segments, vals_per_segment]
+        const RealType *d_noise,             // [num_segments, vals_per_segment]
+        RealType *d_gumbel_noise,            // [num_segments, vals_per_segment] Buffer to store the gumbel distribution
         int *d_samples,                      // [num_segments]
         cudaStream_t stream);
 

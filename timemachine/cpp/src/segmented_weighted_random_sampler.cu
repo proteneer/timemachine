@@ -138,14 +138,22 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_and_offset_dev
     }
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
 
+    const int blocks = ceil_divide(total_values, tpb);
     if (d_noise_offset == nullptr) {
-        k_setup_gumbel_max_trick<<<ceil_divide(total_values, tpb), tpb, 0, stream>>>(
+        k_setup_gumbel_max_trick<<<blocks, tpb, 0, stream>>>(
             total_values, d_log_probabilities, d_noise, d_gumbel_noise);
         gpuErrchk(cudaPeekAtLastError());
     } else {
-        dim3 dimGrid(ceil_divide(total_values / num_segments, tpb), num_segments, 1);
+        dim3 dimGrid(blocks, num_segments, 1);
         k_setup_gumbel_max_trick_with_offset<<<dimGrid, tpb, 0, stream>>>(
-            num_segments, max_offset, d_noise_offset, d_segment_offsets, d_log_probabilities, d_noise, d_gumbel_noise);
+            num_segments,
+            total_values,
+            max_offset,
+            d_noise_offset,
+            d_segment_offsets,
+            d_log_probabilities,
+            d_noise,
+            d_gumbel_noise);
         gpuErrchk(cudaPeekAtLastError());
     }
 
