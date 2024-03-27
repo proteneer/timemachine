@@ -286,6 +286,38 @@ def test_tibd_exchange_validation(precision):
     with pytest.raises(RuntimeError, match="must provide interval greater than 0"):
         klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 0)
 
+    with pytest.raises(RuntimeError, match="must provide batch size greater than 0"):
+        klass(
+            N,
+            ligand_idxs,
+            group_idxs,
+            params,
+            DEFAULT_TEMP,
+            beta,
+            cutoff,
+            radius,
+            seed,
+            proposals_per_move,
+            1,
+            batch_size=0,
+        )
+
+    with pytest.raises(RuntimeError, match="number of proposals per move must be greater than batch size"):
+        klass(
+            N,
+            ligand_idxs,
+            group_idxs,
+            params,
+            DEFAULT_TEMP,
+            beta,
+            cutoff,
+            radius,
+            seed,
+            proposals_per_move,
+            1,
+            batch_size=proposals_per_move + 1,
+        )
+
     # Verify that if the box is too small this will trigger a failure
     # no such protection in the move_device call for performance reasons though an assert will be triggered
     box = np.eye(3) * 0.1
