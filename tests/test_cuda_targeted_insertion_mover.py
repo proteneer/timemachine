@@ -35,7 +35,7 @@ def compute_ref_raw_log_prob(
     log_weights_before_full = ref_exchange.batch_log_weights(coords, box)
     log_weights_before = log_weights_before_full[vi_mols]
 
-    # Verify that the probability of moving the specific water is not highly unlikely
+    # Verify that the probability of moving the specific water is relatively likely to move
     src_idx = np.argwhere(vi_mols == sampled_mol_idx).reshape(-1)
     log_probs_before = log_weights_before - logsumexp(log_weights_before)
     probs_before = np.exp(log_probs_before)
@@ -43,7 +43,7 @@ def compute_ref_raw_log_prob(
     reasonable_probability = min(median_probability, 0.01)
     assert (
         probs_before[src_idx] >= reasonable_probability
-    ), f"Probably of moving water {src_idx} low {probs_before[src_idx]}, median is {median_probability}"
+    ), f"Probability of moving water {src_idx} low {probs_before[src_idx]}, median is {median_probability}"
 
     vj_plus_one_idxs = np.concatenate([[water_idx], vj_mols])
     log_weights_after_full, trial_coords = ref_exchange.batch_log_weights_incremental(
