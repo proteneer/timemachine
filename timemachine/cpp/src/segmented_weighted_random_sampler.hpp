@@ -58,7 +58,7 @@ public:
         cudaStream_t stream);
 
     // sample_given_noise_and_offset_device is useful when sampling using a fixed pool of noise and the noise may need
-    // to be reused by controlling the `d_noise_offset`. This offset should be the offset in the noise buffer
+    // to be reused by controlling the `d_noise_offset`.
     void sample_given_noise_and_offset_device(
         const int vals_per_segment,
         const int num_segments,

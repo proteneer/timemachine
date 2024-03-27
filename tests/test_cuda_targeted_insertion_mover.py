@@ -127,7 +127,6 @@ def verify_targeted_moves(
                 else:
                     assert idx in inner_after
                 raw_test_log_prob = bdem.last_raw_log_probability()
-                # print("Raw test log prob", raw_test_log_prob)
                 # Verify that the raw, without min(x, 0.0), probabilities match coarsely
                 np.testing.assert_allclose(
                     np.exp(raw_test_log_prob),
@@ -721,7 +720,6 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
         iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
         assert not np.all(conf == iterative_moved_coords)  # We should move every time since its a single mol
     batch_moved_coords, _ = bdem_b.move(conf, box)
-    # Where the batch size is 1 the last log probabilities should match exactly
     assert bdem_a.n_accepted() > 0
     assert bdem_a.n_proposed() == proposals_per_move
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
@@ -730,6 +728,7 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
     # Moves should be deterministic regardless the number of steps taken per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
     if batch_size == 1:
+        # Where the batch size is 1 the last log probabilities should match
         if precision == np.float64:
             # For some reason these disagree very slightly in float64,  something to dig into
             np.testing.assert_allclose(
