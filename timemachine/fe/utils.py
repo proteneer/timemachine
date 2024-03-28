@@ -430,9 +430,9 @@ def sanitize_energies(full_us, lamb_idx, cutoff=10000):
     return np.where(abs_us < cutoff, full_us, np.inf)
 
 
-def read_sdf(fname: Union[str, Path]) -> List[Chem.Mol]:
+def read_sdf(fname: Union[str, Path], removeHs=False) -> List[Chem.Mol]:
     """Read list of mols from an SDF (without discarding hydrogens!)"""
-    supplier = Chem.SDMolSupplier(str(fname), removeHs=False)
+    supplier = Chem.SDMolSupplier(str(fname), removeHs=removeHs)
     mols = [mol for mol in supplier]
     return mols
 

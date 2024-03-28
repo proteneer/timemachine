@@ -40,4 +40,5 @@ DEFAULT_ATOM_MAPPING_KWARGS = {
     "enforce_chiral": True,
     "disallow_planar_torsion_flips": True,
     "min_threshold": 0,
+    "initial_mapping": None,
 }
