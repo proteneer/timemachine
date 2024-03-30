@@ -670,6 +670,103 @@ def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, bat
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 
+@pytest.mark.parametrize("radius", [0.4])
+@pytest.mark.parametrize("proposals_per_move,batch_size", [(10000, 250)])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("seed", [2024])
+def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, batch_size, precision, seed):
+    """Test the edges cases of targeted insertion where the proposal probability isn't symmetric.
+
+    Tests a single water and two waters being moved into an empty buckyball.
+    """
+    ff = Forcefield.load_precomputed_default()
+    with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
+        host_pdb = water_exchange / "bb_0_waters.pdb"
+        mols = read_sdf(water_exchange / "bb_centered_espaloma.sdf")
+        assert len(mols) == 1
+        mol = mols[0]
+
+    # Build the protein system using the solvent PDB for buckyball
+    host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
+        str(host_pdb), ff.protein_ff, ff.water_ff
+    )
+    host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)
+
+    bt = BaseTopology(mol, ff)
+    afe = AbsoluteFreeEnergy(mol, bt)
+    # Fully embed the ligand
+    potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, 0.0)
+    ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
+
+    conf = afe.prepare_combined_coords(host_config.conf)
+    box = host_box
+
+    bps = [pot.bind(p) for pot, p in zip(potentials, params)]
+    summed_pot = next(bp.potential for bp in bps if isinstance(bp.potential, SummedPotential))
+    nb = next(
+        pot.bind(p) for pot, p in zip(summed_pot.potentials, summed_pot.params_init) if isinstance(pot, Nonbonded)
+    )
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
+    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.TIBDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.TIBDExchangeMove_f64
+
+    # Reference that makes proposals_per_move proposals per move() call
+    bdem_a = klass(
+        N,
+        ligand_idxs,
+        water_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        1,
+    )
+
+    bdem_b = klass(
+        N,
+        ligand_idxs,
+        water_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        1,
+        batch_size=batch_size,
+    )
+
+    serially_moved_coords, _ = bdem_a.move(conf, box)
+    assert not np.all(conf == serially_moved_coords)
+    batch_moved_coords, _ = bdem_b.move(conf, box)
+
+    assert bdem_a.n_accepted() > 0
+    assert bdem_a.n_proposed() == proposals_per_move
+    assert bdem_a.n_accepted() == bdem_b.n_accepted()
+    assert bdem_a.n_proposed() == bdem_b.n_proposed()
+
+    # Moves should be deterministic regardless the number of steps taken per move
+    np.testing.assert_array_equal(serially_moved_coords, batch_moved_coords)
+
+
 @pytest.mark.parametrize("radius", [1.0])
 @pytest.mark.parametrize("proposals_per_move, batch_size", [(5, 1), (100, 1), (12, 5), (120, 100), (1000, 1000)])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
