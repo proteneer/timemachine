@@ -603,16 +603,10 @@ def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, bat
 
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
-    # Get first two mols as the ones two move
-    group_idxs = all_group_idxs[:2]
+    group_idxs = all_group_idxs[1:]
 
-    center_group = all_group_idxs[2]
-
-    all_group_idxs = all_group_idxs[:3]
-
-    conf_idxs = np.array(all_group_idxs).reshape(-1)
-
-    conf = conf[conf_idxs]
+    # Target the first water
+    center_group = all_group_idxs[0]
 
     box = np.eye(3) * 100.0
 
@@ -621,7 +615,7 @@ def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, bat
 
     N = conf.shape[0]
 
-    params = nb.params[conf_idxs]
+    params = nb.params
 
     cutoff = nb.potential.cutoff
 
@@ -681,14 +675,15 @@ def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, bat
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
 def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_size, precision, seed):
-    """Given one water the exchange mover should accept every move and the results should be deterministic if the seed and proposals per move are the same.
+    """Given a set of waters in a large box the exchange mover should nearly accept every move and the results should be deterministic
+    if the seed and proposals per move are the same.
 
 
     There are three forms of determinism we require:
     * Constructing an exchange move produces the same results every time
     * Calling an exchange move with one proposals per move or K proposals per move produce the same state.
       * It is difficult to test each move when there are K proposals per move so we need to know that it matches the single proposals per move case
-    * TBD: When we attempt K proposals in a batch (each proposal is made up of K proposals) it produces the same as the serial version
+    * When batch size is greater than one (each batch is made up of K proposals) it produces the same result as the serial version (batch size == 1)
     """
     ff = Forcefield.load_default()
     system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
