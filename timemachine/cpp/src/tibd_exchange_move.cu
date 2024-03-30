@@ -176,24 +176,25 @@ void TIBDExchangeMove<RealType>::move(
     * Targeted Insertion Biased Deletion algorithm is as follows
     *
     * 1. Generate all random noise upfront to ensure bitwise identical results regardless of batch size
-    * 2. Compute the initial weights of each of the molecules (no batching)
+    * 2. Compute the initial weights of each of the molecules, called only once per move() (no batching)
     * 3. Copy the initial weights (d_log_weights_before_) to the proposal weight buffers (d_log_weights_after_),
     *    duplicating the values for each proposal in the batch
     * 4. Flag the target molecules that are inside and outside the target region
-    * 5. Set up the proposals determining if they should be targeting the inner region or the outer region
+    * 5. Set up the proposals determining which region is the source region, where waters are to be deleted, and which region is the
+    *    destination region, where waters are to be inserted.
     * 6. Construct the offsets for the initial weights (d_src_log_weights_) and after (d_log_weights_after_) log weights
-    * 7. Separate out the weights (targeting inner region only looks at outer mols) associated with each proposal
-    * 8. For each proposal in the batch sample a weight index from the initial weights, aiming to select indexes with high energies
+    * 7. Separate out the weights (only evaluate the source region weights) associated with each proposal
+    * 8. For each proposal in the batch sample a weight index from the initial weights, aiming to select weights with high energies
     * 9. Compute the logexpsum (using SegmentedSumExp and compute_logsumexp_final) of each proposal's initial weights.
-    * 10. Remap the indexes selected in 8. back to molecule indexes to be able to determine which coordinates to modify in the next
+    * 10. Remap the weight indexes selected in 8. back to molecule indexes to be able to determine which coordinates to modify in the next
     *     step.
     * 11. Generate the proposals for all of the sampled molecules in the batch, rotating and translating the mols to the new
     *    positions.
-    * 12. For each proposal in the batch separate out the proposals weights into the after log weights.
+    * 12. For each proposal in the batch separate out the proposals weights (the molecules within the destination region) into the after log weights.
     * 13. Compute the logexpsum (using SegmentedSumExp and compute_logsumexp_final) of each proposal's after log weights.
     * 14. Find the first proposal in the batch that was accepted with the Metropolis-Hasting check
     * 15. If a move was accepted, update the new proposed coordinates and increment the noise offset (d_noise_offset_)
-    *     by the value in the batch that was accepted.
+    *     by the index in the batch that was accepted.
     *
     * NOTE: The noise offset is used to determine where in the noise buffers the kernels should look. If a kernel is expecting to
     *       access data beyond the total number of proposals, the kernels leave the buffers untouched. This offset to to
