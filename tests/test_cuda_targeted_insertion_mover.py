@@ -856,10 +856,10 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
         if precision == np.float64:
             # For some reason these disagree very slightly in float64,  something to dig into
             np.testing.assert_allclose(
-                bdem_a.last_log_probability(), bdem_b.last_log_probability(), atol=1e-9, rtol=0.0
+                bdem_a.last_raw_log_probability(), bdem_b.last_raw_log_probability(), atol=1e-9, rtol=0.0
             )
         else:
-            assert bdem_a.last_log_probability() == bdem_b.last_log_probability()
+            assert bdem_a.last_raw_log_probability() == bdem_b.last_raw_log_probability()
 
 
 @pytest.mark.parametrize("radius", [1.2])
