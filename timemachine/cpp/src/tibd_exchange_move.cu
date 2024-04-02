@@ -133,7 +133,7 @@ void TIBDExchangeMove<RealType>::move(
     // Set the offset to 0
     gpuErrchk(cudaMemsetAsync(this->d_noise_offset_.data, 0, this->d_noise_offset_.size(), stream));
 
-    this->compute_initial_weights(N, d_coords, d_box, stream);
+    this->compute_initial_weights_device(N, d_coords, d_box, stream);
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int mol_blocks = ceil_divide(this->num_target_mols_, tpb);

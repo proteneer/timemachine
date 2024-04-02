@@ -176,7 +176,7 @@ void BDExchangeMove<RealType>::move(
     *       each proposal in the sequence.
     */
 
-    this->compute_initial_weights(N, d_coords, d_box, stream);
+    this->compute_initial_weights_device(N, d_coords, d_box, stream);
 
     // Compute logsumexp of energies once upfront to get log probabilities
     logsumexp_.sum_device(
@@ -280,7 +280,7 @@ void BDExchangeMove<RealType>::move(
 }
 
 template <typename RealType>
-void BDExchangeMove<RealType>::compute_initial_weights(
+void BDExchangeMove<RealType>::compute_initial_weights_device(
     const int N, double *d_coords, double *d_box, cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int mol_blocks = ceil_divide(num_target_mols_, tpb);
@@ -464,7 +464,7 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
     gpuErrchk(cudaMemsetAsync(d_noise_offset_.data, 0, d_noise_offset_.size(), stream));
 
     // Setup the initial weights
-    this->compute_initial_weights(N, d_coords.data, d_box.data, stream);
+    this->compute_initial_weights_device(N, d_coords.data, d_box.data, stream);
 
     this->compute_incremental_weights_device(
         N,
@@ -490,6 +490,45 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
         h_output[i] = std::vector<RealType>(h_log_weights_after.begin() + start, h_log_weights_after.begin() + end);
     }
     return h_output;
+}
+
+template <typename RealType>
+std::vector<RealType> BDExchangeMove<RealType>::compute_initial_weights_host(
+    const int N,
+    const double *h_coords, // [N, 3]
+    const double *h_box     // [3, 3]
+) {
+    if (N != N_) {
+        throw std::runtime_error("N != N_");
+    }
+
+    DeviceBuffer<double> d_coords(N * 3);
+    DeviceBuffer<double> d_box(3 * 3);
+
+    d_coords.copy_from(h_coords);
+    d_box.copy_from(h_box);
+
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+
+    // Setup the initial weights
+    this->compute_initial_weights_device(N, d_coords.data, d_box.data, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
+
+    return this->get_before_log_weights();
+}
+
+template <typename RealType> std::vector<RealType> BDExchangeMove<RealType>::get_before_log_weights() {
+    std::vector<RealType> h_before_weights(d_log_weights_before_.length);
+    d_log_weights_before_.copy_to(&h_before_weights[0]);
+
+    return h_before_weights;
+}
+
+template <typename RealType> std::vector<RealType> BDExchangeMove<RealType>::get_after_log_weights() {
+    std::vector<RealType> h_after_weights(d_log_weights_after_.length);
+    d_log_weights_after_.copy_to(&h_after_weights[0]);
+
+    return h_after_weights;
 }
 
 template <typename RealType> double BDExchangeMove<RealType>::raw_log_probability_host() {

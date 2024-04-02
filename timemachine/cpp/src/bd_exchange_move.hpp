@@ -81,7 +81,7 @@ protected:
     curandGenerator_t cr_rng_samples_;      // Generate noise for selecting waters
     curandGenerator_t cr_rng_mh_;           // Generate noise for Metropolis-Hastings
 
-    void compute_initial_weights(const int N, double *d_coords, double *d_box, cudaStream_t stream);
+    void compute_initial_weights_device(const int N, double *d_coords, double *d_box, cudaStream_t stream);
 
     BDExchangeMove(
         const int N,
@@ -128,6 +128,15 @@ public:
         const int *mol_idxs,
         const RealType *h_quaternions,
         const RealType *h_translations);
+
+    std::vector<RealType> compute_initial_weights_host(const int N, const double *h_coords, const double *h_box);
+
+    // get_after_weights returns the per molecule weight before each proposal, may come from either
+    // `compute_intial_weights_device` or from `compute_incremental_weights_device`.
+    std::vector<RealType> get_before_log_weights();
+
+    // get_after_weights returns the per molecule weight after being computed incrementally
+    std::vector<RealType> get_after_log_weights();
 
     ~BDExchangeMove();
 

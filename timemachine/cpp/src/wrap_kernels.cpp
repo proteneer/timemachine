@@ -1676,6 +1676,19 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
             py::arg("quaternions"),
             py::arg("translation"))
         .def(
+            "compute_initial_weights",
+            [](Class &mover,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &box) -> std::vector<RealType> {
+                verify_coords_and_box(coords, box);
+                const int N = coords.shape()[0];
+
+                std::vector<RealType> weights = mover.compute_initial_weights_host(N, coords.data(), box.data());
+                return weights;
+            },
+            py::arg("coords"),
+            py::arg("box"))
+        .def(
             "get_params",
             [](Class &mover) -> py::array_t<double, py::array::c_style> {
                 std::vector<double> flat_params = mover.get_params();
@@ -1707,6 +1720,8 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
         .def("n_accepted", &Class::n_accepted)
         .def("n_proposed", &Class::n_proposed)
         .def("acceptance_fraction", &Class::acceptance_fraction)
+        .def("get_before_log_weights", &Class::get_before_log_weights)
+        .def("get_after_log_weights", &Class::get_after_log_weights)
         .def("batch_size", &Class::batch_size);
 }
 
