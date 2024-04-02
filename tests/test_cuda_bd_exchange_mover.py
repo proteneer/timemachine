@@ -609,6 +609,63 @@ def test_moves_in_a_water_box(
     )
 
 
+@pytest.mark.parametrize("num_particles", [3])
+@pytest.mark.parametrize("proposals_per_move", [31])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("seed", [2023])
+def test_compute_incremental_weights_match_initial_weights_when_recomputed(
+    num_particles, proposals_per_move, precision, seed
+):
+    """Verify that the result of computing the weights using `compute_initial_weights` and the incremental weights generated
+    during proposals are identical.
+    """
+    assert (
+        proposals_per_move > 1
+    ), "If proposals per move is 1 then this isn't meaningful since the weights won't be incremental"
+    rng = np.random.default_rng(seed)
+    cutoff = 1.2
+    beta = 2.0
+
+    box_size = 1.0
+    box = np.eye(3) * box_size
+    conf = rng.random((num_particles, 3)) * box_size
+
+    params = rng.random((num_particles, 4))
+    params[:, 3] = 0.0  # Put them in the same plane
+
+    group_idxs = [[x] for x in range(num_particles)]
+
+    N = conf.shape[0]
+
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    # Test version that makes all proposals in a single move
+    bdem = klass(
+        N,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        beta,
+        cutoff,
+        seed,
+        proposals_per_move,
+        1,
+    )
+
+    updated_coords, _ = bdem.move(conf, box)
+    assert not np.all(updated_coords == conf)
+    assert bdem.n_accepted() >= 1
+    assert bdem.n_proposed() == proposals_per_move
+
+    before_log_weights = bdem.get_before_log_weights()
+    ref_log_weights = bdem.compute_initial_weights(updated_coords, box)
+    # The before weights of the mover should identically match the weights if recomputed from scratch
+    diff_idxs = np.argwhere(np.array(before_log_weights) != np.array(ref_log_weights))[0]
+    np.testing.assert_array_equal(before_log_weights, ref_log_weights, err_msg=f"idxs {diff_idxs} don't match")
+
+
 @pytest.mark.parametrize(
     "batch_size,samples,box_size",
     [

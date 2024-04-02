@@ -265,7 +265,8 @@ void __global__ k_adjust_weights(
         int mol_idx = blockIdx.x * blockDim.x + threadIdx.x;
         while (mol_idx < num_weights) {
 
-            RealType current_log_weight = log_weights[idx_in_batch * num_weights + mol_idx];
+            __int128 current_log_weight =
+                FLOAT_TO_FIXED_ENERGY<RealType>(log_weights[idx_in_batch * num_weights + mol_idx]);
             __int128 weight_accumulator = 0;
 
             int mol_start = mol_offsets[mol_idx];
@@ -276,12 +277,16 @@ void __global__ k_adjust_weights(
             // A loop that in the case of water will be 3x3
             for (int i = idx_in_batch * mol_size; i < (idx_in_batch + 1) * mol_size; i++) {
                 for (int j = min_atom_idx; j <= max_atom_idx; j++) {
-                    weight_accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + j]);
+                    weight_accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(per_atom_energies[i * N + j]);
                 }
             }
 
-            weight_accumulator = Negated ? FLOAT_TO_FIXED_ENERGY<RealType>(current_log_weight) - weight_accumulator
-                                         : FLOAT_TO_FIXED_ENERGY<RealType>(current_log_weight) + weight_accumulator;
+            // Convert energy to unitless, done after accumulation to reduce precision loss
+            weight_accumulator =
+                FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * FIXED_ENERGY_TO_FLOAT<RealType>(weight_accumulator));
+
+            weight_accumulator =
+                Negated ? current_log_weight - weight_accumulator : current_log_weight + weight_accumulator;
 
             log_weights[idx_in_batch * num_weights + mol_idx] =
                 fixed_point_overflow(weight_accumulator) ? INFINITY
@@ -361,12 +366,13 @@ void __global__ k_set_sampled_weight_block(
         while (atom_idx < N) {
             if (atom_idx < min_atom_idx || atom_idx > max_atom_idx) {
                 for (int i = idx_in_batch * mol_size; i < (idx_in_batch + 1) * mol_size; i++) {
-                    accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * per_atom_energies[i * N + atom_idx]);
+                    accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(per_atom_energies[i * N + atom_idx]);
                 }
             }
             atom_idx += gridDim.x * blockDim.x;
         }
-        accumulators[threadIdx.x] = accumulator;
+        accumulators[threadIdx.x] =
+            FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * FIXED_ENERGY_TO_FLOAT<RealType>(accumulator));
         __syncthreads();
         block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
         if (threadIdx.x == 0) {
