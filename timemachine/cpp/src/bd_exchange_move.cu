@@ -196,25 +196,18 @@ void BDExchangeMove<RealType>::move(
     // For the first pass just set the value to zero on the host
     *p_noise_offset_.data = 0;
     while (*p_noise_offset_.data < num_proposals_per_move_) {
-        // Run only after the first pass, to maintain meaningful `log_probability_host` values
         if (*p_noise_offset_.data > 0) {
-            // Run a separate kernel to replace the before log probs and weights with the after if accepted a move
-            // Need the weights to sample a value and the log probs are just because they aren't expensive to copy
-            k_store_accepted_log_probability<RealType><<<ceil_divide(num_target_mols_, tpb), tpb, 0>>>(
+            // Run only after the first pass, to maintain meaningful `log_probability_host` values
+            // Run a separate kernel to replace the before logsumexp values with the after if accepted a move
+            // Could also recompute the logsumexp each round, but more expensive than probably necessary.
+            k_store_accepted_log_probability<RealType><<<1, 1, 0>>>(
                 num_target_mols_,
                 batch_size_,
                 d_selected_sample_.data,
                 d_lse_max_before_.data,
                 d_lse_exp_sum_before_.data,
                 d_lse_max_after_.data,
-                d_lse_exp_sum_after_.data,
-                d_log_weights_before_.data,
-                d_log_weights_after_.data);
-            gpuErrchk(cudaPeekAtLastError());
-
-            // Copy the same weights repeatedly from the before weights to the after weights
-            k_copy_batch<RealType><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
-                num_target_mols_, batch_size_, d_log_weights_before_.data, d_log_weights_after_.data);
+                d_lse_exp_sum_after_.data);
             gpuErrchk(cudaPeekAtLastError());
         }
 
@@ -259,16 +252,20 @@ void BDExchangeMove<RealType>::move(
             d_selected_sample_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        k_accepted_exchange_move<<<1, 1, 0, stream>>>(
+        k_store_exchange_move<RealType><<<ceil_divide(num_target_mols_, tpb), tpb, 0, stream>>>(
             batch_size_,
-            mol_size_,
+            num_target_mols_,
             d_selected_sample_.data,
             d_samples_.data,
             d_target_mol_offsets_.data,
+            d_sample_segments_offsets_.data,
             d_intermediate_coords_.data,
             d_coords,
-            d_num_accepted_.data,
-            d_noise_offset_.data);
+            d_log_weights_before_.data,
+            d_log_weights_after_.data,
+            d_noise_offset_.data,
+            nullptr, // No inner/outer flags in Biased deletion
+            d_num_accepted_.data);
         gpuErrchk(cudaPeekAtLastError());
         gpuErrchk(cudaMemcpyAsync(
             p_noise_offset_.data, d_noise_offset_.data, d_noise_offset_.size(), cudaMemcpyDeviceToHost, stream));

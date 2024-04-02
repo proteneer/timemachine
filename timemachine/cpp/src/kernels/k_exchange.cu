@@ -65,46 +65,8 @@ void __global__ k_setup_proposals(
     }
 }
 
-void __global__ k_accepted_exchange_move(
-    const int batch_size,
-    const int num_atoms_in_each_mol,
-    const int *__restrict__ accepted_batched_move, // [1]
-    const int *__restrict__ mol_idx_per_batch,     // [batch_size]
-    const int *__restrict__ mol_offsets,           // [num_target_mols]
-    const double *__restrict__ moved_coords,       // [batch_size, num_atoms_in_each_mol, 3]
-    double *__restrict__ dest_coords,              // [N, 3]
-    size_t *__restrict__ num_accepted,             // [1],
-    int *__restrict__ rand_offset                  // [1]
-) {
-    // Note that this kernel does not handle multiple proposals, expects that the proposals
-    // have been reduced down to a single proposal beforehand.
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    assert(idx == 0);
-
-    const int batch_idx = accepted_batched_move[0];
-    // If the selected batch idx is not less than the total batch size, no proposal was accepted, we can exit immediately.
-    if (batch_idx >= batch_size) {
-        rand_offset[0] += batch_size;
-        return;
-    }
-    const int mol_idx = mol_idx_per_batch[batch_idx];
-    const int mol_start = mol_offsets[mol_idx];
-    // Increment offset by the index + 1, IE the Nth item in the batch being accepted results in incrementing by N + 1
-    rand_offset[0] += batch_idx + 1;
-    if (idx == 0) {
-        num_accepted[0]++;
-    }
-
-    // If accepted, move the coords of the selected mol into place
-    for (int i = 0; i < num_atoms_in_each_mol; i++) {
-        dest_coords[(mol_start + i) * 3 + 0] = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 0];
-        dest_coords[(mol_start + i) * 3 + 1] = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 1];
-        dest_coords[(mol_start + i) * 3 + 2] = moved_coords[num_atoms_in_each_mol * batch_idx * 3 + i * 3 + 2];
-    }
-}
-
 template <typename RealType>
-void __global__ k_store_exchange_move_targeted(
+void __global__ k_store_exchange_move(
     const int batch_size,
     const int num_target_mols,
     const int *__restrict__ accepted_batched_move, // [1]
@@ -116,7 +78,7 @@ void __global__ k_store_exchange_move_targeted(
     RealType *__restrict__ before_weights,         // [num_target_mols]
     RealType *__restrict__ after_weights,          // [batch_size, num_target_mols]
     int *__restrict__ rand_offset,                 // [1]
-    int *__restrict__ inner_flags,                 // [num_target_mols]
+    int *__restrict__ inner_flags,                 // [num_target_mols] or nullptr
     size_t *__restrict__ num_accepted              // [1]
 ) {
     // Note that this kernel does not handle multiple proposals, expects that the proposals
@@ -130,15 +92,18 @@ void __global__ k_store_exchange_move_targeted(
     const int mol_idx = accepted ? mol_idx_per_batch[batch_idx] : 0;
     const int mol_start = accepted ? mol_offsets[mol_idx] : 0;
     const int mol_end = accepted ? mol_offsets[mol_idx + 1] : 0;
-    const int num_atoms_in_each_mol = mol_end - mol_start;
+    const int num_atoms_in_mol = mol_end - mol_start;
 
     // Increment offset by the index + 1, IE the Nth item in the batch being accepted results in incrementing by N + 1
     if (atom_idx == 0) {
         if (accepted) {
             rand_offset[0] += batch_idx + 1;
             num_accepted[0]++;
-            // XOR 1 to flip the flag from 0 to 1 or 1 to 0
-            inner_flags[mol_idx] ^= 1;
+            // When not using targeted, this will be null
+            if (inner_flags != nullptr) {
+                // XOR 1 to flip the flag from 0 to 1 or 1 to 0
+                inner_flags[mol_idx] ^= 1;
+            }
         } else {
             rand_offset[0] += batch_size;
         }
@@ -151,14 +116,14 @@ void __global__ k_store_exchange_move_targeted(
 
     // If accepted, move the coords into place
     // Always copy the weights, either copying from before to after or after to before
-    while (atom_idx < weights_copy_count || atom_idx < num_atoms_in_each_mol) {
-        if (accepted && atom_idx < num_atoms_in_each_mol) {
+    while (atom_idx < weights_copy_count || atom_idx < num_atoms_in_mol) {
+        if (accepted && atom_idx < num_atoms_in_mol) {
             dest_coords[(mol_start + atom_idx) * 3 + 0] =
-                moved_coords[num_atoms_in_each_mol * batch_idx * 3 + atom_idx * 3 + 0];
+                moved_coords[num_atoms_in_mol * batch_idx * 3 + atom_idx * 3 + 0];
             dest_coords[(mol_start + atom_idx) * 3 + 1] =
-                moved_coords[num_atoms_in_each_mol * batch_idx * 3 + atom_idx * 3 + 1];
+                moved_coords[num_atoms_in_mol * batch_idx * 3 + atom_idx * 3 + 1];
             dest_coords[(mol_start + atom_idx) * 3 + 2] =
-                moved_coords[num_atoms_in_each_mol * batch_idx * 3 + atom_idx * 3 + 2];
+                moved_coords[num_atoms_in_mol * batch_idx * 3 + atom_idx * 3 + 2];
         }
         // At the end of batch of proposals we need to update the before and after weights to a usable stable.
         // In the case of not accepting any moves we want to reset the after weights to be the before weights so that
@@ -182,7 +147,7 @@ void __global__ k_store_exchange_move_targeted(
     }
 }
 
-template void __global__ k_store_exchange_move_targeted<float>(
+template void __global__ k_store_exchange_move<float>(
     const int batch_size,
     const int num_target_mols,
     const int *__restrict__ accepted_batched_move, // [1]
@@ -197,7 +162,7 @@ template void __global__ k_store_exchange_move_targeted<float>(
     int *__restrict__ inner_flags,                 // [num_target_mols]
     size_t *__restrict__ num_accepted              // [1]
 );
-template void __global__ k_store_exchange_move_targeted<double>(
+template void __global__ k_store_exchange_move<double>(
     const int batch_size,
     const int num_target_mols,
     const int *__restrict__ accepted_batched_move, // [1]
@@ -221,9 +186,7 @@ void __global__ k_store_accepted_log_probability(
     RealType *__restrict__ before_max,             // [1]
     RealType *__restrict__ before_log_sum,         // [1]
     const RealType *__restrict__ after_max,        // [batch_size]
-    const RealType *__restrict__ after_log_sum,    // [batch_size]
-    RealType *__restrict__ before_weights,         // [num_weights]
-    const RealType *__restrict__ after_weights     // [batch_size, num_weights]
+    const RealType *__restrict__ after_log_sum     // [batch_size]
 ) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -238,11 +201,6 @@ void __global__ k_store_accepted_log_probability(
         before_max[0] = after_max[batch_idx];
         before_log_sum[0] = after_log_sum[batch_idx];
     }
-    // Copy over the weights
-    while (idx < num_weights) {
-        before_weights[idx] = after_weights[batch_idx * num_weights + idx];
-        idx += gridDim.x * blockDim.x;
-    }
 }
 
 template void __global__ k_store_accepted_log_probability<float>(
@@ -252,9 +210,7 @@ template void __global__ k_store_accepted_log_probability<float>(
     float *__restrict__ before_max,
     float *__restrict__ before_log_sum,
     const float *__restrict__ after_max,
-    const float *__restrict__ after_log_sum,
-    float *__restrict__ before_weights,
-    const float *__restrict__ after_weights);
+    const float *__restrict__ after_log_sum);
 template void __global__ k_store_accepted_log_probability<double>(
     const int num_weights,
     const int batch_size,
@@ -262,9 +218,7 @@ template void __global__ k_store_accepted_log_probability<double>(
     double *__restrict__ before_max,
     double *__restrict__ before_log_sum,
     const double *__restrict__ after_max,
-    const double *__restrict__ after_log_sum,
-    double *__restrict__ before_weights,
-    const double *__restrict__ after_weights);
+    const double *__restrict__ after_log_sum);
 
 template <typename RealType>
 void __global__ k_compute_box_volume(

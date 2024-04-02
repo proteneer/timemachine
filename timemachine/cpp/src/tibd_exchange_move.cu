@@ -345,7 +345,7 @@ void TIBDExchangeMove<RealType>::move(
             this->d_selected_sample_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        k_store_exchange_move_targeted<RealType><<<mol_blocks, tpb, 0, stream>>>(
+        k_store_exchange_move<RealType><<<mol_blocks, tpb, 0, stream>>>(
             this->batch_size_,
             this->num_target_mols_,
             this->d_selected_sample_.data,
