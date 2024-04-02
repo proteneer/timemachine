@@ -353,7 +353,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    k_atom_by_atom_energies<<<atom_by_atom_grid, tpb, 0, stream>>>(
+    k_atom_by_atom_energies<RealType><<<atom_by_atom_grid, tpb, 0, stream>>>(
         N,
         mol_size_ * batch_size_,
         d_target_mol_atoms_.data,
@@ -381,7 +381,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
         d_log_weights_after_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    k_atom_by_atom_energies<<<atom_by_atom_grid, tpb, 0, stream>>>(
+    k_atom_by_atom_energies<RealType><<<atom_by_atom_grid, tpb, 0, stream>>>(
         N,
         mol_size_ * batch_size_,
         d_target_mol_atoms_.data,
