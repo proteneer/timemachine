@@ -1349,6 +1349,73 @@ class SingleTopology(AtomMapMixin):
 
         return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
+    def mol(self, lamb, min_bond_k=10.0):
+        """
+        Generate an RDKit mol, with the dummy atoms attached to the molecule. Atom types and bond parameters
+        guesstimated from the corresponding bond orders.
+
+        Tricky-bits: Inferring bond orders and atom-types.
+
+        Parameters
+        ----------
+        lamb: float
+            Lambda value to use
+
+        """
+        vs = self.setup_intermediate_state(lamb)
+        N = self.get_num_atoms()
+
+        # setup atoms
+        mol_a_atomic_nums = [a.GetAtomicNum() for a in self.mol_a.GetAtoms()]
+        mol_b_atomic_nums = [b.GetAtomicNum() for b in self.mol_b.GetAtoms()]
+        mol = Chem.RWMol()
+
+        for c_idx in range(N):
+            if c_idx in self.c_to_a and c_idx in self.c_to_b:
+                # core, in both mol_a and mol_b
+                if lamb < 0.5:
+                    atomic_num = mol_a_atomic_nums[self.c_to_a[c_idx]]
+                else:
+                    atomic_num = mol_b_atomic_nums[self.c_to_b[c_idx]]
+            elif c_idx in self.c_to_a:
+                # only in mol_a
+                atomic_num = mol_a_atomic_nums[self.c_to_a[c_idx]]
+            elif c_idx in self.c_to_b:
+                # only in mol_b
+                atomic_num = mol_b_atomic_nums[self.c_to_b[c_idx]]
+            else:
+                # in neither, assert
+                assert 0
+            atom = Chem.Atom(atomic_num)
+            mol.AddAtom(atom)
+
+        # setup bonds
+        # how do we deal with kekulization/aromatic rings?
+        # bond_mat = np.zeros((N, N))
+        for (i, j), (k, b) in zip(vs.bond.potential.idxs, vs.bond.params):
+            if k > min_bond_k:
+                # if src/dst bond orders are the same?
+                mol.AddBond(int(i), int(j))
+                # if src/dst bond orders are different then we need to look at lambda?
+
+        return mol
+        # bond_list = []
+        # bond_params = []
+        # for bond_lengths in bond_mat:
+
+        #     b0s = []
+        #     nbs = []
+        #     for bond_idx, b0 in enumerate(bond_lengths):
+        #         if b0 > 0:
+        #             nbs.append(bond_idx)
+        #             b0s.append(b0)
+
+        #     bond_list.append(nbs)
+        #     bond_params.append(b0s)
+
+        # print(bond_list)
+        # print(bond_params)
+
     def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
         """
         Return an array containing the guest_charges, guest_sigmas, guest_epsilons, guest_w_coords
