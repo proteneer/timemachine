@@ -417,7 +417,6 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
             num_target_mols_,
             d_target_mol_atoms_.data,
             d_sample_per_atom_energy_buffer_.data,
-            beta_, // 1 / kT
             d_intermediate_sample_weights_.data);
     gpuErrchk(cudaPeekAtLastError());
 
@@ -426,6 +425,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
             batch_size_,
             num_target_mols_,
             num_intermediates_per_reduce_,       // Number of intermediates per sample in batch
+            beta_,                               // 1 / kT
             d_samples_.data,                     // where to set the value
             d_intermediate_sample_weights_.data, // intermediate fixed point weights
             d_log_weights_after_.data);

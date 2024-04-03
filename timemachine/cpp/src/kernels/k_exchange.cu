@@ -349,7 +349,6 @@ void __global__ k_set_sampled_weight_block(
     const int num_weights,
     const int *__restrict__ target_atoms, // [batch_size, mol_size]
     const RealType *__restrict__ per_atom_energies,
-    const RealType inv_kT,                    // 1 / kT
     __int128 *__restrict__ intermediate_accum // [batch_size, ceil_divide(N, THREADS_PER_BLOCK)]
 ) {
     __shared__ __int128 accumulators[THREADS_PER_BLOCK];
@@ -371,8 +370,7 @@ void __global__ k_set_sampled_weight_block(
             }
             atom_idx += gridDim.x * blockDim.x;
         }
-        accumulators[threadIdx.x] =
-            FLOAT_TO_FIXED_ENERGY<RealType>(inv_kT * FIXED_ENERGY_TO_FLOAT<RealType>(accumulator));
+        accumulators[threadIdx.x] = accumulator;
         __syncthreads();
         block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
         if (threadIdx.x == 0) {
@@ -389,7 +387,6 @@ template void __global__ k_set_sampled_weight_block<float, 512>(
     const int num_weights,
     const int *__restrict__ target_atoms,
     const float *__restrict__ per_atom_energies,
-    const float inv_kT,
     __int128 *__restrict__ intermediate_accum);
 template void __global__ k_set_sampled_weight_block<double, 512>(
     const int N,
@@ -398,7 +395,6 @@ template void __global__ k_set_sampled_weight_block<double, 512>(
     const int num_weights,
     const int *__restrict__ target_atoms,
     const double *__restrict__ per_atom_energies,
-    const double inv_kT,
     __int128 *__restrict__ intermediate_accum);
 
 template <typename RealType, int THREADS_PER_BLOCK>
@@ -406,6 +402,7 @@ void __global__ k_set_sampled_weight_reduce(
     const int batch_size,
     const int num_weights,
     const int num_intermediates,
+    const RealType inv_kT,
     const int *__restrict__ samples,                 // [batch_size]
     const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
     RealType *__restrict__ log_weights               // [batch_size, num_weights]
@@ -433,7 +430,8 @@ void __global__ k_set_sampled_weight_reduce(
         if (threadIdx.x == 0) {
             int mol_idx = samples[idx_in_batch];
             log_weights[idx_in_batch * num_weights + mol_idx] =
-                fixed_point_overflow(accumulators[0]) ? INFINITY : FIXED_ENERGY_TO_FLOAT<RealType>(accumulators[0]);
+                fixed_point_overflow(accumulators[0]) ? INFINITY
+                                                      : inv_kT * FIXED_ENERGY_TO_FLOAT<RealType>(accumulators[0]);
         }
 
         idx_in_batch += gridDim.y * blockDim.y;
@@ -444,6 +442,7 @@ template void __global__ k_set_sampled_weight_reduce<float, 512>(
     const int batch_size,
     const int num_intermediates,
     const int num_weights,
+    const float inv_kT,
     const int *__restrict__ samples,                 // [batch_size]
     const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
     float *__restrict__ log_weights                  // [batch_size, num_weights]
@@ -452,6 +451,7 @@ template void __global__ k_set_sampled_weight_reduce<double, 512>(
     const int batch_size,
     const int num_intermediates,
     const int num_weights,
+    const double inv_kT,
     const int *__restrict__ samples,                 // [batch_size]
     const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
     double *__restrict__ log_weights                 // [batch_size, num_weights]

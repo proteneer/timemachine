@@ -130,7 +130,6 @@ void __global__ k_set_sampled_weight_block(
     const int num_weights,
     const int *__restrict__ target_atoms,
     const RealType *__restrict__ per_atom_energies,
-    const RealType inv_kT, // 1 / kT
     __int128 *__restrict__ intermediate_accum);
 
 template <typename RealType, int THREADS_PER_BLOCK>
@@ -138,6 +137,7 @@ void __global__ k_set_sampled_weight_reduce(
     const int batch_size,
     const int num_intermediates,
     const int num_weights,
+    const RealType inv_kT,           // 1 / kT
     const int *__restrict__ samples, // [batch_size]
     const __int128 *__restrict__ intermediate_accum,
     RealType *__restrict__ log_weights);
