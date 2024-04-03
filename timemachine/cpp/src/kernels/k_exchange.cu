@@ -159,7 +159,7 @@ template void __global__ k_store_exchange_move<float>(
     float *__restrict__ before_weights,            // [num_target_mols]
     float *__restrict__ after_weights,             // [num_target_mols]
     int *__restrict__ rand_offset,                 // [1]
-    int *__restrict__ inner_flags,                 // [num_target_mols]
+    int *__restrict__ inner_flags,                 // [num_target_mols] or nullptr
     size_t *__restrict__ num_accepted              // [1]
 );
 template void __global__ k_store_exchange_move<double>(
@@ -174,7 +174,7 @@ template void __global__ k_store_exchange_move<double>(
     double *__restrict__ before_weights,           // [num_target_mols]
     double *__restrict__ after_weights,            // [num_target_mols]
     int *__restrict__ rand_offset,                 // [1]
-    int *__restrict__ inner_flags,                 // [num_target_mols]
+    int *__restrict__ inner_flags,                 // [num_target_mols] or nullptr
     size_t *__restrict__ num_accepted              // [1]
 );
 
