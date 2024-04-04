@@ -329,7 +329,7 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
             out_cif="bulk.cif",
             water_pdb=water_exchange / "bb_6_waters.pdb",
             ligand_sdf=water_exchange / "bb_centered_espaloma.sdf",
-            iterations=5,
+            iterations=50,
             md_steps_per_batch=1000,
             mc_steps_per_batch=5000,
             equilibration_steps=5000,
