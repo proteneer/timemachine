@@ -736,7 +736,10 @@ def test_compute_incremental_weights(batch_size, samples, box_size, precision, r
             moved_conf[mol_idxs] = updated_mol_conf
             np.testing.assert_equal(trial_conf, moved_conf)
             # Janky re-use of assert_energy_arrays_match which is for energies, but functions for any fixed point
-            assert_energy_arrays_match(np.array(ref_final_weights), np.array(test_weights), atol=atol, rtol=rtol)
+            # Slightly reduced threshold to deal with these being weights
+            assert_energy_arrays_match(
+                np.array(ref_final_weights), np.array(test_weights), atol=atol, rtol=rtol, threshold=5e6
+            )
 
 
 @pytest.fixture(scope="module")
