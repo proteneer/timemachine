@@ -610,9 +610,9 @@ def test_moves_in_a_water_box(
 
 
 @pytest.mark.parametrize("num_particles", [3])
-@pytest.mark.parametrize("proposals_per_move", [31])
+@pytest.mark.parametrize("proposals_per_move", [100, 1000])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
-@pytest.mark.parametrize("seed", [2023])
+@pytest.mark.parametrize("seed", [2023, 2024, 2025])
 def test_compute_incremental_weights_match_initial_weights_when_recomputed(
     num_particles, proposals_per_move, precision, seed
 ):
