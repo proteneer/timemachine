@@ -662,7 +662,7 @@ def test_compute_incremental_weights_match_initial_weights_when_recomputed(
     before_log_weights = bdem.get_before_log_weights()
     ref_log_weights = bdem.compute_initial_weights(updated_coords, box)
     # The before weights of the mover should identically match the weights if recomputed from scratch
-    diff_idxs = np.argwhere(np.array(before_log_weights) != np.array(ref_log_weights))[0]
+    diff_idxs = np.argwhere(np.array(before_log_weights) != np.array(ref_log_weights))
     np.testing.assert_array_equal(before_log_weights, ref_log_weights, err_msg=f"idxs {diff_idxs} don't match")
 
 

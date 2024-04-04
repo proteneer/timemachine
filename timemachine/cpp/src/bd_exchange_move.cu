@@ -62,11 +62,11 @@ BDExchangeMove<RealType>::BDExchangeMove(
       num_intermediates_per_reduce_(ceil_divide(N_, WEIGHT_THREADS_PER_BLOCK)), num_attempted_(0),
       mol_potential_(N, target_mols, nb_beta, cutoff), sampler_(num_target_mols_, batch_size_, seed),
       logsumexp_(num_target_mols_, batch_size_), d_intermediate_coords_(batch_size_ * mol_size_ * 3), d_params_(params),
-      d_mol_energy_buffer_(num_target_mols_), d_sample_per_atom_energy_buffer_(batch_size_ * mol_size_ * N),
-      d_atom_idxs_(get_atom_indices(target_mols)), d_mol_offsets_(get_mol_offsets(target_mols)),
-      d_log_weights_before_(num_target_mols_), d_log_weights_after_(batch_size_ * num_target_mols_),
-      d_lse_max_before_(1), d_lse_exp_sum_before_(1), d_lse_max_after_(batch_size_), d_lse_exp_sum_after_(batch_size_),
-      d_samples_(batch_size_), d_selected_sample_(1),
+      d_before_mol_energy_buffer_(num_target_mols_), d_proposal_mol_energy_buffer_(num_target_mols_ * batch_size_),
+      d_sample_per_atom_energy_buffer_(batch_size_ * mol_size_ * N), d_atom_idxs_(get_atom_indices(target_mols)),
+      d_mol_offsets_(get_mol_offsets(target_mols)), d_log_weights_before_(num_target_mols_),
+      d_log_weights_after_(batch_size_ * num_target_mols_), d_lse_max_before_(1), d_lse_exp_sum_before_(1),
+      d_lse_max_after_(batch_size_), d_lse_exp_sum_after_(batch_size_), d_samples_(batch_size_), d_selected_sample_(1),
       d_quaternions_(round_up_even(QUATERNIONS_PER_STEP * num_proposals_per_move_)),
       d_mh_noise_(num_proposals_per_move), d_num_accepted_(1), d_target_mol_atoms_(batch_size_ * mol_size_),
       d_target_mol_offsets_(num_target_mols_ + 1),
@@ -252,7 +252,7 @@ void BDExchangeMove<RealType>::move(
             d_selected_sample_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        k_store_exchange_move<RealType><<<ceil_divide(num_target_mols_, tpb), tpb, 0, stream>>>(
+        k_store_exchange_move<<<ceil_divide(num_target_mols_, tpb), tpb, 0, stream>>>(
             batch_size_,
             num_target_mols_,
             d_selected_sample_.data,
@@ -261,8 +261,8 @@ void BDExchangeMove<RealType>::move(
             d_sample_segments_offsets_.data,
             d_intermediate_coords_.data,
             d_coords,
-            d_log_weights_before_.data,
-            d_log_weights_after_.data,
+            d_before_mol_energy_buffer_.data,
+            d_proposal_mol_energy_buffer_.data,
             d_noise_offset_.data,
             nullptr, // No inner/outer flags in Biased deletion
             d_num_accepted_.data);
@@ -271,6 +271,9 @@ void BDExchangeMove<RealType>::move(
             p_noise_offset_.data, d_noise_offset_.data, d_noise_offset_.size(), cudaMemcpyDeviceToHost, stream));
         // Synchronize to get the new offset
         gpuErrchk(cudaStreamSynchronize(stream));
+        k_convert_energies_to_log_weights<RealType><<<ceil_divide(num_target_mols_, tpb), tpb, 0, stream>>>(
+            num_target_mols_, beta_, d_before_mol_energy_buffer_.data, d_log_weights_before_.data);
+        gpuErrchk(cudaPeekAtLastError());
     }
     // Number of attempts is always the number of proposals per moves
     num_attempted_ += num_proposals_per_move_;
@@ -287,17 +290,16 @@ void BDExchangeMove<RealType>::compute_initial_weights_device(
         d_coords,
         d_params_.data,
         d_box,
-        d_mol_energy_buffer_.data, // Don't need to zero, will be overridden
+        d_before_mol_energy_buffer_.data, // Don't need to zero, will be overridden
         stream);
 
-    // Don't need to normalize to sample
-    k_compute_log_weights_from_energies<RealType><<<mol_blocks, tpb, 0, stream>>>(
-        num_target_mols_, beta_, d_mol_energy_buffer_.data, d_log_weights_before_.data);
+    k_convert_energies_to_log_weights<RealType><<<mol_blocks, tpb, 0, stream>>>(
+        num_target_mols_, beta_, d_before_mol_energy_buffer_.data, d_log_weights_before_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    // Copy the same weights repeatedly from the before weights to the after weights
-    k_copy_batch<RealType><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
-        num_target_mols_, batch_size_, d_log_weights_before_.data, d_log_weights_after_.data);
+    // Copy the same mol energies repeatedly from the before energies to the proposal energies
+    k_copy_batch<__int128><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
+        num_target_mols_, batch_size_, d_before_mol_energy_buffer_.data, d_proposal_mol_energy_buffer_.data);
     gpuErrchk(cudaPeekAtLastError());
 }
 
@@ -368,8 +370,8 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
 
     // Subtract off the weights for the individual waters from the sampled water.
     // It modifies the sampled mol energy value, leaving it in an invalid state, which is why
-    // we later call k_set_sampled_weight to set the weight of the sampled mol
-    k_adjust_weights<RealType, true><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
+    // we later call k_set_sampled_energy to set the weight of the sampled mol
+    k_adjust_energies<RealType, true><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
         N,
         batch_size_,
         mol_size_,
@@ -377,8 +379,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
         d_atom_idxs_.data,
         d_mol_offsets_.data,
         d_sample_per_atom_energy_buffer_.data,
-        beta_, // 1 / kT
-        d_log_weights_after_.data);
+        d_proposal_mol_energy_buffer_.data);
     gpuErrchk(cudaPeekAtLastError());
 
     k_atom_by_atom_energies<RealType><<<atom_by_atom_grid, tpb, 0, stream>>>(
@@ -396,7 +397,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
 
     // Add in the new weights from the individual waters
     // the sampled weight continues to be garbage
-    k_adjust_weights<RealType, false><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
+    k_adjust_energies<RealType, false><<<dim3(ceil_divide(num_target_mols_, tpb), batch_size_, 1), tpb, 0, stream>>>(
         N,
         batch_size_,
         mol_size_,
@@ -404,12 +405,11 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
         d_atom_idxs_.data,
         d_mol_offsets_.data,
         d_sample_per_atom_energy_buffer_.data,
-        beta_, // 1 / kT
-        d_log_weights_after_.data);
+        d_proposal_mol_energy_buffer_.data);
     gpuErrchk(cudaPeekAtLastError());
 
     // Set the sampled weight to be the correct value
-    k_set_sampled_weight_block<RealType, WEIGHT_THREADS_PER_BLOCK>
+    k_set_sampled_energy_block<RealType, WEIGHT_THREADS_PER_BLOCK>
         <<<dim3(num_intermediates_per_reduce_, batch_size_, 1), WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
             N,
             batch_size_,
@@ -420,15 +420,18 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
             d_intermediate_sample_weights_.data);
     gpuErrchk(cudaPeekAtLastError());
 
-    k_set_sampled_weight_reduce<RealType, WEIGHT_THREADS_PER_BLOCK>
+    k_set_sampled_energy_reduce<WEIGHT_THREADS_PER_BLOCK>
         <<<dim3(1, batch_size_, 1), WEIGHT_THREADS_PER_BLOCK, 0, stream>>>(
             batch_size_,
             num_target_mols_,
             num_intermediates_per_reduce_,       // Number of intermediates per sample in batch
-            beta_,                               // 1 / kT
             d_samples_.data,                     // where to set the value
             d_intermediate_sample_weights_.data, // intermediate fixed point weights
-            d_log_weights_after_.data);
+            d_proposal_mol_energy_buffer_.data);
+    gpuErrchk(cudaPeekAtLastError());
+
+    k_convert_energies_to_log_weights<RealType><<<ceil_divide(num_target_mols_ * batch_size_, tpb), tpb, 0, stream>>>(
+        num_target_mols_ * batch_size_, beta_, d_proposal_mol_energy_buffer_.data, d_log_weights_after_.data);
     gpuErrchk(cudaPeekAtLastError());
 }
 

@@ -853,13 +853,7 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
     if batch_size == 1:
         # Where the batch size is 1 the last log probabilities should match
-        if precision == np.float64:
-            # For some reason these disagree very slightly in float64,  something to dig into
-            np.testing.assert_allclose(
-                bdem_a.last_raw_log_probability(), bdem_b.last_raw_log_probability(), atol=1e-9, rtol=0.0
-            )
-        else:
-            assert bdem_a.last_raw_log_probability() == bdem_b.last_raw_log_probability()
+        assert bdem_a.last_raw_log_probability() == bdem_b.last_raw_log_probability()
 
 
 @pytest.mark.parametrize("radius", [1.2])

@@ -45,7 +45,8 @@ protected:
     // Buffer for evaluating moves without touching the original coords
     DeviceBuffer<double> d_intermediate_coords_;             // [batch_size_, mol_size_, 3]
     DeviceBuffer<double> d_params_;                          // [N, PARAMS_PER_ATOM]
-    DeviceBuffer<__int128> d_mol_energy_buffer_;             // [batch_size_, num_target_mols_]
+    DeviceBuffer<__int128> d_before_mol_energy_buffer_;      // [num_target_mols_]
+    DeviceBuffer<__int128> d_proposal_mol_energy_buffer_;    // [batch_size, num_target_mols_]
     DeviceBuffer<RealType> d_sample_per_atom_energy_buffer_; // [batch_size_, mol_size_ * N]
     DeviceBuffer<int> d_atom_idxs_;                          // [num_target_mols_, mol_size_]
     DeviceBuffer<int> d_mol_offsets_;                        // [num_target_mols_ + 1]

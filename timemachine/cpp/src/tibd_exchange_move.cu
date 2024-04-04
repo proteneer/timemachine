@@ -345,7 +345,7 @@ void TIBDExchangeMove<RealType>::move(
             this->d_selected_sample_.data);
         gpuErrchk(cudaPeekAtLastError());
 
-        k_store_exchange_move<RealType><<<mol_blocks, tpb, 0, stream>>>(
+        k_store_exchange_move<<<mol_blocks, tpb, 0, stream>>>(
             this->batch_size_,
             this->num_target_mols_,
             this->d_selected_sample_.data,
@@ -354,11 +354,17 @@ void TIBDExchangeMove<RealType>::move(
             this->d_sample_segments_offsets_.data,
             this->d_intermediate_coords_.data,
             d_coords,
-            this->d_log_weights_before_.data,
-            this->d_log_weights_after_.data,
+            this->d_before_mol_energy_buffer_.data,
+            this->d_proposal_mol_energy_buffer_.data,
             this->d_noise_offset_.data,
             d_inner_flags_.data,
             this->d_num_accepted_.data);
+        gpuErrchk(cudaPeekAtLastError());
+        k_convert_energies_to_log_weights<RealType><<<mol_blocks, tpb, 0, stream>>>(
+            this->num_target_mols_,
+            this->beta_,
+            this->d_before_mol_energy_buffer_.data,
+            this->d_log_weights_before_.data);
         gpuErrchk(cudaPeekAtLastError());
 
         gpuErrchk(cudaMemcpyAsync(

@@ -13,9 +13,8 @@ template <typename RealType> RealType __host__ __device__ __forceinline__ conver
     return isnan(input) ? INFINITY : input;
 }
 
-template <typename RealType>
-void __global__
-k_copy_batch(const int N, const int batch_size, const RealType *__restrict__ src, RealType *__restrict__ dest);
+template <typename T>
+void __global__ k_copy_batch(const int N, const int batch_size, const T *__restrict__ src, T *__restrict__ dest);
 
 template <typename RealType>
 RealType __host__ __device__ __forceinline__
@@ -31,6 +30,10 @@ compute_log_proposal_probabilities_given_counts(const int src_count, const int d
     assert(0);
     return 0.0; // Here to ensure the code compiles, assertion will trigger failure
 }
+
+template <typename RealType>
+void __global__ k_convert_energies_to_log_weights(
+    const int N, const RealType inv_kT, const __int128 *__restrict__ energies, RealType *__restrict__ weights);
 
 template <typename RealType>
 RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targeted(
@@ -74,7 +77,6 @@ void __global__ k_setup_proposals(
     int *__restrict__ output_atom_idxs,        // [batch_size, num_atoms_in_each_mol]
     int *__restrict__ output_mol_offsets);
 
-template <typename RealType>
 void __global__ k_store_exchange_move(
     const int batch_size,
     const int num_target_mols,
@@ -84,8 +86,8 @@ void __global__ k_store_exchange_move(
     const int *__restrict__ segment_offsets,       // [batch_size + 1]
     const double *__restrict__ moved_coords,       // [num_atoms_in_each_mol, 3]
     double *__restrict__ dest_coords,              // [N, 3]
-    RealType *__restrict__ before_weights,         // [num_target_mols]
-    RealType *__restrict__ after_weights,          // [num_target_mols]
+    __int128 *__restrict__ before_weights,         // [num_target_mols]
+    __int128 *__restrict__ after_weights,          // [batch_size, num_target_mols]
     int *__restrict__ rand_offset,                 // [1]
     int *__restrict__ inner_flags,                 // [num_target_mols] or nullptr
     size_t *__restrict__ num_accepted              // [1]
@@ -105,13 +107,13 @@ void __global__ k_store_accepted_log_probability(
 template <typename RealType>
 void __global__ k_compute_box_volume(const double *__restrict__ box, RealType *__restrict__ output_volume);
 
-// k_adjust_weights takes a set of molecules and either subtracts (Negated=true) or adds (Negated=false)
+// k_adjust_energies takes a set of molecules and either subtracts (Negated=true) or adds (Negated=false)
 // the sum of the per atom weights for the molecules from some initial weights.
 // This is used to do the transposition trick where we subtract off the weight contribution of the
 // moved atom followed by adding back in the weight of the sampled mol in the new position.
-// Does NOT special case the weight of the sampled mol and instead use `k_set_sampled_weight`.
+// Does NOT special case the weight of the sampled mol and instead use `k_set_sampled_energy`.
 template <typename RealType, bool Negated>
-void __global__ k_adjust_weights(
+void __global__ k_adjust_energies(
     const int N,
     const int batch_size,
     const int mol_size,
@@ -119,11 +121,10 @@ void __global__ k_adjust_weights(
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
-    const RealType inv_kT, // 1 / kT
-    RealType *__restrict__ log_weights);
+    __int128 *__restrict__ mol_energies);
 
 template <typename RealType, int THREADS_PER_BLOCK>
-void __global__ k_set_sampled_weight_block(
+void __global__ k_set_sampled_energy_block(
     const int N,
     const int batch_size,
     const int mol_size,
@@ -132,15 +133,14 @@ void __global__ k_set_sampled_weight_block(
     const RealType *__restrict__ per_atom_energies,
     __int128 *__restrict__ intermediate_accum);
 
-template <typename RealType, int THREADS_PER_BLOCK>
-void __global__ k_set_sampled_weight_reduce(
+template <int THREADS_PER_BLOCK>
+void __global__ k_set_sampled_energy_reduce(
     const int batch_size,
-    const int num_intermediates,
     const int num_weights,
-    const RealType inv_kT,           // 1 / kT
+    const int num_intermediates,
     const int *__restrict__ samples, // [batch_size]
     const __int128 *__restrict__ intermediate_accum,
-    RealType *__restrict__ log_weights);
+    __int128 *__restrict__ mol_energies);
 
 template <typename RealType>
 void __global__ k_compute_centroid_of_atoms(
