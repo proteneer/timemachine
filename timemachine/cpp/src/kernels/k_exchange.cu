@@ -145,8 +145,9 @@ void __global__ k_store_exchange_move(
         // At the end of batch of proposals we need to update the before and after energies to the correct state.
         // In the case of not accepting any moves we want to reset the after energies to be the before energies so that
         // kernels can update the after energies.
-        // In the case of accepting a move we need to update the before energies with that batches after energies while updating
-        // all of the after energies to have the same value as those after energies.
+        // In the case of accepting a move the before energies need to be updated with the after energies associated with
+        //  the accepted batch. The accepted energies also need to be copied into the other after energy batches so that
+        // the next step can accumulate energies correctly.
         // We will use `k_convert_energies_to_log_weights` to generate the correct weights separately.
         if (atom_idx < energies_copy_count) {
             if (accepted) {
