@@ -438,7 +438,7 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
-    # Moves should be deterministic regardless the number of steps taken per move
+    # Moves should be deterministic regardless the number of proposals per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 
@@ -511,7 +511,7 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
-    # Moves should be deterministic regardless the number of steps taken per move
+    # Moves should be deterministic regardless the number of proposals per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 

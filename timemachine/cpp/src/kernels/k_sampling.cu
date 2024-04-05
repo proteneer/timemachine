@@ -120,7 +120,7 @@ k_copy_kv_key<double>(const int N, const cub::KeyValuePair<int, double> *__restr
 * k_setup_gumbel_max_trick_with_offset to handle the fact that we generate num_noise_per_segment values of noise
 * per segment to ensure that we get bitwise deterministic results. If k_setup_gumbel_max_trick_with_offset
 * were to be used, the data would be re-used but you wouldn't be able to get the same results depending on
-* the number of steps taken per move.
+* the number of proposals per move.
 *
 * Example of why not use k_setup_gumbel_max_trick_with_offset:
 *

@@ -666,7 +666,7 @@ def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, bat
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
-    # Moves should be deterministic regardless the number of steps taken per move
+    # Moves should be deterministic regardless the number of proposals per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 
@@ -763,7 +763,7 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
-    # Moves should be deterministic regardless the number of steps taken per move
+    # Moves should be deterministic regardless the number of proposals per move
     np.testing.assert_array_equal(serially_moved_coords, batch_moved_coords)
 
 
@@ -849,7 +849,7 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
-    # Moves should be deterministic regardless the number of steps taken per move
+    # Moves should be deterministic regardless the number of proposals per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
     if batch_size == 1:
         # Where the batch size is 1 the last log probabilities should match
