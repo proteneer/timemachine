@@ -19,11 +19,6 @@ from timemachine.potentials.jax_utils import (
 
 Array = Any
 
-
-def switch_fn(dij, cutoff):
-    return jnp.power(jnp.cos((jnp.pi * jnp.power(dij, 8)) / (2 * cutoff)), 2)
-
-
 from typing import Optional
 
 
