@@ -424,7 +424,7 @@ void __global__ k_compute_centroid_of_atoms(
     const double *__restrict__ coords, // [N, 3]
     RealType *__restrict__ centroid    // [3]
 ) {
-    volatile __shared__ unsigned long long fixed_centroid[3];
+    __shared__ unsigned long long fixed_centroid[3];
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     // Can only have a single block
     assert(blockIdx.x == 0);
@@ -783,7 +783,7 @@ void __global__ k_accept_first_valid_move(
     const RealType *__restrict__ rand,           // [total_proposals]
     int *__restrict__ accepted_sample            // [1]
 ) {
-    volatile __shared__ int selected_idx;
+    __shared__ int selected_idx;
     assert(blockIdx.x == 0);
     if (threadIdx.x == 0) {
         selected_idx = batch_size;
@@ -864,7 +864,7 @@ void __global__ k_accept_first_valid_move_targeted(
     const RealType *__restrict__ rand,              // [total_proposals]
     int *__restrict__ accepted_sample               // [1]
 ) {
-    volatile __shared__ int selected_idx;
+    __shared__ int selected_idx;
     assert(blockIdx.x == 0);
     if (threadIdx.x == 0) {
         selected_idx = batch_size;
