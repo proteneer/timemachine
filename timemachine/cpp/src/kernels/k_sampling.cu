@@ -1,5 +1,6 @@
 #include "k_sampling.cuh"
 #include <assert.h>
+#include <cmath>
 
 namespace timemachine {
 
@@ -19,7 +20,8 @@ void __global__ k_setup_gumbel_max_trick(
     }
 
     const RealType weight = log_weights[idx];
-    assert(!isnan(weight));
+    // -inf is alright since that is log(0.0), +inf is not
+    assert(!isnan(weight) && weight != INFINITY);
 
     const RealType gumbel_rand = -log(-log(gumbel_noise[idx]));
 
@@ -68,7 +70,8 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     while (idx < N) {
         const RealType weight = log_weights[idx];
-        assert(!isnan(weight));
+        // -inf is alright since that is log(0.0), +inf is not
+        assert(!isnan(weight) && weight != INFINITY);
 
         const RealType gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
 
@@ -183,7 +186,8 @@ void __global__ k_setup_gumbel_max_trick_targeted_insertion(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     while (idx < N) {
         const RealType weight = log_weights[segment_start + idx];
-        assert(!isnan(weight));
+        // -inf is alright since that is log(0.0), +inf is not
+        assert(!isnan(weight) && weight != INFINITY);
 
         const RealType gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
 
