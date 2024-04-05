@@ -165,7 +165,7 @@ void BDExchangeMove<RealType>::move(
     *    positions.
     * 6. Compute the weights for each of the proposals in the batch
     * 7. Compute the logexpsum (using SegmentedSumExp and compute_logsumexp_final) of each set of proposal weights
-    * 8. Find the first proposal in the batch that was accepted with the Metropolis-Hasting check
+    * 8. Find the first proposal in the batch that was accepted with the Metropolis-Hastings check
     * 9. If a move was accepted, update the new proposed coordinates and increment the noise offset (d_noise_offset_)
     *    by the value in the batch that was accepted.
     * 10. If running another move, copy the accepted weights, if any, to the initial weights buffer. Return to 4

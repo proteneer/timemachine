@@ -192,7 +192,7 @@ void TIBDExchangeMove<RealType>::move(
     *    positions.
     * 12. For each proposal in the batch separate out the proposals weights (the molecules within the destination region) into the after log weights.
     * 13. Compute the logexpsum (using SegmentedSumExp and compute_logsumexp_final) of each proposal's after log weights.
-    * 14. Find the first proposal in the batch that was accepted with the Metropolis-Hasting check
+    * 14. Find the first proposal in the batch that was accepted with the Metropolis-Hastings check
     * 15. If a move was accepted, update the new proposed coordinates and increment the noise offset (d_noise_offset_)
     *     by the index in the batch that was accepted.
     *
