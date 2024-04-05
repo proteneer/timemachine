@@ -19,13 +19,13 @@ void __global__ k_setup_gumbel_max_trick(
         return;
     }
 
-    const RealType weight = log_weights[idx];
+    const RealType log_weight = log_weights[idx];
     // -inf is alright since that is log(0.0), +inf is not
-    assert(!isnan(weight) && weight != INFINITY);
+    assert(!isnan(log_weight) && log_weight != INFINITY);
 
     const RealType gumbel_rand = -log(-log(gumbel_noise[idx]));
 
-    prepared_gumbel[idx] = weight + gumbel_rand;
+    prepared_gumbel[idx] = log_weight + gumbel_rand;
 }
 
 template void __global__ k_setup_gumbel_max_trick<float>(
@@ -69,13 +69,13 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
     const int gumbel_offset = rand_offset * N + segment_start;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     while (idx < N) {
-        const RealType weight = log_weights[idx];
+        const RealType log_weight = log_weights[idx];
         // -inf is alright since that is log(0.0), +inf is not
-        assert(!isnan(weight) && weight != INFINITY);
+        assert(!isnan(log_weight) && log_weight != INFINITY);
 
         const RealType gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
 
-        prepared_gumbel[segment_start + idx] = weight + gumbel_rand;
+        prepared_gumbel[segment_start + idx] = log_weight + gumbel_rand;
 
         idx += gridDim.x * blockDim.x;
     }
@@ -185,13 +185,13 @@ void __global__ k_setup_gumbel_max_trick_targeted_insertion(
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     while (idx < N) {
-        const RealType weight = log_weights[segment_start + idx];
+        const RealType log_weight = log_weights[segment_start + idx];
         // -inf is alright since that is log(0.0), +inf is not
-        assert(!isnan(weight) && weight != INFINITY);
+        assert(!isnan(log_weight) && log_weight != INFINITY);
 
         const RealType gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
 
-        prepared_gumbel[segment_start + idx] = weight + gumbel_rand;
+        prepared_gumbel[segment_start + idx] = log_weight + gumbel_rand;
         idx += gridDim.x * blockDim.x;
     }
 }
