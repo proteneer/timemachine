@@ -126,14 +126,14 @@ void __global__ k_store_exchange_move(
         }
     }
 
-    // Need to reset all of the before and source weights
-    // either the after weights to the before weights or the accepted batches weights to the before and the
-    // other after weights
-    const int weights_copy_count = num_target_mols * batch_size;
+    // Need to reset all of the before and source energies
+    // either the after energies to the before energies or the accepted batches energies to the before and the
+    // other after energies
+    const int energies_copy_count = num_target_mols * batch_size;
 
     // If accepted, move the coords into place
-    // Always copy the weights, either copying from before to after or after to before
-    while (atom_idx < weights_copy_count || atom_idx < num_atoms_in_mol) {
+    // Always copy the energies, either copying from before to after or after to before
+    while (atom_idx < energies_copy_count || atom_idx < num_atoms_in_mol) {
         if (accepted && atom_idx < num_atoms_in_mol) {
             dest_coords[(mol_start + atom_idx) * 3 + 0] =
                 moved_coords[num_atoms_in_mol * batch_idx * 3 + atom_idx * 3 + 0];
@@ -142,14 +142,15 @@ void __global__ k_store_exchange_move(
             dest_coords[(mol_start + atom_idx) * 3 + 2] =
                 moved_coords[num_atoms_in_mol * batch_idx * 3 + atom_idx * 3 + 2];
         }
-        // At the end of batch of proposals we need to update the before and after weights to a usable stable.
-        // In the case of not accepting any moves we want to reset the after weights to be the before weights so that
-        // kernels can update the after weights.
-        // In the case of accepting a move we need to update the before weights with that batches after weights while updating
-        // all of the after weights to have the same value as those after weights.
-        if (atom_idx < weights_copy_count) {
+        // At the end of batch of proposals we need to update the before and after energies to the correct state.
+        // In the case of not accepting any moves we want to reset the after energies to be the before energies so that
+        // kernels can update the after energies.
+        // In the case of accepting a move we need to update the before energies with that batches after energies while updating
+        // all of the after energies to have the same value as those after energies.
+        // We will use `k_convert_energies_to_log_weights` to generate the correct weights separately.
+        if (atom_idx < energies_copy_count) {
             if (accepted) {
-                // Before weights is only num_target_mols long
+                // Before energies is only num_target_mols long
                 if (atom_idx < num_target_mols) {
                     before_energies[atom_idx] = after_energies[batch_idx * num_target_mols + atom_idx];
                 }
@@ -167,7 +168,7 @@ void __global__ k_store_exchange_move(
 
 template <typename RealType>
 void __global__ k_store_accepted_log_probability(
-    const int num_weights,
+    const int num_energies,
     const int batch_size,
     const int *__restrict__ accepted_batched_move, // [1]
     RealType *__restrict__ before_max,             // [1]
@@ -191,7 +192,7 @@ void __global__ k_store_accepted_log_probability(
 }
 
 template void __global__ k_store_accepted_log_probability<float>(
-    const int num_weights,
+    const int num_energies,
     const int batch_size,
     const int *__restrict__ accepted_batched_move,
     float *__restrict__ before_max,
@@ -199,7 +200,7 @@ template void __global__ k_store_accepted_log_probability<float>(
     const float *__restrict__ after_max,
     const float *__restrict__ after_log_sum);
 template void __global__ k_store_accepted_log_probability<double>(
-    const int num_weights,
+    const int num_energies,
     const int batch_size,
     const int *__restrict__ accepted_batched_move,
     double *__restrict__ before_max,
@@ -239,11 +240,11 @@ void __global__ k_adjust_energies(
     const int N,
     const int batch_size,
     const int mol_size,
-    const int num_weights,
+    const int num_energies,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
-    __int128 *__restrict__ mol_energies // [batch_size, num_weights]
+    __int128 *__restrict__ mol_energies // [batch_size, num_energies]
 ) {
 
     int idx_in_batch = blockIdx.y;
@@ -251,7 +252,7 @@ void __global__ k_adjust_energies(
     while (idx_in_batch < batch_size) {
 
         int mol_idx = blockIdx.x * blockDim.x + threadIdx.x;
-        while (mol_idx < num_weights) {
+        while (mol_idx < num_energies) {
 
             energy_accumulator = 0;
 
@@ -267,7 +268,7 @@ void __global__ k_adjust_energies(
                 }
             }
 
-            mol_energies[idx_in_batch * num_weights + mol_idx] += Negated ? -energy_accumulator : energy_accumulator;
+            mol_energies[idx_in_batch * num_energies + mol_idx] += Negated ? -energy_accumulator : energy_accumulator;
 
             mol_idx += gridDim.x * blockDim.x;
         }
@@ -280,7 +281,7 @@ template void __global__ k_adjust_energies<float, 0>(
     const int N,
     const int batch_size,
     const int mol_size,
-    const int num_weights,
+    const int num_energies,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const float *__restrict__ per_atom_energies,
@@ -289,7 +290,7 @@ template void __global__ k_adjust_energies<float, 1>(
     const int N,
     const int batch_size,
     const int mol_size,
-    const int num_weights,
+    const int num_energies,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const float *__restrict__ per_atom_energies,
@@ -298,7 +299,7 @@ template void __global__ k_adjust_energies<double, 0>(
     const int N,
     const int batch_size,
     const int mol_size,
-    const int num_weights,
+    const int num_energies,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const double *__restrict__ per_atom_energies,
@@ -307,7 +308,7 @@ template void __global__ k_adjust_energies<double, 1>(
     const int N,
     const int batch_size,
     const int mol_size,
-    const int num_weights,
+    const int num_energies,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const double *__restrict__ per_atom_energies,
@@ -318,7 +319,7 @@ void __global__ k_set_sampled_energy_block(
     const int N,
     const int batch_size,
     const int mol_size,
-    const int num_weights,
+    const int num_energies,
     const int *__restrict__ target_atoms, // [batch_size, mol_size]
     const RealType *__restrict__ per_atom_energies,
     __int128 *__restrict__ intermediate_accum // [batch_size, ceil_divide(N, THREADS_PER_BLOCK)]
@@ -373,15 +374,15 @@ template void __global__ k_set_sampled_energy_block<double, 512>(
 template <int THREADS_PER_BLOCK>
 void __global__ k_set_sampled_energy_reduce(
     const int batch_size,
-    const int num_weights,
+    const int num_energies,
     const int num_intermediates,
     const int *__restrict__ samples,                 // [batch_size]
     const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
-    __int128 *__restrict__ mol_energies              // [batch_size, num_weights]
+    __int128 *__restrict__ mol_energies              // [batch_size, num_energies]
 ) {
     __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
-    // One y block per set of weights, used instead of x block to avoid nuance of setting idx based only on
+    // One y block per set of energies, used instead of x block to avoid nuance of setting idx based only on
     // the thread idx
     int idx_in_batch = blockIdx.y;
 
@@ -395,13 +396,13 @@ void __global__ k_set_sampled_energy_reduce(
             accumulator += intermediate_accum[offset + idx];
             idx += gridDim.x * blockDim.x;
         }
-        // Each block reduces on a specific set of weights which is why just threadIdx.x
+        // Each block reduces on a specific set of energies which is why just threadIdx.x
         accumulators[threadIdx.x] = accumulator;
         __syncthreads();
         block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
         if (threadIdx.x == 0) {
             int mol_idx = samples[idx_in_batch];
-            mol_energies[idx_in_batch * num_weights + mol_idx] = accumulators[0];
+            mol_energies[idx_in_batch * num_energies + mol_idx] = accumulators[0];
         }
 
         idx_in_batch += gridDim.y * blockDim.y;
@@ -411,10 +412,10 @@ void __global__ k_set_sampled_energy_reduce(
 template void __global__ k_set_sampled_energy_reduce<512>(
     const int batch_size,
     const int num_intermediates,
-    const int num_weights,
+    const int num_energies,
     const int *__restrict__ samples,                 // [batch_size]
     const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
-    __int128 *__restrict__ mol_energies              // [batch_size, num_weights]
+    __int128 *__restrict__ mol_energies              // [batch_size, num_energies]
 );
 
 template <typename RealType>
@@ -652,7 +653,6 @@ void __global__ k_separate_weights_for_targeted(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const int local_inner_count = inner_count[0];           // Constant across batch size
     const int weights_start = weight_offsets[idx_in_batch]; // Where to start adding the weights
-    // const int weights_end = weight_offsets[idx_in_batch + 1];
     const int target_inner = targeting_inner_volume[idx_in_batch];
     const int outer_count = num_target_mols - local_inner_count;
     const int count = target_inner == 1 ? outer_count : local_inner_count;
@@ -704,7 +704,6 @@ void __global__ k_setup_destination_weights_for_targeted(
 
     const int target_inner = targeting_inner_volume[idx_in_batch];
     const int weights_start = weight_offsets[idx_in_batch]; // Where to start adding the weights
-    // const int weights_end = weight_offsets[idx_in_batch + 1];
 
     const int count = target_inner == 1 ? local_inner_count : num_target_mols - local_inner_count;
     const int offset = target_inner == 1 ? 0 : local_inner_count;

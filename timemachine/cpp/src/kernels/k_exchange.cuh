@@ -86,8 +86,8 @@ void __global__ k_store_exchange_move(
     const int *__restrict__ segment_offsets,       // [batch_size + 1]
     const double *__restrict__ moved_coords,       // [num_atoms_in_each_mol, 3]
     double *__restrict__ dest_coords,              // [N, 3]
-    __int128 *__restrict__ before_weights,         // [num_target_mols]
-    __int128 *__restrict__ after_weights,          // [batch_size, num_target_mols]
+    __int128 *__restrict__ before_energies,        // [num_target_mols]
+    __int128 *__restrict__ after_energies,         // [batch_size, num_target_mols]
     int *__restrict__ rand_offset,                 // [1]
     int *__restrict__ inner_flags,                 // [num_target_mols] or nullptr
     size_t *__restrict__ num_accepted              // [1]
@@ -95,7 +95,7 @@ void __global__ k_store_exchange_move(
 
 template <typename RealType>
 void __global__ k_store_accepted_log_probability(
-    const int num_weights,
+    const int num_energies,
     const int batch_size,
     const int *__restrict__ accepted_batched_move, // [1]
     RealType *__restrict__ before_max,             // [1]
@@ -108,7 +108,7 @@ template <typename RealType>
 void __global__ k_compute_box_volume(const double *__restrict__ box, RealType *__restrict__ output_volume);
 
 // k_adjust_energies takes a set of molecules and either subtracts (Negated=true) or adds (Negated=false)
-// the sum of the per atom weights for the molecules from some initial weights.
+// the sum of the per atom energies for the molecules from some initial energies.
 // This is used to do the transposition trick where we subtract off the weight contribution of the
 // moved atom followed by adding back in the weight of the sampled mol in the new position.
 // Does NOT special case the weight of the sampled mol and instead use `k_set_sampled_energy`.
@@ -117,7 +117,7 @@ void __global__ k_adjust_energies(
     const int N,
     const int batch_size,
     const int mol_size,
-    const int num_weights,
+    const int num_energies,
     const int *__restrict__ mol_atoms_idxs,
     const int *__restrict__ mol_offsets,
     const RealType *__restrict__ per_atom_energies,
@@ -128,7 +128,7 @@ void __global__ k_set_sampled_energy_block(
     const int N,
     const int batch_size,
     const int mol_size,
-    const int num_weights,
+    const int num_energies,
     const int *__restrict__ target_atoms,
     const RealType *__restrict__ per_atom_energies,
     __int128 *__restrict__ intermediate_accum);
@@ -136,7 +136,7 @@ void __global__ k_set_sampled_energy_block(
 template <int THREADS_PER_BLOCK>
 void __global__ k_set_sampled_energy_reduce(
     const int batch_size,
-    const int num_weights,
+    const int num_energies,
     const int num_intermediates,
     const int *__restrict__ samples, // [batch_size]
     const __int128 *__restrict__ intermediate_accum,
