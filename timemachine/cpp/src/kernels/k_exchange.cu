@@ -247,13 +247,13 @@ void __global__ k_adjust_energies(
 ) {
 
     int idx_in_batch = blockIdx.y;
-    __int128 weight_accumulator;
+    __int128 energy_accumulator;
     while (idx_in_batch < batch_size) {
 
         int mol_idx = blockIdx.x * blockDim.x + threadIdx.x;
         while (mol_idx < num_weights) {
 
-            weight_accumulator = 0;
+            energy_accumulator = 0;
 
             int mol_start = mol_offsets[mol_idx];
             int mol_end = mol_offsets[mol_idx + 1];
@@ -263,11 +263,11 @@ void __global__ k_adjust_energies(
             // A loop that in the case of water will be 3x3
             for (int i = idx_in_batch * mol_size; i < (idx_in_batch + 1) * mol_size; i++) {
                 for (int j = min_atom_idx; j <= max_atom_idx; j++) {
-                    weight_accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(per_atom_energies[i * N + j]);
+                    energy_accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(per_atom_energies[i * N + j]);
                 }
             }
 
-            mol_energies[idx_in_batch * num_weights + mol_idx] += Negated ? -weight_accumulator : weight_accumulator;
+            mol_energies[idx_in_batch * num_weights + mol_idx] += Negated ? -energy_accumulator : energy_accumulator;
 
             mol_idx += gridDim.x * blockDim.x;
         }
