@@ -318,8 +318,9 @@ def test_water_sampling_mc_bulk_water(insertion_type):
             np.testing.assert_array_equal(test_data[key], reference_data[key])
 
 
+@pytest.mark.parametrize("batch_size", [1, 250, 512, 1000])
 @pytest.mark.parametrize("insertion_type", ["targeted", "untargeted"])
-def test_water_sampling_mc_buckyball(insertion_type):
+def test_water_sampling_mc_buckyball(batch_size, insertion_type):
     reference_data_path = EXAMPLES_DIR.parent / "tests" / "data" / f"reference_6_water_{insertion_type}.npz"
     assert reference_data_path.is_file()
     reference_data = np.load(reference_data_path)
@@ -328,12 +329,13 @@ def test_water_sampling_mc_buckyball(insertion_type):
             out_cif="bulk.cif",
             water_pdb=water_exchange / "bb_6_waters.pdb",
             ligand_sdf=water_exchange / "bb_centered_espaloma.sdf",
-            iterations=5,
+            iterations=50,
             md_steps_per_batch=1000,
             mc_steps_per_batch=5000,
             equilibration_steps=5000,
             insertion_type=insertion_type,
             use_hmr=1,
+            batch_size=batch_size,
             save_last_frame="comp_frame.npz",
         )
     with temporary_working_dir() as temp_dir:

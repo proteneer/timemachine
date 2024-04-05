@@ -445,7 +445,7 @@ void __global__ k_compute_nonbonded_target_atom_energies(
     __int128 *__restrict__ output_energies // [num_target_atoms, gridDim.x]
 ) {
     static_assert(THREADS_PER_BLOCK <= 256 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
-    volatile __shared__ __int128 block_energy_buffer[THREADS_PER_BLOCK];
+    __shared__ __int128 block_energy_buffer[THREADS_PER_BLOCK];
 
     const RealType bx = box[0 * 3 + 0];
     const RealType by = box[1 * 3 + 1];
@@ -553,32 +553,40 @@ void __global__ k_compute_nonbonded_target_atom_energies(
 }
 
 // NUM_BLOCKS is the number of blocks that k_compute_nonbonded_target_atom_energies is run with. Decides the number
-// of values that need to be accumulated per atom.
+// of values that need to be accumulated per atom. Also dictates the number of threads
 template <typename RealType, int NUM_BLOCKS>
 void __global__ k_accumulate_atom_energies_to_per_mol_energies(
     const int target_mols,
     const int *__restrict__ mol_offsets,            // [target_mols + 1]
     const __int128 *__restrict__ per_atom_energies, // [target_atoms, NUM_BLOCKS]
     __int128 *__restrict__ per_mol_energies) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (idx >= target_mols) {
-        return;
-    }
+    int mol_idx = blockIdx.x;
 
-    __int128 energy_accumulator = 0;
+    static_assert(NUM_BLOCKS <= 256 && (NUM_BLOCKS & (NUM_BLOCKS - 1)) == 0);
+    __shared__ __int128 block_energy_buffer[NUM_BLOCKS];
 
-    const int mol_start = mol_offsets[idx];
-    const int mol_end = mol_offsets[idx + 1];
+    while (mol_idx < target_mols) {
+        __int128 local_accumulator = 0;
+        const int mol_start = mol_offsets[mol_idx];
+        const int mol_end = mol_offsets[mol_idx + 1];
 
-    // TBD Parallelize
-    for (int i = mol_start; i < mol_end; i++) {
-        for (int j = 0; j < NUM_BLOCKS; j++) {
-            energy_accumulator += per_atom_energies[i * NUM_BLOCKS + j];
+        int idx = (mol_start * NUM_BLOCKS) + threadIdx.x;
+        while (idx < mol_end * NUM_BLOCKS) {
+            local_accumulator += per_atom_energies[idx];
+
+            idx += blockDim.x;
         }
-    }
+        block_energy_buffer[threadIdx.x] = local_accumulator;
+        __syncthreads();
+        block_energy_reduce<NUM_BLOCKS>(block_energy_buffer, threadIdx.x);
 
-    per_mol_energies[idx] = energy_accumulator;
+        if (threadIdx.x == 0) {
+            per_mol_energies[mol_idx] = block_energy_buffer[0];
+        }
+
+        mol_idx += gridDim.x;
+    }
 }
 
 // k_atom_by_atom_energies is intended to be used for computing the energies of a subset of atoms
