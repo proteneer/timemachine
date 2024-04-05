@@ -323,7 +323,7 @@ void __global__ k_set_sampled_energy_block(
     const RealType *__restrict__ per_atom_energies,
     __int128 *__restrict__ intermediate_accum // [batch_size, ceil_divide(N, THREADS_PER_BLOCK)]
 ) {
-    volatile __shared__ __int128 accumulators[THREADS_PER_BLOCK];
+    __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
     int idx_in_batch = blockIdx.y;
 
@@ -379,7 +379,7 @@ void __global__ k_set_sampled_energy_reduce(
     const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
     __int128 *__restrict__ mol_energies              // [batch_size, num_weights]
 ) {
-    volatile __shared__ __int128 accumulators[THREADS_PER_BLOCK];
+    __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
     // One y block per set of weights, used instead of x block to avoid nuance of setting idx based only on
     // the thread idx

@@ -445,7 +445,7 @@ void __global__ k_compute_nonbonded_target_atom_energies(
     __int128 *__restrict__ output_energies // [num_target_atoms, gridDim.x]
 ) {
     static_assert(THREADS_PER_BLOCK <= 256 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
-    volatile __shared__ __int128 block_energy_buffer[THREADS_PER_BLOCK];
+    __shared__ __int128 block_energy_buffer[THREADS_PER_BLOCK];
 
     const RealType bx = box[0 * 3 + 0];
     const RealType by = box[1 * 3 + 1];
@@ -564,7 +564,7 @@ void __global__ k_accumulate_atom_energies_to_per_mol_energies(
     int mol_idx = blockIdx.x;
 
     static_assert(NUM_BLOCKS <= 256 && (NUM_BLOCKS & (NUM_BLOCKS - 1)) == 0);
-    volatile __shared__ __int128 block_energy_buffer[NUM_BLOCKS];
+    __shared__ __int128 block_energy_buffer[NUM_BLOCKS];
 
     while (mol_idx < target_mols) {
         __int128 local_accumulator = 0;
@@ -584,8 +584,6 @@ void __global__ k_accumulate_atom_energies_to_per_mol_energies(
         if (threadIdx.x == 0) {
             per_mol_energies[mol_idx] = block_energy_buffer[0];
         }
-        // Sync the threads so threads don't move on and stomp on the block energy buffer
-        __syncthreads();
 
         mol_idx += gridDim.x;
     }

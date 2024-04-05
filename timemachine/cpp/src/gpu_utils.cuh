@@ -182,7 +182,7 @@ void __global__ k_accumulate_energy(
     __int128 *__restrict__ u_buffer            // [1]
 ) {
 
-    volatile __shared__ __int128 shared_mem[BLOCK_SIZE];
+    __shared__ __int128 shared_mem[BLOCK_SIZE];
     unsigned int tid = threadIdx.x;
     if (tid >= BLOCK_SIZE) {
         return;
