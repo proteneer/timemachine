@@ -32,19 +32,19 @@ template void __global__ k_copy_batch<__int128>(
 
 template <typename RealType>
 void __global__ k_convert_energies_to_log_weights(
-    const int N, const RealType inv_kT, const __int128 *__restrict__ energies, RealType *__restrict__ weights) {
+    const int N, const RealType beta, const __int128 *__restrict__ energies, RealType *__restrict__ weights) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     while (idx < N) {
         __int128 energy = energies[idx];
-        weights[idx] = fixed_point_overflow(energy) ? INFINITY : inv_kT * FIXED_TO_FLOAT<RealType>(energy);
+        weights[idx] = fixed_point_overflow(energy) ? INFINITY : beta * FIXED_TO_FLOAT<RealType>(energy);
         idx += gridDim.x * blockDim.x;
     }
 }
 
 template void __global__ k_convert_energies_to_log_weights<float>(
-    const int N, const float inv_kT, const __int128 *__restrict__ energies, float *__restrict__ weights);
+    const int N, const float beta, const __int128 *__restrict__ energies, float *__restrict__ weights);
 template void __global__ k_convert_energies_to_log_weights<double>(
-    const int N, const double inv_kT, const __int128 *__restrict__ energies, double *__restrict__ weights);
+    const int N, const double beta, const __int128 *__restrict__ energies, double *__restrict__ weights);
 
 // k_setup_proposals takes a set of sampled indices and constructs buffers containing the molecule offsets
 // as well as the atom indices (refer to src/mol_utils.hpp for impl) and setups up the offsets and the atom

@@ -33,7 +33,7 @@ compute_log_proposal_probabilities_given_counts(const int src_count, const int d
 
 template <typename RealType>
 void __global__ k_convert_energies_to_log_weights(
-    const int N, const RealType inv_kT, const __int128 *__restrict__ energies, RealType *__restrict__ weights);
+    const int N, const RealType beta, const __int128 *__restrict__ energies, RealType *__restrict__ weights);
 
 template <typename RealType>
 RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targeted(
