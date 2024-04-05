@@ -134,13 +134,13 @@ k_copy_kv_key<double>(const int N, const cub::KeyValuePair<int, double> *__restr
 *     noise = [a, b, c, d]
 *              ^ Only use the first value
 *     weights = [1]
-*     Sampler -> 0
+*     Sampler -> 0 // First idx
 * Iteration 2
 *     Move targeting outer (evaluating the three inner molecules)
 *     noise = [e, f, g, h]
 *              ^ Looking at e rather than b for the noise
 *     weights = [2, 3, 4]
-*     Sampler -> 3
+*     Sampler -> 1 // Second idx
 *
 * If the proposals_per_move were 2, and had one iteration the results would look like:
 * Iteration 1
@@ -148,7 +148,7 @@ k_copy_kv_key<double>(const int N, const cub::KeyValuePair<int, double> *__restr
 *     noise = [a, b, c, d]
 *                 ^ Used b noise for 2 rather than e in the case of a single proposal per move
 *     weights = [[1], [2, 3, 4]]
-*     Sampler -> [0, 3]
+*     Sampler -> [0, 0] // First idxs of both segments selected, rather than first and second idx.
 *
 * This kernel forces such that each set of weights always uses the full num_noise_per_segment, avoiding
 * the difference between proposals_per_move.
