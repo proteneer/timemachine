@@ -323,7 +323,7 @@ void __global__ k_set_sampled_energy_block(
     const RealType *__restrict__ per_atom_energies,
     __int128 *__restrict__ intermediate_accum // [batch_size, ceil_divide(N, THREADS_PER_BLOCK)]
 ) {
-    __shared__ __int128 accumulators[THREADS_PER_BLOCK];
+    volatile __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
     int idx_in_batch = blockIdx.y;
 
@@ -379,7 +379,7 @@ void __global__ k_set_sampled_energy_reduce(
     const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
     __int128 *__restrict__ mol_energies              // [batch_size, num_weights]
 ) {
-    __shared__ __int128 accumulators[THREADS_PER_BLOCK];
+    volatile __shared__ __int128 accumulators[THREADS_PER_BLOCK];
 
     // One y block per set of weights, used instead of x block to avoid nuance of setting idx based only on
     // the thread idx
@@ -424,7 +424,7 @@ void __global__ k_compute_centroid_of_atoms(
     const double *__restrict__ coords, // [N, 3]
     RealType *__restrict__ centroid    // [3]
 ) {
-    __shared__ unsigned long long fixed_centroid[3];
+    volatile __shared__ unsigned long long fixed_centroid[3];
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     // Can only have a single block
     assert(blockIdx.x == 0);
@@ -783,7 +783,7 @@ void __global__ k_accept_first_valid_move(
     const RealType *__restrict__ rand,           // [total_proposals]
     int *__restrict__ accepted_sample            // [1]
 ) {
-    __shared__ int selected_idx;
+    volatile __shared__ int selected_idx;
     assert(blockIdx.x == 0);
     if (threadIdx.x == 0) {
         selected_idx = batch_size;
@@ -864,7 +864,7 @@ void __global__ k_accept_first_valid_move_targeted(
     const RealType *__restrict__ rand,              // [total_proposals]
     int *__restrict__ accepted_sample               // [1]
 ) {
-    __shared__ int selected_idx;
+    volatile __shared__ int selected_idx;
     assert(blockIdx.x == 0);
     if (threadIdx.x == 0) {
         selected_idx = batch_size;
