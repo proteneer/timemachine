@@ -176,7 +176,7 @@ void BDExchangeMove<RealType>::move(
     *       each proposal in the sequence.
     */
 
-    this->compute_initial_weights_device(N, d_coords, d_box, stream);
+    this->compute_initial_log_weights_device(N, d_coords, d_box, stream);
 
     // Compute logsumexp of energies once upfront to get log probabilities
     logsumexp_.sum_device(
@@ -226,7 +226,7 @@ void BDExchangeMove<RealType>::move(
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // scale the translations as they are between [0, 1]
-        this->compute_incremental_weights_device(
+        this->compute_incremental_log_weights_device(
             N, true, d_box, d_coords, this->d_quaternions_.data, this->d_translations_.data, stream);
 
         logsumexp_.sum_device(
@@ -280,7 +280,7 @@ void BDExchangeMove<RealType>::move(
 }
 
 template <typename RealType>
-void BDExchangeMove<RealType>::compute_initial_weights_device(
+void BDExchangeMove<RealType>::compute_initial_log_weights_device(
     const int N, double *d_coords, double *d_box, cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int mol_blocks = ceil_divide(num_target_mols_, tpb);
@@ -304,7 +304,7 @@ void BDExchangeMove<RealType>::compute_initial_weights_device(
 }
 
 template <typename RealType>
-void BDExchangeMove<RealType>::compute_incremental_weights_device(
+void BDExchangeMove<RealType>::compute_incremental_log_weights_device(
     const int N,
     const bool scale,
     const double *d_box,            // [3, 3]
@@ -436,7 +436,7 @@ void BDExchangeMove<RealType>::compute_incremental_weights_device(
 }
 
 template <typename RealType>
-std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental_weights_host(
+std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental_log_weights_host(
     const int N,
     const double *h_coords, // [N, 3]
     const double *h_box,    // [3, 3]
@@ -464,9 +464,9 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
     gpuErrchk(cudaMemsetAsync(d_noise_offset_.data, 0, d_noise_offset_.size(), stream));
 
     // Setup the initial weights
-    this->compute_initial_weights_device(N, d_coords.data, d_box.data, stream);
+    this->compute_initial_log_weights_device(N, d_coords.data, d_box.data, stream);
 
-    this->compute_incremental_weights_device(
+    this->compute_incremental_log_weights_device(
         N,
         false, // Never scale the translations here, expect the user to do that in python
         d_box.data,
@@ -493,7 +493,7 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
 }
 
 template <typename RealType>
-std::vector<RealType> BDExchangeMove<RealType>::compute_initial_weights_host(
+std::vector<RealType> BDExchangeMove<RealType>::compute_initial_log_weights_host(
     const int N,
     const double *h_coords, // [N, 3]
     const double *h_box     // [3, 3]
@@ -511,24 +511,24 @@ std::vector<RealType> BDExchangeMove<RealType>::compute_initial_weights_host(
     cudaStream_t stream = static_cast<cudaStream_t>(0);
 
     // Setup the initial weights
-    this->compute_initial_weights_device(N, d_coords.data, d_box.data, stream);
+    this->compute_initial_log_weights_device(N, d_coords.data, d_box.data, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
 
     return this->get_before_log_weights();
 }
 
 template <typename RealType> std::vector<RealType> BDExchangeMove<RealType>::get_before_log_weights() {
-    std::vector<RealType> h_before_weights(d_log_weights_before_.length);
-    d_log_weights_before_.copy_to(&h_before_weights[0]);
+    std::vector<RealType> h_before_log_weights(d_log_weights_before_.length);
+    d_log_weights_before_.copy_to(&h_before_log_weights[0]);
 
-    return h_before_weights;
+    return h_before_log_weights;
 }
 
 template <typename RealType> std::vector<RealType> BDExchangeMove<RealType>::get_after_log_weights() {
-    std::vector<RealType> h_after_weights(d_log_weights_after_.length);
-    d_log_weights_after_.copy_to(&h_after_weights[0]);
+    std::vector<RealType> h_after_log_weights(d_log_weights_after_.length);
+    d_log_weights_after_.copy_to(&h_after_log_weights[0]);
 
-    return h_after_weights;
+    return h_after_log_weights;
 }
 
 template <typename RealType> double BDExchangeMove<RealType>::raw_log_probability_host() {

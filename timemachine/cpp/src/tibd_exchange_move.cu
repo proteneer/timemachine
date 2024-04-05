@@ -133,7 +133,7 @@ void TIBDExchangeMove<RealType>::move(
     // Set the offset to 0
     gpuErrchk(cudaMemsetAsync(this->d_noise_offset_.data, 0, this->d_noise_offset_.size(), stream));
 
-    this->compute_initial_weights_device(N, d_coords, d_box, stream);
+    this->compute_initial_log_weights_device(N, d_coords, d_box, stream);
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     const int mol_blocks = ceil_divide(this->num_target_mols_, tpb);
@@ -303,7 +303,7 @@ void TIBDExchangeMove<RealType>::move(
         // Don't move translations into computation of the incremental, as different translations can be used
         // by different bias deletion movers (such as targeted insertion)
         // Don't scale the translations as they are computed to be within the targeted region
-        this->compute_incremental_weights_device(
+        this->compute_incremental_log_weights_device(
             N, false, d_box, d_coords, this->d_quaternions_.data, this->d_selected_translations_.data, stream);
 
         k_setup_destination_weights_for_targeted<RealType><<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(

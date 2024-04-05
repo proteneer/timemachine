@@ -613,10 +613,10 @@ def test_moves_in_a_water_box(
 @pytest.mark.parametrize("proposals_per_move", [100, 1000])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023, 2024, 2025])
-def test_compute_incremental_weights_match_initial_weights_when_recomputed(
+def test_compute_incremental_log_weights_match_initial_log_weights_when_recomputed(
     num_particles, proposals_per_move, precision, seed
 ):
-    """Verify that the result of computing the weights using `compute_initial_weights` and the incremental weights generated
+    """Verify that the result of computing the weights using `compute_initial_log_weights` and the incremental log weights generated
     during proposals are identical.
     """
     assert (
@@ -660,7 +660,7 @@ def test_compute_incremental_weights_match_initial_weights_when_recomputed(
     assert bdem.n_proposed() == proposals_per_move
 
     before_log_weights = bdem.get_before_log_weights()
-    ref_log_weights = bdem.compute_initial_weights(updated_coords, box)
+    ref_log_weights = bdem.compute_initial_log_weights(updated_coords, box)
     # The before weights of the mover should identically match the weights if recomputed from scratch
     diff_idxs = np.argwhere(np.array(before_log_weights) != np.array(ref_log_weights))
     np.testing.assert_array_equal(before_log_weights, ref_log_weights, err_msg=f"idxs {diff_idxs} don't match")
@@ -676,7 +676,7 @@ def test_compute_incremental_weights_match_initial_weights_when_recomputed(
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-5, 1e-5), (np.float32, 8e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_compute_incremental_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
+def test_compute_incremental_log_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
     """Verify that the incremental weights computed are valid for different collections of rotations/translations"""
     proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
     ff = Forcefield.load_default()
@@ -718,7 +718,7 @@ def test_compute_incremental_weights(batch_size, samples, box_size, precision, r
         # Scale the translations
         translations = rng.uniform(0, 1, size=(batch_size, 3)) * np.diagonal(box)
 
-        test_weight_batches = bdem.compute_incremental_weights(conf, box, selected_mols, quaternions, translations)
+        test_weight_batches = bdem.compute_incremental_log_weights(conf, box, selected_mols, quaternions, translations)
         assert len(test_weight_batches) == batch_size
         for test_weights, selected_mol, quat, translation in zip(
             test_weight_batches, selected_mols, quaternions, translations

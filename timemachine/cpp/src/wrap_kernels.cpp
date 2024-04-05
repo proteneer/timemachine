@@ -1635,7 +1635,7 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
             py::arg("coords"),
             py::arg("box"))
         .def(
-            "compute_incremental_weights",
+            "compute_incremental_log_weights",
             [](Class &mover,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &box,
@@ -1666,7 +1666,7 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
                 std::vector<RealType> h_quats = py_array_to_vector_with_cast<double, RealType>(quaternions);
                 std::vector<RealType> h_translations = py_array_to_vector_with_cast<double, RealType>(translations);
 
-                std::vector<std::vector<RealType>> weights = mover.compute_incremental_weights_host(
+                std::vector<std::vector<RealType>> weights = mover.compute_incremental_log_weights_host(
                     N, coords.data(), box.data(), mol_idxs.data(), &h_quats[0], &h_translations[0]);
                 return weights;
             },
@@ -1676,14 +1676,14 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
             py::arg("quaternions"),
             py::arg("translation"))
         .def(
-            "compute_initial_weights",
+            "compute_initial_log_weights",
             [](Class &mover,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &box) -> std::vector<RealType> {
                 verify_coords_and_box(coords, box);
                 const int N = coords.shape()[0];
 
-                std::vector<RealType> weights = mover.compute_initial_weights_host(N, coords.data(), box.data());
+                std::vector<RealType> weights = mover.compute_initial_log_weights_host(N, coords.data(), box.data());
                 return weights;
             },
             py::arg("coords"),

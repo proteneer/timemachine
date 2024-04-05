@@ -82,7 +82,7 @@ protected:
     curandGenerator_t cr_rng_samples_;      // Generate noise for selecting waters
     curandGenerator_t cr_rng_mh_;           // Generate noise for Metropolis-Hastings
 
-    void compute_initial_weights_device(const int N, double *d_coords, double *d_box, cudaStream_t stream);
+    void compute_initial_log_weights_device(const int N, double *d_coords, double *d_box, cudaStream_t stream);
 
     BDExchangeMove(
         const int N,
@@ -110,7 +110,7 @@ public:
         const int interval,
         const int batch_size);
 
-    void compute_incremental_weights_device(
+    void compute_incremental_log_weights_device(
         const int N,
         const bool scale,
         const double *d_box,
@@ -119,10 +119,10 @@ public:
         const RealType *d_translations,
         cudaStream_t stream);
 
-    // compute_incremental_weights_host is used for testing the computation of incremental weights
+    // compute_incremental_log_weights_host is used for testing the computation of incremental weights
     // with different batch sizes.
     // Note that the translations provided are used as is and are not scaled by the box extents.
-    std::vector<std::vector<RealType>> compute_incremental_weights_host(
+    std::vector<std::vector<RealType>> compute_incremental_log_weights_host(
         const int N,
         const double *h_coords,
         const double *h_box,
@@ -130,10 +130,10 @@ public:
         const RealType *h_quaternions,
         const RealType *h_translations);
 
-    std::vector<RealType> compute_initial_weights_host(const int N, const double *h_coords, const double *h_box);
+    std::vector<RealType> compute_initial_log_weights_host(const int N, const double *h_coords, const double *h_box);
 
     // get_after_weights returns the per molecule weight before each proposal, may come from either
-    // `compute_intial_weights_device` or from `compute_incremental_weights_device`.
+    // `compute_intial_weights_device` or from `compute_incremental_log_weights_device`.
     std::vector<RealType> get_before_log_weights();
 
     // get_after_weights returns the per molecule weight after being computed incrementally
