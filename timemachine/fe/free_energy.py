@@ -1082,8 +1082,7 @@ def run_sims_hrex(
             context.set_box(xvb.box)
 
             params = params_by_state[state_idx]
-            assert len(context.get_potentials()) == 1
-            context.get_potentials()[0].set_params(params)
+            bound_potentials[0].set_params(params)
             if state_params.water_sampling_params is not None:
                 for mover in context.get_movers():
                     if isinstance(mover, (custom_ops.TIBDExchangeMove_f32, custom_ops.TIBDExchangeMove_f64)):
@@ -1152,8 +1151,7 @@ def run_sims_hrex(
             context.set_box(xvb.box)
 
             params = params_by_state[state_idx]
-            assert len(context.get_potentials()) == 1
-            context.get_potentials()[0].set_params(params)
+            bound_potentials[0].set_params(params)
 
             current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
 
