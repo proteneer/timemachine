@@ -9,7 +9,14 @@ import pytest
 from psutil import Process
 from scipy import stats
 
-from timemachine.fe.free_energy import HostConfig, HREXParams, MDParams, SimulationResult, sample_with_context
+from timemachine.fe.free_energy import (
+    HostConfig,
+    HREXParams,
+    MDParams,
+    SimulationResult,
+    WaterSamplingParams,
+    sample_with_context,
+)
 from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
@@ -59,6 +66,9 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
         steps_per_frame=400,
         seed=2024,
         hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1),
+        water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000, n_initial_iterations=0)
+        if host_config == "complex"
+        else None,
     )
     n_windows = 5
 
