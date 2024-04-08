@@ -47,6 +47,8 @@ from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond, NonbondedInteractionGroup, SummedPotential
 from timemachine.utils import batches, pairwise_transform_and_combine
 
+WATER_SAMPLER_MOVERS = (custom_ops.TIBDExchangeMove_f32, custom_ops.TIBDExchangeMove_f64)
+
 
 class HostConfig:
     def __init__(self, omm_system, conf, box, num_water_atoms):
@@ -517,7 +519,7 @@ def sample_with_context(
     # Run water sampling after equilibrating to ensure there aren't voids that would change the impact of sampling
     if md_params.water_sampling_params is not None and md_params.water_sampling_params.n_initial_iterations > 0:
         for mover in ctxt.get_movers():
-            if isinstance(mover, (custom_ops.TIBDExchangeMove_f32, custom_ops.TIBDExchangeMove_f64)):
+            if isinstance(mover, WATER_SAMPLER_MOVERS):
                 mover.set_interval(1)
                 x = ctxt.get_x_t()
                 b = ctxt.get_box()
@@ -1059,35 +1061,34 @@ def run_sims_hrex(
     def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
         is_endstate = state_idx == state_idxs[0] or state_idx == state_idxs[-1]
         state_params = md_params
-        if is_endstate:
+        if (
+            not is_endstate
+            and state_params.water_sampling_params is not None
+            and not state_params.water_sampling_params.intermediate_sampling
+        ):
             # Disable water sampling in the intermediate windows
-            if (
-                md_params.water_sampling_params is not None
-                and not md_params.water_sampling_params.intermediate_sampling
-            ):
-                state_params = replace(state_params, water_sampling_params=None)
+            state_params = replace(state_params, water_sampling_params=None)
+        # Set up parameters of the water sampler movers
+        elif state_params.water_sampling_params is not None:
+            for mover in context.get_movers():
+                if isinstance(mover, WATER_SAMPLER_MOVERS):
+                    assert water_params_by_state is not None
+                    mover.set_params(water_params_by_state[state_idx])
         if state_params.n_eq_steps > 0:
             # Set the movers to 0 to ensure they all equilibrate the same way
             # Ensure initial mover state is consistent across replicas
             for mover in context.get_movers():
                 # If water sampling params is disabled and the mover is in the context, disable it by setting the interval larger than steps
                 mover.set_step(0)
-                if state_params.water_sampling_params is None and isinstance(
-                    mover, (custom_ops.TIBDExchangeMove_f32, custom_ops.TIBDExchangeMove_f64)
-                ):
+                if state_params.water_sampling_params is None and isinstance(mover, WATER_SAMPLER_MOVERS):
                     mover.set_interval(state_params.n_eq_steps + 1)
+
+            params = params_by_state[state_idx]
+            bound_potentials[0].set_params(params)
 
             context.set_x_t(xvb.coords)
             context.set_v_t(xvb.velocities)
             context.set_box(xvb.box)
-
-            params = params_by_state[state_idx]
-            bound_potentials[0].set_params(params)
-            if state_params.water_sampling_params is not None:
-                for mover in context.get_movers():
-                    if isinstance(mover, (custom_ops.TIBDExchangeMove_f32, custom_ops.TIBDExchangeMove_f64)):
-                        assert water_params_by_state is not None
-                        mover.set_params(water_params_by_state[state_idx])
 
             xs, boxes = context.multiple_steps(state_params.n_eq_steps, store_x_interval=0)
             x0 = xs[0]
@@ -1100,7 +1101,7 @@ def run_sims_hrex(
             and state_params.water_sampling_params.n_initial_iterations > 0
         ):
             for mover in context.get_movers():
-                if isinstance(mover, (custom_ops.TIBDExchangeMove_f32, custom_ops.TIBDExchangeMove_f64)):
+                if isinstance(mover, WATER_SAMPLER_MOVERS):
                     # Set the interval to 1 to allow making moves
                     mover.set_interval(1)
                     x = xvb.coords
@@ -1114,9 +1115,8 @@ def run_sims_hrex(
         # TBD: Deboggle this, too much logic of the parameters gets pushed down into impl code
         if not is_endstate and md_params.water_sampling_params is not None:
             for mover in context.get_movers():
-                if isinstance(mover, (custom_ops.TIBDExchangeMove_f32, custom_ops.TIBDExchangeMove_f64)):
+                if isinstance(mover, WATER_SAMPLER_MOVERS):
                     mover.set_interval(md_params.water_sampling_params.interval)
-                    break
         return xvb
 
     initial_replicas = [
@@ -1146,6 +1146,8 @@ def run_sims_hrex(
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
+            is_endstate = state_idx == state_idxs[0] or state_idx == state_idxs[-1]
+
             context.set_x_t(xvb.coords)
             context.set_v_t(xvb.velocities)
             context.set_box(xvb.box)
@@ -1159,15 +1161,20 @@ def run_sims_hrex(
             for mover in context.get_movers():
                 # Set the step so that all windows have the movers behave the same way.
                 mover.set_step(current_step)
-                if md_params.water_sampling_params is not None and isinstance(
-                    mover, (custom_ops.TIBDExchangeMove_f32, custom_ops.TIBDExchangeMove_f64)
-                ):
+                if md_params.water_sampling_params is not None and isinstance(mover, WATER_SAMPLER_MOVERS):
                     assert water_params_by_state is not None
                     mover.set_params(water_params_by_state[state_idx])
 
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
             )
+            if (
+                not is_endstate
+                and md_params_replica.water_sampling_params is not None
+                and not md_params_replica.water_sampling_params.intermediate_sampling
+            ):
+                # Disable water sampling in the intermediate windows
+                md_params_replica = replace(md_params_replica, water_sampling_params=None)
 
             return sample_with_context(context, md_params_replica, temperature, ligand_idxs, max_buffer_frames=100)
 
