@@ -1156,25 +1156,23 @@ def run_sims_hrex(
             bound_potentials[0].set_params(params)
 
             current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
-
             # Setup the MC movers of the Context
             for mover in context.get_movers():
                 # Set the step so that all windows have the movers behave the same way.
-                mover.set_step(current_step)
                 if md_params.water_sampling_params is not None and isinstance(mover, WATER_SAMPLER_MOVERS):
                     assert water_params_by_state is not None
                     mover.set_params(water_params_by_state[state_idx])
+                    # call `set_interval` resets the steps, so call `set_step` after
+                    if not is_endstate and not md_params.water_sampling_params.intermediate_sampling:
+                        # Disable the mover for this round
+                        mover.set_interval(current_step + (n_frames_iter * md_params.steps_per_frame) + 1)
+                    else:
+                        mover.set_interval(md_params.water_sampling_params.interval)
+                mover.set_step(current_step)
 
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
             )
-            if (
-                not is_endstate
-                and md_params_replica.water_sampling_params is not None
-                and not md_params_replica.water_sampling_params.intermediate_sampling
-            ):
-                # Disable water sampling in the intermediate windows
-                md_params_replica = replace(md_params_replica, water_sampling_params=None)
 
             return sample_with_context(context, md_params_replica, temperature, ligand_idxs, max_buffer_frames=100)
 

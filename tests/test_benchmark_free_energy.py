@@ -99,7 +99,7 @@ def test_benchmark_hif2a_single_topology(
 
     _, elapsed_ns = run_with_timing(run)
 
-    print("water sampling:", enable_water_sampling, ", intermediate windows:", intermediate_window_water_sampling)
+    print(f"water sampling: {enable_water_sampling}, intermediate windows: {intermediate_window_water_sampling}")
     print("hrex:", enable_hrex)
     print("host:", host_name)
     print("n_windows:", n_windows)
