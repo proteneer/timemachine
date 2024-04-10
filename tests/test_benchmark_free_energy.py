@@ -64,13 +64,9 @@ def hif2a_single_topology_leg(request):
 
 
 @pytest.mark.nightly(reason="Slow")
-@pytest.mark.parametrize(
-    "enable_water_sampling,intermediate_window_water_sampling", [(False, False), (True, False), (True, True)]
-)
+@pytest.mark.parametrize("enable_water_sampling", [False, True])
 @pytest.mark.parametrize("enable_hrex", [False, True])
-def test_benchmark_hif2a_single_topology(
-    hif2a_single_topology_leg, enable_hrex, enable_water_sampling, intermediate_window_water_sampling
-):
+def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex, enable_water_sampling):
     host_name, n_windows, initial_states = hif2a_single_topology_leg
     if host_name != "complex" and enable_water_sampling:
         pytest.skip("Water sampling disabled outside of complex")
@@ -78,12 +74,7 @@ def test_benchmark_hif2a_single_topology(
     n_frames = 500 // n_windows
     md_params = MDParams(n_frames=n_frames, n_eq_steps=1, steps_per_frame=400, seed=2023)
     if enable_water_sampling:
-        md_params = replace(
-            md_params,
-            water_sampling_params=WaterSamplingParams(
-                n_initial_iterations=1, intermediate_sampling=intermediate_window_water_sampling
-            ),
-        )
+        md_params = replace(md_params, water_sampling_params=WaterSamplingParams())
     temperature = DEFAULT_TEMP
 
     if enable_hrex:
@@ -99,7 +90,7 @@ def test_benchmark_hif2a_single_topology(
 
     _, elapsed_ns = run_with_timing(run)
 
-    print(f"water sampling: {enable_water_sampling}, intermediate windows: {intermediate_window_water_sampling}")
+    print("water sampling:", enable_water_sampling)
     print("hrex:", enable_hrex)
     print("host:", host_name)
     print("n_windows:", n_windows)

@@ -94,27 +94,18 @@ class WaterSamplingParams:
     batch_size:
         Number of proposals made per kernel call, typically can be left at default.
 
-    n_intial_iterations:
-        Number of times to make n_proposals before running equilibration
-
     radius:
         Radius, in nanometers, from the centroid of the molecule to treat as the inner target volume
-
-    intermediate_sampling:
-        Whether to run water sampling in intermediate windows or just the endstates.
     """
 
     interval: int = 400
     n_proposals: int = 1000
     batch_size: int = 250
-    n_initial_iterations: int = 0
     radius: float = 1.0
-    intermediate_sampling: bool = True
 
     def __post_init__(self):
         assert self.interval > 0
         assert self.n_proposals > 0
-        assert self.n_initial_iterations >= 0
         assert self.radius > 0.0
         assert self.batch_size > 0
         assert self.batch_size <= self.n_proposals
@@ -516,19 +507,6 @@ def sample_with_context(
         if barostat is not None:
             barostat.set_interval(original_interval)
 
-    # Run water sampling after equilibrating to ensure there aren't voids that would change the impact of sampling
-    if md_params.water_sampling_params is not None and md_params.water_sampling_params.n_initial_iterations > 0:
-        for mover in ctxt.get_movers():
-            if isinstance(mover, WATER_SAMPLER_MOVERS):
-                mover.set_interval(1)
-                x = ctxt.get_x_t()
-                b = ctxt.get_box()
-                for _ in range(md_params.water_sampling_params.n_initial_iterations):
-                    x, b = mover.move(x, b)
-                ctxt.set_x_t(x)
-                ctxt.set_box(b)
-                # Set the interval back to the proper value
-                mover.set_interval(md_params.water_sampling_params.interval)
     rng = np.random.default_rng(md_params.seed)
 
     if md_params.local_steps > 0:
@@ -743,17 +721,9 @@ def run_sims_sequential(
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     u_kln_by_component_by_lambda = []
 
-    for idx, initial_state in enumerate(initial_states):
+    for initial_state in initial_states:
         # run simulation
-        state_params = md_params
-        if idx == 0 or idx == len(initial_states) - 1:
-            # Disable water sampling in the intermediate windows
-            if (
-                md_params.water_sampling_params is not None
-                and not md_params.water_sampling_params.intermediate_sampling
-            ):
-                state_params = replace(state_params, water_sampling_params=None)
-        traj = sample(initial_state, state_params, max_buffer_frames=100)
+        traj = sample(initial_state, md_params, max_buffer_frames=100)
         print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
@@ -842,15 +812,7 @@ def run_sims_bisection(
     @cache
     def get_samples(lamb: float) -> Trajectory:
         initial_state = get_initial_state(lamb)
-        state_params = md_params
-        if lamb == initial_lambdas[0] or lamb == initial_lambdas[-1]:
-            # Disable water sampling in the intermediate windows
-            if (
-                md_params.water_sampling_params is not None
-                and not md_params.water_sampling_params.intermediate_sampling
-            ):
-                state_params = replace(state_params, water_sampling_params=None)
-        traj = sample(initial_state, state_params, max_buffer_frames=100)
+        traj = sample(initial_state, md_params, max_buffer_frames=100)
         return traj
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
@@ -1059,29 +1021,17 @@ def run_sims_hrex(
         barostat.set_interval(equil_barostat_interval)
 
     def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
-        is_endstate = state_idx == state_idxs[0] or state_idx == state_idxs[-1]
-        state_params = md_params
-        if (
-            not is_endstate
-            and state_params.water_sampling_params is not None
-            and not state_params.water_sampling_params.intermediate_sampling
-        ):
-            # Disable water sampling in the intermediate windows
-            state_params = replace(state_params, water_sampling_params=None)
         # Set up parameters of the water sampler movers
-        elif state_params.water_sampling_params is not None:
+        if md_params.water_sampling_params is not None:
             for mover in context.get_movers():
                 if isinstance(mover, WATER_SAMPLER_MOVERS):
                     assert water_params_by_state is not None
                     mover.set_params(water_params_by_state[state_idx])
-        if state_params.n_eq_steps > 0:
+        if md_params.n_eq_steps > 0:
             # Set the movers to 0 to ensure they all equilibrate the same way
             # Ensure initial mover state is consistent across replicas
             for mover in context.get_movers():
-                # If water sampling params is disabled and the mover is in the context, disable it by setting the interval larger than steps
                 mover.set_step(0)
-                if state_params.water_sampling_params is None and isinstance(mover, WATER_SAMPLER_MOVERS):
-                    mover.set_interval(state_params.n_eq_steps + 1)
 
             params = params_by_state[state_idx]
             bound_potentials[0].set_params(params)
@@ -1090,33 +1040,11 @@ def run_sims_hrex(
             context.set_v_t(xvb.velocities)
             context.set_box(xvb.box)
 
-            xs, boxes = context.multiple_steps(state_params.n_eq_steps, store_x_interval=0)
+            xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
             x0 = xs[0]
             v0 = context.get_v_t()
             box0 = boxes[0]
             xvb = CoordsVelBox(x0, v0, box0)
-        # Equilibrate before running water sampling
-        if (
-            state_params.water_sampling_params is not None
-            and state_params.water_sampling_params.n_initial_iterations > 0
-        ):
-            for mover in context.get_movers():
-                if isinstance(mover, WATER_SAMPLER_MOVERS):
-                    # Set the interval to 1 to allow making moves
-                    mover.set_interval(1)
-                    x = xvb.coords
-                    b = xvb.box
-                    for _ in range(state_params.water_sampling_params.n_initial_iterations):
-                        x, b = mover.move(x, b)
-                    xvb = CoordsVelBox(coords=x, velocities=xvb.velocities, box=b)
-                    # Set the interval back to the proper value
-                    mover.set_interval(state_params.water_sampling_params.interval)
-        # If we disabled water sampling previously, need to re-enable it.
-        # TBD: Deboggle this, too much logic of the parameters gets pushed down into impl code
-        if not is_endstate and md_params.water_sampling_params is not None:
-            for mover in context.get_movers():
-                if isinstance(mover, WATER_SAMPLER_MOVERS):
-                    mover.set_interval(md_params.water_sampling_params.interval)
         return xvb
 
     initial_replicas = [
@@ -1135,19 +1063,15 @@ def run_sims_hrex(
     if barostat is not None and state.barostat is not None:
         barostat.set_interval(state.barostat.interval)
 
-    if md_params.water_sampling_params is not None:
-        if md_params.steps_per_frame * n_frames_per_iter > md_params.water_sampling_params.interval:
-            warn("Not running any water sampling, too few steps of MD for the water sampling interval")
-        # Prevent initial iterations after equilibration
-        md_params = replace(
-            md_params, water_sampling_params=replace(md_params.water_sampling_params, n_initial_iterations=0)
-        )
+    if (
+        md_params.water_sampling_params is not None
+        and md_params.steps_per_frame * n_frames_per_iter > md_params.water_sampling_params.interval
+    ):
+        warn("Not running any water sampling, too few steps of MD for the water sampling interval")
 
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
-            is_endstate = state_idx == state_idxs[0] or state_idx == state_idxs[-1]
-
             context.set_x_t(xvb.coords)
             context.set_v_t(xvb.velocities)
             context.set_box(xvb.box)
@@ -1158,16 +1082,10 @@ def run_sims_hrex(
             current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
             # Setup the MC movers of the Context
             for mover in context.get_movers():
-                # Set the step so that all windows have the movers behave the same way.
                 if md_params.water_sampling_params is not None and isinstance(mover, WATER_SAMPLER_MOVERS):
                     assert water_params_by_state is not None
                     mover.set_params(water_params_by_state[state_idx])
-                    # call `set_interval` resets the steps, so call `set_step` after
-                    if not is_endstate and not md_params.water_sampling_params.intermediate_sampling:
-                        # Disable the mover for this round
-                        mover.set_interval(current_step + (n_frames_iter * md_params.steps_per_frame) + 1)
-                    else:
-                        mover.set_interval(md_params.water_sampling_params.interval)
+                # Set the step so that all windows have the movers be called the same number of times.
                 mover.set_step(current_step)
 
             md_params_replica = replace(
