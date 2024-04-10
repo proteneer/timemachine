@@ -66,9 +66,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
         steps_per_frame=400,
         seed=2024,
         hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1),
-        water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000, n_initial_iterations=0)
-        if host_config == "complex"
-        else None,
+        water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000) if host_config == "complex" else None,
     )
     n_windows = 5
 
