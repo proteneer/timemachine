@@ -12,22 +12,35 @@ static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
+double __device__ __forceinline__ switch_fn(double dij) {
+    double cutoff = 1.2;
+    double pi = static_cast<float>(PI);
+    return pow(cos((pi * pow(dij / cutoff, 8)) / 2), 3);
+}
+
 double __device__ __forceinline__ real_es_factor(double real_beta, double dij, double inv_d2ij, double &erfc_beta_dij) {
     double beta_dij = real_beta * dij;
     double exp_beta_dij_2 = exp(-beta_dij * beta_dij);
-    erfc_beta_dij = erfc(beta_dij);
+    erfc_beta_dij = erfc(beta_dij) * switch_fn(dij);
     return -inv_d2ij * (static_cast<double>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
 }
 
 float __device__ __forceinline__ real_es_factor(float real_beta, float dij, float inv_d2ij, float &erfc_beta_dij) {
     float beta_dij = real_beta * dij;
+
     // max ulp error is: 2 + floor(abs(1.16 * x))
     float exp_beta_dij_2 = __expf(-beta_dij * beta_dij);
-    // 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
-    // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
-    float t = 1.0f / (1.0f + 0.3275911f * beta_dij);
-    erfc_beta_dij = (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) *
-                    t * exp_beta_dij_2;
+
+    // coeffs optimized for beta = 2.0, cutoff = 1.2
+    float t = dij;
+    erfc_beta_dij =
+        (1.0f +
+         (-2.256767524f +
+          (-0.038179357f +
+           (3.387718846f + (-1.060439909f + (-3.360820687f + (3.158115598f + -0.825868453f * t) * t) * t) * t) * t) *
+              t) *
+             t);
+
     return -inv_d2ij * (static_cast<float>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
 }
 
