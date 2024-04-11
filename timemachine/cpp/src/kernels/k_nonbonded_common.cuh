@@ -43,26 +43,28 @@ real_es_factor(RealType real_beta, RealType dij, RealType inv_dij, RealType inv_
     return d_es_dr;
 }
 
-// opaque approximations applied here, only valid when real_beta == 2.0
-float __device__ __forceinline__
-real_es_factor(float real_beta, float dij, float inv_dij, float inv_d2ij, float &damping_factor) {
-    float t = dij;
-    // assert real_beta = 2.0?
+// // opaque approximations applied here, only valid when real_beta == 2.0
+// float __device__ __forceinline__
+// real_es_factor(float real_beta, float dij, float inv_dij, float inv_d2ij, float &damping_factor) {
+//     float t = dij;
+//     // assert real_beta = 2.0?
 
-    // clang-format off
+//     // clang-format off
 
-    // polynomial approximation to erfc(beta_dij) * switch_fn(dij) for dij between 0 and 1.2
-    damping_factor = (1.000000003f + (-2.256767524f + (-0.038179357f + (3.387718845f + (-1.060439901f + (-3.360820701f + (3.158115609f + -0.825868456f * t) * t) * t) * t) * t) * t) * t);
+//     // polynomial approximation to erfc(beta_dij) * switch_fn(dij) for dij between 0 and 1.2
+//     //damping_factor = (1.000000003f + (-2.256767524f + (-0.038179357f + (3.387718845f + (-1.060439901f + (-3.360820701f + (3.158115609f + -0.825868456f * t) * t) * t) * t) * t) * t) * t);
+//     damping_factor = (1.000000000f + (-2.256753880f + (0.018515233f + (2.657773313f + (2.377065883f + (-11.423294474f + (13.618150926f + (-8.464803786f + (2.941368615f + -0.464257418f * t) * t) * t) * t) * t) * t) * t) * t) * t);
 
-    // polynomial approximation to deriv of damping_factor, for dij between 0 and 1.2
-    float damping_factor_prime = (-2.256758371f + (-0.000008247f + (8.992386707f + (1.572164882f + (-29.997988338f + (34.101203109f + (-14.371321036f + 1.912459462f * t) * t) * t) * t) * t) * t) * t);
+//     // polynomial approximation to deriv of damping_factor, for dij between 0 and 1.2
+//     //float damping_factor_prime = (-2.256758371f + (-0.000008247f + (8.992386707f + (1.572164882f + (-29.997988338f + (34.101203109f + (-14.371321036f + 1.912459462f * t) * t) * t) * t) * t) * t) * t);
+//     float damping_factor_prime = (-2.256758331f + (0.000011562f + (9.075084876f + (-1.117918509f + (-8.749246274f + (-38.496124435f + (113.496561608f + (-119.796066138f + (59.561671589f + -11.763822412f * t) * t) * t) * t) * t) * t) * t) * t) * t);
 
-    // clang-format on
+//     // clang-format on
 
-    float d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
+//     float d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
 
-    return d_es_dr;
-}
+//     return d_es_dr;
+// }
 
 // Compute the terms associated with electrostatics.
 // This is pulled out into a function to ensure that the same bit values
