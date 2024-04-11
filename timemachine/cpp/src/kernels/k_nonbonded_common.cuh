@@ -12,36 +12,56 @@ static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
-double __device__ __forceinline__ switch_fn(double dij) {
-    double cutoff = 1.2;
-    double pi = static_cast<float>(PI);
+template <typename RealType> RealType __device__ __forceinline__ switch_fn(RealType dij) {
+    RealType cutoff = 1.2;
+    RealType pi = static_cast<RealType>(PI);
     return pow(cos((pi * pow(dij / cutoff, 8)) / 2), 3);
 }
 
-double __device__ __forceinline__ real_es_factor(double real_beta, double dij, double inv_d2ij, double &erfc_beta_dij) {
-    double beta_dij = real_beta * dij;
-    double exp_beta_dij_2 = exp(-beta_dij * beta_dij);
-    erfc_beta_dij = erfc(beta_dij) * switch_fn(dij);
-    return -inv_d2ij * (static_cast<double>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
+template <typename RealType> RealType __device__ __forceinline__ d_switch_fn_dr(RealType dij) {
+    RealType cutoff = 1.2;
+    RealType pi = static_cast<RealType>(PI);
+    RealType k8 = pow(cutoff, 8);
+    RealType arg = pi * pow(dij, 8) / (2 * k8);
+    return -12 * pi * pow(dij, 7) * sin(arg) * pow(cos(arg), 2) / k8;
 }
 
-float __device__ __forceinline__ real_es_factor(float real_beta, float dij, float inv_d2ij, float &erfc_beta_dij) {
-    float beta_dij = real_beta * dij;
+template <typename RealType> RealType __device__ __forceinline__ d_erfc_beta_r_dr(RealType beta, RealType dij) {
+    RealType beta_dij = beta * dij;
+    RealType exp_beta_dij_2 = exp(-beta_dij * beta_dij);
+    return -static_cast<RealType>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
+}
 
-    // max ulp error is: 2 + floor(abs(1.16 * x))
-    float exp_beta_dij_2 = __expf(-beta_dij * beta_dij);
+template <typename RealType>
+RealType __device__ __forceinline__
+real_es_factor(RealType real_beta, RealType dij, RealType inv_dij, RealType inv_d2ij, RealType &damping_factor) {
+    RealType beta_dij = real_beta * dij;
+    damping_factor = erfc(beta_dij) * switch_fn(dij);
+    RealType damping_factor_prime =
+        (erfc(beta_dij) * d_switch_fn_dr(dij)) + (d_erfc_beta_r_dr(real_beta, dij) * switch_fn(dij));
+    RealType d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
+    return d_es_dr;
+}
 
-    // coeffs optimized for beta = 2.0, cutoff = 1.2
+// opaque approximations applied here, only valid when real_beta == 2.0
+float __device__ __forceinline__
+real_es_factor(float real_beta, float dij, float inv_dij, float inv_d2ij, float &damping_factor) {
     float t = dij;
-    erfc_beta_dij =
-        (1.0f +
-         (-2.256767524f +
-          (-0.038179357f +
-           (3.387718846f + (-1.060439909f + (-3.360820687f + (3.158115598f + -0.825868453f * t) * t) * t) * t) * t) *
-              t) *
-             t);
+    // assert real_beta = 2.0?
 
-    return -inv_d2ij * (static_cast<float>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
+    // clang-format off
+
+    // polynomial approximation to erfc(beta_dij) * switch_fn(dij) for dij between 0 and 1.2
+    damping_factor = (1.000000003f + (-2.256767524f + (-0.038179357f + (3.387718845f + (-1.060439901f + (-3.360820701f + (3.158115609f + -0.825868456f * t) * t) * t) * t) * t) * t) * t);
+
+    // polynomial approximation to deriv of damping_factor, for dij between 0 and 1.2
+    float damping_factor_prime = (-2.256758371f + (-0.000008247f + (8.992386707f + (1.572164882f + (-29.997988338f + (34.101203109f + (-14.371321036f + 1.912459462f * t) * t) * t) * t) * t) * t) * t);
+
+    // clang-format on
+
+    float d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
+
+    return d_es_dr;
 }
 
 // Compute the terms associated with electrostatics.
@@ -58,7 +78,7 @@ void __device__ __forceinline__ compute_electrostatics(
     RealType &dij,
     RealType &inv_dij,
     RealType &inv_d2ij,
-    RealType &ebd,
+    RealType &damping_factor,
     RealType &es_prefactor,
     RealType &u) {
     inv_dij = rsqrt(d2ij);
@@ -67,10 +87,12 @@ void __device__ __forceinline__ compute_electrostatics(
     inv_d2ij = inv_dij * inv_dij;
 
     RealType qij = qi * qj;
-    es_prefactor = charge_scale * qij * inv_dij * real_es_factor(beta, dij, inv_d2ij, ebd);
+    // TODO: should I really be multiplying real_es_factor by inv_dij?
+    //    or was a factor of inv_dij pulled out as an optimization, now being double-counted?
+    es_prefactor = charge_scale * qij * inv_dij * real_es_factor(beta, dij, inv_dij, inv_d2ij, damping_factor);
 
     if (COMPUTE_U) {
-        u = charge_scale * qij * inv_dij * ebd;
+        u = charge_scale * qij * inv_dij * damping_factor;
     }
 }
 
