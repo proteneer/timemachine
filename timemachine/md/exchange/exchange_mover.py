@@ -15,7 +15,8 @@ from timemachine.potentials import nonbonded
 
 def get_water_idxs(mol_groups: List[NDArray], ligand_idxs: Optional[NDArray] = None) -> List[NDArray]:
     """Given a list of lists that make up the individual molecules in a system, return the subset that is only the waters.
-    Additional logic to handle the case where ligand_idxs is also of size 3.
+
+    Contains additional logic to handle the case where ligand_idxs is also of size 3.
     """
     water_groups = [g for g in mol_groups if len(g) == 3]
     if ligand_idxs is not None and len(ligand_idxs) == 3:
