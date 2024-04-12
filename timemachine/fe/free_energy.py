@@ -1048,6 +1048,7 @@ def run_sims_hrex(
             context.set_box(xvb.box)
 
             xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
+            assert len(xs) == 1
             x0 = xs[0]
             v0 = context.get_v_t()
             box0 = boxes[0]
