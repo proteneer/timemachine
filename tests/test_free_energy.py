@@ -302,6 +302,8 @@ def test_get_water_sampler_params(num_windows):
     num_host_atoms = solvent_conf.shape[0]
     host_system, masses = convert_omm_system(solvent_sys)
     solvent_host = Host(host_system, masses, solvent_conf, solvent_box, num_host_atoms)
+    mol_a_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 1])
+    mol_b_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 2])
     for lamb in np.linspace(0.0, 1.0, num_windows, endpoint=True):
         state = setup_initial_state(st, lamb, solvent_host, DEFAULT_TEMP, 2024)
         water_sampler_nb_params = get_water_sampler_params(state)
@@ -309,6 +311,12 @@ def test_get_water_sampler_params(num_windows):
         ligand_water_params = st._get_guest_params(
             forcefield.q_handle_solv, forcefield.lj_handle_solv, lamb, nb_pot.cutoff
         )
+        if lamb == 0.0:
+            assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == 0.0)
+            assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == nb_pot.cutoff)
+        elif lamb == 1.0:
+            assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == nb_pot.cutoff)
+            assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == 0.0)
 
         np.testing.assert_array_equal(water_sampler_nb_params[num_host_atoms:], ligand_water_params)
 
