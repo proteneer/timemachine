@@ -85,20 +85,21 @@ void __global__ k_nonbonded_precomputed(
         RealType d_ij = sqrt(d2_ij);
 
         RealType inv_dij = 1 / d_ij;
+        RealType inv_d2ij = inv_dij * inv_dij;
 
         if (q_ij != 0) {
 
-            RealType erfc_beta;
-            RealType es_factor = real_es_factor(static_cast<RealType>(beta), d_ij, inv_dij * inv_dij, erfc_beta);
+            RealType du_dr_factor = rxn_field_du_dr_factor<RealType>(d_ij, inv_d2ij);
+            RealType u_factor = rxn_field_u_factor<RealType>(d2_ij, inv_dij);
 
             if (u_buffer) {
                 // energies
-                RealType nrg = q_ij * erfc_beta * inv_dij;
+                RealType nrg = q_ij * u_factor;
                 energy += FLOAT_TO_FIXED_ENERGY<RealType>(nrg);
             }
 
             if (du_dx || du_dp) {
-                RealType du_dr = q_ij * es_factor;
+                RealType du_dr = q_ij * du_dr_factor;
 
                 RealType force_prefactor = du_dr * inv_dij;
                 if (du_dx) {
@@ -114,7 +115,7 @@ void __global__ k_nonbonded_precomputed(
 
                 if (du_dp) {
                     // du/dp
-                    g_q_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(erfc_beta * inv_dij);
+                    g_q_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(u_factor * inv_dij);
                     g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(delta_w * force_prefactor);
                 }
             }
