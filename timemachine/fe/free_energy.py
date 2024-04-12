@@ -429,7 +429,8 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
 
 def get_water_sampler_params(initial_state: InitialState) -> NDArray:
-    """Given an initial state, return the parameters that define the parameters of water-environment parameters
+    """Given an initial state, return the parameters that define the nonbonded parameters of water with respect to the
+    entire system.
 
     Since we split the different components of the NB into ligand-water, ligand-protein, we want to use the ligand-water parameter
     to ensure that the ligand component is correctly configured for the specific lambda window.
