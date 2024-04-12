@@ -87,13 +87,13 @@ class WaterSamplingParams:
     ----------
 
     interval:
-        How many steps of MD before running a set of water sampling moves
+        How many steps of MD between water sampling moves
 
     n_proposals:
         Number of proposals per make.
 
     batch_size:
-        Number of proposals made per kernel call, typically can be left at default.
+        Internal parameter detailing the parallelism of the mover, typically can be left at default.
 
     radius:
         Radius, in nanometers, from the centroid of the molecule to treat as the inner target volume
