@@ -35,6 +35,7 @@ from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
+from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.hrex import (
     HREX,
     HREXDiagnostics,
@@ -427,7 +428,12 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         return np.concatenate([host_values, ligand_values])
 
 
-def get_water_params(initial_state: InitialState) -> NDArray:
+def get_water_sampler_params(initial_state: InitialState) -> NDArray:
+    """Given an initial state, return the parameters that define the parameters of water-environment parameters
+
+    Since we split the different components of the NB into ligand-water, ligand-protein, we want to use the ligand-water parameter
+    to ensure that the ligand component is correctly configured for the specific lambda window.
+    """
     summed_pot = next(p.potential for p in initial_state.potentials if isinstance(p.potential, SummedPotential))
     # TBD Figure out a better way of handling the jankyness of having to select the IxnGroup that defines the Ligand-Water
     # Currently this just hardcodes to the first ixn group potential which is the ligand-water ixn group as returned by HostTopology.parameterize_nonbonded
@@ -458,17 +464,13 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
         hb_potential = next(p.potential for p in initial_state.potentials if isinstance(p.potential, HarmonicBond))
         group_indices = get_group_indices(get_bond_list(hb_potential), len(initial_state.integrator.masses))
 
-        water_idxs = [group for group in group_indices if len(group) == 3]
-        # Handle the case where the ligand is a 3 atom system
-        if len(initial_state.ligand_idxs) == 3:
-            ligand_atom_set = set(initial_state.ligand_idxs)
-            water_idxs = [group for group in water_idxs if ligand_atom_set != set(group)]
+        water_idxs = get_water_idxs(group_indices, ligand_idxs=initial_state.ligand_idxs)
 
         summed_pot = next(p.potential for p in initial_state.potentials if isinstance(p.potential, SummedPotential))
         # Select a Nonbonded Potential to get the the cutoff/beta, assumes all have same cutoff/beta.
         nb = next(p for p in summed_pot.potentials if isinstance(p, NonbondedInteractionGroup))
 
-        water_params = get_water_params(initial_state)
+        water_params = get_water_sampler_params(initial_state)
 
         water_sampler = custom_ops.TIBDExchangeMove_f32(
             initial_state.x0.shape[0],
@@ -990,7 +992,7 @@ def run_sims_hrex(
     params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
     water_params_by_state: Optional[NDArray] = None
     if md_params.water_sampling_params is not None:
-        water_params_by_state = np.array([get_water_params(initial_state) for initial_state in initial_states])
+        water_params_by_state = np.array([get_water_sampler_params(initial_state) for initial_state in initial_states])
 
     def compute_log_q_matrix(xvbs: List[CoordsVelBox]):
         coords = np.array([xvb.coords for xvb in xvbs])

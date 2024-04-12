@@ -19,10 +19,13 @@ from timemachine.fe.free_energy import image_frames
 from timemachine.ff import Forcefield
 from timemachine.lib import custom_ops
 from timemachine.md.barostat.moves import NPTMove
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
 from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDExchangeMove
+from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.moves import MonteCarloMove
 from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import HarmonicBond
 
 
 def image_xvb(initial_state, xvb_t):
@@ -102,11 +105,11 @@ def test_exchange():
     # nit: use lamb=0.0 to get the fully-interacting end-state
     initial_state, nwm, topology = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff, args.use_hmr, lamb=0.0)
     # set up water indices, assumes that waters are placed at the front of the coordinates.
-    water_idxs = []
-    for wai in range(nwm):
-        water_idxs.append([wai * 3 + 0, wai * 3 + 1, wai * 3 + 2])
-    water_idxs = np.array(water_idxs)
     bps = initial_state.potentials
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, initial_state.x0.shape[0])
+    water_idxs = get_water_idxs(all_group_idxs, initial_state.ligand_idxs)
 
     # [0] nb_all_pairs, [1] nb_ligand_water, [2] nb_ligand_protein
     # all_pairs has masked charges

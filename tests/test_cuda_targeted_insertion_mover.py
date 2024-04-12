@@ -21,7 +21,12 @@ from timemachine.lib import MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDExchangeMove
-from timemachine.md.exchange.exchange_mover import compute_raw_ratio_given_weights, delta_r_np, get_water_groups
+from timemachine.md.exchange.exchange_mover import (
+    compute_raw_ratio_given_weights,
+    delta_r_np,
+    get_water_groups,
+    get_water_idxs,
+)
 from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 
@@ -477,8 +482,8 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # Select an arbitrary water, will be the only water considered for insertion/deletion
-    water_idxs_single = [[group for group in all_group_idxs if len(group) == 3][-1]]
-    water_idxs_double = [group for group in all_group_idxs if len(group) == 3][-2:]
+    water_idxs_single = [get_water_idxs(all_group_idxs)[-1]]
+    water_idxs_double = get_water_idxs(all_group_idxs)[-2:]
 
     conf = image_frame(all_group_idxs, conf, box)
 
@@ -535,7 +540,7 @@ def test_targeted_insertion_brd4_rbfe_with_context(
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs, ligand_idxs=initial_state.ligand_idxs)
 
     N = conf.shape[0]
 
@@ -711,7 +716,7 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs, ligand_idxs=ligand_idxs)
 
     conf = image_frame(all_group_idxs, conf, box)
 
@@ -1024,7 +1029,7 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs, ligand_idxs=initial_state.ligand_idxs)
 
     N = conf.shape[0]
 
