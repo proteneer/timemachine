@@ -23,6 +23,18 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
     const RealType *__restrict__ gumbel_noise,
     RealType *__restrict__ prepared_gumbel);
 
+template <typename RealType>
+void __global__ k_setup_gumbel_max_trick_targeted_insertion(
+    const int num_segments,
+    const int vals_per_segment,
+    const int max_offset,
+    const int *__restrict__ noise_offset,      // [1]
+    const int *__restrict__ segment_offsets,   // [num_segments]
+    const RealType *__restrict__ log_weights,  // [total_values]
+    const RealType *__restrict__ gumbel_noise, // [max_offset]
+    RealType *__restrict__ prepared_gumbel     // [total_values]
+);
+
 template <typename T>
 void __global__
 k_copy_kv_key(const int N, const cub::KeyValuePair<int, T> *__restrict__ kv_pairs, int *__restrict__ out);

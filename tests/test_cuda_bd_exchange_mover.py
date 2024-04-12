@@ -85,7 +85,7 @@ def verify_bias_deletion_moves(
 
         last_conf = x_move
     assert bdem.n_proposed() == total_num_proposals
-    print(f"Accepted { bdem.n_accepted()} of {total_num_proposals} moves")
+    print(f"Accepted {bdem.n_accepted()} of {total_num_proposals} moves")
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
@@ -438,7 +438,7 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
-    # Moves should be deterministic regardless the number of steps taken per move
+    # Moves should be deterministic regardless the number of proposals per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 
@@ -511,7 +511,7 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
-    # Moves should be deterministic regardless the number of steps taken per move
+    # Moves should be deterministic regardless the number of proposals per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 
@@ -609,6 +609,63 @@ def test_moves_in_a_water_box(
     )
 
 
+@pytest.mark.parametrize("num_particles", [3])
+@pytest.mark.parametrize("proposals_per_move", [100, 1000])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("seed", [2023, 2024, 2025])
+def test_compute_incremental_log_weights_match_initial_log_weights_when_recomputed(
+    num_particles, proposals_per_move, precision, seed
+):
+    """Verify that the result of computing the weights using `compute_initial_log_weights` and the incremental log weights generated
+    during proposals are identical.
+    """
+    assert (
+        proposals_per_move > 1
+    ), "If proposals per move is 1 then this isn't meaningful since the weights won't be incremental"
+    rng = np.random.default_rng(seed)
+    cutoff = 1.2
+    beta = 2.0
+
+    box_size = 1.0
+    box = np.eye(3) * box_size
+    conf = rng.random((num_particles, 3)) * box_size
+
+    params = rng.random((num_particles, 4))
+    params[:, 3] = 0.0  # Put them in the same plane
+
+    group_idxs = [[x] for x in range(num_particles)]
+
+    N = conf.shape[0]
+
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    # Test version that makes all proposals in a single move
+    bdem = klass(
+        N,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        beta,
+        cutoff,
+        seed,
+        proposals_per_move,
+        1,
+    )
+
+    updated_coords, _ = bdem.move(conf, box)
+    assert not np.all(updated_coords == conf)
+    assert bdem.n_accepted() >= 1
+    assert bdem.n_proposed() == proposals_per_move
+
+    before_log_weights = bdem.get_before_log_weights()
+    ref_log_weights = bdem.compute_initial_log_weights(updated_coords, box)
+    # The before weights of the mover should identically match the weights if recomputed from scratch
+    diff_idxs = np.argwhere(np.array(before_log_weights) != np.array(ref_log_weights))
+    np.testing.assert_array_equal(before_log_weights, ref_log_weights, err_msg=f"idxs {diff_idxs} don't match")
+
+
 @pytest.mark.parametrize(
     "batch_size,samples,box_size",
     [
@@ -619,7 +676,7 @@ def test_moves_in_a_water_box(
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-5, 1e-5), (np.float32, 8e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_compute_incremental_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
+def test_compute_incremental_log_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
     """Verify that the incremental weights computed are valid for different collections of rotations/translations"""
     proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
     ff = Forcefield.load_default()
@@ -661,7 +718,7 @@ def test_compute_incremental_weights(batch_size, samples, box_size, precision, r
         # Scale the translations
         translations = rng.uniform(0, 1, size=(batch_size, 3)) * np.diagonal(box)
 
-        test_weight_batches = bdem.compute_incremental_weights(conf, box, selected_mols, quaternions, translations)
+        test_weight_batches = bdem.compute_incremental_log_weights(conf, box, selected_mols, quaternions, translations)
         assert len(test_weight_batches) == batch_size
         for test_weights, selected_mol, quat, translation in zip(
             test_weight_batches, selected_mols, quaternions, translations
@@ -679,7 +736,10 @@ def test_compute_incremental_weights(batch_size, samples, box_size, precision, r
             moved_conf[mol_idxs] = updated_mol_conf
             np.testing.assert_equal(trial_conf, moved_conf)
             # Janky re-use of assert_energy_arrays_match which is for energies, but functions for any fixed point
-            assert_energy_arrays_match(np.array(ref_final_weights), np.array(test_weights), atol=atol, rtol=rtol)
+            # Slightly reduced threshold to deal with these being weights
+            assert_energy_arrays_match(
+                np.array(ref_final_weights), np.array(test_weights), atol=atol, rtol=rtol, threshold=5e6
+            )
 
 
 @pytest.fixture(scope="module")
