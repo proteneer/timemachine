@@ -473,6 +473,10 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
         water_params = get_water_sampler_params(initial_state)
 
+        # Generate a new random seed based on the md params seed
+        rng = np.random.default_rng(md_params.seed)
+        water_sampler_seed = rng.integers(np.iinfo(np.int32).max)
+
         water_sampler = custom_ops.TIBDExchangeMove_f32(
             initial_state.x0.shape[0],
             initial_state.ligand_idxs.tolist(),
@@ -482,7 +486,7 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
             nb.beta,
             nb.cutoff,
             md_params.water_sampling_params.radius,
-            md_params.seed,
+            water_sampler_seed,
             md_params.water_sampling_params.n_proposals,
             md_params.water_sampling_params.interval,
             batch_size=md_params.water_sampling_params.batch_size,
