@@ -331,6 +331,15 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
+    def delete(self, path: str):
+        """
+        Parameters
+        ----------
+        path:
+            Relative path to delete.
+        """
+        raise NotImplementedError()
+
 
 class FileClient(AbstractFileClient):
     def __init__(self, base: Optional[Path] = None):
@@ -359,6 +368,9 @@ class FileClient(AbstractFileClient):
 
     def full_path(self, path: str) -> str:
         return str(Path(self.base, path).absolute())
+
+    def delete(self, path: str):
+        Path(self.full_path(path)).unlink()
 
 
 def save_results(result_paths: List[str], local_file_client: FileClient, remote_file_client: AbstractFileClient):
