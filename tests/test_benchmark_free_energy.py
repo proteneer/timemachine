@@ -9,8 +9,15 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_TEMP
-from timemachine.fe.free_energy import HostConfig, MDParams, WaterSamplingParams, run_sims_hrex, run_sims_sequential
-from timemachine.fe.rbfe import setup_initial_states, setup_optimized_host
+from timemachine.fe.free_energy import (
+    HostConfig,
+    MDParams,
+    WaterSamplingParams,
+    run_sims_bisection,
+    run_sims_hrex,
+    run_sims_sequential,
+)
+from timemachine.fe.rbfe import setup_initial_states, setup_optimized_host, setup_optimized_initial_state
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.md import builders
@@ -60,14 +67,14 @@ def hif2a_single_topology_leg(request):
 
     initial_states = setup_initial_states(single_topology, host, DEFAULT_TEMP, lambdas, seed=2023, min_cutoff=0.7)
 
-    return host_name, n_windows, initial_states
+    return single_topology, host, host_name, n_windows, initial_states
 
 
 @pytest.mark.nightly(reason="Slow")
 @pytest.mark.parametrize("enable_water_sampling", [False, True])
-@pytest.mark.parametrize("enable_hrex", [False, True])
-def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex, enable_water_sampling):
-    host_name, n_windows, initial_states = hif2a_single_topology_leg
+@pytest.mark.parametrize("mode", ["sequential", "bisection", "hrex"])
+def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling):
+    single_topology, host, host_name, n_windows, initial_states = hif2a_single_topology_leg
     if host_name != "complex" and enable_water_sampling:
         pytest.skip("Water sampling disabled outside of complex")
 
@@ -77,7 +84,7 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex,
         md_params = replace(md_params, water_sampling_params=WaterSamplingParams())
     temperature = DEFAULT_TEMP
 
-    if enable_hrex:
+    if mode == "hrex":
         run = partial(
             run_sims_hrex,
             initial_states,
@@ -85,13 +92,39 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex,
             n_frames_per_iter=1,
             print_diagnostics_interval=None,
         )
-    else:
+    elif mode == "sequential":
         run = partial(run_sims_sequential, initial_states, md_params, temperature=temperature)
+    elif mode == "bisection":
+        # Function to be used by run_sims_bisection
+        make_optimized_initial_state = partial(
+            setup_optimized_initial_state,
+            single_topology,
+            host=host,
+            optimized_initial_states=initial_states,
+            temperature=temperature,
+            seed=md_params.seed,
+        )
+        # Bisection is a bit different since it has to generate new windows, but still good to benchmark
+        # as it is done upfront before HREX in practice
+        assert len(initial_states) >= 2
+        initial_lambdas = [initial_states[0].lamb, initial_states[-1].lamb]
+        run = partial(
+            run_sims_bisection,
+            initial_lambdas,
+            make_optimized_initial_state,
+            md_params,
+            n_bisections=n_windows - len(initial_lambdas),
+            temperature=temperature,
+            min_overlap=None,
+            verbose=True,
+        )
+    else:
+        assert False
 
     _, elapsed_ns = run_with_timing(run)
 
     print("water sampling:", enable_water_sampling)
-    print("hrex:", enable_hrex)
+    print("mode:", mode)
     print("host:", host_name)
     print("n_windows:", n_windows)
     print("n_frames:", n_frames)
