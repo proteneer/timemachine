@@ -22,6 +22,20 @@ Array = Any
 from typing import Optional
 
 
+def switch_fn(dij, cutoff):
+    """heuristic switching function
+
+    intended to:
+    * have {f, f', f''} go to 0 at cutoff
+    * keep "switch_fn(dij) * erfc(beta * dij)" as close as possible to "erfc(beta * dij)"
+        for the range dij in [0, 1.2), for beta = 2.0
+
+    not necessarily intended for use with LJ
+    """
+    f = jnp.power(jnp.cos((jnp.pi * jnp.power(dij / cutoff, 8)) / 2), 3)
+    return jnp.where(dij <= cutoff, f, 0)
+
+
 def combining_rule_sigma(sig_i, sig_j):
     """Lorentz-Berthelot (sig_i + sig_j) / 2,
     but assuming sig -> (sig / 2) has been applied
@@ -120,7 +134,7 @@ def nonbonded_block_unsummed(
 
     qij = jnp.multiply(qi, qj)
 
-    es = direct_space_pme(dij, qij, beta)
+    es = direct_space_pme(dij, qij, beta) * switch_fn(dij, cutoff)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
     nrgs = jnp.where(dij < cutoff, es + lj, 0)
@@ -363,7 +377,7 @@ def nonbonded_on_specific_pairs(
 
     # Electrostatics by direct-space part of PME
     qij = apply_cutoff(charges[inds_l] * charges[inds_r])
-    electrostatics = direct_space_pme(dij, qij, beta)
+    electrostatics = direct_space_pme(dij, qij, beta) * switch_fn(dij, cutoff)
 
     if rescale_mask is not None:
         assert rescale_mask.shape == (len(pairs), 2)
@@ -416,7 +430,7 @@ def nonbonded_on_precomputed_pairs(
     eps_ij = apply_cutoff(eps_ij)
 
     vdW = jnp.where(eps_ij != 0, lennard_jones(dij, sig_ij, eps_ij), 0)
-    electrostatics = jnp.where(q_ij != 0, direct_space_pme(dij, q_ij, beta), 0)
+    electrostatics = jnp.where(q_ij != 0, direct_space_pme(dij, q_ij, beta) * switch_fn(dij, cutoff), 0)
 
     return vdW, electrostatics
 
