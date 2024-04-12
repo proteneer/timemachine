@@ -120,7 +120,10 @@ void __global__ k_nonbonded_pair_list(
 
     RealType u = static_cast<RealType>(0.0);
     // see note: this must be strictly less than
-    if (d2ij < cutoff_squared) {
+    RealType d2ij_3d = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
+    RealType d2ij = d2ij_3d + delta_w * delta_w;
+    bool is_interacting = (d2ij_3d < cutoff_squared) && ((delta_w * delta_w) < cutoff_squared);
+    if (is_interacting) {
 
         RealType ebd;
         RealType delta_prefactor;

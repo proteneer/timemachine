@@ -78,9 +78,10 @@ void __global__ k_nonbonded_precomputed(
 
     __int128 energy = 0;
 
-    RealType d2_ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;
-
-    if (d2_ij < cutoff_squared) {
+    RealType d2ij_3d = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
+    RealType d2ij = d2ij_3d + delta_w * delta_w;
+    bool is_interacting = (d2ij_3d < cutoff_squared) && ((delta_w * delta_w) < cutoff_squared);
+    if (is_interacting) {
 
         RealType d_ij = sqrt(d2_ij);
 

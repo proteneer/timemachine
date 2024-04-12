@@ -198,13 +198,14 @@ void __device__ v_nonbonded_unified(
         delta_y -= shared_box.y * nearbyint(delta_y * shared_box.inv_y);
         delta_z -= shared_box.z * nearbyint(delta_z * shared_box.inv_z);
 
-        RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
+        RealType d2ij_3d = (delta_x * delta_x) + (delta_y * delta_y) + (delta_z * delta_z);
+        RealType d2ij = d2ij_3d;
         RealType delta_w;
 
         if (ALCHEMICAL) {
             // (ytz): we are guaranteed that delta_w is zero if ALCHEMICAL == false
             delta_w = w_i - w_j;
-            d2ij += delta_w * delta_w;
+            d2ij += (delta_w * delta_w);
         }
 
         // All idxs must be smaller than N and if N == NR then we are doing upper triangle and thus atom_i_idx
@@ -212,9 +213,13 @@ void __device__ v_nonbonded_unified(
         const bool valid_ij = atom_i_idx < N && atom_j_idx < N && (N != NR || atom_i_idx < atom_j_idx);
 
         // (ytz): note that d2ij must be *strictly* less than cutoff_squared. This is because we set the
-        // non-interacting atoms to exactly real_cutoff*real_cutoff. This ensures that atoms who's 4th dimension
-        // is set to cutoff are non-interacting.
-        if (valid_ij && d2ij < cutoff_squared) {
+        //        non-interacting atoms to exactly real_cutoff*real_cutoff. This ensures that atoms whose 4th dimension
+        //        is set to cutoff are non-interacting.
+        // (jf):  to avoid possibility of lam-dependent cutoff artifacts,
+        //        cutoff is applied to spatial distance (d2ij_3d),
+        //        and alchemical coordinate (dw^2) is separately compared to cutoff
+        bool is_interacting = valid_ij && (d2ij_3d < cutoff_squared) && ((delta_w * delta_w) < cutoff_squared);
+        if (is_interacting) {
             // electrostatics
             RealType u;
             RealType es_prefactor;
@@ -513,9 +518,11 @@ void __global__ k_compute_nonbonded_target_atom_energies(
                 delta_y -= by * nearbyint(delta_y * inv_by);
                 delta_z -= bz * nearbyint(delta_z * inv_bz);
 
-                RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;
+                RealType d2ij_3d = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
+                RealType d2ij = d2ij_3d + delta_w * delta_w;
+                bool is_interacting = (d2ij_3d < cutoff_squared) && ((delta_w * delta_w) < cutoff_squared);
 
-                if (d2ij < cutoff_squared) {
+                if (is_interacting) {
                     RealType u;
                     RealType delta_prefactor;
                     RealType ebd;
