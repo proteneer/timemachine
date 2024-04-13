@@ -772,6 +772,8 @@ def get_ligand_ixn_pots_params(
         )
         hg_other_params.append(jnp.concatenate([host_nb_params, guest_params_ixn_other]))
 
+    # If the ordering of these parameters change, will need to change
+    # timemachine.fe.free_energy::get_water_sampler_params
     # total potential = host_guest_pot + guest_intra_pot + lw_ixn_pots + lp_ixn_pots
     hg_ixn_pots = [hg_water_pot] + hg_other_pots
     hg_ixn_params = [hg_water_params] + hg_other_params

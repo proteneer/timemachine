@@ -1,4 +1,5 @@
 import time
+from dataclasses import replace
 from functools import partial
 from importlib import resources
 from itertools import product
@@ -8,7 +9,7 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_TEMP
-from timemachine.fe.free_energy import HostConfig, MDParams, run_sims_hrex, run_sims_sequential
+from timemachine.fe.free_energy import HostConfig, MDParams, WaterSamplingParams, run_sims_hrex, run_sims_sequential
 from timemachine.fe.rbfe import setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
@@ -63,12 +64,17 @@ def hif2a_single_topology_leg(request):
 
 
 @pytest.mark.nightly(reason="Slow")
+@pytest.mark.parametrize("enable_water_sampling", [False, True])
 @pytest.mark.parametrize("enable_hrex", [False, True])
-def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex):
+def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex, enable_water_sampling):
     host_name, n_windows, initial_states = hif2a_single_topology_leg
+    if host_name != "complex" and enable_water_sampling:
+        pytest.skip("Water sampling disabled outside of complex")
 
     n_frames = 500 // n_windows
     md_params = MDParams(n_frames=n_frames, n_eq_steps=1, steps_per_frame=400, seed=2023)
+    if enable_water_sampling:
+        md_params = replace(md_params, water_sampling_params=WaterSamplingParams())
     temperature = DEFAULT_TEMP
 
     if enable_hrex:
@@ -84,6 +90,7 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, enable_hrex)
 
     _, elapsed_ns = run_with_timing(run)
 
+    print("water sampling:", enable_water_sampling)
     print("hrex:", enable_hrex)
     print("host:", host_name)
     print("n_windows:", n_windows)

@@ -19,7 +19,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
-from timemachine.md.exchange.exchange_mover import translate_coordinates
+from timemachine.md.exchange.exchange_mover import get_water_idxs, translate_coordinates
 from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -314,7 +314,7 @@ def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs)
 
     dt = 2.5e-3
 
@@ -817,7 +817,7 @@ def test_moves_with_complex(
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs)
 
     # Re-image coords so that everything is imaged to begin with
     conf = image_frame(all_group_idxs, conf, box)
@@ -944,7 +944,7 @@ def test_bd_moves_with_complex_and_ligand(
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs, ligand_idxs=initial_state.ligand_idxs)
 
     N = conf.shape[0]
 
