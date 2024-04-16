@@ -116,7 +116,6 @@ void __global__ k_nonbonded_pair_list(
     delta_z -= box_z * nearbyint(delta_z * inv_box_z);
 
     RealType delta_w = w_i - w_j;
-    RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z + delta_w * delta_w;
 
     RealType u = static_cast<RealType>(0.0);
     // see note: this must be strictly less than
