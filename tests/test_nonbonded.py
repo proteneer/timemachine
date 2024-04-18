@@ -27,6 +27,7 @@ class TestNonbondedDHFR(GradientTest):
         self.nonbonded_params = nonbonded_bp.params
         self.host_conf = host_coords
         self.beta = self.nonbonded_fn.beta
+        self.nonbonded_fn.cutoff = 1.2
         self.cutoff = self.nonbonded_fn.cutoff
 
     def test_nblist_hilbert(self):
@@ -165,7 +166,7 @@ class TestNonbondedWater(GradientTest):
 
         host_system, host_conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
 
-        host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
+        host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
         test_bp = next(bp for bp in host_fns if isinstance(bp.potential, potentials.Nonbonded))
         assert test_bp.params is not None
@@ -223,7 +224,7 @@ class TestNonbonded(GradientTest):
             test_system[idx] = np.zeros(3) + np.random.rand() / 1000 + 2
 
         beta = 2.0
-        cutoff = 1.0
+        cutoff = 1.2
 
         potential = potentials.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
@@ -240,7 +241,7 @@ class TestNonbonded(GradientTest):
         for size in [33, 231, 1050]:
             coords = all_coords[:size]
 
-            for cutoff in [1.0]:
+            for cutoff in [1.2]:
                 # E = 0 # DEBUG!
                 charge_params, potential = prepare_water_system(coords, p_scale=5.0, cutoff=cutoff)
                 for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
