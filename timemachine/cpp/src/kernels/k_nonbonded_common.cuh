@@ -13,9 +13,12 @@ static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
 template <typename RealType> RealType __device__ __forceinline__ switch_fn(RealType dij) {
-    RealType cutoff = 1.2;
+    constexpr RealType cutoff = 1.2;
+    constexpr RealType inv_cutoff = 1 / cutoff;
+
     RealType pi = static_cast<RealType>(PI);
-    RealType dij_k = dij / cutoff; // TODO: multiply by inv cutoff
+    //RealType dij_k = dij / cutoff; // TODO: multiply by inv cutoff
+    RealType dij_k = dij * inv_cutoff;
 
     // exponentiation
     RealType dij_k2 = dij_k * dij_k;
@@ -50,20 +53,56 @@ template <typename RealType> RealType __device__ __forceinline__ d_switch_fn_dr(
     return -12 * pi * dij7 * sin(arg) * cos_arg2 / k8;
 }
 
+float __device__ __forceinline__ fast_erfc(float x) {
+    // TODO: consider using fasterfc implementations listed in this thread:
+    // https://forums.developer.nvidia.com/t/calling-all-juffas-whats-up-with-erfcf-nowadays/262973/4
+
+    float exp_beta_x2 = __expf(-x * x);
+    // (ytz) 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
+    // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
+    float t = 1.0f / (1.0f + 0.3275911f * x);
+    return (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) * t *
+           exp_beta_x2;
+}
+
 template <typename RealType> RealType __device__ __forceinline__ d_erfc_beta_r_dr(RealType beta, RealType dij) {
+    // -2 beta exp(-(beta dij)^2) / sqrt(pi)
+
     RealType beta_dij = beta * dij;
     RealType exp_beta_dij_2 = exp(-beta_dij * beta_dij);
     return -static_cast<RealType>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
+}
+
+float __device__ __forceinline__ d_erfc_beta_r_dr(float beta, float dij) {
+    // (ytz): max ulp error is: 2 + floor(abs(1.16 * x))
+
+    float beta_dij = beta * dij;
+    float exp_beta_dij_2 = __expf(-beta_dij * beta_dij);
+    return -static_cast<float>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
 }
 
 template <typename RealType>
 RealType __device__ __forceinline__
 real_es_factor(RealType real_beta, RealType dij, RealType inv_dij, RealType inv_d2ij, RealType &damping_factor) {
     RealType beta_dij = real_beta * dij;
-    damping_factor = erfc(beta_dij) * switch_fn(dij);
+    RealType erfc_beta_dij = erfc(beta_dij);
+
+    damping_factor = erfc_beta_dij * switch_fn(dij);
     RealType damping_factor_prime =
-        (erfc(beta_dij) * d_switch_fn_dr(dij)) + (d_erfc_beta_r_dr(real_beta, dij) * switch_fn(dij));
+        (erfc_beta_dij * d_switch_fn_dr(dij)) + (d_erfc_beta_r_dr(real_beta, dij) * switch_fn(dij));
     RealType d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
+    return d_es_dr;
+}
+
+float __device__ __forceinline__
+real_es_factor(float real_beta, float dij, float inv_dij, float inv_d2ij, float &damping_factor) {
+    float beta_dij = real_beta * dij;
+    float erfc_beta_dij = fast_erfc(beta_dij);
+
+    damping_factor = erfc_beta_dij * switch_fn(dij);
+    float damping_factor_prime =
+        (erfc_beta_dij * d_switch_fn_dr(dij)) + (d_erfc_beta_r_dr(real_beta, dij) * switch_fn(dij));
+    float d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
     return d_es_dr;
 }
 
@@ -90,8 +129,6 @@ void __device__ __forceinline__ compute_electrostatics(
     inv_d2ij = inv_dij * inv_dij;
 
     RealType qij = qi * qj;
-    // TODO: should I really be multiplying real_es_factor by inv_dij?
-    //    or was a factor of inv_dij pulled out as an optimization, now being double-counted?
     es_prefactor = charge_scale * qij * inv_dij * real_es_factor(beta, dij, inv_dij, inv_d2ij, damping_factor);
 
     if (COMPUTE_U) {
