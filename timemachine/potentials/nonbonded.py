@@ -110,7 +110,7 @@ def nonbonded_block_unsummed(
 
     # 3d and 4d displacements
     dij_3d = delta_r(ri, rj, box)
-    dw = (w_i - w_j).reshape(*dij_3d.shape[:-1], 1)
+    dw = w_i - w_j
     dij = jnp.concatenate([dij_3d, dw], axis=-1)
 
     # 3d and 4d distances
@@ -135,7 +135,7 @@ def nonbonded_block_unsummed(
 
     # apply cutoff to 3d distance, also zero out if lam >= 1
     # (i.e. |dw| >= cutoff)
-    is_interacting = (dij_3d < cutoff) * (dw.abs() < cutoff)
+    is_interacting = (dij_3d < cutoff) * (jnp.abs(dw) < cutoff)
     nrgs = jnp.where(is_interacting, es + lj, 0)
     return nrgs
 
@@ -290,8 +290,10 @@ def nonbonded(
     dij = pairwise_distances(conf, box, w_coords)
     w_i = jnp.expand_dims(w_coords, 0)
     w_j = jnp.expand_dims(w_coords, 1)
-    dw = (w_i - w_j).reshape(*dij_3d.shape[:-1], 1)
-    is_interacting = (dij_3d < cutoff) * (dw.abs() < cutoff)
+    dw = w_i - w_j
+
+    # within_cutoff = dij < cutoff
+    within_cutoff = (dij_3d < cutoff) * (jnp.abs(dw) < cutoff)
 
     keep_mask = jnp.ones((N, N)) - jnp.eye(N)
     keep_mask = jnp.where(eps_ij != 0, keep_mask, 0)
@@ -299,7 +301,7 @@ def nonbonded(
     if cutoff is not None:
         if runtime_validate:
             validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
-        eps_ij = jnp.where(is_interacting, eps_ij, 0)
+        eps_ij = jnp.where(within_cutoff, eps_ij, 0)
 
     # (ytz): this avoids a nan in the gradient in both jax and tensorflow
     sig_ij = jnp.where(keep_mask, sig_ij, 0)
@@ -327,7 +329,7 @@ def nonbonded(
     # funny enough lim_{x->0} erfc(x)/x = 0
     eij_charge = jnp.where(keep_mask, qij * erfc(beta * dij) * inv_dij, 0)  # zero out diagonals
     if cutoff is not None:
-        eij_charge = jnp.where(is_interacting, eij_charge, 0)
+        eij_charge = jnp.where(within_cutoff, eij_charge, 0)
 
     eij_total = eij_lj * lj_rescale_mask + eij_charge * charge_rescale_mask
 
@@ -368,7 +370,7 @@ def nonbonded_on_specific_pairs(
 
     keep_mask = dij_3d < cutoff
     if w_offsets is not None:
-        keep_mask *= (w_offsets).abs() < cutoff
+        keep_mask *= jnp.abs(w_offsets) < cutoff
 
     def apply_cutoff(x):
         return jnp.where(keep_mask, x, 0)
@@ -430,8 +432,8 @@ def nonbonded_on_precomputed_pairs(
     dij = distance_on_pairs(conf[inds_l], conf[inds_r], box, offsets)
     if cutoff is None:
         cutoff = np.inf
-    dw = (w_i - w_j).reshape(*dij_3d.shape[:-1], 1)
-    keep_mask = (dij_3d < cutoff) * (dw.abs() < cutoff)
+    dw = w_i - w_j
+    keep_mask = (dij_3d < cutoff) * (jnp.abs(dw) < cutoff)
 
     def apply_cutoff(x):
         return jnp.where(keep_mask, x, 0)
