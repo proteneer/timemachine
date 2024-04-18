@@ -15,15 +15,39 @@ static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
 template <typename RealType> RealType __device__ __forceinline__ switch_fn(RealType dij) {
     RealType cutoff = 1.2;
     RealType pi = static_cast<RealType>(PI);
-    return pow(cos((pi * pow(dij / cutoff, 8)) / 2), 3);
+    RealType dij_k = dij / cutoff; // TODO: multiply by inv cutoff
+
+    // exponentiation
+    RealType dij_k2 = dij_k * dij_k;
+    RealType dij_k4 = dij_k2 * dij_k2;
+    RealType dij_k8 = dij_k4 * dij_k4;
+
+    RealType cos_arg = cos(0.5 * (pi * dij_k8));
+
+    // exponentiation
+    RealType cos_arg3 = cos_arg * cos_arg * cos_arg;
+    return cos_arg3;
 }
 
 template <typename RealType> RealType __device__ __forceinline__ d_switch_fn_dr(RealType dij) {
     RealType cutoff = 1.2;
     RealType pi = static_cast<RealType>(PI);
-    RealType k8 = pow(cutoff, 8);
-    RealType arg = pi * pow(dij, 8) / (2 * k8);
-    return -12 * pi * pow(dij, 7) * sin(arg) * pow(cos(arg), 2) / k8;
+
+    // exponentiation
+    RealType k2 = cutoff * cutoff;
+    RealType k4 = k2 * k2;
+    RealType k8 = k4 * k4;
+
+    RealType dij2 = dij * dij;
+    RealType dij4 = dij2 * dij2;
+    RealType dij7 = dij4 * dij2 * dij;
+    RealType dij8 = dij4 * dij4;
+
+    RealType arg = pi * dij8 / (2 * k8);
+    RealType cos_arg = cos(arg);
+    RealType cos_arg2 = cos_arg * cos_arg;
+
+    return -12 * pi * dij7 * sin(arg) * cos_arg2 / k8;
 }
 
 template <typename RealType> RealType __device__ __forceinline__ d_erfc_beta_r_dr(RealType beta, RealType dij) {
