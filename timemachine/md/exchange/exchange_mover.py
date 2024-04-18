@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -11,6 +11,18 @@ from timemachine.constants import BOLTZ
 from timemachine.md import moves
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import nonbonded
+
+
+def get_water_idxs(mol_groups: List[NDArray], ligand_idxs: Optional[NDArray] = None) -> List[NDArray]:
+    """Given a list of lists that make up the individual molecules in a system, return the subset that is only the waters.
+
+    Contains additional logic to handle the case where ligand_idxs is also of size 3.
+    """
+    water_groups = [g for g in mol_groups if len(g) == 3]
+    if ligand_idxs is not None and len(ligand_idxs) == 3:
+        ligand_atom_set = set(ligand_idxs)
+        water_groups = [g for g in water_groups if set(g) != ligand_atom_set]
+    return water_groups
 
 
 def randomly_rotate_and_translate(coords, new_loc):

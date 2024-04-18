@@ -24,3 +24,11 @@ class BoundPotential:
 
 class FanoutSummedPotential:
     pass
+
+
+class TIBDExchangeMove_f32:
+    pass
+
+
+class TIBDExchangeMove_f64:
+    pass

@@ -19,7 +19,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
-from timemachine.md.exchange.exchange_mover import translate_coordinates
+from timemachine.md.exchange.exchange_mover import get_water_idxs, translate_coordinates
 from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -85,7 +85,7 @@ def verify_bias_deletion_moves(
 
         last_conf = x_move
     assert bdem.n_proposed() == total_num_proposals
-    print(f"Accepted { bdem.n_accepted()} of {total_num_proposals} moves")
+    print(f"Accepted {bdem.n_accepted()} of {total_num_proposals} moves")
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
         np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
@@ -314,7 +314,7 @@ def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs)
 
     dt = 2.5e-3
 
@@ -438,7 +438,7 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
-    # Moves should be deterministic regardless the number of steps taken per move
+    # Moves should be deterministic regardless the number of proposals per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 
@@ -511,7 +511,7 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
-    # Moves should be deterministic regardless the number of steps taken per move
+    # Moves should be deterministic regardless the number of proposals per move
     np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
 
 
@@ -609,6 +609,63 @@ def test_moves_in_a_water_box(
     )
 
 
+@pytest.mark.parametrize("num_particles", [3])
+@pytest.mark.parametrize("proposals_per_move", [100, 1000])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("seed", [2023, 2024, 2025])
+def test_compute_incremental_log_weights_match_initial_log_weights_when_recomputed(
+    num_particles, proposals_per_move, precision, seed
+):
+    """Verify that the result of computing the weights using `compute_initial_log_weights` and the incremental log weights generated
+    during proposals are identical.
+    """
+    assert (
+        proposals_per_move > 1
+    ), "If proposals per move is 1 then this isn't meaningful since the weights won't be incremental"
+    rng = np.random.default_rng(seed)
+    cutoff = 1.2
+    beta = 2.0
+
+    box_size = 1.0
+    box = np.eye(3) * box_size
+    conf = rng.random((num_particles, 3)) * box_size
+
+    params = rng.random((num_particles, 4))
+    params[:, 3] = 0.0  # Put them in the same plane
+
+    group_idxs = [[x] for x in range(num_particles)]
+
+    N = conf.shape[0]
+
+    klass = custom_ops.BDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.BDExchangeMove_f64
+
+    # Test version that makes all proposals in a single move
+    bdem = klass(
+        N,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        beta,
+        cutoff,
+        seed,
+        proposals_per_move,
+        1,
+    )
+
+    updated_coords, _ = bdem.move(conf, box)
+    assert not np.all(updated_coords == conf)
+    assert bdem.n_accepted() >= 1
+    assert bdem.n_proposed() == proposals_per_move
+
+    before_log_weights = bdem.get_before_log_weights()
+    ref_log_weights = bdem.compute_initial_log_weights(updated_coords, box)
+    # The before weights of the mover should identically match the weights if recomputed from scratch
+    diff_idxs = np.argwhere(np.array(before_log_weights) != np.array(ref_log_weights))
+    np.testing.assert_array_equal(before_log_weights, ref_log_weights, err_msg=f"idxs {diff_idxs} don't match")
+
+
 @pytest.mark.parametrize(
     "batch_size,samples,box_size",
     [
@@ -619,7 +676,7 @@ def test_moves_in_a_water_box(
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-5, 1e-5), (np.float32, 8e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_compute_incremental_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
+def test_compute_incremental_log_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
     """Verify that the incremental weights computed are valid for different collections of rotations/translations"""
     proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
     ff = Forcefield.load_default()
@@ -661,7 +718,7 @@ def test_compute_incremental_weights(batch_size, samples, box_size, precision, r
         # Scale the translations
         translations = rng.uniform(0, 1, size=(batch_size, 3)) * np.diagonal(box)
 
-        test_weight_batches = bdem.compute_incremental_weights(conf, box, selected_mols, quaternions, translations)
+        test_weight_batches = bdem.compute_incremental_log_weights(conf, box, selected_mols, quaternions, translations)
         assert len(test_weight_batches) == batch_size
         for test_weights, selected_mol, quat, translation in zip(
             test_weight_batches, selected_mols, quaternions, translations
@@ -679,7 +736,10 @@ def test_compute_incremental_weights(batch_size, samples, box_size, precision, r
             moved_conf[mol_idxs] = updated_mol_conf
             np.testing.assert_equal(trial_conf, moved_conf)
             # Janky re-use of assert_energy_arrays_match which is for energies, but functions for any fixed point
-            assert_energy_arrays_match(np.array(ref_final_weights), np.array(test_weights), atol=atol, rtol=rtol)
+            # Slightly reduced threshold to deal with these being weights
+            assert_energy_arrays_match(
+                np.array(ref_final_weights), np.array(test_weights), atol=atol, rtol=rtol, threshold=5e6
+            )
 
 
 @pytest.fixture(scope="module")
@@ -757,7 +817,7 @@ def test_moves_with_complex(
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs)
 
     # Re-image coords so that everything is imaged to begin with
     conf = image_frame(all_group_idxs, conf, box)
@@ -884,7 +944,7 @@ def test_bd_moves_with_complex_and_ligand(
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs, ligand_idxs=initial_state.ligand_idxs)
 
     N = conf.shape[0]
 

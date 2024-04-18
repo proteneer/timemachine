@@ -11,9 +11,11 @@ void __global__ k_compute_log_weights_from_energies(
     __int128 energy;
     while (idx < N) {
         energy = energies[idx];
-        // If the energy is invalid, set the energy to inf
-        log_probabilities[idx] =
-            !fixed_point_overflow(energy) ? beta * FIXED_ENERGY_TO_FLOAT<RealType>(energy) : INFINITY;
+        // If the energy is invalid, set the log probability to inf
+        log_probabilities[idx] = !fixed_point_overflow(energy)
+                                     ? FIXED_ENERGY_TO_FLOAT<RealType>(FLOAT_TO_FIXED_ENERGY<RealType>(
+                                           beta * FIXED_ENERGY_TO_FLOAT<RealType>(energy)))
+                                     : INFINITY;
         idx += gridDim.x * blockDim.x;
     }
 }

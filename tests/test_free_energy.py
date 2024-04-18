@@ -22,16 +22,18 @@ from timemachine.fe.free_energy import (
     PairBarResult,
     batches,
     estimate_free_energy_bar,
+    get_water_sampler_params,
     make_pair_bar_plots,
     run_sims_bisection,
     sample,
 )
-from timemachine.fe.rbfe import setup_initial_state, setup_initial_states, setup_optimized_host
+from timemachine.fe.rbfe import Host, setup_initial_state, setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
+from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
 from timemachine.md import builders
-from timemachine.potentials import SummedPotential
+from timemachine.potentials import Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -287,6 +289,36 @@ def test_plot_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
         "ChiralAtomRestraint",
     }
     assert set(mock_fig.call_args.args[0]) == expected_potentials
+
+
+@pytest.mark.nocuda
+@pytest.mark.parametrize("num_windows", [2, 5])
+def test_get_water_sampler_params(num_windows):
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    # Use the simple charges simply because it is faster
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(3.0, forcefield.water_ff)
+    num_host_atoms = solvent_conf.shape[0]
+    host_system, masses = convert_omm_system(solvent_sys)
+    solvent_host = Host(host_system, masses, solvent_conf, solvent_box, num_host_atoms)
+    mol_a_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 1])
+    mol_b_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 2])
+    for lamb in np.linspace(0.0, 1.0, num_windows, endpoint=True):
+        state = setup_initial_state(st, lamb, solvent_host, DEFAULT_TEMP, 2024)
+        water_sampler_nb_params = get_water_sampler_params(state)
+        nb_pot = next(p.potential for p in state.potentials if isinstance(p.potential, Nonbonded))
+        ligand_water_params = st._get_guest_params(
+            forcefield.q_handle_solv, forcefield.lj_handle_solv, lamb, nb_pot.cutoff
+        )
+        if lamb == 0.0:
+            assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == 0.0)
+            assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == nb_pot.cutoff)
+        elif lamb == 1.0:
+            assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == nb_pot.cutoff)
+            assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == 0.0)
+
+        np.testing.assert_array_equal(water_sampler_nb_params[num_host_atoms:], ligand_water_params)
 
 
 def test_run_sims_bisection_early_stopping(hif2a_ligand_pair_single_topology_lam0_state):

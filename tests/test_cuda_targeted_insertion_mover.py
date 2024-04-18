@@ -21,7 +21,12 @@ from timemachine.lib import MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDExchangeMove
-from timemachine.md.exchange.exchange_mover import compute_raw_ratio_given_weights, delta_r_np, get_water_groups
+from timemachine.md.exchange.exchange_mover import (
+    compute_raw_ratio_given_weights,
+    delta_r_np,
+    get_water_groups,
+    get_water_idxs,
+)
 from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 
@@ -85,6 +90,7 @@ def verify_targeted_moves(
                 new_pos = x_move[mol_idxs]
                 idx = i
         if num_moved > 0:
+            print(f"Accepted {num_moved} moves on step {step}")
             accepted += 1
         if num_moved == 1:
             # The molecules should all be imaged in the home box
@@ -285,6 +291,38 @@ def test_tibd_exchange_validation(precision):
     with pytest.raises(RuntimeError, match="must provide interval greater than 0"):
         klass(N, ligand_idxs, group_idxs, params, DEFAULT_TEMP, beta, cutoff, radius, seed, proposals_per_move, 0)
 
+    with pytest.raises(RuntimeError, match="must provide batch size greater than 0"):
+        klass(
+            N,
+            ligand_idxs,
+            group_idxs,
+            params,
+            DEFAULT_TEMP,
+            beta,
+            cutoff,
+            radius,
+            seed,
+            proposals_per_move,
+            1,
+            batch_size=0,
+        )
+
+    with pytest.raises(RuntimeError, match="number of proposals per move must be greater than batch size"):
+        klass(
+            N,
+            ligand_idxs,
+            group_idxs,
+            params,
+            DEFAULT_TEMP,
+            beta,
+            cutoff,
+            radius,
+            seed,
+            proposals_per_move,
+            1,
+            batch_size=proposals_per_move + 1,
+        )
+
     # Verify that if the box is too small this will trigger a failure
     # no such protection in the move_device call for performance reasons though an assert will be triggered
     box = np.eye(3) * 0.1
@@ -444,8 +482,8 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # Select an arbitrary water, will be the only water considered for insertion/deletion
-    water_idxs_single = [[group for group in all_group_idxs if len(group) == 3][-1]]
-    water_idxs_double = [group for group in all_group_idxs if len(group) == 3][-2:]
+    water_idxs_single = [get_water_idxs(all_group_idxs)[-1]]
+    water_idxs_double = get_water_idxs(all_group_idxs)[-2:]
 
     conf = image_frame(all_group_idxs, conf, box)
 
@@ -477,11 +515,13 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
         verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, proposals_per_move, rtol, atol)
 
 
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(20000, 1), (20000, 200)])
 @pytest.mark.parametrize("radius", [1.3])
 @pytest.mark.parametrize("precision", [np.float32])
 @pytest.mark.parametrize("seed", [2023])
-def test_targeted_insertion_brd4_rbfe_with_context(brd4_rbfe_state, radius, precision, seed):
-    proposals_per_move = 20000
+def test_targeted_insertion_brd4_rbfe_with_context(
+    brd4_rbfe_state, proposals_per_move, batch_size, radius, precision, seed
+):
     # Interval has to be large enough to resolve clashes in the MD steps
     interval = 800
     steps = interval * 10
@@ -500,7 +540,7 @@ def test_targeted_insertion_brd4_rbfe_with_context(brd4_rbfe_state, radius, prec
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs, ligand_idxs=initial_state.ligand_idxs)
 
     N = conf.shape[0]
 
@@ -530,6 +570,7 @@ def test_targeted_insertion_brd4_rbfe_with_context(brd4_rbfe_state, radius, prec
         seed,
         proposals_per_move,
         interval,
+        batch_size=batch_size,
     )
 
     ctxt = custom_ops.Context(
@@ -549,20 +590,202 @@ def test_targeted_insertion_brd4_rbfe_with_context(brd4_rbfe_state, radius, prec
         check_force_norm(-du_dx)
 
 
-@pytest.mark.memcheck
 @pytest.mark.parametrize("radius", [1.0])
-@pytest.mark.parametrize("proposals_per_move", [1, 100])
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(2, 2), (100, 100), (512, 512), (2000, 1000)])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("seed", [2024])
+def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, batch_size, precision, seed):
+    """Verify that if we run with the same batch size but either call `move()` repeatedly or just
+    increase the number of proposals per move in the constructor that the results should be identical
+    """
+    rng = np.random.default_rng(seed)
+    ff = Forcefield.load_default()
+    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+
+    group_idxs = all_group_idxs[1:]
+
+    # Target the first water
+    center_group = all_group_idxs[0]
+
+    box = np.eye(3) * 100.0
+
+    # Re-image coords so that everything is imaged to begin with
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+
+    klass = custom_ops.TIBDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.TIBDExchangeMove_f64
+
+    iterations = rng.integers(2, 5)
+
+    # Reference that makes proposals_per_move proposals per move() call
+    bdem_a = klass(
+        N,
+        center_group,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        1,
+    )
+
+    bdem_b = klass(
+        N,
+        center_group,
+        group_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move * iterations,
+        1,
+        batch_size=batch_size,
+    )
+
+    iterative_moved_coords = conf.copy()
+    for _ in range(iterations):
+        iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
+        assert not np.all(conf == iterative_moved_coords)
+    batch_moved_coords, _ = bdem_b.move(conf, box)
+
+    assert bdem_a.n_accepted() > 0
+    assert bdem_a.n_proposed() == proposals_per_move * iterations
+    assert bdem_a.n_accepted() == bdem_b.n_accepted()
+    assert bdem_a.n_proposed() == bdem_b.n_proposed()
+
+    # Moves should be deterministic regardless the number of proposals per move
+    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
+
+
+@pytest.mark.parametrize("radius", [0.4])
+@pytest.mark.parametrize("proposals_per_move,batch_size", [(10000, 250)])
+@pytest.mark.parametrize("precision", [np.float64, np.float32])
+@pytest.mark.parametrize("seed", [2024])
+def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, batch_size, precision, seed):
+    """Test the edges cases of targeted insertion where the proposal probability isn't symmetric.
+
+    Tests a single water and two waters being moved into an empty buckyball.
+    """
+    ff = Forcefield.load_precomputed_default()
+    with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
+        host_pdb = water_exchange / "bb_0_waters.pdb"
+        mols = read_sdf(water_exchange / "bb_centered_espaloma.sdf")
+        assert len(mols) == 1
+        mol = mols[0]
+
+    # Build the protein system using the solvent PDB for buckyball
+    host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
+        str(host_pdb), ff.protein_ff, ff.water_ff
+    )
+    host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)
+
+    bt = BaseTopology(mol, ff)
+    afe = AbsoluteFreeEnergy(mol, bt)
+    # Fully embed the ligand
+    potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, 0.0)
+    ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
+
+    conf = afe.prepare_combined_coords(host_config.conf)
+    box = host_box
+
+    bps = [pot.bind(p) for pot, p in zip(potentials, params)]
+    summed_pot = next(bp.potential for bp in bps if isinstance(bp.potential, SummedPotential))
+    nb = next(
+        pot.bind(p) for pot, p in zip(summed_pot.potentials, summed_pot.params_init) if isinstance(pot, Nonbonded)
+    )
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
+    water_idxs = get_water_idxs(all_group_idxs, ligand_idxs=ligand_idxs)
+
+    conf = image_frame(all_group_idxs, conf, box)
+
+    N = conf.shape[0]
+
+    params = nb.params
+
+    cutoff = nb.potential.cutoff
+    klass = custom_ops.TIBDExchangeMove_f32
+    if precision == np.float64:
+        klass = custom_ops.TIBDExchangeMove_f64
+
+    # Reference that makes proposals_per_move proposals per move() call
+    bdem_a = klass(
+        N,
+        ligand_idxs,
+        water_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        1,
+    )
+
+    bdem_b = klass(
+        N,
+        ligand_idxs,
+        water_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        1,
+        batch_size=batch_size,
+    )
+
+    serially_moved_coords, _ = bdem_a.move(conf, box)
+    assert not np.all(conf == serially_moved_coords)
+    batch_moved_coords, _ = bdem_b.move(conf, box)
+
+    assert bdem_a.n_accepted() > 0
+    assert bdem_a.n_proposed() == proposals_per_move
+    assert bdem_a.n_accepted() == bdem_b.n_accepted()
+    assert bdem_a.n_proposed() == bdem_b.n_proposed()
+
+    # Moves should be deterministic regardless the number of proposals per move
+    np.testing.assert_array_equal(serially_moved_coords, batch_moved_coords)
+
+
+@pytest.mark.parametrize("radius", [1.0])
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(5, 1), (100, 1), (12, 5), (120, 100), (1000, 1000)])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
-def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision, seed):
-    """Given one water the exchange mover should accept every move and the results should be deterministic if the seed and proposals per move are the same.
+def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_size, precision, seed):
+    """Given a set of waters in a large box the exchange mover should nearly accept every move and the results should be deterministic
+    if the seed and proposals per move are the same.
 
 
     There are three forms of determinism we require:
     * Constructing an exchange move produces the same results every time
     * Calling an exchange move with one proposals per move or K proposals per move produce the same state.
       * It is difficult to test each move when there are K proposals per move so we need to know that it matches the single proposals per move case
-    * TBD: When we attempt K proposals in a batch (each proposal is made up of K proposals) it produces the same as the serial version
+    * When batch size is greater than one (each batch is made up of K proposals) it produces the same result as the serial version (batch size == 1)
     """
     ff = Forcefield.load_default()
     system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
@@ -573,16 +796,10 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision
 
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
-    # Get first two mols as the ones two move
-    group_idxs = all_group_idxs[:2]
+    group_idxs = all_group_idxs[1:]
 
-    center_group = all_group_idxs[2]
-
-    all_group_idxs = all_group_idxs[:3]
-
-    conf_idxs = np.array(all_group_idxs).reshape(-1)
-
-    conf = conf[conf_idxs]
+    # Target the first water
+    center_group = all_group_idxs[0]
 
     box = np.eye(3) * 100.0
 
@@ -591,7 +808,7 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision
 
     N = conf.shape[0]
 
-    params = nb.params[conf_idxs]
+    params = nb.params
 
     cutoff = nb.potential.cutoff
     klass = custom_ops.TIBDExchangeMove_f32
@@ -624,6 +841,7 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision
         seed,
         proposals_per_move,
         1,
+        batch_size=batch_size,
     )
 
     iterative_moved_coords = conf.copy()
@@ -631,29 +849,32 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, precision
         iterative_moved_coords, _ = bdem_a.move(iterative_moved_coords, box)
         assert not np.all(conf == iterative_moved_coords)  # We should move every time since its a single mol
     batch_moved_coords, _ = bdem_b.move(conf, box)
-    # Moves should be deterministic regardless the number of steps taken per move
-    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
-
     assert bdem_a.n_accepted() > 0
     assert bdem_a.n_proposed() == proposals_per_move
     assert bdem_a.n_accepted() == bdem_b.n_accepted()
     assert bdem_a.n_proposed() == bdem_b.n_proposed()
 
+    # Moves should be deterministic regardless the number of proposals per move
+    np.testing.assert_array_equal(iterative_moved_coords, batch_moved_coords)
+    if batch_size == 1:
+        # Where the batch size is 1 the last log probabilities should match
+        assert bdem_a.last_raw_log_probability() == bdem_b.last_raw_log_probability()
+
 
 @pytest.mark.parametrize("radius", [1.2])
 @pytest.mark.parametrize(
-    "proposals_per_move,total_num_proposals,box_size",
+    "proposals_per_move,total_num_proposals,batch_size,,box_size",
     [
-        (1, 500, 4.0),
-        (500, 10000, 4.0),
+        (1, 500, 1, 4.0),
+        (500, 10000, 250, 4.0),
         # The 5.7nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
-        pytest.param(1, 5000, 5.7, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1, 5000, 1, 5.7, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 2e-5, 2e-5), (np.float32, 5e-3, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
 def test_targeted_moves_in_bulk_water(
-    radius, proposals_per_move, total_num_proposals, box_size, precision, rtol, atol, seed
+    radius, proposals_per_move, total_num_proposals, batch_size, box_size, precision, rtol, atol, seed
 ):
     """Given bulk water molecules with one of them treated as the targeted region"""
     ff = Forcefield.load_default()
@@ -697,6 +918,7 @@ def test_targeted_moves_in_bulk_water(
         seed,
         proposals_per_move,
         1,
+        batch_size=batch_size,
     )
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
@@ -707,15 +929,18 @@ def test_targeted_moves_in_bulk_water(
 
 @pytest.mark.parametrize("radius", [1.2])
 @pytest.mark.parametrize(
-    "proposals_per_move, total_num_proposals",
+    "proposals_per_move,total_num_proposals, batch_size",
     [
-        pytest.param(1, 40000, marks=pytest.mark.nightly(reason="slow")),
-        pytest.param(5000, 40000, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1, 40000, 1, marks=pytest.mark.nightly(reason="slow")),
+        (10000, 40000, 1),
+        (10000, 40000, 250),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
 @pytest.mark.parametrize("seed", [2023])
-def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals, precision, rtol, atol, seed):
+def test_moves_with_three_waters(
+    radius, proposals_per_move, batch_size, total_num_proposals, precision, rtol, atol, seed
+):
     """Given three water molecules with one of them treated as the targeted region."""
     ff = Forcefield.load_default()
     system, host_conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
@@ -760,6 +985,7 @@ def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals
         seed,
         proposals_per_move,
         1,
+        batch_size=batch_size,
     )
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
@@ -771,8 +997,8 @@ def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals
 
 @pytest.mark.parametrize("radius", [0.95])
 @pytest.mark.parametrize(
-    "proposals_per_move,total_num_proposals",
-    [(10_000, 200_000)],
+    "proposals_per_move,batch_size,total_num_proposals",
+    [(10_000, 1, 200_000), (10_000, 200, 200_000)],
 )
 @pytest.mark.parametrize(
     "precision,rtol,atol",
@@ -780,7 +1006,7 @@ def test_moves_with_three_waters(radius, proposals_per_move, total_num_proposals
 )
 @pytest.mark.parametrize("seed", [2023])
 def test_targeted_moves_with_complex_and_ligand_in_brd4(
-    brd4_rbfe_state, radius, proposals_per_move, total_num_proposals, precision, rtol, atol, seed
+    brd4_rbfe_state, radius, proposals_per_move, batch_size, total_num_proposals, precision, rtol, atol, seed
 ):
     """Verify that when the water atoms are between the protein and ligand that the reference and cuda exchange mover agree.
 
@@ -803,7 +1029,7 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
-    water_idxs = [group for group in all_group_idxs if len(group) == 3]
+    water_idxs = get_water_idxs(all_group_idxs, ligand_idxs=initial_state.ligand_idxs)
 
     N = conf.shape[0]
 
@@ -826,6 +1052,7 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
         seed,
         proposals_per_move,
         1,
+        batch_size=batch_size,
     )
 
     ref_bdem = RefTIBDExchangeMove(
