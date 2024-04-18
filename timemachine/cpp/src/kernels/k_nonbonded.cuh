@@ -200,7 +200,8 @@ void __device__ v_nonbonded_unified(
 
         RealType d2ij_3d = (delta_x * delta_x) + (delta_y * delta_y) + (delta_z * delta_z);
         RealType d2ij = d2ij_3d;
-        RealType delta_w;
+
+        RealType delta_w = 0.0;
 
         if (ALCHEMICAL) {
             // (ytz): we are guaranteed that delta_w is zero if ALCHEMICAL == false
@@ -218,7 +219,11 @@ void __device__ v_nonbonded_unified(
         // (jf):  to avoid possibility of lam-dependent cutoff artifacts,
         //        cutoff is applied to spatial distance (d2ij_3d),
         //        and alchemical coordinate (dw^2) is separately compared to cutoff
-        bool is_interacting = valid_ij && (d2ij_3d < cutoff_squared) && ((delta_w * delta_w) < cutoff_squared);
+        bool within_cutoff_3d = d2ij_3d < cutoff_squared;
+        bool dw_below_cutoff = (delta_w * delta_w) < cutoff_squared;
+        bool is_interacting =
+            valid_ij && (dw_below_cutoff && dw_below_cutoff); // TODO: possibly optimize order of checks
+
         if (is_interacting) {
             // electrostatics
             RealType u;
