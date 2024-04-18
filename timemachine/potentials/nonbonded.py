@@ -69,6 +69,11 @@ def direct_space_pme(dij, qij, beta):
     return qij * erfc(beta * dij) / dij
 
 
+def switched_direct_space_pme(dij, qij, beta, cutoff):
+    """direct_space_pme * switch_fn"""
+    return direct_space_pme(dij, qij, beta) * switch_fn(dij, cutoff)
+
+
 def nonbonded_block_unsummed(
     xi: NDArray,
     xj: NDArray,
@@ -134,7 +139,7 @@ def nonbonded_block_unsummed(
 
     qij = jnp.multiply(qi, qj)
 
-    es = direct_space_pme(dij, qij, beta) * switch_fn(dij, cutoff)
+    es = switched_direct_space_pme(dij, qij, beta, cutoff)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
     nrgs = jnp.where(dij < cutoff, es + lj, 0)
@@ -322,7 +327,7 @@ def nonbonded(
     dij = jnp.where(keep_mask, dij, 0)
 
     # funny enough lim_{x->0} erfc(x)/x = 0
-    eij_charge = jnp.where(keep_mask, qij * erfc(beta * dij) * inv_dij, 0)  # zero out diagonals
+    eij_charge = jnp.where(keep_mask, qij * switched_direct_space_pme(dij, qij, beta, cutoff), 0)  # zero out diagonals
     if cutoff is not None:
         eij_charge = jnp.where(dij < cutoff, eij_charge, 0)
 
@@ -377,7 +382,7 @@ def nonbonded_on_specific_pairs(
 
     # Electrostatics by direct-space part of PME
     qij = apply_cutoff(charges[inds_l] * charges[inds_r])
-    electrostatics = direct_space_pme(dij, qij, beta) * switch_fn(dij, cutoff)
+    electrostatics = switched_direct_space_pme(dij, qij, beta, cutoff)
 
     if rescale_mask is not None:
         assert rescale_mask.shape == (len(pairs), 2)
@@ -430,7 +435,7 @@ def nonbonded_on_precomputed_pairs(
     eps_ij = apply_cutoff(eps_ij)
 
     vdW = jnp.where(eps_ij != 0, lennard_jones(dij, sig_ij, eps_ij), 0)
-    electrostatics = jnp.where(q_ij != 0, direct_space_pme(dij, q_ij, beta) * switch_fn(dij, cutoff), 0)
+    electrostatics = jnp.where(q_ij != 0, switched_direct_space_pme(dij, q_ij, beta, cutoff), 0)
 
     return vdW, electrostatics
 
@@ -504,7 +509,7 @@ def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutof
         sum_j q_j / d_ij * erfc(beta * d_ij)
     """
     d_ij = jax_utils.distance_from_one_to_others(x_i, x_others, box, cutoff)
-    prefactor_i = jnp.sum((q_others / d_ij) * erfc(beta * d_ij))
+    prefactor_i = jnp.sum((q_others / d_ij) * erfc(beta * d_ij) * switch_fn(d_ij, cutoff))
     return prefactor_i
 
 
