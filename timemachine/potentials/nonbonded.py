@@ -22,7 +22,7 @@ Array = Any
 from typing import Optional
 
 
-def switch_fn(dij, cutoff):
+def switch_fn(dij, cutoff=None):
     """heuristic switching function
 
     intended to:
@@ -32,8 +32,11 @@ def switch_fn(dij, cutoff):
 
     not necessarily intended for use with LJ
     """
-    f = jnp.power(jnp.cos((jnp.pi * jnp.power(dij / cutoff, 8)) / 2), 3)
-    return jnp.where(dij <= cutoff, f, 0)
+    if cutoff is not None and jnp.isfinite(cutoff):
+        f = jnp.power(jnp.cos((jnp.pi * jnp.power(dij / cutoff, 8)) / 2), 3)
+        return jnp.where(dij < cutoff, f, 0)
+    else:
+        return jnp.ones_like(dij)
 
 
 def combining_rule_sigma(sig_i, sig_j):
@@ -327,7 +330,7 @@ def nonbonded(
     dij = jnp.where(keep_mask, dij, 0)
 
     # funny enough lim_{x->0} erfc(x)/x = 0
-    eij_charge = jnp.where(keep_mask, qij * switched_direct_space_pme(dij, qij, beta, cutoff), 0)  # zero out diagonals
+    eij_charge = jnp.where(keep_mask, switched_direct_space_pme(dij, qij, beta, cutoff), 0)  # zero out diagonals
     if cutoff is not None:
         eij_charge = jnp.where(dij < cutoff, eij_charge, 0)
 
@@ -366,7 +369,7 @@ def nonbonded_on_specific_pairs(
     dij = distance_on_pairs(conf[inds_l], conf[inds_r], box, w_offsets)
     if cutoff is None:
         cutoff = np.inf
-    keep_mask = dij <= cutoff
+    keep_mask = dij < cutoff
 
     def apply_cutoff(x):
         return jnp.where(keep_mask, x, 0)
@@ -425,7 +428,7 @@ def nonbonded_on_precomputed_pairs(
     if cutoff is None:
         cutoff = np.inf
 
-    keep_mask = dij <= cutoff
+    keep_mask = dij < cutoff
 
     def apply_cutoff(x):
         return jnp.where(keep_mask, x, 0)
