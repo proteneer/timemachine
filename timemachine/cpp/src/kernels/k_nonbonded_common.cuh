@@ -170,6 +170,20 @@ float __device__ __forceinline__ d_erfc_beta_r_dr(float beta, float dij) {
     return -static_cast<float>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
 }
 
+float __device__ __forceinline__ fast_erfc_and_deriv(float x, float *dedx) {
+    // TODO: consider using fasterfc implementations listed in this thread:
+    // https://forums.developer.nvidia.com/t/calling-all-juffas-whats-up-with-erfcf-nowadays/262973/4
+
+    float exp_beta_x2 = __expf(-x * x);
+    // (ytz) 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
+    // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
+    float t = 1.0f / (1.0f + 0.3275911f * x);
+    float erfc_x = (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) *
+                   t * exp_beta_x2;
+    dedx[0] = -static_cast<float>(TWO_OVER_SQRT_PI) * exp_beta_x2;
+    return erfc_x;
+}
+
 template <typename RealType>
 RealType __device__ __forceinline__
 real_es_factor(RealType real_beta, RealType dij, RealType inv_dij, RealType inv_d2ij, RealType &damping_factor) {
@@ -187,15 +201,15 @@ float __device__ __forceinline__
 real_es_factor(float real_beta, float dij, float inv_dij, float inv_d2ij, float &damping_factor) {
     float beta_dij = real_beta * dij;
 
-    // TODO: see if there's an oopportunity to merge these...
-    float ebd = fast_erfc(beta_dij);
-    float debdr = d_erfc_beta_r_dr(real_beta, dij);
+    float debd;
+    float ebd = fast_erfc_and_deriv(beta_dij, &debd);
+    debd = real_beta * debd;
 
     float dsdr;
     float sr = switch_fn_and_deriv(dij, &dsdr);
 
     damping_factor = ebd * sr;
-    float damping_factor_prime = (ebd * dsdr) + (debdr * sr);
+    float damping_factor_prime = (ebd * dsdr) + (debd * sr);
     float d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
     return d_es_dr;
 }
