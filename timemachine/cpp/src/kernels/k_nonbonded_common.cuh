@@ -25,7 +25,7 @@ template <typename RealType> RealType __device__ __forceinline__ switch_fn(RealT
     RealType dij_k4 = dij_k2 * dij_k2;
     RealType dij_k8 = dij_k4 * dij_k4;
 
-    RealType cos_arg = cos(0.5 * (pi * dij_k8));
+    RealType cos_arg = cos(0.5 * pi * dij_k8);
 
     // exponentiation
     RealType cos_arg3 = cos_arg * cos_arg * cos_arg;
@@ -54,11 +54,12 @@ float __device__ __forceinline__ switch_fn(float dij) {
 }
 
 template <typename RealType> RealType __device__ __forceinline__ d_switch_fn_dr(RealType dij) {
-    RealType cutoff = 1.2;
+    constexpr RealType cutoff = 1.2;
     RealType pi = static_cast<RealType>(PI);
 
     // exponentiation
-    RealType k2 = cutoff * cutoff;
+    RealType inv_cutoff = 1.0 / cutoff;
+    RealType k2 = inv_cutoff * inv_cutoff;
     RealType k4 = k2 * k2;
     RealType k8 = k4 * k4;
 
@@ -67,7 +68,9 @@ template <typename RealType> RealType __device__ __forceinline__ d_switch_fn_dr(
     RealType dij7 = dij4 * dij2 * dij;
     RealType dij8 = dij4 * dij4;
 
-    RealType arg = pi * dij8 / (2 * k8);
+    RealType dij_k8 = dij8 * k8;
+
+    RealType arg = 0.5 * pi * dij_k8;
 
     RealType cos_arg = cos(arg);
     RealType cos_arg2 = cos_arg * cos_arg;
@@ -77,11 +80,13 @@ template <typename RealType> RealType __device__ __forceinline__ d_switch_fn_dr(
 
 // same as above, but with (sin(a), cos(a)) -> __sincosf(a)
 float __device__ __forceinline__ d_switch_fn_dr(float dij) {
-    float cutoff = 1.2;
+
+    constexpr float cutoff = 1.2;
     float pi = static_cast<float>(PI);
 
     // exponentiation
-    float k2 = cutoff * cutoff;
+    float inv_cutoff = 1.0 / cutoff;
+    float k2 = inv_cutoff * inv_cutoff;
     float k4 = k2 * k2;
     float k8 = k4 * k4;
 
@@ -90,7 +95,9 @@ float __device__ __forceinline__ d_switch_fn_dr(float dij) {
     float dij7 = dij4 * dij2 * dij;
     float dij8 = dij4 * dij4;
 
-    float arg = pi * dij8 / (2 * k8);
+    float dij_k8 = dij8 * k8;
+
+    float arg = 0.5 * pi * dij_k8;
 
     float sin_arg;
     float cos_arg;
