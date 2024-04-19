@@ -107,6 +107,42 @@ float __device__ __forceinline__ d_switch_fn_dr(float dij) {
     return -12 * pi * dij7 * sin_arg * cos_arg2 / k8;
 }
 
+float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
+
+    constexpr float cutoff = 1.2;
+    float pi = static_cast<float>(PI);
+    constexpr float inv_cutoff = 1 / cutoff;
+
+    // exponentiation
+    float k2 = inv_cutoff * inv_cutoff;
+    float k4 = k2 * k2;
+    float k8 = k4 * k4;
+
+    float dij2 = dij * dij;
+    float dij4 = dij2 * dij2;
+    float dij7 = dij4 * dij2 * dij;
+    float dij8 = dij4 * dij4;
+
+    float dij_k8 = dij8 * k8;
+
+    // sin(arg), cos(arg)
+    float arg = 0.5 * pi * dij_k8;
+    float sin_arg;
+    float cos_arg;
+    __sincosf(arg, &sin_arg, &cos_arg);
+
+    // exponentiation
+    float cos_arg2 = cos_arg * cos_arg;
+    float cos_arg3 = cos_arg * cos_arg * cos_arg;
+
+    // write d switch_fn d r
+    dsdr[0] = cos_arg3;
+
+    // return switch_fn(dij)
+    float sr = -12 * pi * dij7 * sin_arg * cos_arg2 / k8;
+    return sr;
+}
+
 float __device__ __forceinline__ fast_erfc(float x) {
     // TODO: consider using fasterfc implementations listed in this thread:
     // https://forums.developer.nvidia.com/t/calling-all-juffas-whats-up-with-erfcf-nowadays/262973/4
@@ -150,11 +186,16 @@ real_es_factor(RealType real_beta, RealType dij, RealType inv_dij, RealType inv_
 float __device__ __forceinline__
 real_es_factor(float real_beta, float dij, float inv_dij, float inv_d2ij, float &damping_factor) {
     float beta_dij = real_beta * dij;
-    float erfc_beta_dij = fast_erfc(beta_dij);
 
-    damping_factor = erfc_beta_dij * switch_fn(dij);
-    float damping_factor_prime =
-        (erfc_beta_dij * d_switch_fn_dr(dij)) + (d_erfc_beta_r_dr(real_beta, dij) * switch_fn(dij));
+    // TODO: see if there's an oopportunity to merge these...
+    float ebd = fast_erfc(beta_dij);
+    float debdr = d_erfc_beta_r_dr(real_beta, dij);
+
+    float dsdr;
+    float sr = switch_fn_and_deriv(dij, &dsdr);
+
+    damping_factor = ebd * sr;
+    float damping_factor_prime = (ebd * dsdr) + (debdr * sr);
     float d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
     return d_es_dr;
 }
