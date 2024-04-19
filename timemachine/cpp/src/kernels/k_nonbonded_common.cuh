@@ -32,6 +32,27 @@ template <typename RealType> RealType __device__ __forceinline__ switch_fn(RealT
     return cos_arg3;
 }
 
+// same as above, but with cos -> __cosf
+float __device__ __forceinline__ switch_fn(float dij) {
+    constexpr float cutoff = 1.2;
+    constexpr float inv_cutoff = 1 / cutoff;
+
+    float pi = static_cast<float>(PI);
+    //RealType dij_k = dij / cutoff; // TODO: multiply by inv cutoff
+    float dij_k = dij * inv_cutoff;
+
+    // exponentiation
+    float dij_k2 = dij_k * dij_k;
+    float dij_k4 = dij_k2 * dij_k2;
+    float dij_k8 = dij_k4 * dij_k4;
+
+    float cos_arg = __cosf(0.5 * (pi * dij_k8));
+
+    // exponentiation
+    float cos_arg3 = cos_arg * cos_arg * cos_arg;
+    return cos_arg3;
+}
+
 template <typename RealType> RealType __device__ __forceinline__ d_switch_fn_dr(RealType dij) {
     RealType cutoff = 1.2;
     RealType pi = static_cast<RealType>(PI);
@@ -47,10 +68,36 @@ template <typename RealType> RealType __device__ __forceinline__ d_switch_fn_dr(
     RealType dij8 = dij4 * dij4;
 
     RealType arg = pi * dij8 / (2 * k8);
+
     RealType cos_arg = cos(arg);
     RealType cos_arg2 = cos_arg * cos_arg;
 
     return -12 * pi * dij7 * sin(arg) * cos_arg2 / k8;
+}
+
+// same as above, but with (sin(a), cos(a)) -> __sincosf(a)
+float __device__ __forceinline__ d_switch_fn_dr(float dij) {
+    float cutoff = 1.2;
+    float pi = static_cast<float>(PI);
+
+    // exponentiation
+    float k2 = cutoff * cutoff;
+    float k4 = k2 * k2;
+    float k8 = k4 * k4;
+
+    float dij2 = dij * dij;
+    float dij4 = dij2 * dij2;
+    float dij7 = dij4 * dij2 * dij;
+    float dij8 = dij4 * dij4;
+
+    float arg = pi * dij8 / (2 * k8);
+
+    float sin_arg;
+    float cos_arg;
+    __sincosf(arg, &sin_arg, &cos_arg);
+    float cos_arg2 = cos_arg * cos_arg;
+
+    return -12 * pi * dij7 * sin_arg * cos_arg2 / k8;
 }
 
 float __device__ __forceinline__ fast_erfc(float x) {
@@ -67,15 +114,14 @@ float __device__ __forceinline__ fast_erfc(float x) {
 
 template <typename RealType> RealType __device__ __forceinline__ d_erfc_beta_r_dr(RealType beta, RealType dij) {
     // -2 beta exp(-(beta dij)^2) / sqrt(pi)
-
     RealType beta_dij = beta * dij;
     RealType exp_beta_dij_2 = exp(-beta_dij * beta_dij);
     return -static_cast<RealType>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
 }
 
+// same as above, but with exp -> __expf
 float __device__ __forceinline__ d_erfc_beta_r_dr(float beta, float dij) {
     // (ytz): max ulp error is: 2 + floor(abs(1.16 * x))
-
     float beta_dij = beta * dij;
     float exp_beta_dij_2 = __expf(-beta_dij * beta_dij);
     return -static_cast<float>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
