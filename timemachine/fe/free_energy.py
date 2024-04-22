@@ -1145,10 +1145,9 @@ def run_sims_hrex(
     unbound_impls = potential.get_potentials()
 
     def make_energy_decomposed_state(
-        results: Tuple[StateIdx, StoredArrays, List[NDArray]]
+        results: Tuple[StoredArrays, List[NDArray], InitialState]
     ) -> EnergyDecomposedState[StoredArrays]:
-        state_idx, frames, boxes = results
-        initial_state = initial_states[state_idx]
+        frames, boxes, initial_state = results
         # Reuse the existing unbound potentials already constructed to make a batch Us fn
         return EnergyDecomposedState(
             frames,
@@ -1157,7 +1156,8 @@ def run_sims_hrex(
         )
 
     results_by_state = [
-        (StateIdx(state_idx), samples.frames, samples.boxes) for state_idx, samples in enumerate(samples_by_state)
+        (samples.frames, samples.boxes, initial_state)
+        for samples, initial_state in zip(samples_by_state, initial_states)
     ]
 
     bar_results = list(
