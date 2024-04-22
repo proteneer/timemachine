@@ -15,12 +15,7 @@ from timemachine.fe.bar import (
     pair_overlap_from_ukln,
     works_from_ukln,
 )
-from timemachine.fe.energy_decomposition import (
-    Batch_u_fn,
-    EnergyDecomposedState,
-    compute_energy_decomposed_u_kln,
-    get_batch_u_fns,
-)
+from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
 from timemachine.fe.plots import (
     plot_as_png_fxn,
     plot_dG_errs_figure,
@@ -48,7 +43,10 @@ from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond, NonbondedInteractionGroup, SummedPotential
 from timemachine.utils import batches, pairwise_transform_and_combine
 
-WATER_SAMPLER_MOVERS = (custom_ops.TIBDExchangeMove_f32, custom_ops.TIBDExchangeMove_f64)
+WATER_SAMPLER_MOVERS = (
+    custom_ops.TIBDExchangeMove_f32,
+    custom_ops.TIBDExchangeMove_f64,
+)
 
 
 class HostConfig:
@@ -728,6 +726,8 @@ def run_sims_sequential(
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     u_kln_by_component_by_lambda = []
 
+    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
+    unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in initial_states[0].potentials]
     for initial_state in initial_states:
         # run simulation
         traj = sample(initial_state, md_params, max_buffer_frames=100)
@@ -736,8 +736,7 @@ def run_sims_sequential(
         # keep samples from any requested states in memory
         stored_trajectories.append(traj)
 
-        bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
-        cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
+        cur_batch_U_fns = get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature)
 
         state = EnergyDecomposedState(traj.frames, traj.boxes, cur_batch_U_fns)
 
@@ -754,12 +753,6 @@ def run_sims_sequential(
     ]
 
     return PairBarResult(list(initial_states), bar_results), stored_trajectories
-
-
-def make_batch_u_fns(initial_state: InitialState, temperature: float) -> List[Batch_u_fn]:
-    assert initial_state.barostat is None or initial_state.barostat.temperature == temperature
-    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
-    return get_batch_u_fns(bound_impls, temperature)
 
 
 class MinOverlapWarning(UserWarning):
@@ -814,6 +807,8 @@ def run_sims_bisection(
     assert len(initial_lambdas) >= 2
     assert np.all(np.diff(initial_lambdas) > 0), "initial lambda schedule must be monotonically increasing"
 
+    lambdas = list(initial_lambdas)
+
     get_initial_state = cache(make_initial_state)
 
     @cache
@@ -822,13 +817,17 @@ def run_sims_bisection(
         traj = sample(initial_state, md_params, max_buffer_frames=100)
         return traj
 
+    # Set up a single set of unbound potentials for computing the batch U fns
+    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
+    unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in get_initial_state(lambdas[0]).potentials]
+
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
     # 1. can use significant GPU memory
     # 2. can be reconstructed relatively quickly
     def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
         initial_state = get_initial_state(lamb)
         traj = get_samples(lamb)
-        batch_u_fns = make_batch_u_fns(initial_state, temperature)
+        batch_u_fns = get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature)
         return EnergyDecomposedState(traj.frames, traj.boxes, batch_u_fns)
 
     @cache
@@ -855,7 +854,6 @@ def run_sims_bisection(
         bar_results = [get_bar_result(lamb1, lamb2) for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
         return PairBarResult(refined_initial_states, bar_results)
 
-    lambdas = list(initial_lambdas)
     result = compute_intermediate_result(lambdas)
     results = [result]
 
@@ -1141,14 +1139,20 @@ def run_sims_hrex(
             print("Final replica permutation  :", hrex.replica_idx_by_state)
             print()
 
+    # Use the unbound potentials associated with the summed potential once to compute the u_kln
+    # Avoids repeated creation of underlying GPU potentials
+    assert isinstance(potential, custom_ops.SummedPotential)
+    unbound_impls = potential.get_potentials()
+
     def make_energy_decomposed_state(
         results: Tuple[StoredArrays, List[NDArray], InitialState]
     ) -> EnergyDecomposedState[StoredArrays]:
         frames, boxes, initial_state = results
+        # Reuse the existing unbound potentials already constructed to make a batch Us fn
         return EnergyDecomposedState(
             frames,
             boxes,
-            get_batch_u_fns([pot.to_gpu(np.float32).bound_impl for pot in initial_state.potentials], temperature),
+            get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature),
         )
 
     results_by_state = [
