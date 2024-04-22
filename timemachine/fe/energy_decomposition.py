@@ -44,7 +44,7 @@ def get_batch_u_fns(
 
     assert len(pots) == len(params)
     batch_u_fns: List[Batch_u_fn] = []
-    for p, bp in zip(params, pots):
+    for p, pot in zip(params, pots):
 
         def batch_u_fn(xs, boxes, pot_impl, pot_params):
             coords = np.array([x for x in xs])
@@ -61,7 +61,7 @@ def get_batch_u_fns(
             return us
 
         # extra functools.partial is needed to deal with closure jank
-        batch_u_fns.append(functools.partial(batch_u_fn, pot_impl=bp, pot_params=p[np.newaxis]))
+        batch_u_fns.append(functools.partial(batch_u_fn, pot_impl=pot, pot_params=p[np.newaxis]))
 
     return batch_u_fns
 
