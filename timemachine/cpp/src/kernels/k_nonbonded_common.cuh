@@ -12,23 +12,23 @@ static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
-template <typename RealType> RealType __device__ __forceinline__ switch_fn(RealType dij) {
-    constexpr RealType cutoff = 1.2;
-    constexpr RealType inv_cutoff = 1 / cutoff;
+double __device__ __forceinline__ switch_fn(double dij) {
+    constexpr double cutoff = 1.2;
+    constexpr double inv_cutoff = 1 / cutoff;
 
-    RealType pi = static_cast<RealType>(PI);
+    double pi = static_cast<double>(PI);
     //RealType dij_k = dij / cutoff; // TODO: multiply by inv cutoff
-    RealType dij_k = dij * inv_cutoff;
+    double dij_k = dij * inv_cutoff;
 
     // exponentiation
-    RealType dij_k2 = dij_k * dij_k;
-    RealType dij_k4 = dij_k2 * dij_k2;
-    RealType dij_k8 = dij_k4 * dij_k4;
+    double dij_k2 = dij_k * dij_k;
+    double dij_k4 = dij_k2 * dij_k2;
+    double dij_k8 = dij_k4 * dij_k4;
 
-    RealType cos_arg = cos(0.5 * pi * dij_k8);
+    double cos_arg = cos(0.5 * pi * dij_k8);
 
     // exponentiation
-    RealType cos_arg3 = cos_arg * cos_arg * cos_arg;
+    double cos_arg3 = cos_arg * cos_arg * cos_arg;
     return cos_arg3;
 }
 
@@ -46,36 +46,39 @@ float __device__ __forceinline__ switch_fn(float dij) {
     float dij_k4 = dij_k2 * dij_k2;
     float dij_k8 = dij_k4 * dij_k4;
 
-    float cos_arg = __cosf(0.5 * (pi * dij_k8));
+    float cos_arg = cosf(0.5 * (pi * dij_k8)); // TODO: consider fastmath __cosf
 
     // exponentiation
     float cos_arg3 = cos_arg * cos_arg * cos_arg;
     return cos_arg3;
 }
 
-template <typename RealType> RealType __device__ __forceinline__ d_switch_fn_dr(RealType dij) {
-    constexpr RealType cutoff = 1.2;
-    RealType pi = static_cast<RealType>(PI);
+double __device__ __forceinline__ d_switch_fn_dr(double dij) {
+    constexpr double cutoff = 1.2;
+    double pi = static_cast<double>(PI);
 
     // exponentiation
-    RealType inv_cutoff = 1.0 / cutoff;
-    RealType k2 = inv_cutoff * inv_cutoff;
-    RealType k4 = k2 * k2;
-    RealType k8 = k4 * k4;
+    double inv_cutoff = 1.0 / cutoff;
+    double k2 = inv_cutoff * inv_cutoff;
+    double k4 = k2 * k2;
+    double k8 = k4 * k4;
 
-    RealType dij2 = dij * dij;
-    RealType dij4 = dij2 * dij2;
-    RealType dij7 = dij4 * dij2 * dij;
-    RealType dij8 = dij4 * dij4;
+    double dij2 = dij * dij;
+    double dij4 = dij2 * dij2;
+    double dij7 = dij4 * dij2 * dij;
+    double dij8 = dij4 * dij4;
 
-    RealType dij_k8 = dij8 * k8;
+    double dij_k8 = dij8 * k8;
 
-    RealType arg = 0.5 * pi * dij_k8;
+    double arg = 0.5 * pi * dij_k8;
 
-    RealType cos_arg = cos(arg);
-    RealType cos_arg2 = cos_arg * cos_arg;
+    double sin_arg;
+    double cos_arg;
+    sincos(arg, &sin_arg, &cos_arg);
 
-    return -12 * pi * dij7 * sin(arg) * cos_arg2 / k8;
+    double cos_arg2 = cos_arg * cos_arg;
+
+    return -12 * pi * dij7 * sin_arg * cos_arg2 / k8;
 }
 
 // same as above, but with (sin(a), cos(a)) -> __sincosf(a)
@@ -101,7 +104,7 @@ float __device__ __forceinline__ d_switch_fn_dr(float dij) {
 
     float sin_arg;
     float cos_arg;
-    __sincosf(arg, &sin_arg, &cos_arg);
+    sincosf(arg, &sin_arg, &cos_arg);
     float cos_arg2 = cos_arg * cos_arg;
 
     return -12 * pi * dij7 * sin_arg * cos_arg2 / k8;
@@ -129,17 +132,17 @@ float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
     float arg = 0.5 * pi * dij_k8;
     float sin_arg;
     float cos_arg;
-    __sincosf(arg, &sin_arg, &cos_arg);
+    sincosf(arg, &sin_arg, &cos_arg);
 
     // exponentiation
     float cos_arg2 = cos_arg * cos_arg;
-    float cos_arg3 = cos_arg * cos_arg * cos_arg;
+    float cos_arg3 = cos_arg2 * cos_arg;
 
     // write d switch_fn d r
-    dsdr[0] = cos_arg3;
+    dsdr[0] = -12 * pi * dij7 * sin_arg * cos_arg2 / k8;
 
     // return switch_fn(dij)
-    float sr = -12 * pi * dij7 * sin_arg * cos_arg2 / k8;
+    float sr = cos_arg3;
     return sr;
 }
 
@@ -184,16 +187,15 @@ float __device__ __forceinline__ fast_erfc_and_deriv(float x, float *dedx) {
     return erfc_x;
 }
 
-template <typename RealType>
-RealType __device__ __forceinline__
-real_es_factor(RealType real_beta, RealType dij, RealType inv_dij, RealType inv_d2ij, RealType &damping_factor) {
-    RealType beta_dij = real_beta * dij;
-    RealType erfc_beta_dij = erfc(beta_dij);
+double __device__ __forceinline__
+real_es_factor(double real_beta, double dij, double inv_dij, double inv_d2ij, double &damping_factor) {
+    double beta_dij = real_beta * dij;
+    double erfc_beta_dij = erfc(beta_dij);
 
     damping_factor = erfc_beta_dij * switch_fn(dij);
-    RealType damping_factor_prime =
+    double damping_factor_prime =
         (erfc_beta_dij * d_switch_fn_dr(dij)) + (d_erfc_beta_r_dr(real_beta, dij) * switch_fn(dij));
-    RealType d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
+    double d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
     return d_es_dr;
 }
 
@@ -201,10 +203,14 @@ float __device__ __forceinline__
 real_es_factor(float real_beta, float dij, float inv_dij, float inv_d2ij, float &damping_factor) {
     float beta_dij = real_beta * dij;
 
+    // f(dij) = erfc(beta * dij)
+    // ebd = f(dij), debd = f'(dij)
     float debd;
     float ebd = fast_erfc_and_deriv(beta_dij, &debd);
     debd = real_beta * debd;
 
+    // g(dij) = switch_fn(dij)
+    // sr = g(dij), dsdr = g'(dij)
     float dsdr;
     float sr = switch_fn_and_deriv(dij, &dsdr);
 
