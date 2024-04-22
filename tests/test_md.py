@@ -400,8 +400,8 @@ def test_multiple_steps_local_consistency(freeze_reference):
     unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=True)
     v0 = np.zeros_like(coords)
     bps = []
-    for p, bp in zip(sys_params, unbound_potentials):
-        bps.append(bp.bind(p).to_gpu(np.float32).bound_impl)
+    for p, pot in zip(sys_params, unbound_potentials):
+        bps.append(pot.bind(p).to_gpu(np.float32).bound_impl)
 
     reference_values = []
     for bp in bps:
@@ -442,9 +442,9 @@ def test_multiple_steps_local_consistency(freeze_reference):
     assert np.all(coords[frozen_idxs] == xs[-1][frozen_idxs])
 
     # Verify that the bound potentials haven't been changed, as local md modifies potentials
-    for ref_val, bp in zip(reference_values, bps):
+    for ref_val, pot in zip(reference_values, bps):
         ref_du_dx, ref_u = ref_val
-        test_du_dx, test_u = bp.execute(coords, box)
+        test_du_dx, test_u = pot.execute(coords, box)
         np.testing.assert_array_equal(ref_du_dx, test_du_dx)
         np.testing.assert_equal(ref_u, test_u)
         check_force_norm(-ref_du_dx)
@@ -507,8 +507,8 @@ def test_get_movers():
     unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
     v0 = np.zeros_like(coords)
     bps = []
-    for p, bp in zip(sys_params, unbound_potentials):
-        bps.append(bp.bind(p).to_gpu(np.float32).bound_impl)
+    for p, pot in zip(sys_params, unbound_potentials):
+        bps.append(pot.bind(p).to_gpu(np.float32).bound_impl)
 
     intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
@@ -547,8 +547,8 @@ def test_multiple_steps_local_entire_system(freeze_reference):
     unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
     v0 = np.zeros_like(coords)
     bps = []
-    for p, bp in zip(sys_params, unbound_potentials):
-        bps.append(bp.bind(p).to_gpu(np.float32).bound_impl)
+    for p, pot in zip(sys_params, unbound_potentials):
+        bps.append(pot.bind(p).to_gpu(np.float32).bound_impl)
 
     # Select the molecule as the local idxs
     local_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
@@ -770,8 +770,8 @@ def test_setup_context_with_references():
 
         weak_refs = []
         bps = []
-        for p, bp in zip(sys_params, unbound_potentials):
-            bound_impl = bp.bind(p).to_gpu(np.float32).bound_impl
+        for p, pot in zip(sys_params, unbound_potentials):
+            bound_impl = pot.bind(p).to_gpu(np.float32).bound_impl
             bps.append(bound_impl)
             weak_refs.append(weakref.ref(bound_impl))
 
@@ -898,8 +898,8 @@ def test_context_invalid_boxes():
     selection = rng.choice(host_idxs, size=40, replace=False)
 
     bps = []
-    for p, bp in zip(sys_params, unbound_potentials):
-        bound_impl = bp.bind(p).to_gpu(np.float32).bound_impl
+    for p, pot in zip(sys_params, unbound_potentials):
+        bound_impl = pot.bind(p).to_gpu(np.float32).bound_impl
         bps.append(bound_impl)
 
     intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
@@ -946,11 +946,11 @@ def test_context_invalid_boxes_without_nonbonded_potentials():
     v0 = np.zeros_like(coords)
 
     bps = []
-    for p, bp in zip(sys_params, unbound_potentials):
+    for p, pot in zip(sys_params, unbound_potentials):
         # Skip the nonbonded all pairs, which is a SummedPotential, will result in no check
-        if isinstance(bp, SummedPotential):
+        if isinstance(pot, SummedPotential):
             continue
-        bound_impl = bp.bind(p).to_gpu(np.float32).bound_impl
+        bound_impl = pot.bind(p).to_gpu(np.float32).bound_impl
         bps.append(bound_impl)
 
     intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
