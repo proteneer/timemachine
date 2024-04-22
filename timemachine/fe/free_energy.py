@@ -726,6 +726,7 @@ def run_sims_sequential(
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     u_kln_by_component_by_lambda = []
 
+    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
     unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in initial_states[0].potentials]
     for initial_state in initial_states:
         # run simulation
@@ -817,6 +818,7 @@ def run_sims_bisection(
         return traj
 
     # Set up a single set of unbound potentials for computing the batch U fns
+    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
     unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in get_initial_state(lambdas[0]).potentials]
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
