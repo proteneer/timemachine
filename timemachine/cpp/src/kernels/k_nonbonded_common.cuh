@@ -104,7 +104,7 @@ float __device__ __forceinline__ d_switch_fn_dr(float dij) {
 
     float sin_arg;
     float cos_arg;
-    sincosf(arg, &sin_arg, &cos_arg);
+    __sincosf(arg, &sin_arg, &cos_arg);
 
     float cos_arg2 = cos_arg * cos_arg;
 
@@ -133,7 +133,7 @@ float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
     float arg = 0.5 * pi * dij_k8;
     float sin_arg;
     float cos_arg;
-    sincosf(arg, &sin_arg, &cos_arg);
+    __sincosf(arg, &sin_arg, &cos_arg);
 
     // exponentiation
     float cos_arg2 = cos_arg * cos_arg;
