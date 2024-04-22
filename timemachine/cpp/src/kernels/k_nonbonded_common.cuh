@@ -78,7 +78,7 @@ double __device__ __forceinline__ d_switch_fn_dr(double dij) {
 
     double cos_arg2 = cos_arg * cos_arg;
 
-    return -12 * pi * dij7 * sin_arg * cos_arg2 / k8;
+    return -12 * pi * dij7 * sin_arg * cos_arg2 * k8;
 }
 
 // same as above, but with (sin(a), cos(a)) -> __sincosf(a)
@@ -105,9 +105,10 @@ float __device__ __forceinline__ d_switch_fn_dr(float dij) {
     float sin_arg;
     float cos_arg;
     sincosf(arg, &sin_arg, &cos_arg);
+
     float cos_arg2 = cos_arg * cos_arg;
 
-    return -12 * pi * dij7 * sin_arg * cos_arg2 / k8;
+    return -12 * pi * dij7 * sin_arg * cos_arg2 * k8;
 }
 
 float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
@@ -139,7 +140,7 @@ float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
     float cos_arg3 = cos_arg2 * cos_arg;
 
     // write d switch_fn d r
-    dsdr[0] = -12 * pi * dij7 * sin_arg * cos_arg2 / k8;
+    dsdr[0] = -12 * pi * dij7 * sin_arg * cos_arg2 * k8;
 
     // return switch_fn(dij)
     float sr = cos_arg3;
@@ -158,11 +159,11 @@ float __device__ __forceinline__ fast_erfc(float x) {
            exp_beta_x2;
 }
 
-template <typename RealType> RealType __device__ __forceinline__ d_erfc_beta_r_dr(RealType beta, RealType dij) {
+double __device__ __forceinline__ d_erfc_beta_r_dr(double beta, double dij) {
     // -2 beta exp(-(beta dij)^2) / sqrt(pi)
-    RealType beta_dij = beta * dij;
-    RealType exp_beta_dij_2 = exp(-beta_dij * beta_dij);
-    return -static_cast<RealType>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
+    double beta_dij = beta * dij;
+    double exp_beta_dij_2 = exp(-beta_dij * beta_dij);
+    return -static_cast<double>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
 }
 
 // same as above, but with exp -> __expf
@@ -193,8 +194,12 @@ real_es_factor(double real_beta, double dij, double inv_dij, double inv_d2ij, do
     double erfc_beta_dij = erfc(beta_dij);
 
     damping_factor = erfc_beta_dij * switch_fn(dij);
-    double damping_factor_prime =
-        (erfc_beta_dij * d_switch_fn_dr(dij)) + (d_erfc_beta_r_dr(real_beta, dij) * switch_fn(dij));
+
+    double dsdr = d_switch_fn_dr(dij);
+    double debd = d_erfc_beta_r_dr(real_beta, dij);
+    double sr = switch_fn(dij);
+
+    double damping_factor_prime = (erfc_beta_dij * dsdr) + (debd * sr);
     double d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
     return d_es_dr;
 }
