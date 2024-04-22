@@ -24,6 +24,15 @@ class Move(Generic[_State], ABC):
     def move(self, _: _State) -> _State:
         ...
 
+    def move_n(self, x: _State, n: int) -> _State:
+        """Return the result of iterating the move n times.
+
+        Subclasses may override this to use a more efficient implementation, e.g. to generate random numbers in batch.
+        """
+        for _ in range(n):
+            x = self.move(x)
+        return x
+
     def sample_chain_iter(self, x: _State) -> Iterator[_State]:
         """Given an initial state, returns an iterator over an infinite sequence of samples"""
         while True:
@@ -31,7 +40,10 @@ class Move(Generic[_State], ABC):
             yield x
 
     def sample_chain(self, x: _State, n_samples: int) -> List[_State]:
-        """Given an initial state and number of samples, returns a finite sequence of samples"""
+        """Given an initial state and number of samples, returns a finite sequence of samples
+
+        Subclasses may override this to use a more efficient implementation, e.g. to generate random numbers in batch.
+        """
         return list(islice(self.sample_chain_iter(x), n_samples))
 
 
@@ -94,24 +106,21 @@ class MixtureOfMoves(CompoundMove[_State]):
         x = chosen_move.move(x)
         return x
 
-
-class BatchedMixtureOfMoves(MixtureOfMoves[_State]):
-    """Repeatedly sample from a uniform mixture of moves.
-
-    Has the same intended behavior as calling MixtureOfMoves multiple times. Added as a
-    performance optimization to avoid calling np.random.choice repeatedly, which can be expensive
-    as the number of moves gets large.
-    """
-
-    def __init__(self, batch_size: int, moves: Sequence[MonteCarloMove[_State]]):
-        self.batch_size = batch_size
-        super().__init__(moves)
-
-    def move(self, x) -> _State:
-        idxs = np.random.choice(len(self.moves), size=self.batch_size, replace=True)
+    def move_n(self, x: _State, n: int):
+        # Override default implementation to generate random selections in batch for efficiency
+        idxs = np.random.choice(len(self.moves), size=n, replace=True)
         for idx in idxs:
             x = self.moves[idx].move(x)
         return x
+
+    def sample_chain(self, x: _State, n_samples: int) -> List[_State]:
+        # Override default implementation to generate random selections in batch for efficiency
+        idxs = np.random.choice(len(self.moves), size=n_samples, replace=True)
+        samples = []
+        for idx in idxs:
+            x = self.moves[idx].move(x)
+            samples.append(x)
+        return samples
 
 
 class SequenceOfMoves(CompoundMove[_State]):

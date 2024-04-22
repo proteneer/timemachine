@@ -17,7 +17,7 @@ from timemachine.fe.plots import (
     plot_hrex_transition_matrix,
 )
 from timemachine.md.hrex import HREXDiagnostics, NeighborSwapMove, ReplicaIdx, StateIdx, run_hrex
-from timemachine.md.moves import BatchedMixtureOfMoves, MixtureOfMoves, MonteCarloMove
+from timemachine.md.moves import MixtureOfMoves, MonteCarloMove
 
 DEBUG = False
 
@@ -299,26 +299,20 @@ def test_batched_mixture_of_moves(num_states, seed, swaps):
     def log_q(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
         return log_q_matrix[replica_idx, state_idx]
 
-    # Add (0, 0) to the list of neighbor pairs considered for swap moves to ensure that performing a fixed number of
-    # neighbor swaps is aperiodic in cases where swap acceptance rates approach 100%
-    neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
+    neighbor_swaps = [NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs]
 
-    move = MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
-    sequential_swaps = replica_idxs.copy()
-    for _ in range(swaps):
-        sequential_swaps = move.move(sequential_swaps)
+    def run_sequential_swaps(replica_idxs):
+        move = MixtureOfMoves(neighbor_swaps)
+        for _ in range(swaps):
+            replica_idxs = move.move(replica_idxs)
+        return move
 
-    seq_diagnostics = HREXDiagnostics([], list(zip(move.n_accepted_by_move, move.n_proposed_by_move)))
+    np.random.seed(seed)
+    move_seq = run_sequential_swaps(replica_idxs)
 
-    batched_move = BatchedMixtureOfMoves(swaps, [NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
-    _ = batched_move.move(replica_idxs.copy())
+    move_batched = MixtureOfMoves(neighbor_swaps)
+    np.random.seed(seed)
+    _ = move_batched.move_n(replica_idxs, swaps)
 
-    batched_diagnostics = HREXDiagnostics(
-        [], list(zip(batched_move.n_accepted_by_move, batched_move.n_proposed_by_move))
-    )
-
-    np.testing.assert_allclose(
-        seq_diagnostics.cumulative_swap_acceptance_rates,
-        batched_diagnostics.cumulative_swap_acceptance_rates,
-        atol=0.02,
-    )
+    assert move_seq.n_accepted_by_move == move_batched.n_accepted_by_move
+    assert move_seq.n_proposed_by_move == move_batched.n_proposed_by_move
