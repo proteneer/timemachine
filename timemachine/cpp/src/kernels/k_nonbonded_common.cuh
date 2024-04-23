@@ -14,41 +14,42 @@ static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
 
 // f64 switch fxn
 double __device__ __forceinline__ switch_fn(double dij) {
+    // constants
     constexpr double cutoff = 1.2;
     constexpr double inv_cutoff = 1 / cutoff;
+    constexpr double pi = static_cast<double>(PI);
 
-    double pi = static_cast<double>(PI);
+    // (dij/cutoff)^8
     double dij_k = dij * inv_cutoff;
-
-    // exponentiation
     double dij_k2 = dij_k * dij_k;
     double dij_k4 = dij_k2 * dij_k2;
     double dij_k8 = dij_k4 * dij_k4;
 
+    // cos(0.5*pi*(dij/cutoff)^8)^3
     double cos_arg = cos(0.5 * pi * dij_k8);
-
-    // exponentiation
     double cos_arg3 = cos_arg * cos_arg * cos_arg;
     return cos_arg3;
 }
 
 double __device__ __forceinline__ d_switch_fn_dr(double dij) {
+    // constants
     constexpr double cutoff = 1.2;
-    double pi = static_cast<double>(PI);
+    constexpr double pi = static_cast<double>(PI);
 
-    // exponentiation
+    // cutoff^-8
     double inv_cutoff = 1.0 / cutoff;
     double k2 = inv_cutoff * inv_cutoff;
     double k4 = k2 * k2;
     double k8 = k4 * k4;
 
+    // dij^-7 and dij^-8
     double dij2 = dij * dij;
     double dij4 = dij2 * dij2;
     double dij7 = dij4 * dij2 * dij;
     double dij8 = dij4 * dij4;
 
+    // arg = 0.5 * pi * (dij / cutoff)^8
     double dij_k8 = dij8 * k8;
-
     double arg = 0.5 * pi * dij_k8;
 
     double sin_arg;
@@ -72,12 +73,14 @@ real_es_factor(double real_beta, double dij, double inv_dij, double inv_d2ij, do
     double beta_dij = real_beta * dij;
     double erfc_beta_dij = erfc(beta_dij);
 
+    // write erfc(beta * dij) * switch_fn(dij) into damping_factor
     damping_factor = erfc_beta_dij * switch_fn(dij);
 
     double dsdr = d_switch_fn_dr(dij);
     double debd = d_erfc_beta_r_dr(real_beta, dij);
     double sr = switch_fn(dij);
 
+    // chain rule
     double damping_factor_prime = (erfc_beta_dij * dsdr) + (debd * sr);
     double d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
     return d_es_dr;
@@ -87,24 +90,27 @@ real_es_factor(double real_beta, double dij, double inv_dij, double inv_d2ij, do
 // and (2) a fast erfc approximation and its deriv into fast_erfc_and_deriv
 float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
 
+    // constants
     constexpr float cutoff = 1.2;
     constexpr float pi = static_cast<float>(PI);
     constexpr float inv_cutoff = 1 / cutoff;
 
-    // exponentiation
+    // cutoff^-1
     constexpr float k2 = inv_cutoff * inv_cutoff;
     constexpr float k4 = k2 * k2;
     constexpr float k8 = k4 * k4;
 
+    // dij^7, dij^8
     float dij2 = dij * dij;
     float dij4 = dij2 * dij2;
     float dij7 = dij4 * dij2 * dij;
     float dij8 = dij4 * dij4;
 
+    // arg = (dij/cutoff)^8 * pi/2
     float dij_k8 = dij8 * k8;
+    float arg = 0.5 * pi * dij_k8;
 
     // sin(arg), cos(arg)
-    float arg = 0.5 * pi * dij_k8;
     float sin_arg;
     float cos_arg;
     __sincosf(arg, &sin_arg, &cos_arg);
