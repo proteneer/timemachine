@@ -454,8 +454,20 @@ def _get_cores_impl(
         rmsd = np.sqrt(r2_ij / len(core))
         dists.append(rmsd)
 
+    valence_mismatches = []
+    for core in all_cores:
+        r_i = conf_a[core[:, 0]]
+        r_j = conf_b[core[:, 1]]
+        count = 0
+        for idx, jdx in core:
+            count += abs(
+                mol_a.GetAtomWithIdx(int(idx)).GetTotalValence() - mol_b.GetAtomWithIdx(int(jdx)).GetTotalValence()
+            )
+        valence_mismatches.append(count)
+
+    sort_vals = np.array(list(zip(valence_mismatches, dists)), dtype=[("valence", "i"), ("rmsd", "f")])
     sorted_cores = []
-    for p in np.argsort(dists, kind="stable"):
+    for p in np.argsort(sort_vals, order=["valence", "rmsd"]):
         sorted_cores.append(all_cores[p])
 
     # undo the sort
