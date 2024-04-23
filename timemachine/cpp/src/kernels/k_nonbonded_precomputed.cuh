@@ -116,8 +116,7 @@ void __global__ k_nonbonded_precomputed(
 
                 if (du_dp) {
                     // du/dp
-                    g_q_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(
-                        damping_factor * inv_dij); // TODO: fix me
+                    g_q_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(damping_factor * inv_dij);
                     g_dw_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DW>(delta_w * force_prefactor);
                 }
             }
