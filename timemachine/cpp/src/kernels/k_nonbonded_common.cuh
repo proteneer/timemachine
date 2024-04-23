@@ -12,12 +12,12 @@ static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
+// f64 switch fxn
 double __device__ __forceinline__ switch_fn(double dij) {
     constexpr double cutoff = 1.2;
     constexpr double inv_cutoff = 1 / cutoff;
 
     double pi = static_cast<double>(PI);
-    //RealType dij_k = dij / cutoff; // TODO: multiply by inv cutoff
     double dij_k = dij * inv_cutoff;
 
     // exponentiation
@@ -29,27 +29,6 @@ double __device__ __forceinline__ switch_fn(double dij) {
 
     // exponentiation
     double cos_arg3 = cos_arg * cos_arg * cos_arg;
-    return cos_arg3;
-}
-
-// same as above, but with cos -> __cosf
-float __device__ __forceinline__ switch_fn(float dij) {
-    constexpr float cutoff = 1.2;
-    constexpr float inv_cutoff = 1 / cutoff;
-
-    float pi = static_cast<float>(PI);
-    //RealType dij_k = dij / cutoff; // TODO: multiply by inv cutoff
-    float dij_k = dij * inv_cutoff;
-
-    // exponentiation
-    float dij_k2 = dij_k * dij_k;
-    float dij_k4 = dij_k2 * dij_k2;
-    float dij_k8 = dij_k4 * dij_k4;
-
-    float cos_arg = cosf(0.5 * (pi * dij_k8)); // TODO: consider fastmath __cosf
-
-    // exponentiation
-    float cos_arg3 = cos_arg * cos_arg * cos_arg;
     return cos_arg3;
 }
 
@@ -81,46 +60,41 @@ double __device__ __forceinline__ d_switch_fn_dr(double dij) {
     return -12 * pi * dij7 * sin_arg * cos_arg2 * k8;
 }
 
-// same as above, but with (sin(a), cos(a)) -> __sincosf(a)
-float __device__ __forceinline__ d_switch_fn_dr(float dij) {
-
-    constexpr float cutoff = 1.2;
-    float pi = static_cast<float>(PI);
-
-    // exponentiation
-    float inv_cutoff = 1.0 / cutoff;
-    float k2 = inv_cutoff * inv_cutoff;
-    float k4 = k2 * k2;
-    float k8 = k4 * k4;
-
-    float dij2 = dij * dij;
-    float dij4 = dij2 * dij2;
-    float dij7 = dij4 * dij2 * dij;
-    float dij8 = dij4 * dij4;
-
-    float dij_k8 = dij8 * k8;
-
-    float arg = 0.5 * pi * dij_k8;
-
-    float sin_arg;
-    float cos_arg;
-    __sincosf(arg, &sin_arg, &cos_arg);
-
-    float cos_arg2 = cos_arg * cos_arg;
-
-    return -12 * pi * dij7 * sin_arg * cos_arg2 * k8;
+double __device__ __forceinline__ d_erfc_beta_r_dr(double beta, double dij) {
+    // -2 beta exp(-(beta dij)^2) / sqrt(pi)
+    double beta_dij = beta * dij;
+    double exp_beta_dij_2 = exp(-beta_dij * beta_dij);
+    return -static_cast<double>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
 }
 
+double __device__ __forceinline__
+real_es_factor(double real_beta, double dij, double inv_dij, double inv_d2ij, double &damping_factor) {
+    double beta_dij = real_beta * dij;
+    double erfc_beta_dij = erfc(beta_dij);
+
+    damping_factor = erfc_beta_dij * switch_fn(dij);
+
+    double dsdr = d_switch_fn_dr(dij);
+    double debd = d_erfc_beta_r_dr(real_beta, dij);
+    double sr = switch_fn(dij);
+
+    double damping_factor_prime = (erfc_beta_dij * dsdr) + (debd * sr);
+    double d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
+    return d_es_dr;
+}
+
+// f32 code path merges (1) switch_fn and its deriv into switch_fn_and_deriv
+// and (2) a fast erfc approximation and its deriv into fast_erfc_and_deriv
 float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
 
     constexpr float cutoff = 1.2;
-    float pi = static_cast<float>(PI);
+    constexpr float pi = static_cast<float>(PI);
     constexpr float inv_cutoff = 1 / cutoff;
 
     // exponentiation
-    float k2 = inv_cutoff * inv_cutoff;
-    float k4 = k2 * k2;
-    float k8 = k4 * k4;
+    constexpr float k2 = inv_cutoff * inv_cutoff;
+    constexpr float k4 = k2 * k2;
+    constexpr float k8 = k4 * k4;
 
     float dij2 = dij * dij;
     float dij4 = dij2 * dij2;
@@ -147,33 +121,6 @@ float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
     return sr;
 }
 
-float __device__ __forceinline__ fast_erfc(float x) {
-    // TODO: consider using fasterfc implementations listed in this thread:
-    // https://forums.developer.nvidia.com/t/calling-all-juffas-whats-up-with-erfcf-nowadays/262973/4
-
-    float exp_beta_x2 = __expf(-x * x);
-    // (ytz) 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
-    // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
-    float t = 1.0f / (1.0f + 0.3275911f * x);
-    return (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) * t *
-           exp_beta_x2;
-}
-
-double __device__ __forceinline__ d_erfc_beta_r_dr(double beta, double dij) {
-    // -2 beta exp(-(beta dij)^2) / sqrt(pi)
-    double beta_dij = beta * dij;
-    double exp_beta_dij_2 = exp(-beta_dij * beta_dij);
-    return -static_cast<double>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
-}
-
-// same as above, but with exp -> __expf
-float __device__ __forceinline__ d_erfc_beta_r_dr(float beta, float dij) {
-    // (ytz): max ulp error is: 2 + floor(abs(1.16 * x))
-    float beta_dij = beta * dij;
-    float exp_beta_dij_2 = __expf(-beta_dij * beta_dij);
-    return -static_cast<float>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
-}
-
 float __device__ __forceinline__ fast_erfc_and_deriv(float x, float *dedx) {
     // TODO: consider using fasterfc implementations listed in this thread:
     // https://forums.developer.nvidia.com/t/calling-all-juffas-whats-up-with-erfcf-nowadays/262973/4
@@ -181,27 +128,12 @@ float __device__ __forceinline__ fast_erfc_and_deriv(float x, float *dedx) {
     float exp_beta_x2 = __expf(-x * x);
     // (ytz) 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
     // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
-    float t = 1.0f / (1.0f + 0.3275911f * x);
+    float t = __fdividef(1.0f, (1.0f + 0.3275911f * x));
     float erfc_x = (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) *
                    t * exp_beta_x2;
-    dedx[0] = -static_cast<float>(TWO_OVER_SQRT_PI) * exp_beta_x2;
+    constexpr float minus_two_over_sqrt_pi = -static_cast<float>(TWO_OVER_SQRT_PI);
+    dedx[0] = minus_two_over_sqrt_pi * exp_beta_x2;
     return erfc_x;
-}
-
-double __device__ __forceinline__
-real_es_factor(double real_beta, double dij, double inv_dij, double inv_d2ij, double &damping_factor) {
-    double beta_dij = real_beta * dij;
-    double erfc_beta_dij = erfc(beta_dij);
-
-    damping_factor = erfc_beta_dij * switch_fn(dij);
-
-    double dsdr = d_switch_fn_dr(dij);
-    double debd = d_erfc_beta_r_dr(real_beta, dij);
-    double sr = switch_fn(dij);
-
-    double damping_factor_prime = (erfc_beta_dij * dsdr) + (debd * sr);
-    double d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
-    return d_es_dr;
 }
 
 float __device__ __forceinline__
