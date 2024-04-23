@@ -37,10 +37,10 @@ double __device__ __forceinline__ d_switch_fn_dr(double dij) {
     constexpr double pi = static_cast<double>(PI);
 
     // cutoff^-8
-    double inv_cutoff = 1.0 / cutoff;
-    double k2 = inv_cutoff * inv_cutoff;
-    double k4 = k2 * k2;
-    double k8 = k4 * k4;
+    constexpr double inv_cutoff = 1.0 / cutoff;
+    constexpr double k2 = inv_cutoff * inv_cutoff;
+    constexpr double k4 = k2 * k2;
+    constexpr double k8 = k4 * k4;
 
     // dij^-7 and dij^-8
     double dij2 = dij * dij;
@@ -57,8 +57,9 @@ double __device__ __forceinline__ d_switch_fn_dr(double dij) {
     sincos(arg, &sin_arg, &cos_arg);
 
     double cos_arg2 = cos_arg * cos_arg;
+    constexpr double minus_12_pi_k8 = -12 * pi * k8;
 
-    return -12 * pi * dij7 * sin_arg * cos_arg2 * k8;
+    return dij7 * sin_arg * cos_arg2 * minus_12_pi_k8;
 }
 
 double __device__ __forceinline__ d_erfc_beta_r_dr(double beta, double dij) {
@@ -72,15 +73,14 @@ double __device__ __forceinline__
 real_es_factor(double real_beta, double dij, double inv_dij, double inv_d2ij, double &damping_factor) {
     double beta_dij = real_beta * dij;
     double erfc_beta_dij = erfc(beta_dij);
-
-    // write erfc(beta * dij) * switch_fn(dij) into damping_factor
-    damping_factor = erfc_beta_dij * switch_fn(dij);
-
-    double dsdr = d_switch_fn_dr(dij);
-    double debd = d_erfc_beta_r_dr(real_beta, dij);
     double sr = switch_fn(dij);
 
+    // write erfc(beta * dij) * switch_fn(dij) into damping_factor
+    damping_factor = erfc_beta_dij * sr;
+
     // chain rule
+    double dsdr = d_switch_fn_dr(dij);
+    double debd = d_erfc_beta_r_dr(real_beta, dij);
     double damping_factor_prime = (erfc_beta_dij * dsdr) + (debd * sr);
     double d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
     return d_es_dr;
@@ -93,9 +93,10 @@ float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
     // constants
     constexpr float cutoff = 1.2;
     constexpr float pi = static_cast<float>(PI);
+    constexpr float pi_over_2 = 0.5f * pi;
     constexpr float inv_cutoff = 1 / cutoff;
 
-    // cutoff^-1
+    // cutoff^-8
     constexpr float k2 = inv_cutoff * inv_cutoff;
     constexpr float k4 = k2 * k2;
     constexpr float k8 = k4 * k4;
@@ -108,7 +109,7 @@ float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
 
     // arg = (dij/cutoff)^8 * pi/2
     float dij_k8 = dij8 * k8;
-    float arg = 0.5 * pi * dij_k8;
+    float arg = pi_over_2 * dij_k8;
 
     // sin(arg), cos(arg)
     float sin_arg;
@@ -120,7 +121,8 @@ float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
     float cos_arg3 = cos_arg2 * cos_arg;
 
     // write d switch_fn d r
-    dsdr[0] = -12 * pi * dij7 * sin_arg * cos_arg2 * k8;
+    constexpr float minus_12_pi_k8 = -12 * pi * k8;
+    dsdr[0] = minus_12_pi_k8 * dij7 * sin_arg * cos_arg2;
 
     // return switch_fn(dij)
     float sr = cos_arg3;
@@ -134,7 +136,7 @@ float __device__ __forceinline__ fast_erfc_and_deriv(float x, float *dedx) {
     float exp_beta_x2 = __expf(-x * x);
     // (ytz) 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
     // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
-    float t = __fdividef(1.0f, (1.0f + 0.3275911f * x));
+    float t = __frcp_rn(1.0f + 0.3275911f * x);
     float erfc_x = (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) *
                    t * exp_beta_x2;
     constexpr float minus_two_over_sqrt_pi = -static_cast<float>(TWO_OVER_SQRT_PI);
