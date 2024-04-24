@@ -21,6 +21,8 @@ The forcefields that are bundled with Timemachine come from the [Open Forcefield
 * OpenForceField 1.1.0 - [original](https://github.com/openforcefield/openff-forcefields/blob/master/openforcefields/offxml/openff-1.1.0.offxml)
 * OpenForceField 1.3.1 - [original](https://github.com/openforcefield/openff-forcefields/blob/master/openforcefields/offxml/openff-1.3.1.offxml)
 * OpenForceField 2.0.0 - [original](https://github.com/openforcefield/openff-forcefields/blob/master/openforcefields/offxml/openff-2.0.0.offxml)
+* OpenForceField 2.1.0 - [original](https://github.com/openforcefield/openff-forcefields/blob/main/openforcefields/offxml/openff-2.1.0.offxml)
+* OpenForceField 2.2.0 - [original](https://github.com/openforcefield/openff-forcefields/blob/main/openforcefields/offxml/openff-2.2.0.offxml)
 
 ## Forcefield Support
 
