@@ -70,7 +70,7 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
     frames, _ = simulate(
         x_min,
         U_fn,
-        300.0,  #
+        300.0,
         np.ones(num_atoms) * 4.0,
         steps_per_batch,
         samples_per_worker + burn_in_batches,
