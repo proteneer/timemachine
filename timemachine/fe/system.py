@@ -43,18 +43,14 @@ def minimize_scipy(U_fn, x0, return_traj=False, seed=2024):
     def callback_fn(x):
         traj.append(x.reshape(*shape))
 
-    # minimizer_kwargs = {"jac": grad_bfgs_fn, "callback": callback_fn}
-    # res = scipy.optimize.basinhopping(U_flat, x0.reshape(-1), minimizer_kwargs=minimizer_kwargs, seed=seed)
-    res = scipy.optimize.minimize(U_flat, x0.reshape(-1), jac=grad_bfgs_fn, callback=callback_fn)
+    minimizer_kwargs = {"jac": grad_bfgs_fn, "callback": callback_fn}
+    res = scipy.optimize.basinhopping(U_flat, x0.reshape(-1), minimizer_kwargs=minimizer_kwargs, seed=seed)
     xi = res.x.reshape(*shape)
 
     if return_traj:
         return traj
     else:
         return xi
-
-
-from timemachine.constants import DEFAULT_TEMP
 
 
 def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_workers=None, minimize=True):
@@ -74,7 +70,7 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
     frames, _ = simulate(
         x_min,
         U_fn,
-        DEFAULT_TEMP,  #
+        300.0,  #
         np.ones(num_atoms) * 4.0,
         steps_per_batch,
         samples_per_worker + burn_in_batches,
