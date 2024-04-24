@@ -333,7 +333,7 @@ def _deduplicate_all_cores_and_bonds(all_cores, all_bonds):
     return cores, bonds
 
 
-def cb_count(mol_a, mol_b, core):
+def core_bonds_broken_count(mol_a, mol_b, core):
     # count the number of core bonds broken in mol_a when applying the core atom map
     core_a_to_b = dict(core)
     count = 0
@@ -481,7 +481,9 @@ def _get_cores_impl(
             )
 
         valence_mismatches.append(v_count)
-        cb_counts.append(cb_count(mol_a, mol_b, core) + cb_count(mol_b, mol_a, core[:, [1, 0]]))
+        cb_counts.append(
+            core_bonds_broken_count(mol_a, mol_b, core) + core_bonds_broken_count(mol_b, mol_a, core[:, [1, 0]])
+        )
 
     sort_vals = np.array(
         list(zip(cb_counts, valence_mismatches, dists)), dtype=[("cb", "i"), ("valence", "i"), ("rmsd", "f")]
