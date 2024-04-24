@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.lib.custom_ops import Potential
+from timemachine.potentials.types import Params
 
 Frames = TypeVar("Frames")
 Boxes = List[NDArray]
@@ -25,7 +26,7 @@ class EnergyDecomposedState(Generic[Frames]):
 
 def get_batch_u_fns(
     pots: Sequence[Potential],
-    params: Sequence[NDArray],
+    params: Sequence[Params],
     temperature: float = DEFAULT_TEMP,
 ) -> List[Batch_u_fn]:
     """Get a list of functions that take in (coords, boxes), return reduced_potentials

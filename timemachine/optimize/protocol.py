@@ -40,17 +40,18 @@ References
         Gradient-based optimization of high-dimensional protocols, using a reweighting-based estimate of a
         a T.I.-tailored objective, stddev(du/dlambda).
 """
-from typing import Any, Callable, cast
+
+from typing import Callable, cast
 
 import numpy as np
-from jax import jit
+from jax import Array, jit
 from jax import numpy as jnp
 from jax import vmap
 from jax.scipy.special import logsumexp
+from jax.typing import ArrayLike
 from scipy.optimize import bisect
 
 Float = float
-Array = Any  # see https://github.com/google/jax/issues/943
 DistanceFxn = Callable[[Float, Float], Float]
 WorkStddevEstimator = DistanceFxn
 
@@ -99,7 +100,7 @@ def rebalance_initial_protocol(
     return optimized_protocol
 
 
-def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
+def log_weights_from_mixture(u_kn: ArrayLike, f_k: ArrayLike, N_k: ArrayLike) -> Array:
     r"""Assuming
     * K reduced potential energy functions u_k
     * N_k samples from each state e^{-u_k} / Z_k
@@ -111,6 +112,9 @@ def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
     interpret the collection of N = \sum_k N_k samples as coming from a
     mixture of states p(x) = (1 / K) \sum_k e^-u_k / Z_k
     """
+    f_k = jnp.asarray(f_k)
+    u_kn = jnp.asarray(u_kn)
+
     log_q_k = f_k - u_kn.T
     N_k = np.array(N_k, dtype=np.float64)  # may be ints, or in a list...
     log_weights = logsumexp(log_q_k, b=N_k, axis=1)
@@ -121,7 +125,7 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Callable:
     """Given a matrix u_kn[k, n] = u(xs[n], lambdas[k]) produce linear interpolated estimates of u(xs[n], lam)
     at arbitrary new values lam"""
 
-    def u_interp(u_n: Array, lam: Float) -> Float:
+    def u_interp(u_n: ArrayLike, lam: ArrayLike) -> Array:
         return jnp.nan_to_num(jnp.interp(lam, lambdas, u_n), nan=+jnp.inf, posinf=+jnp.inf)
 
     @jit
