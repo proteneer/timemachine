@@ -22,7 +22,7 @@ Array = Any
 from typing import Optional
 
 
-def switch_fn(dij, cutoff=None):
+def switch_fn(dij, cutoff=1.2):
     """heuristic switching function
 
     intended to:
@@ -30,13 +30,12 @@ def switch_fn(dij, cutoff=None):
     * keep "switch_fn(dij) * erfc(beta * dij)" as close as possible to "erfc(beta * dij)"
         for the range dij in [0, 1.2), for beta = 2.0
 
-    not necessarily intended for use with LJ
+    usage notes:
+    * express "no cutoff" as cutoff=np.inf
+    * not necessarily intended for use with LJ
     """
-    if cutoff is not None and jnp.isfinite(cutoff):
-        f = jnp.power(jnp.cos((jnp.pi * jnp.power(dij / cutoff, 8)) / 2), 3)
-        return jnp.where(dij < cutoff, f, 0)
-    else:
-        return jnp.ones_like(dij)
+    f = jnp.power(jnp.cos((jnp.pi * jnp.power(dij / cutoff, 8)) / 2), 3)
+    return jnp.where(dij < cutoff, f, 0)
 
 
 def combining_rule_sigma(sig_i, sig_j):
