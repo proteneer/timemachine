@@ -1349,18 +1349,24 @@ class SingleTopology(AtomMapMixin):
 
         return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
-    def mol(self, lamb, min_bond_k=10.0):
+    def mol(self, lamb, min_bond_k=100.0) -> Chem.Mol:
         """
         Generate an RDKit mol, with the dummy atoms attached to the molecule. Atom types and bond parameters
         guesstimated from the corresponding bond orders.
 
-        Tricky-bits: Inferring bond orders and atom-types.
+        Tricky-bits to figure out later on: Inferring bond orders and atom-types.
 
         Parameters
         ----------
         lamb: float
             Lambda value to use
 
+        min_bond_k: float
+            Minimum force constant required for a bond to be present in the mol
+
+        Returns
+        -------
+        Chem.Mol
         """
         vs = self.setup_intermediate_state(lamb)
         N = self.get_num_atoms()
@@ -1390,31 +1396,12 @@ class SingleTopology(AtomMapMixin):
             mol.AddAtom(atom)
 
         # setup bonds
-        # how do we deal with kekulization/aromatic rings?
-        # bond_mat = np.zeros((N, N))
         for (i, j), (k, b) in zip(vs.bond.potential.idxs, vs.bond.params):
             if k > min_bond_k:
-                # if src/dst bond orders are the same?
-                mol.AddBond(int(i), int(j))
-                # if src/dst bond orders are different then we need to look at lambda?
+                mol.AddBond(int(i), int(j), Chem.BondType.SINGLE)
 
-        return mol
-        # bond_list = []
-        # bond_params = []
-        # for bond_lengths in bond_mat:
-
-        #     b0s = []
-        #     nbs = []
-        #     for bond_idx, b0 in enumerate(bond_lengths):
-        #         if b0 > 0:
-        #             nbs.append(bond_idx)
-        #             b0s.append(b0)
-
-        #     bond_list.append(nbs)
-        #     bond_params.append(b0s)
-
-        # print(bond_list)
-        # print(bond_params)
+        # make read-only
+        return Chem.Mol(mol)
 
     def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
         """
