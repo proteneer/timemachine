@@ -96,6 +96,7 @@ def test_st_mol():
 
     # at lambda=0,lambda=0.01: bond (6,8) should be missing, bond (3,4) should be present
     # at lambda=99,lambda=1: bond (6,8) should be present, and bond (3,4) should be missing
+    # near lambda=0.5, both bonds are present (this is implementation dependent, and may break later on)
     ff = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, ff)
 
@@ -108,6 +109,11 @@ def test_st_mol():
         mol = st.mol(lamb)
         assert mol.GetBondBetweenAtoms(6, 8) is not None
         assert mol.GetBondBetweenAtoms(3, 4) is None
+
+    for lamb in [0.49, 0.5, 0.51]:
+        mol = st.mol(lamb)
+        assert mol.GetBondBetweenAtoms(6, 8) is not None
+        assert mol.GetBondBetweenAtoms(3, 4) is not None
 
     x_a = get_romol_conf(mol_a)
     x_b = get_romol_conf(mol_b)
