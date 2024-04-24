@@ -88,7 +88,7 @@ real_es_factor(double real_beta, double dij, double inv_dij, double inv_d2ij, do
 
 // f32 code path merges (1) switch_fn and its deriv into switch_fn_and_deriv
 // and (2) a fast erfc approximation and its deriv into fast_erfc_and_deriv
-float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
+float __device__ __forceinline__ switch_fn_and_deriv(float dij, float &dsdr) {
 
     // constants
     constexpr float cutoff = 1.2;
@@ -122,14 +122,14 @@ float __device__ __forceinline__ switch_fn_and_deriv(float dij, float *dsdr) {
 
     // write d switch_fn d r
     constexpr float minus_12_pi_k8 = -12 * pi * k8;
-    dsdr[0] = minus_12_pi_k8 * dij7 * sin_arg * cos_arg2;
+    dsdr = minus_12_pi_k8 * dij7 * sin_arg * cos_arg2;
 
     // return switch_fn(dij)
     float sr = cos_arg3;
     return sr;
 }
 
-float __device__ __forceinline__ fast_erfc_and_deriv(float x, float *dedx) {
+float __device__ __forceinline__ fast_erfc_and_deriv(float x, float &dedx) {
     // TODO: consider using fasterfc implementations listed in this thread:
     // https://forums.developer.nvidia.com/t/calling-all-juffas-whats-up-with-erfcf-nowadays/262973/4
 
@@ -140,7 +140,7 @@ float __device__ __forceinline__ fast_erfc_and_deriv(float x, float *dedx) {
     float erfc_x = (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) *
                    t * exp_beta_x2;
     constexpr float minus_two_over_sqrt_pi = -static_cast<float>(TWO_OVER_SQRT_PI);
-    dedx[0] = minus_two_over_sqrt_pi * exp_beta_x2;
+    dedx = minus_two_over_sqrt_pi * exp_beta_x2;
     return erfc_x;
 }
 
@@ -151,13 +151,13 @@ real_es_factor(float real_beta, float dij, float inv_dij, float inv_d2ij, float 
     // f(dij) = erfc(beta * dij)
     // ebd = f(dij), debd = f'(dij)
     float debd;
-    float ebd = fast_erfc_and_deriv(beta_dij, &debd);
+    float ebd = fast_erfc_and_deriv(beta_dij, debd);
     debd = real_beta * debd;
 
     // g(dij) = switch_fn(dij)
     // sr = g(dij), dsdr = g'(dij)
     float dsdr;
-    float sr = switch_fn_and_deriv(dij, &dsdr);
+    float sr = switch_fn_and_deriv(dij, dsdr);
 
     damping_factor = ebd * sr;
     float damping_factor_prime = (ebd * dsdr) + (debd * sr);
