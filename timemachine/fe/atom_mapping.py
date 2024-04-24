@@ -333,6 +333,21 @@ def _deduplicate_all_cores_and_bonds(all_cores, all_bonds):
     return cores, bonds
 
 
+def core_bonds_broken_count(mol_a, mol_b, core):
+    # count the number of core bonds broken in mol_a when applying the core atom map
+    core_a_to_b = dict(core)
+    count = 0
+    for bond in mol_a.GetBonds():
+        src_a, dst_a = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        if src_a in core_a_to_b and dst_a in core_a_to_b:
+            if mol_b.GetBondBetweenAtoms(int(core_a_to_b[src_a]), int(core_a_to_b[dst_a])):
+                pass
+            else:
+                count += 1
+
+    return count
+
+
 def _get_cores_impl(
     mol_a,
     mol_b,
@@ -447,15 +462,36 @@ def _get_cores_impl(
     all_cores, _ = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
 
     dists = []
+    valence_mismatches = []
+    cb_counts = []
+
     for core in all_cores:
         r_i = conf_a[core[:, 0]]
         r_j = conf_b[core[:, 1]]
+
+        # distance score
         r2_ij = np.sum(np.power(r_i - r_j, 2))
         rmsd = np.sqrt(r2_ij / len(core))
         dists.append(rmsd)
 
+        v_count = 0
+        for idx, jdx in core:
+            v_count += abs(
+                mol_a.GetAtomWithIdx(int(idx)).GetTotalValence() - mol_b.GetAtomWithIdx(int(jdx)).GetTotalValence()
+            )
+
+        valence_mismatches.append(v_count)
+        cb_counts.append(
+            core_bonds_broken_count(mol_a, mol_b, core) + core_bonds_broken_count(mol_b, mol_a, core[:, [1, 0]])
+        )
+
+    sort_vals = np.array(
+        list(zip(cb_counts, valence_mismatches, dists)), dtype=[("cb", "i"), ("valence", "i"), ("rmsd", "f")]
+    )
     sorted_cores = []
-    for p in np.argsort(dists, kind="stable"):
+
+    sort_order = np.argsort(sort_vals, order=["cb", "valence", "rmsd"])
+    for p in sort_order:
         sorted_cores.append(all_cores[p])
 
     # undo the sort
