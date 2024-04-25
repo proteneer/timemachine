@@ -33,7 +33,11 @@ def switch_fn(dij, cutoff=1.2):
     usage notes:
     * express "no cutoff" as cutoff=np.inf
     * not necessarily intended for use with LJ
+
+    TODO
+    * respond to user-specified cutoff
     """
+    cutoff = 1.2  # NOTE: intentionally overrides user input for now
     f = jnp.power(jnp.cos((jnp.pi * jnp.power(dij / cutoff, 8)) / 2), 3)
     return jnp.where(dij < cutoff, f, 0)
 
