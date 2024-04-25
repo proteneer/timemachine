@@ -14,8 +14,8 @@ def test_nonbonded_reference_jittable(num_atom_idxs, rng: np.random.Generator):
 
     U_ref = Nonbonded(
         N,
-        exclusion_idxs=jnp.zeros((0,)),
-        scale_factors=jnp.zeros((0, 2)),
+        exclusion_idxs=np.zeros((0,), dtype=np.int32),
+        scale_factors=np.zeros((0, 2)),
         beta=1.0,
         cutoff=0.1,
         atom_idxs=np.arange(num_atom_idxs) if num_atom_idxs is not None else None,
