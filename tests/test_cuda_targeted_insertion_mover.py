@@ -995,7 +995,7 @@ def test_moves_with_three_waters(
     )
 
 
-@pytest.mark.parametrize("radius", [0.95])
+@pytest.mark.parametrize("radius", [1.1])
 @pytest.mark.parametrize(
     "proposals_per_move,batch_size,total_num_proposals",
     [(10_000, 1, 200_000), (10_000, 200, 200_000)],
