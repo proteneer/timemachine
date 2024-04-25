@@ -440,6 +440,7 @@ def get_water_sampler_params(initial_state: InitialState) -> NDArray:
     assert isinstance(summed_pot.potentials[ixn_group_idx], NonbondedInteractionGroup)
     water_params = summed_pot.params_init[ixn_group_idx]
     assert water_params.shape[1] == 4
+    water_params = np.asarray(water_params)
     return water_params
 
 

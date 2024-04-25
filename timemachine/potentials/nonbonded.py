@@ -1,9 +1,10 @@
-from typing import Any
+from typing import Optional, Tuple, cast
 
 import jax.numpy as jnp
 import numpy as np
-from jax import jit, vmap
+from jax import Array, jit, vmap
 from jax.scipy.special import erfc
+from jax.typing import ArrayLike
 from numpy.typing import NDArray
 from scipy.special import binom
 
@@ -16,10 +17,6 @@ from timemachine.potentials.jax_utils import (
     pairwise_distances,
     process_traj_in_chunks,
 )
-
-Array = Any
-
-from typing import Optional
 
 
 def switch_fn(dij, cutoff=1.2):
@@ -88,7 +85,7 @@ def nonbonded_block_unsummed(
     params_j: NDArray,
     beta: float,
     cutoff: float,
-):
+) -> Array:
     """
     This is a modified version of `nonbonded` that computes a block of
     NxM interactions between two sets of particles x_i and x_j. It is assumed that
@@ -149,7 +146,7 @@ def nonbonded_block_unsummed(
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
     nrgs = jnp.where(dij < cutoff, es + lj, 0)
-    return nrgs
+    return cast(Array, nrgs)
 
 
 def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
@@ -350,7 +347,7 @@ def nonbonded_on_specific_pairs(
     beta: float,
     cutoff: Optional[float] = None,
     rescale_mask=None,
-):
+) -> Tuple[Array, Array]:
     """See `nonbonded` docstring for more details
 
     Notes
@@ -361,7 +358,7 @@ def nonbonded_on_specific_pairs(
     """
 
     if len(pairs) == 0:
-        return np.zeros(1), np.zeros(1)
+        return jnp.zeros(1), jnp.zeros(1)
 
     inds_l, inds_r = pairs.T
 
@@ -397,7 +394,10 @@ def nonbonded_on_specific_pairs(
         rescale_electrostatics = rescale_mask[:, 0]
         electrostatics = jnp.where(rescale_electrostatics != 0, electrostatics * rescale_electrostatics, 0)
 
-    return vdW, electrostatics
+    vdW_arr = cast(Array, vdW)
+    electrostatics_arr = cast(Array, electrostatics)
+
+    return vdW_arr, electrostatics_arr
 
 
 def nonbonded_on_precomputed_pairs(
@@ -494,7 +494,7 @@ def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
 #   TODO: avoid repetition between this and lennard-jones
 
 
-def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=jnp.inf) -> float:
+def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=jnp.inf) -> Array:
     """Precompute part of (sum_i q_i * q_j / d_ij * rxn_field(d_ij)) that does not depend on q_i
 
     Parameters
@@ -577,7 +577,7 @@ def coulomb_prefactors_on_traj(
     return process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
 
 
-def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> float:
+def coulomb_interaction_group_energy(q_ligand: ArrayLike, q_prefactors: ArrayLike) -> Array:
     """Assuming q_prefactors = coulomb_prefactors_on_snapshot(x_ligand, ...),
     cheaply compute the energy of ligand-environment interaction group
 

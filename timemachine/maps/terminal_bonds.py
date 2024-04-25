@@ -204,7 +204,7 @@ class TerminalMappableState:
             interval = self.intervals[i]
             bond_valid.append((r <= interval.upper) * (r >= interval.lower))
 
-        return jnp.array(bond_valid).all()
+        return jnp.array(bond_valid).all().item()
 
     @classmethod
     def from_harmonic_bond_params(cls, bond_idxs, params, temperature=DEFAULT_TEMP, sigma_thresh=DEFAULT_SIGMA_THRESH):

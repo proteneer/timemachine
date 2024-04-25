@@ -4,7 +4,6 @@ from typing import List, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import NDArray
-from PIL import Image
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
@@ -214,7 +213,7 @@ def plot_atom_mapping_grid(
     core: NDArray,
     num_rotations: int = 5,
     seed: int = 1234,
-) -> Image:
+):
     mol_a_3d = recenter_mol(mol_a)
     mol_b_3d = recenter_mol(mol_b)
 
