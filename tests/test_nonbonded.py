@@ -176,7 +176,10 @@ class TestNonbondedWater(GradientTest):
         # (ytz): note the ordering should be from large box to small box. though in the current code
         # the rebuild is triggered as long as the box *changes*.
         for test_box in [big_box, box]:
-            for precision, rtol, atol in [(np.float64, 1e-8, 1e-10), (np.float32, 1e-4, 3e-5)]:
+            for precision, rtol, atol, du_dp_rtol, du_dp_atol in [
+                (np.float64, 1e-8, 1e-10, 1e-6, 1e-9),
+                (np.float32, 1e-4, 3e-5, 1e-4, 3e-5),
+            ]:
                 self.compare_forces(
                     host_conf,
                     test_bp.params,
@@ -185,6 +188,8 @@ class TestNonbondedWater(GradientTest):
                     test_bp.potential.to_gpu(precision),
                     rtol=rtol,
                     atol=atol,
+                    du_dp_rtol=du_dp_rtol,
+                    du_dp_atol=du_dp_atol,
                 )
 
 
