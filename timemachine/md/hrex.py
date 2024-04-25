@@ -1,7 +1,11 @@
 from dataclasses import dataclass
 from typing import Callable, Generic, List, NewType, Optional, Sequence, Tuple, TypeVar
 
+import jax
+import jax.numpy as jnp
 import numpy as np
+from jax import Array
+from jax.typing import ArrayLike
 from numpy.typing import NDArray
 
 from timemachine.md.moves import MixtureOfMoves, MonteCarloMove
@@ -34,6 +38,52 @@ class NeighborSwapMove(MonteCarloMove[List[Replica]]):
         log_acceptance_probability = np.minimum(log_q_diff, 0.0)
 
         return proposed_state, log_acceptance_probability
+
+
+@jax.jit
+def run_neighbor_swaps(
+    keys: Array,
+    replica_idx_by_state: ArrayLike,
+    neighbor_pairs: ArrayLike,
+    log_q_kl: ArrayLike,
+) -> Tuple[Array, Array, Array]:
+    replica_idx_by_state = jnp.asarray(replica_idx_by_state)
+    neighbor_pairs = jnp.asarray(neighbor_pairs)
+    log_q_kl = jnp.asarray(log_q_kl)
+
+    def run_neighbor_swap(carry: Tuple[Array, Array, Array], key: Array) -> Tuple[Tuple[Array, Array, Array], None]:
+        replica_idx_by_state, proposed, accepted = carry
+
+        key, subkey = jax.random.split(key)
+        pair_idx = jax.random.choice(subkey, len(neighbor_pairs))
+        s_a, s_b = neighbor_pairs[pair_idx]
+        proposed_next = proposed.at[pair_idx].add(1)
+
+        r_a = replica_idx_by_state[s_a]
+        r_b = replica_idx_by_state[s_b]
+        log_q_diff = log_q_kl[r_a, s_b] + log_q_kl[r_b, s_a] - log_q_kl[r_a, s_a] - log_q_kl[r_b, s_b]
+
+        log_acceptance_probability = jnp.minimum(log_q_diff, 0.0)
+        acceptance_probability = jnp.exp(log_acceptance_probability)
+        is_accepted = jax.random.bernoulli(key, acceptance_probability)
+
+        def accept():
+            replica_idx_by_state_next = replica_idx_by_state.at[s_a].set(r_b).at[s_b].set(r_a)
+            accepted_next = accepted.at[pair_idx].add(1)
+            return (replica_idx_by_state_next, proposed_next, accepted_next)
+
+        def reject():
+            return (replica_idx_by_state, proposed_next, accepted)
+
+        result = jax.lax.cond(is_accepted, accept, reject)
+
+        return (result, None)
+
+    n_pairs, _ = neighbor_pairs.shape
+    init = (replica_idx_by_state, jnp.zeros(n_pairs), jnp.zeros(n_pairs))
+    (replica_idx_by_state, proposed, accepted), _ = jax.lax.scan(run_neighbor_swap, init, keys)
+
+    return (replica_idx_by_state, proposed, accepted)
 
 
 Samples = TypeVar("Samples")
@@ -74,6 +124,26 @@ class HREX(Generic[Replica]):
         replica_idx_by_state = move.move_n(list(self.replica_idx_by_state), n_swap_attempts)
 
         fraction_accepted_by_pair = list(zip(move.n_accepted_by_move, move.n_proposed_by_move))
+
+        return HREX(self.replicas, replica_idx_by_state), fraction_accepted_by_pair
+
+    def attempt_neighbor_swaps_fast(
+        self,
+        neighbor_pairs: Sequence[Tuple[StateIdx, StateIdx]],
+        log_q_kl: ArrayLike,
+        n_swap_attempts: int,
+    ) -> Tuple["HREX[Replica]", List[Tuple[int, int]]]:
+        # initialize jax rng key from numpy global rng state
+        seed = np.random.randint(np.iinfo(np.uint32).max)
+        key = jax.random.key(seed)
+        keys = jax.random.split(key, n_swap_attempts)
+
+        replica_idx_by_state_, proposed, accepted = run_neighbor_swaps(
+            keys, jnp.asarray(self.replica_idx_by_state), jnp.asarray(neighbor_pairs), log_q_kl
+        )
+
+        replica_idx_by_state = replica_idx_by_state_.tolist()
+        fraction_accepted_by_pair = list(zip(accepted.tolist(), proposed.tolist()))
 
         return HREX(self.replicas, replica_idx_by_state), fraction_accepted_by_pair
 
@@ -290,8 +360,12 @@ def run_hrex(
 
     for n_samples_batch in batches(n_samples, n_samples_per_iter):
         log_q_fn = get_log_q_fn(hrex.replicas)
-        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(
-            neighbor_pairs, log_q_fn, n_swap_attempts_per_iter
+        log_q_kl = jnp.array(
+            [[log_q_fn(ReplicaIdx(r), StateIdx(s)) for s in range(n_replicas)] for r in range(n_replicas)]
+        )
+
+        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
+            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter
         )
 
         sample_replica_ = lambda replica, state_idx: sample_replica(replica, state_idx, n_samples_batch)

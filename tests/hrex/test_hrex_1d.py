@@ -112,7 +112,7 @@ def run_hrex_with_local_proposal(
         )
 
         def log_q(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
-            return log_q_matrix[replica_idx, state_idx]
+            return log_q_matrix[replica_idx, state_idx].item()
 
         return log_q
 
