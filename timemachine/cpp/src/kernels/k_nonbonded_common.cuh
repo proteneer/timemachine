@@ -137,8 +137,8 @@ float __device__ __forceinline__ fast_erfc_and_deriv(float x, float &dedx) {
     // (ytz) 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
     // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
     float t = __frcp_rn(1.0f + 0.3275911f * x);
-    float erfc_x = (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) *
-                   t * exp_beta_x2;
+    float erfc_x =
+        (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) * t * exp_x2;
     constexpr float minus_two_over_sqrt_pi = -static_cast<float>(TWO_OVER_SQRT_PI);
     dedx = minus_two_over_sqrt_pi * exp_x2;
     return erfc_x;
