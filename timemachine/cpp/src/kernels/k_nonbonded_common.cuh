@@ -16,6 +16,9 @@ static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
 double __device__ __forceinline__ switch_fn(double dij) {
     // constants
     constexpr double cutoff = 1.2;
+    if (dij >= cutoff) {
+        return 0.0;
+    }
     constexpr double inv_cutoff = 1 / cutoff;
     constexpr double pi = static_cast<double>(PI);
 
@@ -35,6 +38,10 @@ double __device__ __forceinline__ d_switch_fn_dr(double dij) {
     // constants
     constexpr double cutoff = 1.2;
     constexpr double pi = static_cast<double>(PI);
+
+    if (dij >= cutoff) {
+        return 0.0;
+    }
 
     // cutoff^-8
     constexpr double inv_cutoff = 1.0 / cutoff;
@@ -95,6 +102,11 @@ float __device__ __forceinline__ switch_fn_and_deriv(float dij, float &dsdr) {
     constexpr float pi = static_cast<float>(PI);
     constexpr float pi_over_2 = 0.5f * pi;
     constexpr float inv_cutoff = 1 / cutoff;
+
+    if (dij >= cutoff) {
+        dsdr = 0.0f;
+        return 0.0f;
+    }
 
     // cutoff^-8
     constexpr float k2 = inv_cutoff * inv_cutoff;
