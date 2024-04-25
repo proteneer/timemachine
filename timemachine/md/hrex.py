@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable, Generic, List, NewType, Optional, Sequence, Tuple, TypeVar
+from typing import Any, Callable, Generic, List, NewType, Optional, Sequence, Tuple, TypeVar
 
 import jax
 import jax.numpy as jnp
@@ -15,6 +15,8 @@ Replica = TypeVar("Replica")
 
 StateIdx = NewType("StateIdx", int)
 ReplicaIdx = NewType("ReplicaIdx", int)
+
+PRNGKeyArray = Any
 
 
 class NeighborSwapMove(MonteCarloMove[List[Replica]]):
@@ -51,7 +53,9 @@ def run_neighbor_swaps(
     neighbor_pairs = jnp.asarray(neighbor_pairs)
     log_q_kl = jnp.asarray(log_q_kl)
 
-    def run_neighbor_swap(carry: Tuple[Array, Array, Array], key: Array) -> Tuple[Tuple[Array, Array, Array], None]:
+    def run_neighbor_swap(
+        carry: Tuple[Array, Array, Array], key: PRNGKeyArray
+    ) -> Tuple[Tuple[Array, Array, Array], None]:
         replica_idx_by_state, proposed, accepted = carry
 
         key, subkey = jax.random.split(key)
