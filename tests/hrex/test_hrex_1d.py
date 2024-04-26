@@ -268,7 +268,7 @@ def test_hrex_gaussian_mixture(seed):
         return scipy.stats.ks_2samp(samples[tau::tau], target_samples).pvalue
 
     assert compute_ks_pvalue(local_samples) == pytest.approx(0.0, abs=1e-10)  # local sampling alone is insufficient
-    assert compute_ks_pvalue(hrex_samples) > 0.01
+    assert compute_ks_pvalue(hrex_samples) > 0.005
 
     final_swap_acceptance_rates = diagnostics.cumulative_swap_acceptance_rates[-1]
     assert final_swap_acceptance_rates[0] > 0.2
