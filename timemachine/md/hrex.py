@@ -43,16 +43,12 @@ class NeighborSwapMove(MonteCarloMove[List[Replica]]):
 
 
 @jax.jit
-def run_neighbor_swaps(
+def _run_neighbor_swaps(
     keys: Array,
-    replica_idx_by_state: ArrayLike,
-    neighbor_pairs: ArrayLike,
-    log_q_kl: ArrayLike,
+    replica_idx_by_state: Array,
+    neighbor_pairs: Array,
+    log_q_kl: Array,
 ) -> Tuple[Array, Array, Array]:
-    replica_idx_by_state = jnp.asarray(replica_idx_by_state)
-    neighbor_pairs = jnp.asarray(neighbor_pairs)
-    log_q_kl = jnp.asarray(log_q_kl)
-
     def run_neighbor_swap(
         carry: Tuple[Array, Array, Array], key: PRNGKeyArray
     ) -> Tuple[Tuple[Array, Array, Array], None]:
@@ -142,8 +138,8 @@ class HREX(Generic[Replica]):
         key = jax.random.key(seed)
         keys = jax.random.split(key, n_swap_attempts)
 
-        replica_idx_by_state_, proposed, accepted = run_neighbor_swaps(
-            keys, jnp.asarray(self.replica_idx_by_state), jnp.asarray(neighbor_pairs), log_q_kl
+        replica_idx_by_state_, proposed, accepted = _run_neighbor_swaps(
+            keys, jnp.asarray(self.replica_idx_by_state), jnp.asarray(neighbor_pairs), jnp.asarray(log_q_kl)
         )
 
         replica_idx_by_state = replica_idx_by_state_.tolist()
