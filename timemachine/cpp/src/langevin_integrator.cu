@@ -37,6 +37,9 @@ LangevinIntegrator<RealType>::LangevinIntegrator(
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 
     cudaSafeMalloc(&d_du_dx_, N_ * 3 * sizeof(*d_du_dx_));
+
+    // Memset the forces to zero, assumes that k_update_forward_baoab will zero after every call
+    gpuErrchk(cudaMemset(d_du_dx_, 0, N_ * 3 * sizeof(*d_du_dx_)));
 }
 template <typename RealType> LangevinIntegrator<RealType>::~LangevinIntegrator() {
     gpuErrchk(cudaFree(d_cbs_));
@@ -56,9 +59,7 @@ void LangevinIntegrator<RealType>::step_fwd(
     double *d_box_t,
     unsigned int *d_idxs,
     cudaStream_t stream) {
-    const int D = 3;
-
-    gpuErrchk(cudaMemsetAsync(d_du_dx_, 0, N_ * D * sizeof(*d_du_dx_), stream));
+    constexpr int D = 3;
 
     runner_.execute_potentials(
         bps,
