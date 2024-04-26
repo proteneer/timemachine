@@ -120,7 +120,7 @@ def _run_neighbor_swaps(
 Samples = TypeVar("Samples")
 
 
-def get_jax_random_key() -> Array:
+def get_jax_random_key() -> PRNGKeyArray:
     """Return a JAX PRNG key initialized from global numpy random state"""
     seed = np.random.randint(np.iinfo(np.uint32).max)
     key = jax.random.key(seed)
