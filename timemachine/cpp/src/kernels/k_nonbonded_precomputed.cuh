@@ -16,7 +16,7 @@ void __global__ k_nonbonded_precomputed(
     const double *__restrict__ box,    // box vectors
     const int *__restrict__ pair_idxs, // [M, 2] pair-list of atoms
     const double beta,
-    const double cutoff,
+    const RealType cutoff_squared,
     unsigned long long *__restrict__ du_dx,
     unsigned long long *__restrict__ du_dp,
     __int128 *__restrict__ u_buffer) {
@@ -38,6 +38,7 @@ void __global__ k_nonbonded_precomputed(
     unsigned long long g_dw_ij = 0;
 
     int atom_i_idx = pair_idxs[pair_idx * 2 + 0];
+    int atom_j_idx = pair_idxs[pair_idx * 2 + 1];
 
     RealType ci_x = coords[atom_i_idx * 3 + 0];
     RealType ci_y = coords[atom_i_idx * 3 + 1];
@@ -47,8 +48,6 @@ void __global__ k_nonbonded_precomputed(
     unsigned long long gi_y = 0;
     unsigned long long gi_z = 0;
 
-    int atom_j_idx = pair_idxs[pair_idx * 2 + 1];
-
     RealType cj_x = coords[atom_j_idx * 3 + 0];
     RealType cj_y = coords[atom_j_idx * 3 + 1];
     RealType cj_z = coords[atom_j_idx * 3 + 2];
@@ -56,9 +55,6 @@ void __global__ k_nonbonded_precomputed(
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
     unsigned long long gj_z = 0;
-
-    RealType real_cutoff = static_cast<RealType>(cutoff);
-    RealType cutoff_squared = real_cutoff * real_cutoff;
 
     RealType box_x = box[0 * 3 + 0];
     RealType box_y = box[1 * 3 + 1];
@@ -121,13 +117,19 @@ void __global__ k_nonbonded_precomputed(
         }
 
         if (eps_ij != 0 && sig_ij != 0) {
+            RealType d_ij_2 = d_ij * d_ij;
+            RealType d_ij_4 = d_ij_2 * d_ij_2;
+            RealType d_ij_6 = d_ij_4 * d_ij_2;
 
-            RealType d_ij_6 = pow(d_ij, 6);
-            RealType sig_ij_6 = pow(sig_ij, 6);
+            RealType sig_ij_2 = sig_ij * sig_ij;
+            RealType sig_ij_4 = sig_ij_2 * sig_ij_2;
+            RealType sig_ij_6 = sig_ij_4 * sig_ij_2;
             RealType du_de;
             if (u_buffer || du_dp) {
-                RealType sig_inv_dij_6 = pow(sig_ij * inv_dij, 6);
-                du_de = 4 * (sig_inv_dij_6 - 1) * sig_inv_dij_6;
+                RealType sig_inv_dij_2 = (sig_ij * inv_dij) * (sig_ij * inv_dij);
+                RealType sig_inv_dij_4 = sig_inv_dij_2 * sig_inv_dij_2;
+                RealType sig_inv_dij_6 = sig_inv_dij_4 * sig_inv_dij_2;
+                du_de = static_cast<RealType>(4.0) * (sig_inv_dij_6 - 1) * sig_inv_dij_6;
                 if (u_buffer) {
                     // energies
                     RealType nrg = eps_ij * du_de;
@@ -137,7 +139,8 @@ void __global__ k_nonbonded_precomputed(
 
             if (du_dx || du_dp) {
                 RealType d_ij_12 = d_ij_6 * d_ij_6;
-                RealType du_dr = eps_ij * 24 * sig_ij_6 * (d_ij_6 - 2 * sig_ij_6) / (d_ij_12 * d_ij);
+                RealType du_dr = eps_ij * static_cast<RealType>(24.0) * sig_ij_6 *
+                                 (d_ij_6 - static_cast<RealType>(2.0) * sig_ij_6) / (d_ij_12 * d_ij);
 
                 RealType force_prefactor = du_dr * inv_dij;
                 if (du_dx) {
@@ -159,7 +162,8 @@ void __global__ k_nonbonded_precomputed(
                 }
 
                 if (du_dp) {
-                    RealType du_ds = -24 * eps_ij * pow(sig_ij, 5) * (d_ij_6 - 2 * sig_ij_6) / d_ij_12;
+                    RealType du_ds = static_cast<RealType>(-24.0) * eps_ij * (sig_ij_4 * sig_ij) *
+                                     (d_ij_6 - static_cast<RealType>(2.0) * sig_ij_6) / d_ij_12;
 
                     g_eps_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(du_de);
                     g_sig_ij += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(du_ds);
