@@ -20,6 +20,8 @@ PRNGKeyArray = Any
 
 
 class NeighborSwapMove(MonteCarloMove[List[Replica]]):
+    """Move that attempts to swap replicas at a fixed pair of states."""
+
     def __init__(self, log_q: Callable[[Replica, StateIdx], float], s_a: StateIdx, s_b: StateIdx):
         super().__init__()
         self.log_q = log_q
@@ -49,6 +51,35 @@ def _run_neighbor_swaps(
     neighbor_pairs: Array,
     log_q_kl: Array,
 ) -> Tuple[Array, Array, Array]:
+    """Efficient implementation of a batch of neighbor swap moves.
+
+    Conceptually equivalent to
+
+    .. code-block:: python
+        MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
+
+    but implemented in JAX for performance.
+
+    Parameters
+    ----------
+    keys : Array
+        array of N PRNG keys, where N is the number of swap attempts to perform
+
+    replica_idx_by_state : Array
+        (n_states,) array of replica indices by state
+
+    neighbor_pairs : Array
+        (n_pairs, 2) array representing allowed swaps
+
+    log_q_kl : Array
+        (n_replicas, n_states) array with the (r, s) element giving the unnormalized probability of replica r in state s
+
+    Returns
+    -------
+    Tuple[Array, Array, Array]
+        Final replica_idx_by_state, number of proposals by neighbor pair, number of accepted moves by neighbor pair
+    """
+
     def run_neighbor_swap(
         carry: Tuple[Array, Array, Array], key: PRNGKeyArray
     ) -> Tuple[Tuple[Array, Array, Array], None]:
@@ -119,6 +150,27 @@ class HREX(Generic[Replica]):
         log_q: Callable[[ReplicaIdx, StateIdx], float],
         n_swap_attempts: int,
     ) -> Tuple["HREX[Replica]", List[Tuple[int, int]]]:
+        """Run a batch of swap attempts.
+
+        See :py:meth:`attempt_neighbor_swaps_fast` for a more efficient implementation with a similar signature.
+        Note that these methods do not generate compatible random sequences.
+
+        Parameters
+        ----------
+        neighbor_pairs : Sequence[Tuple[StateIdx, StateIdx]]
+            pairs of states between which to attempt swaps
+
+        log_q : Callable[[ReplicaIdx, StateIdx], float]
+            function to compute the unnormalized probability of a given replica in a given state
+
+        n_swap_attempts : int
+            number of individual swap attempts, each between a randomly-selected neighbor pair
+
+        Returns
+        -------
+        Tuple[HREX[Replica], List[Tuple[int, int]]]
+            Updated HREX state, list of (accepted, proposed) counts by neighbor pair
+        """
         move = MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
 
         replica_idx_by_state = move.move_n(list(self.replica_idx_by_state), n_swap_attempts)
@@ -133,6 +185,28 @@ class HREX(Generic[Replica]):
         log_q_kl: ArrayLike,
         n_swap_attempts: int,
     ) -> Tuple["HREX[Replica]", List[Tuple[int, int]]]:
+        """Run a batch of swap attempts.
+
+        See :py:meth:`attempt_neighbor_swaps` for a (typically slower) reference version.
+        Note that these methods do not generate compatible random sequences.
+
+        Parameters
+        ----------
+        neighbor_pairs : Sequence[Tuple[StateIdx, StateIdx]]
+            pairs of states between which to attempt swaps
+
+        log_q_kl : ArrayLike
+            (n_replicas, n_states) array with the (r, s) element giving the unnormalized probability of replica r in state s
+
+        n_swap_attempts : int
+            number of individual swap attempts, each between a randomly-selected neighbor pair
+
+        Returns
+        -------
+        Tuple[HREX[Replica], List[Tuple[int, int]]]
+            Updated HREX state, list of (accepted, proposed) counts by neighbor pair
+        """
+
         # initialize jax rng key from numpy global rng state
         seed = np.random.randint(np.iinfo(np.uint32).max)
         key = jax.random.key(seed)
