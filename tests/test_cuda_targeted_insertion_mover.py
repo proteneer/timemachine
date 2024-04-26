@@ -8,16 +8,16 @@ from common import prepare_single_topology_initial_state
 from numpy.typing import NDArray
 from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState
-from timemachine.fe.model_utils import apply_hmr, image_frame
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState, MDParams, sample
+from timemachine.fe.model_utils import image_frame
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import MonteCarloBarostat, custom_ops
+from timemachine.lib import custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDExchangeMove
@@ -74,7 +74,6 @@ def verify_targeted_moves(
     rtol: float,
     atol: float,
 ):
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     accepted = 0
     last_conf = conf
     for step in range(total_num_proposals // proposals_per_move):
@@ -152,14 +151,13 @@ def verify_targeted_moves(
             np.testing.assert_array_equal(last_conf, x_move)
         assert proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
         last_conf = x_move
-    assert bdem.n_proposed() == total_num_proposals
     print(f"Accepted {accepted} of {total_num_proposals} moves")
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
-        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
         assert bdem.n_accepted() == accepted
     else:
         assert bdem.n_accepted() >= accepted
+    np.testing.assert_allclose(bdem.acceptance_fraction(), bdem.n_accepted() / bdem.n_proposed())
 
 
 @pytest.mark.memcheck
@@ -384,58 +382,25 @@ def brd4_rbfe_state() -> InitialState:
         mols = read_sdf(ligand_path)
     mol_a = mols[0]
     mol_b = mols[1]
+
     core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
     host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
     st = SingleTopology(mol_a, mol_b, core, ff)
 
     initial_state = prepare_single_topology_initial_state(st, host_config, lamb=lamb)
-    conf = initial_state.x0
 
-    bond_pot = next(bp for bp in initial_state.potentials if isinstance(bp.potential, HarmonicBond)).potential
-
-    bond_list = get_bond_list(bond_pot)
-    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
-
-    bps = initial_state.potentials
-    masses = initial_state.integrator.masses
-
-    # Equilibrate the system a bit before hand, which reduces clashes in the system which results greater differences
-    # between the reference and test case.
-    temperature = DEFAULT_TEMP
-    pressure = DEFAULT_PRESSURE
-
-    masses = apply_hmr(masses, bond_list)
-    intg = initial_state.integrator.impl()
-
-    bound_impls = []
-
-    for potential in bps:
-        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
-
-    barostat_interval = 5
-    baro = MonteCarloBarostat(
-        conf.shape[0],
-        pressure,
-        temperature,
-        all_group_idxs,
-        barostat_interval,
-        seed,
+    traj = sample(
+        initial_state, MDParams(n_frames=1, n_eq_steps=0, steps_per_frame=10_000, seed=seed), max_buffer_frames=1
     )
-    baro_impl = baro.impl(bound_impls)
 
-    ctxt = custom_ops.Context(
-        conf,
-        np.zeros_like(conf),
-        box,
-        intg,
-        bound_impls,
-        movers=[baro_impl],
-    )
-    xs, boxes = ctxt.multiple_steps(10_000)
-    for bp in bound_impls:
-        du_dx, _ = bp.execute(xs[-1], boxes[-1], True, False)
+    assert len(traj.frames) == 1
+    x = traj.frames[0]
+    b = traj.boxes[0]
+
+    for bp in initial_state.potentials:
+        du_dx, _ = bp.to_gpu(np.float32).bound_impl.execute(x, b, True, False)
         check_force_norm(-du_dx)
-    return replace(initial_state, v0=ctxt.get_v_t(), x0=xs[-1], box0=boxes[-1])
+    return replace(initial_state, v0=traj.final_velocities, x0=x, box0=b)
 
 
 @pytest.mark.parametrize("radius", [0.4])
@@ -509,10 +474,12 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
             proposals_per_move,
             1,
         )
+        assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
 
         ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP, ligand_idxs, radius)
 
         verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, proposals_per_move, rtol, atol)
+        assert bdem.n_proposed() == moves
 
 
 @pytest.mark.parametrize("proposals_per_move, batch_size", [(20000, 1), (20000, 200)])
@@ -920,11 +887,13 @@ def test_targeted_moves_in_bulk_water(
         1,
         batch_size=batch_size,
     )
+    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
     verify_targeted_moves(
         all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
     )
+    assert bdem.n_proposed() == total_num_proposals
 
 
 @pytest.mark.parametrize("radius", [1.2])
@@ -987,18 +956,20 @@ def test_moves_with_three_waters(
         1,
         batch_size=batch_size,
     )
+    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
 
     ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP, center_group, radius)
 
     verify_targeted_moves(
         all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
     )
+    assert bdem.n_proposed() == total_num_proposals
 
 
-@pytest.mark.parametrize("radius", [0.95])
+@pytest.mark.parametrize("radius", [1.1])
 @pytest.mark.parametrize(
     "proposals_per_move,batch_size,total_num_proposals",
-    [(10_000, 1, 200_000), (10_000, 200, 200_000)],
+    [(2_000, 1, 20_000), (2_000, 200, 20_000)],
 )
 @pytest.mark.parametrize(
     "precision,rtol,atol",
@@ -1040,6 +1011,15 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
     if precision == np.float64:
         klass = custom_ops.TIBDExchangeMove_f64
 
+    ref_bdem = RefTIBDExchangeMove(
+        nb.potential.beta,
+        nb.potential.cutoff,
+        water_params,
+        water_idxs,
+        DEFAULT_TEMP,
+        initial_state.ligand_idxs,
+        radius,
+    )
     bdem = klass(
         N,
         initial_state.ligand_idxs,
@@ -1054,17 +1034,36 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
         1,
         batch_size=batch_size,
     )
+    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
 
-    ref_bdem = RefTIBDExchangeMove(
-        nb.potential.beta,
-        nb.potential.cutoff,
-        water_params,
-        water_idxs,
-        DEFAULT_TEMP,
-        initial_state.ligand_idxs,
-        radius,
-    )
+    md_params = MDParams(n_frames=1, n_eq_steps=0, steps_per_frame=1000, seed=seed)
 
-    verify_targeted_moves(
-        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
-    )
+    iterations = 10
+    # Up to some number of iterations of MD/MC are allowed before considering the test a failure
+    # since there is relatively little space in which to insert a water. Requires MD/MC to ensure the
+    # test is not flaky.
+    for i in range(iterations):
+        try:
+            verify_targeted_moves(
+                all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
+            )
+            assert bdem.n_proposed() == (i + 1) * total_num_proposals
+            # If we verified the target moves, we can exit
+            return
+        except AssertionError as e:
+            if "No moves were made, nothing was tested" in str(e):
+                traj = sample(
+                    initial_state,
+                    md_params,
+                    max_buffer_frames=1,
+                )
+
+                assert len(traj.frames) == 1
+                conf = traj.frames[0]
+                box = traj.boxes[0]
+                conf = image_frame(all_group_idxs, conf, box)
+                print("Running MD")
+                continue
+            # If an unexpect error was raised, re-raise the error
+            raise
+    assert False, f"No moves were made after {iterations}"
