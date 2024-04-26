@@ -120,6 +120,13 @@ def _run_neighbor_swaps(
 Samples = TypeVar("Samples")
 
 
+def get_jax_random_key() -> Array:
+    """Return a JAX PRNG key initialized from global numpy random state"""
+    seed = np.random.randint(np.iinfo(np.uint32).max)
+    key = jax.random.key(seed)
+    return key
+
+
 @dataclass(frozen=True)
 class HREX(Generic[Replica]):
     replicas: List[Replica]
@@ -207,9 +214,7 @@ class HREX(Generic[Replica]):
             Updated HREX state, list of (accepted, proposed) counts by neighbor pair
         """
 
-        # initialize jax rng key from numpy global rng state
-        seed = np.random.randint(np.iinfo(np.uint32).max)
-        key = jax.random.key(seed)
+        key = get_jax_random_key()
         keys = jax.random.split(key, n_swap_attempts)
 
         replica_idx_by_state_, proposed, accepted = _run_neighbor_swaps(
