@@ -67,7 +67,7 @@ void NonbondedPairListPrecomputed<RealType>::execute_device(
             d_p,
             d_box,
             d_idxs_,
-            beta_,
+            static_cast<RealType>(beta_),
             static_cast<RealType>(cutoff_ * cutoff_),
             d_du_dx,
             d_du_dp,
