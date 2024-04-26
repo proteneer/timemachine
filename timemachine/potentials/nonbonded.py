@@ -28,7 +28,6 @@ def switch_fn(dij, cutoff=1.2):
         for the range dij in [0, 1.2), for beta = 2.0
 
     usage notes:
-    * express "no cutoff" as cutoff=np.inf
     * not necessarily intended for use with LJ
 
     TODO
