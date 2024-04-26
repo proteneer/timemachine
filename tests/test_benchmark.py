@@ -446,7 +446,8 @@ def run_single_topology_benchmarks(
             initial_state.ligand_idxs,
         )
 
-        if host_config.num_water_atoms < initial_state.x0.shape[0] - st.get_num_atoms():
+        # Only in the case where the ligand is in complex do we want to look at water sampling
+        if host_config.num_water_atoms < host_config.conf.shape[0]:
             benchmark_rbfe_water_sampling(
                 config,
                 f"{stage}-rbfe",
