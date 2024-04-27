@@ -46,10 +46,11 @@ class NeighborSwapMove(MonteCarloMove[List[Replica]]):
 
 @jax.jit
 def _run_neighbor_swaps(
-    keys: Array,
     replica_idx_by_state: Array,
     neighbor_pairs: Array,
     log_q_kl: Array,
+    pair_idxs: Array,
+    uniform_samples: Array,
 ) -> Tuple[Array, Array, Array]:
     """Efficient implementation of a batch of neighbor swap moves.
 
@@ -62,9 +63,6 @@ def _run_neighbor_swaps(
 
     Parameters
     ----------
-    keys : Array
-        array of N PRNG keys, where N is the number of swap attempts to perform
-
     replica_idx_by_state : Array
         (n_states,) array of replica indices by state
 
@@ -74,6 +72,12 @@ def _run_neighbor_swaps(
     log_q_kl : Array
         (n_replicas, n_states) array with the (r, s) element giving the unnormalized probability of replica r in state s
 
+    pair_idxs : Array
+        (n_swap_attempts,) array of indices of pairs for which to attempt swap moves
+
+    uniform_samples : Array
+        (n_swap_attempts,) array of random samples drawn from uniform(0, 1)
+
     Returns
     -------
     Tuple[Array, Array, Array]
@@ -81,12 +85,11 @@ def _run_neighbor_swaps(
     """
 
     def run_neighbor_swap(
-        carry: Tuple[Array, Array, Array], key: PRNGKeyArray
+        carry: Tuple[Array, Array, Array], pair_idx_and_uniform_sample: Tuple[Array, Array]
     ) -> Tuple[Tuple[Array, Array, Array], None]:
         replica_idx_by_state, proposed, accepted = carry
+        pair_idx, uniform_sample = pair_idx_and_uniform_sample
 
-        key, subkey = jax.random.split(key)
-        pair_idx = jax.random.choice(subkey, len(neighbor_pairs))
         s_a, s_b = neighbor_pairs[pair_idx]
         proposed_next = proposed.at[pair_idx].add(1)
 
@@ -100,7 +103,7 @@ def _run_neighbor_swaps(
 
         log_acceptance_probability = jnp.minimum(log_q_diff, 0.0)
         acceptance_probability = jnp.exp(log_acceptance_probability)
-        is_accepted = jax.random.bernoulli(key, acceptance_probability)
+        is_accepted = uniform_sample < acceptance_probability
 
         def accept():
             replica_idx_by_state_next = replica_idx_by_state.at[s_a].set(r_b).at[s_b].set(r_a)
@@ -116,9 +119,10 @@ def _run_neighbor_swaps(
 
     n_pairs, _ = neighbor_pairs.shape
     init = (replica_idx_by_state, jnp.zeros(n_pairs), jnp.zeros(n_pairs))
-    (replica_idx_by_state, proposed, accepted), _ = jax.lax.scan(run_neighbor_swap, init, keys)
 
-    return (replica_idx_by_state, proposed, accepted)
+    (replica_idx_by_state, proposed, accepted), _ = jax.lax.scan(run_neighbor_swap, init, (pair_idxs, uniform_samples))
+
+    return replica_idx_by_state, proposed, accepted
 
 
 Samples = TypeVar("Samples")
@@ -191,10 +195,7 @@ class HREX(Generic[Replica]):
         return HREX(self.replicas, replica_idx_by_state), fraction_accepted_by_pair
 
     def attempt_neighbor_swaps_fast(
-        self,
-        neighbor_pairs: Sequence[Tuple[StateIdx, StateIdx]],
-        log_q_kl: ArrayLike,
-        n_swap_attempts: int,
+        self, neighbor_pairs: Sequence[Tuple[StateIdx, StateIdx]], log_q_kl: ArrayLike, n_swap_attempts: int
     ) -> Tuple["HREX[Replica]", List[Tuple[int, int]]]:
         """Run a batch of swap attempts.
 
@@ -219,10 +220,16 @@ class HREX(Generic[Replica]):
         """
 
         key = get_jax_random_key()
-        keys = jax.random.split(key, n_swap_attempts)
+        key, subkey = jax.random.split(key)
+        pair_idxs = jax.random.choice(subkey, len(neighbor_pairs), (n_swap_attempts,))
+        uniform_samples = jax.random.uniform(key, (n_swap_attempts,))
 
         replica_idx_by_state_, proposed, accepted = _run_neighbor_swaps(
-            keys, jnp.asarray(self.replica_idx_by_state), jnp.asarray(neighbor_pairs), jnp.asarray(log_q_kl)
+            jnp.asarray(self.replica_idx_by_state),
+            jnp.asarray(neighbor_pairs),
+            jnp.asarray(log_q_kl),
+            pair_idxs,
+            uniform_samples,
         )
 
         replica_idx_by_state = replica_idx_by_state_.tolist()
