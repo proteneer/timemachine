@@ -385,7 +385,7 @@ def run_hrex(
 
     This implementation uses a method described in [1] (in section III.B.2) to generate effectively uncorrelated
     permutations by attempting many consecutive nearest-neighbor swap moves. By default, the number of swap moves is
-    determined as a function of the number of states (:math:`K`) as :math`N_{\text{swaps}} = K^4`, a heuristic also
+    determined as a function of the number of states (:math:`K`) as :math`N_{\text{swaps}} = K^3`, a heuristic also
     described in [1].
 
     References
