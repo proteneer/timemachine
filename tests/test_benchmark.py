@@ -14,7 +14,7 @@ from common import prepare_single_topology_initial_state
 from numpy.typing import NDArray
 
 from timemachine import constants
-from timemachine.fe.free_energy import HostConfig
+from timemachine.fe.free_energy import HostConfig, InitialState, MDParams, WaterSamplingParams, get_context
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
@@ -175,7 +175,7 @@ def benchmark(
     temperature = constants.DEFAULT_TEMP
     pressure = constants.DEFAULT_PRESSURE
 
-    harmonic_bond_potential = bound_potentials[0]
+    harmonic_bond_potential = next(p for p in bound_potentials if isinstance(p.potential, HarmonicBond))
     bond_list = get_bond_list(harmonic_bond_potential.potential)
     if hmr:
         dt = 2.5e-3
@@ -246,6 +246,75 @@ def benchmark(
     )
 
 
+def benchmark_rbfe_water_sampling(
+    config: BenchmarkConfig,
+    label: str,
+    state: InitialState,
+    water_sampling_interval: int = 400,
+    radius: float = 1.0,
+    batch_size: int = 250,
+):
+    if state.barostat is not None:
+        label += f"-barostat-interval-{state.barostat.interval}"
+    label += f"-water-sampling-interval-{water_sampling_interval}"
+    seed = 1234
+
+    if config.steps_per_batch < water_sampling_interval:
+        print("Warning::Not running water sampling every batch, interval is too large")
+
+    ctxt = get_context(
+        state,
+        MDParams(
+            n_frames=1,
+            n_eq_steps=0,
+            steps_per_frame=1,
+            seed=seed,
+            water_sampling_params=WaterSamplingParams(
+                interval=water_sampling_interval, radius=radius, batch_size=batch_size
+            ),
+        ),
+    )
+    assert len(ctxt.get_movers()) == 2, "Expected barostat and water sampler"
+
+    batch_times = []
+
+    steps_per_batch = config.steps_per_batch
+    num_batches = config.num_batches
+
+    dt = state.integrator.dt
+
+    # run once before timer starts
+    ctxt.multiple_steps(steps_per_batch)
+
+    start = time.time()
+
+    for batch in range(num_batches):
+        # time the current batch
+        batch_start = time.time()
+        _, _ = ctxt.multiple_steps(steps_per_batch)
+        batch_end = time.time()
+
+        delta = batch_end - batch_start
+
+        batch_times.append(delta)
+
+        steps_per_second = steps_per_batch / np.mean(batch_times)
+        steps_per_day = steps_per_second * SECONDS_PER_DAY
+
+        ps_per_day = dt * steps_per_day
+        ns_per_day = ps_per_day * 1e-3
+
+        if config.verbose:
+            print(f"steps per second: {steps_per_second:.3f}")
+            print(f"ns per day: {ns_per_day:.3f}")
+
+    assert np.all(np.abs(ctxt.get_x_t()) < 1000)
+
+    print(
+        f"{label}: N={state.x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt*1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
+    )
+
+
 def benchmark_local(
     config: BenchmarkConfig,
     label: str,
@@ -264,7 +333,7 @@ def benchmark_local(
 
     rng = np.random.default_rng(seed)
 
-    harmonic_bond_potential = bound_potentials[0]
+    harmonic_bond_potential = next(p for p in bound_potentials if isinstance(p.potential, HarmonicBond))
     bond_list = get_bond_list(harmonic_bond_potential.potential)
     if hmr:
         dt = 2.5e-3
@@ -376,6 +445,15 @@ def run_single_topology_benchmarks(
             initial_state.potentials,
             initial_state.ligand_idxs,
         )
+
+        # Only in the case where the ligand is in complex do we want to look at water sampling
+        if host_config.num_water_atoms < host_config.conf.shape[0]:
+            benchmark_rbfe_water_sampling(
+                config,
+                f"{stage}-rbfe",
+                initial_state,
+                water_sampling_interval=400,
+            )
 
 
 def benchmark_dhfr(config: BenchmarkConfig):
