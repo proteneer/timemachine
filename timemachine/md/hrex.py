@@ -92,7 +92,11 @@ def _run_neighbor_swaps(
 
         r_a = replica_idx_by_state[s_a]
         r_b = replica_idx_by_state[s_b]
-        log_q_diff = log_q_kl[r_a, s_b] + log_q_kl[r_b, s_a] - log_q_kl[r_a, s_a] - log_q_kl[r_b, s_b]
+
+        log_q_before = log_q_kl[r_a, s_a] + log_q_kl[r_b, s_b]
+        log_q_after = log_q_kl[r_a, s_b] + log_q_kl[r_b, s_a]
+
+        log_q_diff = log_q_after - log_q_before
 
         log_acceptance_probability = jnp.minimum(log_q_diff, 0.0)
         acceptance_probability = jnp.exp(log_acceptance_probability)
