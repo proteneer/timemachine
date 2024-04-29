@@ -69,7 +69,8 @@ void __global__ k_log_flat_bottom_bond(
         u[b_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(u_real);
     }
 
-    RealType prefactor = -exp(-beta * nrg) / (static_cast<RealType>(1) - exp(-beta * nrg));
+    RealType prefactor = -exp(-beta * nrg);
+    prefactor = prefactor / (static_cast<RealType>(1) + prefactor);
 
     if (du_dp || du_dx) {
         RealType d_r_min = r - rmin;
@@ -96,10 +97,11 @@ void __global__ k_log_flat_bottom_bond(
 
         if (du_dx) {
             RealType du_dr = k * ((r_gt_rmax * d_rmax_3) + (r_lt_rmin * d_rmin_3));
+            RealType inv_r = 1 / r;
 #pragma unroll
             for (int d = 0; d < 3; d++) {
                 // compute du/dcoords
-                RealType du_dsrc_real = du_dr * dx[d] / r;
+                RealType du_dsrc_real = du_dr * dx[d] * inv_r;
                 RealType du_ddst_real = -du_dsrc_real;
 
                 // cast float -> fixed
