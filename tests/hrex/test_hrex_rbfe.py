@@ -31,11 +31,7 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 DEBUG = False
 
 
-@pytest.fixture(
-    scope="module", params=[None, "solvent", pytest.param("complex", marks=pytest.mark.nightly(reason="slow"))]
-)
-def hif2a_single_topology_leg(request):
-    host_name = request.param
+def get_hif2a_single_topology_leg(host_name: str | None):
     forcefield = Forcefield.load_default()
     host_config: Optional[HostConfig] = None
 
@@ -55,6 +51,13 @@ def hif2a_single_topology_leg(request):
     forcefield = Forcefield.load_default()
 
     return mol_a, mol_b, core, forcefield, host_config
+
+
+@pytest.fixture(
+    scope="module", params=[None, "solvent", pytest.param("complex", marks=pytest.mark.nightly(reason="slow"))]
+)
+def hif2a_single_topology_leg(request):
+    return get_hif2a_single_topology_leg(request.param)
 
 
 @pytest.mark.nightly(reason="Slow")
