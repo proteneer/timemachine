@@ -12,7 +12,8 @@ RealType __device__ __forceinline__ compute_flat_bottom_energy(RealType k, RealT
     RealType d_rmin_2 = d_rmin * d_rmin;
     RealType d_rmin_4 = d_rmin_2 * d_rmin_2;
 
-    RealType d_rmax_2 = (r - rmax) * (r - rmax);
+    RealType d_rmax = r - rmax;
+    RealType d_rmax_2 = d_rmax * d_rmax;
     RealType d_rmax_4 = d_rmax_2 * d_rmax_2;
 
     return (k / static_cast<RealType>(4.0)) * ((r_lt_rmin * d_rmin_4) + (r_gt_rmax * d_rmax_4));
