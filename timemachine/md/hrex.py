@@ -70,7 +70,7 @@ def _run_neighbor_swaps(
         (n_pairs, 2) array representing allowed swaps
 
     log_q_kl : Array
-        (n_replicas, n_states) array with the (r, s) element giving the unnormalized probability of replica r in state s
+        (n_replicas, n_states) array with the (r, s) element giving the log unnormalized probability of replica r in state s
 
     pair_idxs : Array
         (n_swap_attempts,) array of indices of pairs for which to attempt swap moves
@@ -176,7 +176,7 @@ class HREX(Generic[Replica]):
             pairs of states between which to attempt swaps
 
         log_q : Callable[[ReplicaIdx, StateIdx], float]
-            function to compute the unnormalized probability of a given replica in a given state
+            function to compute the log unnormalized probability of a given replica in a given state
 
         n_swap_attempts : int
             number of individual swap attempts, each between a randomly-selected neighbor pair
@@ -208,7 +208,7 @@ class HREX(Generic[Replica]):
             pairs of states between which to attempt swaps
 
         log_q_kl : ArrayLike
-            (n_replicas, n_states) array with the (r, s) element giving the unnormalized probability of replica r in state s
+            (n_replicas, n_states) array with the (r, s) element giving the log unnormalized probability of replica r in state s
 
         n_swap_attempts : int
             number of individual swap attempts, each between a randomly-selected neighbor pair
