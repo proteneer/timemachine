@@ -8,7 +8,8 @@ template <typename RealType>
 RealType __device__ __forceinline__ compute_flat_bottom_energy(RealType k, RealType r, RealType rmin, RealType rmax) {
     RealType r_gt_rmax = static_cast<RealType>(r > rmax);
     RealType r_lt_rmin = static_cast<RealType>(r < rmin);
-    RealType d_rmin_2 = (r - rmin) * (r - rmin);
+    RealType d_rmin = r - rmin;
+    RealType d_rmin_2 = d_rmin * d_rmin;
     RealType d_rmin_4 = d_rmin_2 * d_rmin_2;
 
     RealType d_rmax_2 = (r - rmax) * (r - rmax);
