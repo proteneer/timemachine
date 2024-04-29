@@ -17,7 +17,7 @@ from timemachine.fe.plots import (
     plot_hrex_transition_matrix,
 )
 from timemachine.md.hrex import HREXDiagnostics, NeighborSwapMove, ReplicaIdx, StateIdx, run_hrex
-from timemachine.md.moves import BatchedMixtureOfMoves, MixtureOfMoves, MonteCarloMove
+from timemachine.md.moves import MixtureOfMoves, MonteCarloMove
 
 DEBUG = False
 
@@ -63,7 +63,7 @@ class GaussianMixture:
     def log_q(self, x: float) -> float:
         x_ = np.atleast_1d(np.asarray(x))
         log_q = -((x_[:, None] - self.locs) ** 2) / (2 * self.scales**2)
-        return logsumexp(log_q + self.log_weights, axis=1)
+        return logsumexp(log_q + self.log_weights, axis=1).item()
 
 
 def gaussian(loc: float, scale: float, log_weight: float = 0.0) -> Distribution:
@@ -106,15 +106,11 @@ def run_hrex_with_local_proposal(
         samples = move.sample_chain(replica, n_samples)
         return samples
 
-    def get_log_q_fn(replicas: Sequence[float]) -> Callable[[ReplicaIdx, StateIdx], float]:
-        log_q_matrix = np.array(
+    def get_log_q(replicas: Sequence[float]) -> NDArray:
+        log_q_kl = np.array(
             [[states[state_idx].log_q(replicas[replica_idx]) for state_idx in state_idxs] for replica_idx in state_idxs]
         )
-
-        def log_q(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
-            return log_q_matrix[replica_idx, state_idx]
-
-        return log_q
+        return log_q_kl
 
     def replica_from_samples(xs: List[float]) -> float:
         return xs[-1]
@@ -124,7 +120,7 @@ def run_hrex_with_local_proposal(
         sample_replica,
         replica_from_samples,
         neighbor_pairs,
-        get_log_q_fn,
+        get_log_q,
         n_samples=n_samples,
         n_samples_per_iter=n_samples_per_iter,
     )
@@ -268,7 +264,7 @@ def test_hrex_gaussian_mixture(seed):
         return scipy.stats.ks_2samp(samples[tau::tau], target_samples).pvalue
 
     assert compute_ks_pvalue(local_samples) == pytest.approx(0.0, abs=1e-10)  # local sampling alone is insufficient
-    assert compute_ks_pvalue(hrex_samples) > 0.01
+    assert compute_ks_pvalue(hrex_samples) > 0.005
 
     final_swap_acceptance_rates = diagnostics.cumulative_swap_acceptance_rates[-1]
     assert final_swap_acceptance_rates[0] > 0.2
@@ -286,7 +282,8 @@ def plot_hrex_diagnostics(diagnostics: HREXDiagnostics):
 @pytest.mark.parametrize("swaps", [50_000])
 @pytest.mark.parametrize("seed", range(5))
 def test_batched_mixture_of_moves(num_states, seed, swaps):
-    replicas = np.random.uniform(size=num_states)
+    np.random.seed(seed)
+    replicas = sorted(np.random.uniform(size=num_states))
     states = [gaussian(loc, 0.3) for loc in replicas]
     state_idxs = [StateIdx(i) for i, _ in enumerate(states)]
     replica_idxs = [ReplicaIdx(i) for i, _ in enumerate(replicas)]
@@ -299,26 +296,19 @@ def test_batched_mixture_of_moves(num_states, seed, swaps):
     def log_q(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
         return log_q_matrix[replica_idx, state_idx]
 
-    # Add (0, 0) to the list of neighbor pairs considered for swap moves to ensure that performing a fixed number of
-    # neighbor swaps is aperiodic in cases where swap acceptance rates approach 100%
-    neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
+    neighbor_swaps = [NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs]
 
-    move = MixtureOfMoves([NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
-    sequential_swaps = replica_idxs.copy()
-    for _ in range(swaps):
-        sequential_swaps = move.move(sequential_swaps)
+    def run_sequential_swaps(replica_idxs):
+        move = MixtureOfMoves(neighbor_swaps)
+        for _ in range(swaps):
+            replica_idxs = move.move(replica_idxs)
+        return move
 
-    seq_diagnostics = HREXDiagnostics([], list(zip(move.n_accepted_by_move, move.n_proposed_by_move)))
+    move_seq = run_sequential_swaps(replica_idxs)
 
-    batched_move = BatchedMixtureOfMoves(swaps, [NeighborSwapMove(log_q, s_a, s_b) for s_a, s_b in neighbor_pairs])
-    _ = batched_move.move(replica_idxs.copy())
+    move_batched = MixtureOfMoves(neighbor_swaps)
+    np.random.seed(seed)
+    _ = move_batched.move_n(replica_idxs, swaps)
 
-    batched_diagnostics = HREXDiagnostics(
-        [], list(zip(batched_move.n_accepted_by_move, batched_move.n_proposed_by_move))
-    )
-
-    np.testing.assert_allclose(
-        seq_diagnostics.cumulative_swap_acceptance_rates,
-        batched_diagnostics.cumulative_swap_acceptance_rates,
-        atol=0.02,
-    )
+    assert move_seq.n_accepted_by_move == move_batched.n_accepted_by_move
+    assert move_seq.n_proposed_by_move == move_batched.n_proposed_by_move

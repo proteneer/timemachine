@@ -998,20 +998,12 @@ def run_sims_hrex(
     if md_params.water_sampling_params is not None:
         water_params_by_state = np.array([get_water_sampler_params(initial_state) for initial_state in initial_states])
 
-    def compute_log_q_matrix(xvbs: List[CoordsVelBox]):
+    def compute_log_q_matrix(xvbs: List[CoordsVelBox]) -> NDArray:
         coords = np.array([xvb.coords for xvb in xvbs])
         boxes = np.array([xvb.box for xvb in xvbs])
         _, _, U = potential.execute_batch(coords, params_by_state, boxes, False, False, True)
         log_q = -U / (BOLTZ * temperature)
         return log_q
-
-    def get_log_q_fn(xvbs: List[CoordsVelBox]):
-        log_q_kl = compute_log_q_matrix(xvbs)
-
-        def log_q_fn(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
-            return log_q_kl[replica_idx, state_idx]
-
-        return log_q_fn
 
     state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
     neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
@@ -1105,8 +1097,10 @@ def run_sims_hrex(
             return CoordsVelBox(traj.frames[-1], traj.final_velocities, traj.boxes[-1])
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
-        log_q = get_log_q_fn(hrex.replicas)
-        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(neighbor_pairs, log_q, n_swap_attempts_per_iter)
+        log_q_kl = compute_log_q_matrix(hrex.replicas)
+        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
+            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter
+        )
 
         if len(initial_states) == 2:
             fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
