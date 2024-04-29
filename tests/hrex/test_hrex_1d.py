@@ -282,7 +282,8 @@ def plot_hrex_diagnostics(diagnostics: HREXDiagnostics):
 @pytest.mark.parametrize("swaps", [50_000])
 @pytest.mark.parametrize("seed", range(5))
 def test_batched_mixture_of_moves(num_states, seed, swaps):
-    replicas = np.random.uniform(size=num_states)
+    np.random.seed(seed)
+    replicas = sorted(np.random.uniform(size=num_states))
     states = [gaussian(loc, 0.3) for loc in replicas]
     state_idxs = [StateIdx(i) for i, _ in enumerate(states)]
     replica_idxs = [ReplicaIdx(i) for i, _ in enumerate(replicas)]
@@ -303,7 +304,6 @@ def test_batched_mixture_of_moves(num_states, seed, swaps):
             replica_idxs = move.move(replica_idxs)
         return move
 
-    np.random.seed(seed)
     move_seq = run_sequential_swaps(replica_idxs)
 
     move_batched = MixtureOfMoves(neighbor_swaps)
