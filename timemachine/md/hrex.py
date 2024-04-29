@@ -168,7 +168,7 @@ class HREX(Generic[Replica]):
         """Run a batch of swap attempts.
 
         See :py:meth:`attempt_neighbor_swaps_fast` for a more efficient implementation with a similar signature.
-        Note that these methods do not generate compatible random sequences.
+        Note that these methods do not generate identical random sequences.
 
         Parameters
         ----------
