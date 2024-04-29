@@ -998,7 +998,7 @@ def run_sims_hrex(
     if md_params.water_sampling_params is not None:
         water_params_by_state = np.array([get_water_sampler_params(initial_state) for initial_state in initial_states])
 
-    def compute_log_q_matrix(xvbs: List[CoordsVelBox]):
+    def compute_log_q_matrix(xvbs: List[CoordsVelBox]) -> NDArray:
         coords = np.array([xvb.coords for xvb in xvbs])
         boxes = np.array([xvb.box for xvb in xvbs])
         _, _, U = potential.execute_batch(coords, params_by_state, boxes, False, False, True)

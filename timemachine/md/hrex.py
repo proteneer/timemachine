@@ -383,7 +383,7 @@ def run_hrex(
     sample_replica: Callable[[Replica, StateIdx, int], Samples],
     replica_from_samples: Callable[[Samples], Replica],
     neighbor_pairs: Sequence[Tuple[StateIdx, StateIdx]],
-    get_log_q_fn: Callable[[List[Replica]], Callable[[ReplicaIdx, StateIdx], float]],
+    get_log_q: Callable[[List[Replica]], ArrayLike | Callable[[ReplicaIdx, StateIdx], float]],
     n_samples: int,
     n_samples_per_iter: int,
     n_swap_attempts_per_iter: Optional[int] = None,
@@ -414,10 +414,11 @@ def run_hrex(
     neighbor_pairs: sequence of (StateIdx, StateIdx)
         Pairs of states for which to attempt swap moves
 
-    get_log_q_fn: sequence of Replica -> ((ReplicaIdx, StateIdx) -> float)
-        Function that returns a function from replica-state pairs to log unnormalized probability. Note that this is
-        equivalent to the simpler signature (Replica, StateIdx) -> float; the "curried" form here is to allow for the
-        implementation to compute the full matrix as a batch operation when this is more efficient.
+    get_log_q: (sequence of Replica) -> (((ReplicaIdx, StateIdx) -> float) or (sequence of Replica -> array))
+        Function that, given a list of replicas, returns either:
+
+        1. a (n_replicas, n_states) array with the (r, s) element giving the log unnormalized probability of replica r in state s, or
+        2. a function from replica-state pairs to log unnormalized probability
 
     n_samples: int
         Total number of local samples (e.g. MD frames)
@@ -449,9 +450,11 @@ def run_hrex(
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
 
     for n_samples_batch in batches(n_samples, n_samples_per_iter):
-        log_q_fn = get_log_q_fn(hrex.replicas)
-        log_q_kl = jnp.array(
-            [[log_q_fn(ReplicaIdx(r), StateIdx(s)) for s in range(n_replicas)] for r in range(n_replicas)]
+        log_q = get_log_q(hrex.replicas)
+        log_q_kl = (
+            jnp.array([[log_q(ReplicaIdx(r), StateIdx(s)) for s in range(n_replicas)] for r in range(n_replicas)])
+            if callable(log_q)
+            else log_q
         )
 
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(

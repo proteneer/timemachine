@@ -63,7 +63,7 @@ class GaussianMixture:
     def log_q(self, x: float) -> float:
         x_ = np.atleast_1d(np.asarray(x))
         log_q = -((x_[:, None] - self.locs) ** 2) / (2 * self.scales**2)
-        return logsumexp(log_q + self.log_weights, axis=1)
+        return logsumexp(log_q + self.log_weights, axis=1).item()
 
 
 def gaussian(loc: float, scale: float, log_weight: float = 0.0) -> Distribution:
@@ -106,15 +106,11 @@ def run_hrex_with_local_proposal(
         samples = move.sample_chain(replica, n_samples)
         return samples
 
-    def get_log_q_fn(replicas: Sequence[float]) -> Callable[[ReplicaIdx, StateIdx], float]:
-        log_q_matrix = np.array(
+    def get_log_q(replicas: Sequence[float]) -> NDArray:
+        log_q_kl = np.array(
             [[states[state_idx].log_q(replicas[replica_idx]) for state_idx in state_idxs] for replica_idx in state_idxs]
         )
-
-        def log_q(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
-            return log_q_matrix[replica_idx, state_idx].item()
-
-        return log_q
+        return log_q_kl
 
     def replica_from_samples(xs: List[float]) -> float:
         return xs[-1]
@@ -124,7 +120,7 @@ def run_hrex_with_local_proposal(
         sample_replica,
         replica_from_samples,
         neighbor_pairs,
-        get_log_q_fn,
+        get_log_q,
         n_samples=n_samples,
         n_samples_per_iter=n_samples_per_iter,
     )
