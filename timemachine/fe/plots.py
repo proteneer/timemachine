@@ -14,8 +14,14 @@ DEFAULT_HEATMAP_ANNOTATE_THRESHOLD = 20
 
 def plot_work(w_forward, w_reverse, axes):
     """histograms of +forward and -reverse works"""
-    axes.hist(+w_forward, alpha=0.5, label="fwd", density=True, bins=20)
-    axes.hist(-w_reverse, alpha=0.5, label="-rev", density=True, bins=20)
+
+    w_all = np.concatenate([+w_forward, -w_reverse])
+    # Tear out any non-finite works
+    w_all = w_all[np.isfinite(w_all)]
+    a_min, a_max = np.amin(w_all), np.amax(w_all)
+
+    axes.hist(+w_forward, alpha=0.5, label="fwd", density=True, bins=20, range=(a_min, a_max))
+    axes.hist(-w_reverse, alpha=0.5, label="-rev", density=True, bins=20, range=(a_min, a_max))
     axes.set_xlabel("work (kT)")
     axes.legend()
 
@@ -110,7 +116,7 @@ def plot_overlap_detail_figure(
         component names
     dGs: (n_lambdas - 1) floats
     dG_errs: (n_lambdas - 1) floats
-    u_kln_by_component_by_lambda: [L,P,2,2,T] array
+    u_kln_by_component_by_lambda: [n_lambdas - 1,P,2,2,T] array
     temperature: float
         kelvin
     prefix: string
@@ -129,10 +135,11 @@ def plot_overlap_detail_figure(
     num_energy_components = len(components)
     assert num_energy_components == u_kln_by_component_by_lambda[0].shape[0]
 
-    num_rows = len(u_kln_by_component_by_lambda)  # L - 1 adjacent pairs
+    num_rows = len(u_kln_by_component_by_lambda)  # n_lambdas - 1 adjacent pairs
     num_cols = num_energy_components + 1  # one per component + one for overall energy
 
-    _, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))
+    fig, all_axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 5, num_rows * 3))
+    fig.tight_layout(pad=4.0)
     if num_rows == 1:
         all_axes = [all_axes]
 
@@ -150,8 +157,8 @@ def plot_overlap_detail_figure(
         df_err = beta * dG_errs[lamb_idx]
 
         # add to plot
-        plot_axis = all_axes[lamb_idx - 1][num_energy_components]
-        plot_title = f"{prefix}_{lamb_idx - 1}_to_{lamb_idx}"
+        plot_axis = all_axes[lamb_idx][num_energy_components]
+        plot_title = f"{prefix}_{lamb_idx}_to_{lamb_idx + 1}"
         plot_BAR(df, df_err, w_fwd, w_rev, plot_title, plot_axis)
 
     # [n_lambdas x num_energy_components] plots (relying on energy decomposition)
@@ -161,7 +168,7 @@ def plot_overlap_detail_figure(
 
         # loop over bond, angle, torsion, nonbonded terms etc.
         for u_idx in range(num_energy_components):
-            plot_axis = all_axes[lamb_idx - 1][u_idx]
+            plot_axis = all_axes[lamb_idx][u_idx]
 
             plot_work(w_fwd_by_component[u_idx], w_rev_by_component[u_idx], plot_axis)
             plot_axis.set_title(components[u_idx])
@@ -321,6 +328,31 @@ def plot_fwd_reverse_predictions(
     return plot_png
 
 
+def plot_chiral_restraint_energies(
+    chiral_energies: NDArray,
+    annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
+    figsize: Tuple[float, float] = (13, 10),
+):
+    """Plot matrix of chiral restraint energies as a heatmap.
+
+    For use with the outputs of timemachine.fe.chiral_utils.make_chiral_flip_heatmaps.
+    """
+    n_states, n_frames = chiral_energies.shape
+    states = np.arange(n_states)
+    frames = np.arange(n_frames)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    p = ax.pcolormesh(frames, states, chiral_energies, vmin=0.0)
+
+    ax.set_xlabel("frame")
+    ax.set_ylabel("state")
+    ax.xaxis.get_major_locator().set_params(integer=True)
+    ax.yaxis.get_major_locator().set_params(integer=True)
+
+    fig.colorbar(p, label="chiral restraint energy")
+    fig.suptitle("Chiral Restraint Energies")
+
+
 def plot_hrex_transition_matrix(
     transition_probability: NDArray,
     figsize: Tuple[float, float] = (13, 10),
@@ -459,7 +491,7 @@ def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_co
             ax.set_visible(False)
 
     fig.subplots_adjust(right=0.8, hspace=0.2, wspace=0.2)
-    cbar_ax = fig.add_axes([0.85, 0.15, 0.02, 0.7])
+    cbar_ax = fig.add_axes((0.85, 0.15, 0.02, 0.7))
     fig.colorbar(p, cax=cbar_ax, label=r"$\log_{10}$(number of iterations)")
 
 

@@ -470,8 +470,8 @@ def equilibrate_solvent_phase(
     friction = 1.0
 
     bps = []
-    for p, bp in zip(params, potentials):
-        bps.append(bp.bind(p))
+    for p, pot in zip(params, potentials):
+        bps.append(pot.bind(p))
 
     all_impls = [bp.to_gpu(np.float32).bound_impl for bp in bps]
 

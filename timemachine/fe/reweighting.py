@@ -5,36 +5,38 @@ __all__ = [
     "interpret_as_mixture_potential",
 ]
 
-from typing import Any, Callable, Collection
+from typing import Callable, Collection
 
 import numpy as np
+from jax import Array
 from jax import numpy as jnp
 from jax.scipy.special import logsumexp
+from jax.typing import ArrayLike
 
 Samples = Collection
 Params = Collection
-Array = Any  # see https://github.com/google/jax/issues/943
 Energies = Array
 
 BatchedReducedPotentialFxn = Callable[[Samples, Params], Energies]
 
 
-def log_mean(log_values: Array) -> float:
+def log_mean(log_values: ArrayLike) -> Array:
     """stable log(mean(values))
 
     log(mean(values))
     = log(sum(values / len(values)))
     = logsumexp(log(values) - log(len(values))
     """
+    log_values = jnp.asarray(log_values)
     return logsumexp(log_values - jnp.log(len(log_values)))
 
 
-def estimate_log_z_ratio(log_importance_weights: Array) -> float:
+def estimate_log_z_ratio(log_importance_weights: ArrayLike) -> Array:
     """stable log(mean(importance_weights))"""
     return log_mean(log_importance_weights)
 
 
-def one_sided_exp(delta_us: Array) -> float:
+def one_sided_exp(delta_us: ArrayLike) -> Array:
     """exponential averaging
 
     References
@@ -44,10 +46,11 @@ def one_sided_exp(delta_us: Array) -> float:
     """
     # delta_us = -log_importance_weights
     # delta_f  = -log_z_ratio
+    delta_us = jnp.asarray(delta_us)
     return -estimate_log_z_ratio(-delta_us)
 
 
-def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array:
+def interpret_as_mixture_potential(u_kn: ArrayLike, f_k: ArrayLike, N_k: ArrayLike) -> Array:
     r"""Interpret samples from multiple states k as if they originate from a single state
     defined as a weighted mixture:
 
@@ -103,6 +106,9 @@ def interpret_as_mixture_potential(u_kn: Array, f_k: Array, N_k: Array) -> Array
     [3] [Elvira+, 2019] Generalized multiple importance sampling
         https://arxiv.org/abs/1511.03095
     """
+    u_kn = jnp.asarray(u_kn)
+    f_k = jnp.asarray(f_k)
+
     # one-liner: mixture_u_n = -logsumexp(f_k - u_kn.T, b=N_k, axis=1)
 
     # expanding steps:
@@ -141,7 +147,7 @@ def construct_endpoint_reweighting_estimator(
     batched_u_1_fxn: BatchedReducedPotentialFxn,
     ref_params: Params,
     ref_delta_f: float,
-) -> Callable[[Params], float]:
+) -> Callable[[Params], Array]:
     """assuming
     * endpoint samples (samples_0, samples_1)
     * precise estimate of free energy difference at initial params
@@ -181,17 +187,17 @@ def construct_endpoint_reweighting_estimator(
     ref_u_0 = batched_u_0_fxn(samples_0, ref_params)
     ref_u_1 = batched_u_1_fxn(samples_1, ref_params)
 
-    def endpoint_correction_0(params) -> float:
+    def endpoint_correction_0(params) -> Array:
         """estimate f(ref, 0) -> f(params, 0) by reweighting"""
         delta_us = batched_u_0_fxn(samples_0, params) - ref_u_0
         return one_sided_exp(delta_us)
 
-    def endpoint_correction_1(params) -> float:
+    def endpoint_correction_1(params) -> Array:
         """estimate f(ref, 1) -> f(params, 1) by reweighting"""
         delta_us = batched_u_1_fxn(samples_1, params) - ref_u_1
         return one_sided_exp(delta_us)
 
-    def estimate_delta_f(params: Params) -> float:
+    def estimate_delta_f(params: Params) -> Array:
         """estimate f(params, 1) - f(params, 0)
 
         using this thermodynamic cycle:
@@ -218,10 +224,10 @@ def construct_endpoint_reweighting_estimator(
 
 def construct_mixture_reweighting_estimator(
     samples_n: Samples,
-    u_ref_n: Array,
+    u_ref_n: ArrayLike,
     batched_u_0_fxn: BatchedReducedPotentialFxn,
     batched_u_1_fxn: BatchedReducedPotentialFxn,
-) -> Callable[[Params], float]:
+) -> Callable[[Params], Array]:
     r"""assuming
     * samples x_n from a distribution p_ref(x) \propto(exp(-u_ref(x))
       that has good overlap with BOTH p_0(params)(x) and p_1(params)(x),
@@ -275,6 +281,7 @@ def construct_mixture_reweighting_estimator(
     [3] Wieder et al. PyTorch implementation of differentiable reweighting in neutromeratio
         https://github.com/choderalab/neutromeratio/blob/2abf29f03e5175a988503b5d6ceeee8ce5bfd4ad/neutromeratio/parameter_gradients.py#L246-L267
     """
+    u_ref_n = jnp.asarray(u_ref_n)
     assert len(samples_n) == len(u_ref_n)
 
     def f_0(params):
@@ -282,12 +289,12 @@ def construct_mixture_reweighting_estimator(
         u_0_n = batched_u_0_fxn(samples_n, params)
         return one_sided_exp(u_0_n - u_ref_n)
 
-    def f_1(params) -> float:
+    def f_1(params) -> Array:
         """estimate f(params, 1) - f(ref) by reweighting"""
         u_1_n = batched_u_1_fxn(samples_n, params)
         return one_sided_exp(u_1_n - u_ref_n)
 
-    def estimate_delta_f(params) -> float:
+    def estimate_delta_f(params) -> Array:
         r"""estimate f(params, 1) - f(params, 0)
 
         using this thermodynamic cycle:

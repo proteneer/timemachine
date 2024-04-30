@@ -219,10 +219,14 @@ def test_file_client(tmpdir):
         assert fc.exists("test_copy")
         assert str(fc.full_path("test_copy")) == str(Path(tmpdir, "subdir", "test_copy"))
         assert fc.load("test") == fc.load("test_copy")
+        fc.delete("test_copy")
+        assert not fc.exists("test_copy")
 
         large_obj = b"a" * (io.DEFAULT_BUFFER_SIZE * 10)
         fc.store_stream("larger_than_stream", io.BytesIO(large_obj))
         assert fc.load("larger_than_stream") == large_obj
+        fc.delete("larger_than_stream")
+        assert not fc.exists("larger_than_stream")
 
 
 def test_save_results(tmpdir):

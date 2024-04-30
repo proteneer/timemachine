@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -11,6 +11,18 @@ from timemachine.constants import BOLTZ
 from timemachine.md import moves
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import nonbonded
+
+
+def get_water_idxs(mol_groups: List[NDArray], ligand_idxs: Optional[NDArray] = None) -> List[NDArray]:
+    """Given a list of lists that make up the individual molecules in a system, return the subset that is only the waters.
+
+    Contains additional logic to handle the case where ligand_idxs is also of size 3.
+    """
+    water_groups = [g for g in mol_groups if len(g) == 3]
+    if ligand_idxs is not None and len(ligand_idxs) == 3:
+        ligand_atom_set = set(ligand_idxs)
+        water_groups = [g for g in water_groups if set(g) != ligand_atom_set]
+    return water_groups
 
 
 def randomly_rotate_and_translate(coords, new_loc):
@@ -29,7 +41,7 @@ def randomly_rotate_and_translate(coords, new_loc):
     return rotated_coords + new_loc
 
 
-def randomly_translate(coords, new_loc):
+def translate_coordinates(coords, new_loc):
     """
     Translate coords such that the centroid of the displaced
     coordinates is equal to new_loc.
@@ -107,7 +119,13 @@ class BDExchangeMove(moves.MonteCarloMove):
         def U_fn(conf, box, a_idxs, b_idxs):
             return jnp.sum(U_fn_unsummed(conf, box, a_idxs, b_idxs))
 
-        self.batch_U_fn = jax.jit(jax.vmap(U_fn, (None, None, 0, 0)))
+        def batch_U_fn(conf, box, all_a_idxs, all_b_idxs):
+            nrgs = []
+            for a_idxs, b_idxs in zip(all_a_idxs, all_b_idxs):
+                nrgs.append(U_fn(conf, box, a_idxs, b_idxs))
+            return jnp.array(nrgs)
+
+        self.batch_U_fn = batch_U_fn
 
         def batch_log_weights(conf, box):
             """
@@ -187,7 +205,7 @@ class BDExchangeMove(moves.MonteCarloMove):
         # tbd - what should we do  with velocities?
 
         moved_coords = randomly_rotate_and_translate(trial_chosen_coords, trial_translation)
-        # moved_coords = randomly_translate(trial_chosen_coords, trial_translation)
+        # moved_coords = translate_coordinates(trial_chosen_coords, trial_translation)
 
         # optimized version using double transposition
         log_weights_after, trial_coords = self.batch_log_weights_incremental(
@@ -388,7 +406,7 @@ class TIBDExchangeMove(BDExchangeMove):
 
         # remove centroid and offset into insertion site
         new_coords = randomly_rotate_and_translate(new_coords, vj_site)
-        # new_coords = randomly_translate(new_coords, vj_site) # keep for pedagogical utility
+        # new_coords = translate_coordinates(new_coords, vj_site) # keep for pedagogical utility
 
         vj_plus_one_idxs = np.concatenate([[water_idx], vj_mols])
         log_weights_after_full, trial_coords = self.batch_log_weights_incremental(

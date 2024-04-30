@@ -4,13 +4,16 @@ from functools import partial
 from typing import Callable, Iterator, List, Mapping, Sequence, Set, Tuple
 
 import numpy as np
+from jax import jit
+from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem.rdchem import BondType
 
+from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K
 from timemachine.fe.dummy import canonicalize_bond
 from timemachine.fe.utils import get_romol_conf
 from timemachine.graph_utils import convert_to_nx, enumerate_simple_paths
-from timemachine.potentials.chiral_restraints import pyramidal_volume, torsion_volume
+from timemachine.potentials.chiral_restraints import U_chiral_atom_batch, pyramidal_volume, torsion_volume
 
 FourTuple = Tuple[int, int, int, int]
 
@@ -398,3 +401,86 @@ def setup_find_flipped_planar_torsions(
     find_flipped_planar_torsions = partial(_find_flipped_torsions, planar_torsions_a, planar_torsions_b)
 
     return find_flipped_planar_torsions
+
+
+def make_chiral_restr_fxns(mol_a, mol_b, chiral_k: float = DEFAULT_CHIRAL_ATOM_RESTRAINT_K):
+    restr_idxs_a = np.array(setup_all_chiral_atom_restr_idxs(mol_a, get_romol_conf(mol_a)))
+    restr_idxs_b = np.array(setup_all_chiral_atom_restr_idxs(mol_b, get_romol_conf(mol_b)))
+
+    @jit
+    def U_a(x_a):
+        return U_chiral_atom_batch(x_a, restr_idxs_a, chiral_k).sum()
+
+    @jit
+    def U_b(x_b):
+        return U_chiral_atom_batch(x_b, restr_idxs_b, chiral_k).sum()
+
+    return U_a, U_b
+
+
+def xs_ab_from_xs(xs: NDArray, atom_map):
+    """map convert_single_topology_mols over xs
+
+    Parameters
+    ----------
+    xs: An array of coordinates
+        Coordinates containing the alchemical molecule constructed for RBFE
+    atom_map: timemachine.fe.single_topology.AtomMapMixin
+        Contains the atom map between the two end state molecules
+
+    Returns
+    -------
+    2-tuple
+        Returns a tuple of the mol_a and mol_b frames.
+
+    """
+    # Import here to avoid circular, TBD Deboggle
+    from timemachine.fe.cif_writer import convert_single_topology_mols
+
+    n_a = atom_map.mol_a.GetNumAtoms()
+    xs_a_, xs_b_ = [], []
+    for x in xs:
+        combined = convert_single_topology_mols(x, atom_map)
+        xs_a_.append(combined[:n_a])
+        xs_b_.append(combined[n_a:])
+    xs_a = np.array(xs_a_)
+    xs_b = np.array(xs_b_)
+    return xs_a, xs_b
+
+
+def make_chiral_flip_heatmaps(simulation_result, atom_map):
+    """Evaluate mol_a and mol_b chiral restraint energy in each frame of a simulation
+
+    Parameters
+    ----------
+    simulation_result: timemachine.fe.free_energy.SimulationResult
+        Containing all of the frames that make up a simulation_result, may contain intermediate windows
+
+    atom_map: timemachine.fe.single_topology.AtomMapMixin
+        Contains the atom map between the two end state molecules
+
+    Returns
+    -------
+    2-tuple
+        Returns a tuple of the chiral energies in endstate A (lamb=0.0) and endstate B (lamb=1.0)
+        each with shape (num_states, frames_per_state). Chiral energies are zero when there is no inversion
+    """
+    mol_a_chiral_conflicts = []
+    mol_b_chiral_conflicts = []
+    U_a, U_b = make_chiral_restr_fxns(atom_map.mol_a, atom_map.mol_b)
+
+    for traj in simulation_result.frames:
+        # Truncate off just the ligands, to handle all type of simulations
+        # Use list comprehension to avoid loading the complete frames into memory traj is a StoredArrays object
+        xs = np.array([frame[-atom_map.get_num_atoms() :] for frame in traj])
+        xs_a, xs_b = xs_ab_from_xs(xs, atom_map)
+        # TODO: probably vmap
+        mol_a_chiral_conflicts.append(np.array([U_a(x) for x in xs_a]))
+        mol_b_chiral_conflicts.append(np.array([U_b(x) for x in xs_b]))
+
+    mol_a_chiral_conflicts = np.array(mol_a_chiral_conflicts)
+    mol_b_chiral_conflicts = np.array(mol_b_chiral_conflicts)
+
+    assert mol_a_chiral_conflicts.shape == (len(simulation_result.frames), len(simulation_result.frames[0]))
+
+    return mol_a_chiral_conflicts, mol_b_chiral_conflicts

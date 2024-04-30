@@ -4,7 +4,6 @@ from typing import List, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import NDArray
-from PIL import Image
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import rdMolDraw2D
@@ -190,13 +189,31 @@ def rotate_mol(mol, rotation_matrix):
     return mol_copy
 
 
+def generate_bond_idxs_and_colors(mol_a, mol_b, core):
+    bond_core_on = (144 / 255, 238 / 255, 144 / 255)  # green
+    bond_core_off = (238 / 255, 144 / 255, 144 / 255)  # red
+    bond_idxs_a = []
+    bond_colors_a = dict()
+    core_a_to_b = dict(core)
+    for bond in mol_a.GetBonds():
+        src_a, dst_a = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        if src_a in core_a_to_b and dst_a in core_a_to_b:
+            bond_idxs_a.append(bond.GetIdx())
+            if mol_b.GetBondBetweenAtoms(int(core_a_to_b[src_a]), int(core_a_to_b[dst_a])):
+                bond_colors_a[int(bond.GetIdx())] = bond_core_on
+            else:
+                bond_colors_a[int(bond.GetIdx())] = bond_core_off
+
+    return bond_idxs_a, bond_colors_a
+
+
 def plot_atom_mapping_grid(
     mol_a: Chem.rdchem.Mol,
     mol_b: Chem.rdchem.Mol,
     core: NDArray,
     num_rotations: int = 5,
     seed: int = 1234,
-) -> Image:
+):
     mol_a_3d = recenter_mol(mol_a)
     mol_b_3d = recenter_mol(mol_b)
 
@@ -210,8 +227,15 @@ def plot_atom_mapping_grid(
         atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
         atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
 
+    # highlight bond idxs and colors
+    bond_idxs_a, bond_colors_a = generate_bond_idxs_and_colors(mol_a, mol_b, core)
+    bond_idxs_b, bond_colors_b = generate_bond_idxs_and_colors(mol_b, mol_a, core[:, [1, 0]])
+    # highlight atom idxs and colors
     hals = [core[:, 0].tolist(), core[:, 1].tolist()]
     hacs = [atom_colors_a, atom_colors_b]
+
+    hbls = [bond_idxs_a, bond_idxs_b]
+    hbcs = [bond_colors_a, bond_colors_b]
 
     for rot in extra_rotations:
         extra_mols.append(rotate_mol(mol_a_3d, rot))
@@ -220,6 +244,10 @@ def plot_atom_mapping_grid(
         hals.append(core[:, 1].tolist())
         hacs.append(atom_colors_a)
         hacs.append(atom_colors_b)
+        hbls.append(bond_idxs_a)
+        hbls.append(bond_idxs_b)
+        hbcs.append(bond_colors_a)
+        hbcs.append(bond_colors_b)
 
     num_mols = len(extra_mols) + 2
 
@@ -235,6 +263,8 @@ def plot_atom_mapping_grid(
         molsPerRow=num_mols,
         highlightAtomLists=hals,
         highlightAtomColors=hacs,
+        highlightBondLists=hbls,
+        highlightBondColors=hbcs,
         subImgSize=(25 * num_mols, 300),
         legends=legends,
         useSVG=True,

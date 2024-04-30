@@ -77,17 +77,26 @@ def harmonic_bond(conf, params, box, bond_idxs):
     return jnp.sum(energy)
 
 
-def harmonic_angle(conf, params, box, angle_idxs, cos_angles=True):
+def kahan_angle(ci, cj, ck):
+    """
+    Compute the angle given three points, i,j,k, as defined by the vector j->i, j->k
+    """
+    rji = ci - cj
+    rjk = ck - cj
+    nji = jnp.linalg.norm(rji, axis=-1, keepdims=True)
+    njk = jnp.linalg.norm(rjk, axis=-1, keepdims=True)
+    y = jnp.linalg.norm(njk * rji - nji * rjk, axis=-1)
+    x = jnp.linalg.norm(njk * rji + nji * rjk, axis=-1)
+    angle = 2 * jnp.arctan2(y, x)
+    return angle
+
+
+def harmonic_angle(conf, params, box, angle_idxs):
     """
     Compute the harmonic angle energy given a collection of molecules.
 
     This implements a harmonic angle potential:
         V(t) = k*(t - t0)^2
-            if cos_angles=False
-        or
-        V(t) = k*(cos(t)-cos(t0))^2
-            if cos_angles=True
-
 
     Parameters:
     -----------
@@ -105,40 +114,21 @@ def harmonic_angle(conf, params, box, angle_idxs, cos_angles=True):
         each element (i, j, k) is a unique angle in the conformation. Atom j is defined
         to be the middle atom.
 
-    cos_angles: True (default)
-        if True, then this instead implements V(t) = k/2*(cos(t)-cos(t0))^2. This is far more
-        numerically stable when the angle is pi.
-
     Notes
     -----
     * box argument unused
     """
     if angle_idxs.shape[0] == 0:
         return 0.0
-
     ci = conf[angle_idxs[:, 0]]
     cj = conf[angle_idxs[:, 1]]
     ck = conf[angle_idxs[:, 2]]
-
     kas = params[:, 0]
     a0s = params[:, 1]
+    angle = kahan_angle(ci, cj, ck)
+    energies = kas / 2 * jnp.power(angle - a0s, 2)
 
-    vij = ci - cj
-    vjk = ck - cj
-
-    top = jnp.sum(jnp.multiply(vij, vjk), -1)
-    bot = jnp.linalg.norm(vij, axis=-1) * jnp.linalg.norm(vjk, axis=-1)
-
-    tb = top / bot
-
-    # (ytz): we use the squared version so that the energy is strictly positive
-    if cos_angles:
-        energies = kas / 2 * jnp.power(tb - jnp.cos(a0s), 2)
-    else:
-        angle = jnp.arccos(tb)
-        energies = kas / 2 * jnp.power(angle - a0s, 2)
-
-    return jnp.sum(energies, -1)  # reduce over all angles
+    return jnp.sum(energies, axis=-1)  # reduce over all angles
 
 
 def signed_torsion_angle(xa, xb, xc, xd):

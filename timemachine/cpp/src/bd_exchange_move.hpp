@@ -3,6 +3,7 @@
 #include "device_buffer.hpp"
 #include "mover.hpp"
 #include "nonbonded_mol_energy.hpp"
+#include "pinned_host_buffer.hpp"
 #include "segmented_sumexp.hpp"
 #include "segmented_weighted_random_sampler.hpp"
 #include <array>
@@ -36,6 +37,7 @@ protected:
     const RealType beta_; // 1 / kT
     const RealType cutoff_squared_;
     const int batch_size_;
+    const int num_intermediates_per_reduce_; // Number of intermediate values to reduce mol weights
     size_t num_attempted_;
     NonbondedMolEnergyPotential<RealType> mol_potential_;
     SegmentedWeightedRandomSampler<RealType> sampler_;
@@ -43,7 +45,8 @@ protected:
     // Buffer for evaluating moves without touching the original coords
     DeviceBuffer<double> d_intermediate_coords_;             // [batch_size_, mol_size_, 3]
     DeviceBuffer<double> d_params_;                          // [N, PARAMS_PER_ATOM]
-    DeviceBuffer<__int128> d_mol_energy_buffer_;             // [batch_size_, num_target_mols_]
+    DeviceBuffer<__int128> d_before_mol_energy_buffer_;      // [num_target_mols_]
+    DeviceBuffer<__int128> d_proposal_mol_energy_buffer_;    // [batch_size, num_target_mols_]
     DeviceBuffer<RealType> d_sample_per_atom_energy_buffer_; // [batch_size_, mol_size_ * N]
     DeviceBuffer<int> d_atom_idxs_;                          // [num_target_mols_, mol_size_]
     DeviceBuffer<int> d_mol_offsets_;                        // [num_target_mols_ + 1]
@@ -57,31 +60,29 @@ protected:
     DeviceBuffer<RealType> d_lse_exp_sum_after_;  // [batch_size_]
 
     DeviceBuffer<int> d_samples_;            // [batch_size_] The indices of the molecules to make proposals for
+    DeviceBuffer<int> d_selected_sample_;    // [1] The mol selected from the batch
     DeviceBuffer<RealType> d_quaternions_;   // Normal noise for uniform random rotations
+    DeviceBuffer<RealType> d_mh_noise_;      // Noise used in the Metropolis-Hastings check
     DeviceBuffer<size_t> d_num_accepted_;    // [1]
     DeviceBuffer<int> d_target_mol_atoms_;   // [batch_size_, mol_size_]
     DeviceBuffer<int> d_target_mol_offsets_; // [num_target_mols + 1]
-    DeviceBuffer<__int128> d_intermediate_sample_weights_;
-    DeviceBuffer<RealType> d_sample_noise_; // Noise to use for selecting molecules
+    DeviceBuffer<__int128> d_intermediate_sample_weights_; // [batch_size, num_intermediates_per_reduce_]
+    DeviceBuffer<RealType> d_sample_noise_;                // Noise to use for selecting molecules
     DeviceBuffer<RealType>
         d_sampling_intermediate_;           // [batch_size_, num_target_mols_] Intermediate buffer for weighted sampling
     DeviceBuffer<RealType> d_translations_; // Uniform noise for translation + the check
-    DeviceBuffer<int> d_sample_segments_offsets_; // Segment offsets for the sampler
+    DeviceBuffer<int> d_sample_segments_offsets_; // Segment offsets for the sampler // [batch_size + 1]
+    DeviceBuffer<int> d_noise_offset_;            // [1]  Offset into noise
 
-    curandGenerator_t cr_rng_quat_;
-    curandGenerator_t cr_rng_translations_;
-    curandGenerator_t cr_rng_samples_;
+    PinnedHostBuffer<int> p_noise_offset_; // [1]
 
-    void compute_initial_weights(const int N, double *d_coords, double *d_box, cudaStream_t stream);
+    // If the RNGs are changed, make sure to modify the seeding of TIBDExchangeMove translations RNG
+    curandGenerator_t cr_rng_quat_;         // Generate noise for quaternions
+    curandGenerator_t cr_rng_translations_; // Generate noise for translations
+    curandGenerator_t cr_rng_samples_;      // Generate noise for selecting waters
+    curandGenerator_t cr_rng_mh_;           // Generate noise for Metropolis-Hastings
 
-    void compute_incremental_weights(
-        const int N,
-        const bool scale,
-        const double *d_box,
-        const double *d_coords,
-        const RealType *d_quaternions,
-        const RealType *d_translations,
-        cudaStream_t stream);
+    void compute_initial_log_weights_device(const int N, double *d_coords, double *d_box, cudaStream_t stream);
 
     BDExchangeMove(
         const int N,
@@ -109,6 +110,35 @@ public:
         const int interval,
         const int batch_size);
 
+    void compute_incremental_log_weights_device(
+        const int N,
+        const bool scale,
+        const double *d_box,
+        const double *d_coords,
+        const RealType *d_quaternions,
+        const RealType *d_translations,
+        cudaStream_t stream);
+
+    // compute_incremental_log_weights_host is used for testing the computation of incremental weights
+    // with different batch sizes.
+    // Note that the translations provided are used as is and are not scaled by the box extents.
+    std::vector<std::vector<RealType>> compute_incremental_log_weights_host(
+        const int N,
+        const double *h_coords,
+        const double *h_box,
+        const int *mol_idxs,
+        const RealType *h_quaternions,
+        const RealType *h_translations);
+
+    std::vector<RealType> compute_initial_log_weights_host(const int N, const double *h_coords, const double *h_box);
+
+    // get_after_weights returns the per molecule weight before each proposal, may come from either
+    // `compute_intial_weights_device` or from `compute_incremental_log_weights_device`.
+    std::vector<RealType> get_before_log_weights();
+
+    // get_after_weights returns the per molecule weight after being computed incrementally
+    std::vector<RealType> get_after_log_weights();
+
     ~BDExchangeMove();
 
     virtual void move(
@@ -119,6 +149,8 @@ public:
 
     virtual double log_probability_host();
     virtual double raw_log_probability_host();
+
+    size_t batch_size() const { return batch_size_; }
 
     size_t n_proposed() const { return num_attempted_; }
 

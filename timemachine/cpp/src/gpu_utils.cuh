@@ -9,7 +9,7 @@
 
 namespace timemachine {
 
-// round_up_even is important to generating random numbers with cuRand as the generators only generate
+// round_up_even is important to generating random numbers with cuRand if generating Normal noise as the normal generators only generate
 // sets that are divisible by the dimension (typically 2) and will return error CURAND_STATUS_LENGTH_NOT_MULTIPLE.
 // https://docs.nvidia.com/cuda/curand/group__HOST.html#group__HOST_1gb94a31d5c165858c96b6c18b70644437
 int round_up_even(int count);
@@ -111,6 +111,10 @@ double __device__ __forceinline__ rmul_rn(double a, double b) { return __dmul_rn
 float __device__ __forceinline__ radd_rn(float a, float b) { return __fadd_rn(a, b); }
 
 double __device__ __forceinline__ radd_rn(double a, double b) { return __dadd_rn(a, b); }
+
+float __device__ __forceinline__ rsub_rn(float a, float b) { return __fsub_rn(a, b); }
+
+double __device__ __forceinline__ rsub_rn(double a, double b) { return __dsub_rn(a, b); }
 
 // If this were not int128s, we could do __shfl_down_sync, but only supports up to 64 values
 // For more details reference the PDF in the docstring for k_accumulate_energy

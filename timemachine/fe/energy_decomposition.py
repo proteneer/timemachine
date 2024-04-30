@@ -1,12 +1,13 @@
 import functools
 from dataclasses import dataclass
-from typing import Callable, Generic, Iterable, List, Sequence, TypeVar
+from typing import Callable, Generic, List, Sequence, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
-from timemachine.lib.custom_ops import BoundPotential
+from timemachine.lib.custom_ops import Potential
+from timemachine.potentials.types import Params
 
 Frames = TypeVar("Frames")
 Boxes = List[NDArray]
@@ -23,12 +24,17 @@ class EnergyDecomposedState(Generic[Frames]):
     batch_u_fns: Sequence[Batch_u_fn]  # u_fn : (frames, boxes) -> reduced_energies
 
 
-def get_batch_u_fns(bps: Iterable[BoundPotential], temperature: float = DEFAULT_TEMP) -> List[Batch_u_fn]:
+def get_batch_u_fns(
+    pots: Sequence[Potential],
+    params: Sequence[Params],
+    temperature: float = DEFAULT_TEMP,
+) -> List[Batch_u_fn]:
     """Get a list of functions that take in (coords, boxes), return reduced_potentials
 
     Parameters
     ----------
-    bps: list of bound potential impls
+    pots: list of potential impls
+    params: list of parameters to call potentials on
     temperature: float
 
     Returns
@@ -37,17 +43,26 @@ def get_batch_u_fns(bps: Iterable[BoundPotential], temperature: float = DEFAULT_
     """
     kBT = temperature * BOLTZ
 
+    assert len(pots) == len(params)
     batch_u_fns: List[Batch_u_fn] = []
-    for bp in bps:
+    for p, pot in zip(params, pots):
 
-        def batch_u_fn(xs, boxes, bp_impl):
+        def batch_u_fn(xs, boxes, pot_impl, pot_params):
             coords = np.array([x for x in xs])
-            _, Us = bp_impl.execute_batch(coords, np.array(boxes), compute_du_dx=False, compute_u=True)
-            us = Us / kBT
+            _, _, Us = pot_impl.execute_batch(
+                coords,
+                pot_params,
+                np.array(boxes),
+                compute_du_dx=False,
+                compute_du_dp=False,
+                compute_u=True,
+            )
+            # ravel the array to remove the params dimension
+            us = Us.ravel() / kBT
             return us
 
         # extra functools.partial is needed to deal with closure jank
-        batch_u_fns.append(functools.partial(batch_u_fn, bp_impl=bp))
+        batch_u_fns.append(functools.partial(batch_u_fn, pot_impl=pot, pot_params=p[np.newaxis]))
 
     return batch_u_fns
 

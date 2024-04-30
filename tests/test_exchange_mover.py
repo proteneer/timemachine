@@ -5,11 +5,33 @@ config.update("jax_enable_x64", True)
 import numpy as np
 import pytest
 
-from timemachine.constants import DEFAULT_KT
+from timemachine.constants import DEFAULT_KT, DEFAULT_WATER_FF
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.builders import build_water_system
 from timemachine.md.exchange import exchange_mover
 from timemachine.md.exchange.exchange_mover import delta_r_np
+from timemachine.potentials import HarmonicBond
 
 pytestmark = [pytest.mark.nocuda]
+
+
+@pytest.mark.parametrize("num_lig_atoms", [1, 2, 3, 4, 10])
+def test_get_water_idxs(num_lig_atoms):
+    system, host_conf, _, _ = build_water_system(3.0, DEFAULT_WATER_FF)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+
+    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
+
+    assert exchange_mover.get_water_idxs(all_group_idxs) == all_group_idxs
+
+    additional_ligand_atoms = np.arange(num_lig_atoms) + host_conf.shape[0]
+    all_group_idxs.append(additional_ligand_atoms)
+
+    water_idxs = exchange_mover.get_water_idxs(all_group_idxs, ligand_idxs=additional_ligand_atoms)
+    assert len(water_idxs) == len(all_group_idxs) - 1
 
 
 @pytest.mark.parametrize("add_offset", [True, False])

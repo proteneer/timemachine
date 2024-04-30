@@ -1,9 +1,10 @@
-from typing import Any
+from typing import Tuple, cast
 
 import jax.numpy as jnp
 import numpy as np
-from jax import jit, vmap
+from jax import Array, jit, vmap
 from jax.scipy.special import erfc
+from jax.typing import ArrayLike
 from numpy.typing import NDArray
 from scipy.special import binom
 
@@ -16,8 +17,6 @@ from timemachine.potentials.jax_utils import (
     pairwise_distances,
     process_traj_in_chunks,
 )
-
-Array = Any
 
 
 def switch_fn(dij, cutoff):
@@ -60,7 +59,15 @@ def direct_space_pme(dij, qij, beta):
     return qij * erfc(beta * dij) / dij
 
 
-def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
+def nonbonded_block_unsummed(
+    xi: NDArray,
+    xj: NDArray,
+    box: NDArray,
+    params_i: NDArray,
+    params_j: NDArray,
+    beta: float,
+    cutoff: float,
+) -> Array:
     """
     This is a modified version of `nonbonded` that computes a block of
     NxM interactions between two sets of particles x_i and x_j. It is assumed that
@@ -68,8 +75,7 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     include computing the interaction energy between the environment and a
     ligand.
 
-    This is mainly used for testing, as it does not support 4D decoupling or
-    alchemical semantics yet.
+    This is mainly used for testing.
 
     Parameters
     ----------
@@ -79,10 +85,10 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
         Coordinates
     box : Optional 3x3 np.ndarray
         Periodic boundary conditions
-    params_i : (N, 3) np.ndarray
-        3-Tuples of (charge, sigma, epsilons)
-    params_j : (M, 3) np.ndarray
-        3-Tuples of (charge, sigma, epsilons)
+    params_i : (N,4) np.ndarray
+        3-Tuples of (charge, sigma, epsilons, w_offset)
+    params_j : (M,4) np.ndarray
+        3-Tuples of (charge, sigma, epsilons, w_offset)
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
@@ -98,7 +104,13 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     ri = jnp.expand_dims(xi, axis=1)
     rj = jnp.expand_dims(xj, axis=0)
 
-    dij = jnp.linalg.norm(delta_r(ri, rj, box), axis=-1)
+    w_i = jnp.expand_dims(params_i[:, 3], axis=1)
+    w_j = jnp.expand_dims(params_j[:, 3], axis=0)
+
+    dij = delta_r(ri, rj, box)
+    dij = jnp.concatenate([dij, (w_i - w_j).reshape(*dij.shape[:-1], 1)], axis=-1)
+
+    dij = jnp.linalg.norm(dij, axis=-1)
     sig_i = jnp.expand_dims(params_i[:, 1], axis=1)
     sig_j = jnp.expand_dims(params_j[:, 1], axis=0)
     eps_i = jnp.expand_dims(params_i[:, 2], axis=1)
@@ -116,7 +128,7 @@ def nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff):
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
     nrgs = jnp.where(dij < cutoff, es + lj, 0)
-    return nrgs
+    return cast(Array, nrgs)
 
 
 def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
@@ -317,7 +329,7 @@ def nonbonded_on_specific_pairs(
     beta: float,
     cutoff: Optional[float] = None,
     rescale_mask=None,
-):
+) -> Tuple[Array, Array]:
     """See `nonbonded` docstring for more details
 
     Notes
@@ -328,7 +340,7 @@ def nonbonded_on_specific_pairs(
     """
 
     if len(pairs) == 0:
-        return np.zeros(1), np.zeros(1)
+        return jnp.zeros(1), jnp.zeros(1)
 
     inds_l, inds_r = pairs.T
 
@@ -364,7 +376,10 @@ def nonbonded_on_specific_pairs(
         rescale_electrostatics = rescale_mask[:, 0]
         electrostatics = jnp.where(rescale_electrostatics != 0, electrostatics * rescale_electrostatics, 0)
 
-    return vdW, electrostatics
+    vdW_arr = cast(Array, vdW)
+    electrostatics_arr = cast(Array, electrostatics)
+
+    return vdW_arr, electrostatics_arr
 
 
 def nonbonded_on_precomputed_pairs(
@@ -461,7 +476,7 @@ def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
 #   TODO: avoid repetition between this and lennard-jones
 
 
-def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=jnp.inf) -> float:
+def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutoff=jnp.inf) -> Array:
     """Precompute part of (sum_i q_i * q_j / d_ij * rxn_field(d_ij)) that does not depend on q_i
 
     Parameters
@@ -544,7 +559,7 @@ def coulomb_prefactors_on_traj(
     return process_traj_in_chunks(f_snapshot, traj, boxes, chunk_size)
 
 
-def coulomb_interaction_group_energy(q_ligand: Array, q_prefactors: Array) -> float:
+def coulomb_interaction_group_energy(q_ligand: ArrayLike, q_prefactors: ArrayLike) -> Array:
     """Assuming q_prefactors = coulomb_prefactors_on_snapshot(x_ligand, ...),
     cheaply compute the energy of ligand-environment interaction group
 

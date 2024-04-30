@@ -47,6 +47,7 @@ void __global__ k_log_flat_bottom_bond(
     // compute common subexpressions involving distance, displacements
     RealType dx[3];
     RealType r2 = 0;
+#pragma unroll
     for (int d = 0; d < 3; d++) {
         double delta = coords[src_idx * 3 + d] - coords[dst_idx * 3 + d];
         delta -= box[d * 3 + d] * nearbyint(delta / box[d * 3 + d]);
@@ -68,40 +69,49 @@ void __global__ k_log_flat_bottom_bond(
         u[b_idx] = FLOAT_TO_FIXED_ENERGY<RealType>(u_real);
     }
 
-    RealType prefactor = -exp(-beta * nrg) / (1 - exp(-beta * nrg));
+    RealType prefactor = -exp(-beta * nrg);
+    prefactor = prefactor / (static_cast<RealType>(1) + prefactor);
 
-    if (du_dp) {
-        // compute parameter derivatives
-        RealType du_dk_real = (r_gt_rmax * (pow(r - rmax, 4) / 4)) + (r_lt_rmin * (pow(r - rmin, 4) / 4));
-        RealType du_drmin_real = r_lt_rmin * (-k * pow(r - rmin, 3));
-        RealType du_drmax_real = r_gt_rmax * (-k * pow(r - rmax, 3));
-
-        // cast float -> fixed
-        auto du_dk = FLOAT_TO_FIXED_BONDED<RealType>(du_dk_real * prefactor);
-        auto du_drmin = FLOAT_TO_FIXED_BONDED<RealType>(du_drmin_real * prefactor);
-        auto du_drmax = FLOAT_TO_FIXED_BONDED<RealType>(du_drmax_real * prefactor);
-
-        // increment du_dp array
-        atomicAdd(du_dp + k_idx, du_dk);
-        atomicAdd(du_dp + rmin_idx, du_drmin);
-        atomicAdd(du_dp + rmax_idx, du_drmax);
-    }
-
-    if (du_dx) {
-        RealType du_dr = k * ((r_gt_rmax * pow(r - rmax, 3)) + (r_lt_rmin * pow(r - rmin, 3)));
-
-        for (int d = 0; d < 3; d++) {
-            // compute du/dcoords
-            RealType du_dsrc_real = du_dr * dx[d] / r;
-            RealType du_ddst_real = -du_dsrc_real;
+    if (du_dp || du_dx) {
+        RealType d_r_min = r - rmin;
+        RealType d_r_max = r - rmax;
+        RealType d_rmin_3 = d_r_min * d_r_min * d_r_min;
+        RealType d_rmax_3 = d_r_max * d_r_max * d_r_max;
+        if (du_dp) {
+            // compute parameter derivatives
+            RealType du_dk_real = (r_gt_rmax * ((d_rmax_3 * d_r_max) / static_cast<RealType>(4))) +
+                                  (r_lt_rmin * ((d_rmin_3 * d_r_min) / static_cast<RealType>(4)));
+            RealType du_drmin_real = r_lt_rmin * (-k * d_rmin_3);
+            RealType du_drmax_real = r_gt_rmax * (-k * d_rmax_3);
 
             // cast float -> fixed
-            auto du_dsrc = FLOAT_TO_FIXED_BONDED<RealType>(prefactor * du_dsrc_real);
-            auto du_ddst = FLOAT_TO_FIXED_BONDED<RealType>(prefactor * du_ddst_real);
+            unsigned long long du_dk = FLOAT_TO_FIXED_BONDED<RealType>(du_dk_real * prefactor);
+            unsigned long long du_drmin = FLOAT_TO_FIXED_BONDED<RealType>(du_drmin_real * prefactor);
+            unsigned long long du_drmax = FLOAT_TO_FIXED_BONDED<RealType>(du_drmax_real * prefactor);
 
-            // increment du_dx array
-            atomicAdd(du_dx + src_idx * 3 + d, du_dsrc);
-            atomicAdd(du_dx + dst_idx * 3 + d, du_ddst);
+            // increment du_dp array
+            atomicAdd(du_dp + k_idx, du_dk);
+            atomicAdd(du_dp + rmin_idx, du_drmin);
+            atomicAdd(du_dp + rmax_idx, du_drmax);
+        }
+
+        if (du_dx) {
+            RealType du_dr = k * ((r_gt_rmax * d_rmax_3) + (r_lt_rmin * d_rmin_3));
+            RealType inv_r = 1 / r;
+#pragma unroll
+            for (int d = 0; d < 3; d++) {
+                // compute du/dcoords
+                RealType du_dsrc_real = du_dr * dx[d] * inv_r;
+                RealType du_ddst_real = -du_dsrc_real;
+
+                // cast float -> fixed
+                unsigned long long du_dsrc = FLOAT_TO_FIXED_BONDED<RealType>(prefactor * du_dsrc_real);
+                unsigned long long du_ddst = FLOAT_TO_FIXED_BONDED<RealType>(prefactor * du_ddst_real);
+
+                // increment du_dx array
+                atomicAdd(du_dx + src_idx * 3 + d, du_dsrc);
+                atomicAdd(du_dx + dst_idx * 3 + d, du_ddst);
+            }
         }
     }
 }

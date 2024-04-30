@@ -18,8 +18,8 @@ def test_segmented_cuda_logsumexp_validation(precision):
     else:
         summer = custom_ops.SegmentedSumExp_f64(max_values_per_segment, num_segments)
 
-    with pytest.raises(RuntimeError, match="number of segments don't match"):
-        summer.logsumexp([[1.0]])
+    with pytest.raises(RuntimeError, match="number of segments must be less than or equal"):
+        summer.logsumexp([[1.0] for _ in range(num_segments + 1)])
 
     with pytest.raises(RuntimeError, match="empty array not allowed"):
         summer.logsumexp([[1.0], []])

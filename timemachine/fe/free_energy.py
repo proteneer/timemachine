@@ -15,12 +15,7 @@ from timemachine.fe.bar import (
     pair_overlap_from_ukln,
     works_from_ukln,
 )
-from timemachine.fe.energy_decomposition import (
-    Batch_u_fn,
-    EnergyDecomposedState,
-    compute_energy_decomposed_u_kln,
-    get_batch_u_fns,
-)
+from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
 from timemachine.fe.plots import (
     plot_as_png_fxn,
     plot_dG_errs_figure,
@@ -32,9 +27,10 @@ from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
+from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.hrex import (
     HREX,
     HREXDiagnostics,
@@ -44,9 +40,13 @@ from timemachine.md.hrex import (
     get_swap_attempts_per_iter_heuristic,
 )
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, HarmonicBond, SummedPotential
-from timemachine.potentials.potential import GpuImplWrapper
+from timemachine.potentials import BoundPotential, HarmonicBond, NonbondedInteractionGroup, SummedPotential
 from timemachine.utils import batches, pairwise_transform_and_combine
+
+WATER_SAMPLER_MOVERS = (
+    custom_ops.TIBDExchangeMove_f32,
+    custom_ops.TIBDExchangeMove_f64,
+)
 
 
 class HostConfig:
@@ -79,6 +79,38 @@ class HREXParams:
 
 
 @dataclass(frozen=True)
+class WaterSamplingParams:
+    """
+    Parameters
+    ----------
+
+    interval:
+        How many steps of MD between water sampling moves
+
+    n_proposals:
+        Number of proposals per make.
+
+    batch_size:
+        Internal parameter detailing the parallelism of the mover, typically can be left at default.
+
+    radius:
+        Radius, in nanometers, from the centroid of the molecule to treat as the inner target volume
+    """
+
+    interval: int = 400
+    n_proposals: int = 1000
+    batch_size: int = 250
+    radius: float = 1.0
+
+    def __post_init__(self):
+        assert self.interval > 0
+        assert self.n_proposals > 0
+        assert self.radius > 0.0
+        assert self.batch_size > 0
+        assert self.batch_size <= self.n_proposals
+
+
+@dataclass(frozen=True)
 class MDParams:
     n_frames: int
     n_eq_steps: int
@@ -92,6 +124,8 @@ class MDParams:
 
     # Set to HREXParams or None to disable HREX
     hrex_params: Optional[HREXParams] = None
+    # Setting water_sampling_params to None disables water sampling.
+    water_sampling_params: Optional[WaterSamplingParams] = None
 
     def __post_init__(self):
         assert self.steps_per_frame > 0
@@ -118,6 +152,11 @@ class InitialState:
     box0: NDArray
     lamb: float
     ligand_idxs: NDArray
+    protein_idxs: NDArray
+
+    def __post_init__(self):
+        assert self.ligand_idxs.dtype == np.int32 or self.ligand_idxs.dtype == np.int64
+        assert self.protein_idxs.dtype == np.int32 or self.protein_idxs.dtype == np.int64
 
 
 @dataclass
@@ -387,12 +426,71 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         return np.concatenate([host_values, ligand_values])
 
 
-def get_context(initial_state: InitialState) -> Context:
-    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
+def get_water_sampler_params(initial_state: InitialState) -> NDArray:
+    """Given an initial state, return the parameters that define the nonbonded parameters of water with respect to the
+    entire system.
+
+    Since we split the different components of the NB into ligand-water, ligand-protein, we want to use the ligand-water parameter
+    to ensure that the ligand component is correctly configured for the specific lambda window.
+    """
+    summed_pot = next(p.potential for p in initial_state.potentials if isinstance(p.potential, SummedPotential))
+    # TBD Figure out a better way of handling the jankyness of having to select the IxnGroup that defines the Ligand-Water
+    # Currently this just hardcodes to the first ixn group potential which is the ligand-water ixn group as returned by HostTopology.parameterize_nonbonded
+    ixn_group_idx = next(i for i, pot in enumerate(summed_pot.potentials) if isinstance(pot, NonbondedInteractionGroup))
+    assert isinstance(summed_pot.potentials[ixn_group_idx], NonbondedInteractionGroup)
+    water_params = summed_pot.params_init[ixn_group_idx]
+    assert water_params.shape[1] == 4
+    water_params = np.asarray(water_params)
+    return water_params
+
+
+def get_context(initial_state: InitialState, md_params: Optional[MDParams] = None) -> Context:
+    """
+    Construct a Context that has a single SummedPotential that combines the potentials defined by the initial state
+    """
+    potentials = [bp.potential for bp in initial_state.potentials]
+    params = [bp.params for bp in initial_state.potentials]
+    potential = SummedPotential(potentials, params).to_gpu(np.float32)
+
+    # Set up context for MD using overall potential
+    bound_impl = potential.bind_params_list(params).bound_impl
+    bound_impls = [bound_impl]
     intg_impl = initial_state.integrator.impl()
     movers = []
     if initial_state.barostat:
         movers.append(initial_state.barostat.impl(bound_impls))
+    if md_params is not None and md_params.water_sampling_params is not None:
+        # Setup the water indices
+        hb_potential = next(p.potential for p in initial_state.potentials if isinstance(p.potential, HarmonicBond))
+        group_indices = get_group_indices(get_bond_list(hb_potential), len(initial_state.integrator.masses))
+
+        water_idxs = get_water_idxs(group_indices, ligand_idxs=initial_state.ligand_idxs)
+
+        summed_pot = next(p.potential for p in initial_state.potentials if isinstance(p.potential, SummedPotential))
+        # Select a Nonbonded Potential to get the the cutoff/beta, assumes all have same cutoff/beta.
+        nb = next(p for p in summed_pot.potentials if isinstance(p, NonbondedInteractionGroup))
+
+        water_params = get_water_sampler_params(initial_state)
+
+        # Generate a new random seed based on the md params seed
+        rng = np.random.default_rng(md_params.seed)
+        water_sampler_seed = rng.integers(np.iinfo(np.int32).max)
+
+        water_sampler = custom_ops.TIBDExchangeMove_f32(
+            initial_state.x0.shape[0],
+            initial_state.ligand_idxs.tolist(),
+            [water_group.tolist() for water_group in water_idxs],
+            water_params,
+            initial_state.integrator.temperature,
+            nb.beta,
+            nb.cutoff,
+            md_params.water_sampling_params.radius,
+            water_sampler_seed,
+            md_params.water_sampling_params.n_proposals,
+            md_params.water_sampling_params.interval,
+            batch_size=md_params.water_sampling_params.batch_size,
+        )
+        movers.append(water_sampler)
 
     return Context(initial_state.x0, initial_state.v0, initial_state.box0, intg_impl, bound_impls, movers=movers)
 
@@ -507,7 +605,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     * Assertion error if coords become NaN
     """
 
-    ctxt = get_context(initial_state)
+    ctxt = get_context(initial_state, md_params)
 
     return sample_with_context(
         ctxt, md_params, initial_state.integrator.temperature, initial_state.ligand_idxs, max_buffer_frames
@@ -629,6 +727,8 @@ def run_sims_sequential(
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     u_kln_by_component_by_lambda = []
 
+    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
+    unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in initial_states[0].potentials]
     for initial_state in initial_states:
         # run simulation
         traj = sample(initial_state, md_params, max_buffer_frames=100)
@@ -637,8 +737,7 @@ def run_sims_sequential(
         # keep samples from any requested states in memory
         stored_trajectories.append(traj)
 
-        bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
-        cur_batch_U_fns = get_batch_u_fns(bound_impls, temperature)
+        cur_batch_U_fns = get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature)
 
         state = EnergyDecomposedState(traj.frames, traj.boxes, cur_batch_U_fns)
 
@@ -655,12 +754,6 @@ def run_sims_sequential(
     ]
 
     return PairBarResult(list(initial_states), bar_results), stored_trajectories
-
-
-def make_batch_u_fns(initial_state: InitialState, temperature: float) -> List[Batch_u_fn]:
-    assert initial_state.barostat is None or initial_state.barostat.temperature == temperature
-    bound_impls = [p.to_gpu(np.float32).bound_impl for p in initial_state.potentials]
-    return get_batch_u_fns(bound_impls, temperature)
 
 
 class MinOverlapWarning(UserWarning):
@@ -715,6 +808,8 @@ def run_sims_bisection(
     assert len(initial_lambdas) >= 2
     assert np.all(np.diff(initial_lambdas) > 0), "initial lambda schedule must be monotonically increasing"
 
+    lambdas = list(initial_lambdas)
+
     get_initial_state = cache(make_initial_state)
 
     @cache
@@ -723,13 +818,17 @@ def run_sims_bisection(
         traj = sample(initial_state, md_params, max_buffer_frames=100)
         return traj
 
+    # Set up a single set of unbound potentials for computing the batch U fns
+    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
+    unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in get_initial_state(lambdas[0]).potentials]
+
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
     # 1. can use significant GPU memory
     # 2. can be reconstructed relatively quickly
     def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
         initial_state = get_initial_state(lamb)
         traj = get_samples(lamb)
-        batch_u_fns = make_batch_u_fns(initial_state, temperature)
+        batch_u_fns = get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature)
         return EnergyDecomposedState(traj.frames, traj.boxes, batch_u_fns)
 
     @cache
@@ -756,7 +855,6 @@ def run_sims_bisection(
         bar_results = [get_bar_result(lamb1, lamb2) for lamb1, lamb2 in zip(lambdas, lambdas[1:])]
         return PairBarResult(refined_initial_states, bar_results)
 
-    lambdas = list(initial_lambdas)
     result = compute_intermediate_result(lambdas)
     results = [result]
 
@@ -767,14 +865,20 @@ def run_sims_bisection(
             break
 
         lambdas_new, info = greedy_bisection_step(lambdas, cost_fn, midpoint)
-
         if verbose:
             costs, left_idx, lamb_new = info
             lamb1 = lambdas[left_idx]
             lamb2 = lambdas[left_idx + 1]
+
+            if min_overlap is not None:
+                overlap_info = f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} <= {min_overlap:.3g} "
+            else:
+                overlap_info = f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} (min_overlap == None) "
+
             print(
-                f"Current minimum BAR overlap {cost_to_overlap(max(costs)):.3g} "
-                f"between states at λ={lamb1:.3g} and λ={lamb2:.3g}. "
+                f"Bisection iteration {iteration} (of {n_bisections}): "
+                + overlap_info
+                + f"between states at λ={lamb1:.3g} and λ={lamb2:.3g}. "
                 f"Sampling new state at λ={lamb_new:.3g}…"
             )
 
@@ -877,33 +981,12 @@ def run_sims_hrex(
     warn(f"Setting numpy global random state using seed {md_params.seed}")
     np.random.seed(md_params.seed)
 
-    def get_potential_and_context(initial_state: InitialState) -> Tuple[GpuImplWrapper, Context]:
-        # Set up overall potential
-        potentials = [bp.potential for bp in initial_state.potentials]
-        params = [bp.params for bp in initial_state.potentials]
-        potential = SummedPotential(potentials, params).to_gpu(np.float32)
-
-        # Set up context for MD using overall potential
-        bound_impl = potential.bind_params_list(params).bound_impl
-        bound_impls = [bound_impl]
-        intg_impl = initial_state.integrator.impl()
-        movers = []
-        if initial_state.barostat:
-            movers.append(initial_state.barostat.impl(bound_impls))
-        context = Context(
-            initial_state.x0,
-            initial_state.v0,
-            initial_state.box0,
-            intg_impl,
-            bound_impls,
-            movers=movers,
-        )
-
-        return potential, context
-
     # Set up overall potential and context using the first state.
     # NOTE: this assumes that states differ only in their parameters, but we do not check this!
-    potential, context = get_potential_and_context(initial_states[0])
+    context = get_context(initial_states[0], md_params=md_params)
+    bound_potentials = context.get_potentials()
+    assert len(bound_potentials) == 1
+    potential = bound_potentials[0].get_potential()
     temperature = initial_states[0].integrator.temperature
     ligand_idxs = initial_states[0].ligand_idxs
 
@@ -911,21 +994,16 @@ def run_sims_hrex(
         return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
 
     params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
+    water_params_by_state: Optional[NDArray] = None
+    if md_params.water_sampling_params is not None:
+        water_params_by_state = np.array([get_water_sampler_params(initial_state) for initial_state in initial_states])
 
-    def compute_log_q_matrix(xvbs: List[CoordsVelBox]):
+    def compute_log_q_matrix(xvbs: List[CoordsVelBox]) -> NDArray:
         coords = np.array([xvb.coords for xvb in xvbs])
         boxes = np.array([xvb.box for xvb in xvbs])
-        _, _, U = potential.unbound_impl.execute_batch(coords, params_by_state, boxes, False, False, True)
+        _, _, U = potential.execute_batch(coords, params_by_state, boxes, False, False, True)
         log_q = -U / (BOLTZ * temperature)
         return log_q
-
-    def get_log_q_fn(xvbs: List[CoordsVelBox]):
-        log_q_kl = compute_log_q_matrix(xvbs)
-
-        def log_q_fn(replica_idx: ReplicaIdx, state_idx: StateIdx) -> float:
-            return log_q_kl[replica_idx, state_idx]
-
-        return log_q_fn
 
     state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
     neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
@@ -940,30 +1018,36 @@ def run_sims_hrex(
     if barostat is not None:
         barostat.set_interval(equil_barostat_interval)
 
-    def get_equilibrated_xvb(xvb: CoordsVelBox, params: NDArray) -> CoordsVelBox:
-        if md_params.n_eq_steps == 0:
-            return xvb
-        # Ensure initial mover state is consistent across replicas
-        for mover in context.get_movers():
-            mover.set_step(0)
+    def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
+        # Set up parameters of the water sampler movers
+        if md_params.water_sampling_params is not None:
+            for mover in context.get_movers():
+                if isinstance(mover, WATER_SAMPLER_MOVERS):
+                    assert water_params_by_state is not None
+                    mover.set_params(water_params_by_state[state_idx])
+        if md_params.n_eq_steps > 0:
+            # Set the movers to 0 to ensure they all equilibrate the same way
+            # Ensure initial mover state is consistent across replicas
+            for mover in context.get_movers():
+                mover.set_step(0)
 
-        context.set_x_t(xvb.coords)
-        context.set_v_t(xvb.velocities)
-        context.set_box(xvb.box)
+            params = params_by_state[state_idx]
+            bound_potentials[0].set_params(params)
 
-        assert len(context.get_potentials()) == 1
-        context.get_potentials()[0].set_params(params)
+            context.set_x_t(xvb.coords)
+            context.set_v_t(xvb.velocities)
+            context.set_box(xvb.box)
 
-        xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
-        x0 = xs[0]
-        v0 = context.get_v_t()
-        box0 = boxes[0]
-
-        return CoordsVelBox(x0, v0, box0)
+            xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
+            assert len(xs) == 1
+            x0 = xs[0]
+            v0 = context.get_v_t()
+            box0 = boxes[0]
+            xvb = CoordsVelBox(x0, v0, box0)
+        return xvb
 
     initial_replicas = [
-        get_equilibrated_xvb(CoordsVelBox(s.x0, s.v0, s.box0), params)
-        for s, params in zip(initial_states, params_by_state)
+        get_equilibrated_xvb(CoordsVelBox(s.x0, s.v0, s.box0), StateIdx(i)) for i, s in enumerate(initial_states)
     ]
 
     hrex = HREX.from_replicas(initial_replicas)
@@ -978,6 +1062,12 @@ def run_sims_hrex(
     if barostat is not None and state.barostat is not None:
         barostat.set_interval(state.barostat.interval)
 
+    if (
+        md_params.water_sampling_params is not None
+        and md_params.steps_per_frame * n_frames_per_iter > md_params.water_sampling_params.interval
+    ):
+        warn("Not running any water sampling, too few steps of MD for the water sampling interval")
+
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
@@ -986,13 +1076,15 @@ def run_sims_hrex(
             context.set_box(xvb.box)
 
             params = params_by_state[state_idx]
-            assert len(context.get_potentials()) == 1
-            context.get_potentials()[0].set_params(params)
+            bound_potentials[0].set_params(params)
 
             current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
             # Setup the MC movers of the Context
             for mover in context.get_movers():
-                # Set the step so that all windows have the movers behave the same way.
+                if md_params.water_sampling_params is not None and isinstance(mover, WATER_SAMPLER_MOVERS):
+                    assert water_params_by_state is not None
+                    mover.set_params(water_params_by_state[state_idx])
+                # Set the step so that all windows have the movers be called the same number of times.
                 mover.set_step(current_step)
 
             md_params_replica = replace(
@@ -1005,8 +1097,10 @@ def run_sims_hrex(
             return CoordsVelBox(traj.frames[-1], traj.final_velocities, traj.boxes[-1])
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
-        log_q = get_log_q_fn(hrex.replicas)
-        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps(neighbor_pairs, log_q, n_swap_attempts_per_iter)
+        log_q_kl = compute_log_q_matrix(hrex.replicas)
+        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
+            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter
+        )
 
         if len(initial_states) == 2:
             fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
@@ -1040,14 +1134,20 @@ def run_sims_hrex(
             print("Final replica permutation  :", hrex.replica_idx_by_state)
             print()
 
+    # Use the unbound potentials associated with the summed potential once to compute the u_kln
+    # Avoids repeated creation of underlying GPU potentials
+    assert isinstance(potential, custom_ops.SummedPotential)
+    unbound_impls = potential.get_potentials()
+
     def make_energy_decomposed_state(
         results: Tuple[StoredArrays, List[NDArray], InitialState]
     ) -> EnergyDecomposedState[StoredArrays]:
         frames, boxes, initial_state = results
+        # Reuse the existing unbound potentials already constructed to make a batch Us fn
         return EnergyDecomposedState(
             frames,
             boxes,
-            get_batch_u_fns([pot.to_gpu(np.float32).bound_impl for pot in initial_state.potentials], temperature),
+            get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature),
         )
 
     results_by_state = [

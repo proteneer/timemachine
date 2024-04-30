@@ -5,6 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from timemachine import potentials
+from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
 from timemachine.fe import chiral_utils
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
@@ -388,13 +389,16 @@ class BaseTopology:
         combined_potential = potentials.PeriodicTorsion(combined_idxs)
         return combined_params, combined_potential
 
-    def setup_chiral_restraints(self, restraint_k=1000.0):
+    def setup_chiral_restraints(self, chiral_atom_restraint_k, chiral_bond_restraint_k):
         """
         Create chiral atom and bond potentials.
 
         Parameters
         ----------
-        restraint_k: float
+        chiral_atom_restraint_k: float
+            Force constant of the restraints
+
+        chiral_bond_restraint_k: float
             Force constant of the restraints
 
         Returns
@@ -403,30 +407,28 @@ class BaseTopology:
             Returns a ChiralAtomRestraint and a ChiralBondRestraint
 
         """
-        chiral_bonds = chiral_utils.find_chiral_bonds(self.mol)
+        mol = self.mol
+        conf = get_romol_conf(mol)
 
-        chiral_atom_restr_idxs = chiral_utils.setup_all_chiral_atom_restr_idxs(self.mol, get_romol_conf(self.mol))
+        # chiral atoms
+        chiral_atom_restr_idxs = np.array(chiral_utils.setup_all_chiral_atom_restr_idxs(mol, conf))
 
-        chiral_atom_params = []
-        for idxs in chiral_atom_restr_idxs:
-            chiral_atom_params.extend(restraint_k for _ in idxs)
-
-        chiral_atom_params = np.array(chiral_atom_params)
-        chiral_atom_restr_idxs = np.array(chiral_atom_restr_idxs)
+        chiral_atom_params = chiral_atom_restraint_k * np.ones(len(chiral_atom_restr_idxs))
+        assert len(chiral_atom_params) == len(chiral_atom_restr_idxs)  # TODO: can this be checked in Potential::bind ?
         chiral_atom_potential = potentials.ChiralAtomRestraint(chiral_atom_restr_idxs).bind(chiral_atom_params)
 
+        # chiral bonds
+        chiral_bonds = chiral_utils.find_chiral_bonds(mol)
         chiral_bond_restr_idxs = []
         chiral_bond_restr_signs = []
         chiral_bond_params = []
         for src_idx, dst_idx in chiral_bonds:
-            idxs, signs = chiral_utils.setup_chiral_bond_restraints(
-                self.mol, get_romol_conf(self.mol), src_idx, dst_idx
-            )
+            idxs, signs = chiral_utils.setup_chiral_bond_restraints(mol, conf, src_idx, dst_idx)
             for ii in idxs:
                 assert ii not in chiral_bond_restr_idxs
             chiral_bond_restr_idxs.extend(idxs)
             chiral_bond_restr_signs.extend(signs)
-            chiral_bond_params.extend(restraint_k for _ in idxs)
+            chiral_bond_params.extend(chiral_bond_restraint_k for _ in idxs)  # TODO: double-check this
 
         chiral_bond_restr_idxs = np.array(chiral_bond_restr_idxs)
         chiral_bond_restr_signs = np.array(chiral_bond_restr_signs)
@@ -442,7 +444,10 @@ class BaseTopology:
         Setup an end-state with chiral restraints attached.
         """
         system = self.setup_end_state()
-        chiral_atom_potential, chiral_bond_potential = self.setup_chiral_restraints()
+        chiral_atom_potential, chiral_bond_potential = self.setup_chiral_restraints(
+            chiral_atom_restraint_k=DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
+            chiral_bond_restraint_k=DEFAULT_CHIRAL_BOND_RESTRAINT_K,
+        )
         system.chiral_atom = chiral_atom_potential
         system.chiral_bond = chiral_bond_potential
         return system
@@ -767,6 +772,8 @@ def get_ligand_ixn_pots_params(
         )
         hg_other_params.append(jnp.concatenate([host_nb_params, guest_params_ixn_other]))
 
+    # If the ordering of these parameters change, will need to change
+    # timemachine.fe.free_energy::get_water_sampler_params
     # total potential = host_guest_pot + guest_intra_pot + lw_ixn_pots + lp_ixn_pots
     hg_ixn_pots = [hg_water_pot] + hg_other_pots
     hg_ixn_params = [hg_water_params] + hg_other_params

@@ -27,8 +27,13 @@ repos:
     rev: v1.5.1
     hooks:
     -   id: mypy
+        # include dependencies that export types (i.e. have a py.typed file in the root module) so that they can be used
+        # by mypy in pre-commit
         additional_dependencies:
+          - "jax==0.4.14"
           - "numpy==1.23.5"
+          - "scipy==1.10.1"
+          - "matplotlib==3.7.1"
 
         # Exclude custom_ops.py to work around clash with stub file when typechecking
         exclude: '^timemachine/lib/custom_ops.py$'

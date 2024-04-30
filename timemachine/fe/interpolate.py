@@ -162,6 +162,7 @@ def log_linear_interpolation(src_params, dst_params, lamb, min_value):
     src_params = jnp.maximum(src_params, min_value)
     dst_params = jnp.maximum(dst_params, min_value)
 
+    # tbd: handle 0s better if lamb = 0 and src_params == 0
     return jnp.exp(linear_interpolation(jnp.log(src_params), jnp.log(dst_params), lamb))
 
 

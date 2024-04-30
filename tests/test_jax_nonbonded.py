@@ -153,7 +153,7 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
 
     min_dist = 0.1
     conf, box = resolve_clashes(conf, box, min_dist=min_dist)
-    box = np.array(box)
+    box = jnp.array(box)
 
     cutoff = 1.2
     if instance_flags["randomize_cutoff"]:

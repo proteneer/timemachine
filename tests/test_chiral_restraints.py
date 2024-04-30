@@ -1,10 +1,22 @@
-import jax.numpy as jnp
+from dataclasses import replace
+
 import numpy as np
 import pytest
 import scipy
+from jax import numpy as jnp
 from rdkit import Chem
 
+from timemachine.constants import (
+    DEFAULT_ATOM_MAPPING_KWARGS,
+    DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
+    DEFAULT_CHIRAL_BOND_RESTRAINT_K,
+)
 from timemachine.fe import topology, utils
+from timemachine.fe.atom_mapping import get_cores
+from timemachine.fe.chiral_utils import make_chiral_flip_heatmaps
+from timemachine.fe.free_energy import HREXParams
+from timemachine.fe.rbfe import DEFAULT_HREX_PARAMS, run_solvent, run_vacuum
+from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.fe.system import simulate_system
 from timemachine.ff import Forcefield
 from timemachine.potentials import chiral_restraints
@@ -15,8 +27,6 @@ from timemachine.potentials.chiral_restraints import (
     pyramidal_volume,
     torsion_volume,
 )
-
-pytestmark = [pytest.mark.nocuda]
 
 
 def test_chiral_restraints_pyramidal():
@@ -259,6 +269,9 @@ $$$$""",
     )
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    # pessimize: strengthen harmonic angle force constant to max
+    ff.ha_handle.params[:, 0] = np.max(ff.ha_handle.params[:, 0])
+
     s_top = topology.BaseTopology(mol, ff)
     x0 = utils.get_romol_conf(mol)
 
@@ -280,7 +293,8 @@ $$$$""",
     U_fn = system.get_U_fn()
 
     vols_orig = []
-    frames = simulate_system(U_fn, x0)
+    # turn off minimizing to avoid accidentally swapping chiral states
+    frames = simulate_system(U_fn, x0, minimize=False)
     for f in frames:
         vols_orig.append([pyramidal_volume(*f[p]) for p in perms])
 
@@ -389,11 +403,14 @@ $$$$""",
     assert np.all(np.asarray(U_chiral_atom_batch(x0, normal_restr_idxs, kc)) == 0)
     assert np.all(np.asarray(U_chiral_atom_batch(x0, inverted_restr_idxs, kc)) > 0)
 
+    # ugh basin-hopping is inverting the non-chiral endstates too, sigh
     system = s_top.setup_end_state()
     U_fn = system.get_U_fn()
 
     vols_orig = []
-    frames = simulate_system(U_fn, x0, num_samples=4000)
+
+    # turn off minimization for this case to avoid inversions
+    frames = simulate_system(U_fn, x0, num_samples=4000, minimize=False)
     for f in frames:
         vol_list = []
         for p in normal_restr_idxs:
@@ -433,13 +450,19 @@ $$$$""",
     ref_dist = np.array([x for x in vols_orig if x < 0])
     test_dist = np.array([x for x in vols_chiral if x > 0])
     # should be indistinguishable under KS-test
+
     ks, pv = scipy.stats.ks_2samp(-ref_dist, test_dist)
     assert ks < 0.05 or pv > 0.10
 
 
-# Expected to fail until chiral restraints are re-enabled for vacuum simulations
-@pytest.mark.xfail
-def test_chiral_topology():
+@pytest.mark.parametrize(
+    "check_chiral_atoms, check_chiral_bonds",
+    [
+        (True, False),
+        pytest.param(True, True, marks=pytest.mark.xfail(reason="chiral bonds not supported yet")),
+    ],
+)
+def test_chiral_topology(check_chiral_atoms, check_chiral_bonds):
     # test adding chiral restraints to the base topology
     # this molecule has several chiral atoms and bonds
     # 1) setup the molecule with a particular set of chiral restraints
@@ -512,7 +535,9 @@ $$$$""",
 
     x0 = utils.get_romol_conf(mol)
 
-    chiral_atom, chiral_bond = top.setup_chiral_restraints()
+    chiral_atom, chiral_bond = top.setup_chiral_restraints(
+        DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
+    )
 
     def get_chiral_atom_volumes(x):
         volumes = []
@@ -539,7 +564,7 @@ $$$$""",
         assert bond_vol * bond_sign < 0
 
     def assert_same_signs(a, b):
-        assert np.all(np.sign(a) == np.sign(b))
+        np.testing.assert_array_equal(np.sign(a), np.sign(b))
 
     # frames = simulate_system(U_fn, x0, num_samples=1000)
     # for f in frames:
@@ -626,5 +651,98 @@ $$$$""",
         frame_bond_vols = get_chiral_bond_volumes(f)
         # f = f - np.mean(f, axis=0)
         # writer.write_frame(f*10)
-        assert_same_signs(frame_atom_vols, ref_chiral_atom_vols)
-        assert_same_signs(frame_bond_vols, ref_chiral_bond_vols)
+        if check_chiral_atoms:
+            assert_same_signs(frame_atom_vols, ref_chiral_atom_vols)
+        if check_chiral_bonds:
+            assert_same_signs(frame_bond_vols, ref_chiral_bond_vols)
+
+
+def make_chiral_flip_pair(well_aligned=True):
+    # mol_a, mol_b : substituted chiral cyclobutyl
+    # with 2 different alignments of mol_b w.r.t. mol_a
+    mol_dict = {utils.get_mol_name(mol): mol for mol in utils.read_sdf("tests/data/1243_chiral_ring_confs.sdf")}
+    mol_a = mol_dict["A"]
+    mol_b_0 = mol_dict["B_0"]
+    mol_b_1 = mol_dict["B_1"]
+    core_0 = get_cores(mol_a, mol_b_0, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+    core_1 = get_cores(mol_a, mol_b_1, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+    assert len(core_0) == 10
+    assert len(core_1) == 15
+
+    if well_aligned:
+        return AtomMapMixin(mol_a, mol_b_1, core_1)
+    else:
+        return AtomMapMixin(mol_a, mol_b_0, core_0)
+
+
+@pytest.mark.parametrize("well_aligned", [True, False])
+def test_chiral_inversion_in_single_topology_runs(well_aligned):
+    """simply test that no exceptions are raised, when running vacuum hrex"""
+    very_short_hrex_params = replace(
+        DEFAULT_HREX_PARAMS, n_frames=2, n_eq_steps=2, steps_per_frame=2, hrex_params=HREXParams(n_frames_bisection=2)
+    )
+    ff = Forcefield.load_default()
+
+    atom_map = make_chiral_flip_pair(well_aligned)
+    _ = run_vacuum(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, very_short_hrex_params, n_windows=3)
+
+
+@pytest.mark.nightly(reason="slow")
+@pytest.mark.parametrize("well_aligned", [True, False])
+def test_chiral_inversion_in_single_topology(well_aligned):
+    """assert chiral consistency preserved through vacuum HREX"""
+
+    ff = Forcefield.load_default()
+
+    atom_map = make_chiral_flip_pair(well_aligned)
+
+    vacuum_results = run_vacuum(
+        atom_map.mol_a,
+        atom_map.mol_b,
+        atom_map.core,
+        ff,
+        None,
+        DEFAULT_HREX_PARAMS,
+        min_overlap=0.667,  # No need to have a higher overlap then 0.667
+    )
+    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(vacuum_results, atom_map)
+    assert (heatmap_a[0] == 0).all(), "chirality in end state A was not preserved"
+    assert (heatmap_b[-1] == 0).all(), "chirality in end state B was not preserved"
+
+    # from timemachine.fe.plots import plot_as_png_fxn, plot_chiral_restraint_energies
+
+    # with open(f"vacuum_chiral_energies_aligned_{well_aligned}_a.png", "wb") as ofs:
+    #     data_a = plot_as_png_fxn(plot_chiral_restraint_energies, heatmap_a)
+    #     ofs.write(data_a)
+
+    # with open(f"vacuum_chiral_energies_aligned_{well_aligned}_b.png", "wb") as ofs:
+    #     data_b = plot_as_png_fxn(plot_chiral_restraint_energies, heatmap_b)
+    #     ofs.write(data_b)
+
+
+@pytest.mark.nightly(reason="slow")
+def test_chiral_inversion_in_single_topology_solvent():
+    """assert chiral consistency preserved through solvent HREX"""
+
+    ff = Forcefield.load_default()
+
+    # Run the poorly aligned version, restraints get exercised
+    atom_map = make_chiral_flip_pair(False)
+
+    md_params = DEFAULT_HREX_PARAMS
+    md_params = replace(md_params, n_frames=100)
+
+    res, _, _ = run_solvent(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, md_params, n_windows=3)
+    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(res, atom_map)
+    assert (heatmap_a[0] == 0).all(), "chirality in end state A was not preserved"
+    assert (heatmap_b[-1] == 0).all(), "chirality in end state B was not preserved"
+
+    # from timemachine.fe.plots import plot_as_png_fxn, plot_chiral_restraint_energies
+
+    # with open("solvent_chiral_energies_a.png", "wb") as ofs:
+    #     data_a = plot_as_png_fxn(plot_chiral_restraint_energies, heatmap_a)
+    #     ofs.write(data_a)
+
+    # with open("solvent_chiral_energies_b.png", "wb") as ofs:
+    #     data_b = plot_as_png_fxn(plot_chiral_restraint_energies, heatmap_b)
+    #     ofs.write(data_b)

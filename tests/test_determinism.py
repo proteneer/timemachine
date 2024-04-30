@@ -90,14 +90,17 @@ def test_deterministic_energies(precision, rtol, atol):
 
     ref_pot = summed_pot.to_gpu(precision).bind_params_list(host_params).bound_impl
     for bp in host_fns:
-        bps.append(bp.to_gpu(precision=precision).bound_impl)  # get the bound implementation
-        ubps.append(bp.potential.to_gpu(precision).unbound_impl)
+        bound_impl = bp.to_gpu(precision=precision).bound_impl
+        bps.append(bound_impl)  # get the bound implementation
+        ubps.append(bound_impl.get_potential())  # Get unbound potential
 
+    baro_impl = baro.impl(bps)
     num_steps = 200
-    for movers in [None, [baro.impl(bps)], [tibdem], [baro.impl(bps), tibdem]]:
+    for movers in [None, [baro_impl], [tibdem], [baro_impl, tibdem]]:
         if movers is not None:
             for mover in movers:
                 # Make sure we are actually running all of the movers
+                mover.set_step(0)
                 assert mover.get_interval() <= num_steps
         ctxt = custom_ops.Context(x0, v0, complex_box, intg.impl(), bps, movers=movers)
         xs, boxes = ctxt.multiple_steps(num_steps, 10)

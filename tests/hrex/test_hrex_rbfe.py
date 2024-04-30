@@ -9,7 +9,14 @@ import pytest
 from psutil import Process
 from scipy import stats
 
-from timemachine.fe.free_energy import HostConfig, HREXParams, MDParams, SimulationResult, sample_with_context
+from timemachine.fe.free_energy import (
+    HostConfig,
+    HREXParams,
+    MDParams,
+    SimulationResult,
+    WaterSamplingParams,
+    sample_with_context,
+)
 from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
@@ -24,11 +31,7 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 DEBUG = False
 
 
-@pytest.fixture(
-    scope="module", params=[None, "solvent", pytest.param("complex", marks=pytest.mark.nightly(reason="slow"))]
-)
-def hif2a_single_topology_leg(request):
-    host_name = request.param
+def get_hif2a_single_topology_leg(host_name: str | None):
     forcefield = Forcefield.load_default()
     host_config: Optional[HostConfig] = None
 
@@ -50,6 +53,13 @@ def hif2a_single_topology_leg(request):
     return mol_a, mol_b, core, forcefield, host_config
 
 
+@pytest.fixture(
+    scope="module", params=[None, "solvent", pytest.param("complex", marks=pytest.mark.nightly(reason="slow"))]
+)
+def hif2a_single_topology_leg(request):
+    return get_hif2a_single_topology_leg(request.param)
+
+
 @pytest.mark.nightly(reason="Slow")
 def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     mol_a, mol_b, core, forcefield, host_config = hif2a_single_topology_leg
@@ -59,6 +69,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
         steps_per_frame=400,
         seed=2024,
         hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1),
+        water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000) if host_config == "complex" else None,
     )
     n_windows = 5
 
