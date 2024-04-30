@@ -88,27 +88,47 @@ void __global__ k_find_group_centroids(
 
 // k_setup_barostat_move performs the initialization for a barostat move. It determines what the the proposed
 // volume will be and sets up d_length_scale and d_volume_delta for use in k_decide_move.
+// Also copies the initial coordinates and box to a new buffer that can be adjusted
+// Clears centroid buffers as well.
 template <typename RealType>
 void __global__ k_setup_barostat_move(
+    const int N,
+    const int num_mols,
     const bool adaptive,
-    const RealType *__restrict__ rand,     // [2], use first value, second value is metropolis condition
-    double *__restrict__ d_box,            // [3*3]
-    RealType *__restrict__ d_volume_delta, // [1]
-    double *__restrict__ d_volume_scale,   // [1]
-    RealType *__restrict__ d_length_scale  // [1]
+    const RealType *__restrict__ rand,            // [2], use first value, second value is metropolis condition
+    const double *__restrict__ d_x,               // [N*3]
+    const double *__restrict__ d_box,             // [3*3]
+    double *__restrict__ d_x_after,               // [N*3]
+    double *__restrict__ d_box_after,             // [3*3]
+    unsigned long long *__restrict__ d_centroids, // [num_mols*3]
+    RealType *__restrict__ d_volume_delta,        // [1]
+    double *__restrict__ d_volume_scale,          // [1]
+    RealType *__restrict__ d_length_scale         // [1]
 ) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= 1) {
-        return; // Only a single thread needs to perform this operation
-    }
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const RealType volume = d_box[0 * 3 + 0] * d_box[1 * 3 + 1] * d_box[2 * 3 + 2];
-    if (d_volume_scale[0] == 0.0 && adaptive) {
-        d_volume_scale[0] = 0.01 * volume;
+    static int D = 3;
+    if (idx == 0) {
+        if (d_volume_scale[0] == 0.0 && adaptive) {
+            d_volume_scale[0] = 0.01 * volume;
+        }
+        const RealType delta_volume = d_volume_scale[0] * 2 * (rand[0] - 0.5);
+        const RealType new_volume = volume + delta_volume;
+        d_volume_delta[0] = delta_volume;
+        d_length_scale[0] = cbrt(new_volume / volume);
     }
-    const RealType delta_volume = d_volume_scale[0] * 2 * (rand[0] - 0.5);
-    const RealType new_volume = volume + delta_volume;
-    d_volume_delta[0] = delta_volume;
-    d_length_scale[0] = cbrt(new_volume / volume);
+    while (idx < N * D) {
+        if (idx < (D * D)) {
+            d_box_after[idx] = d_box[idx];
+        }
+        // Zero out the centroids
+        if (idx < num_mols * D) {
+            d_centroids[idx] = 0;
+        }
+        d_x_after[idx] = d_x[idx];
+
+        idx += blockDim.x * gridDim.x;
+    }
 }
 
 // k_decide_move handles the metropolis check for whether or not to accept a barostat move that scales

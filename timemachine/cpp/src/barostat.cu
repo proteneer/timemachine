@@ -169,23 +169,28 @@ void MonteCarloBarostat<RealType>::move(
         curandErrchk(curandSetStream(cr_rng_, stream));
         curandErrchk(templateCurandUniform(cr_rng_, d_rand_, RANDOM_BATCH_SIZE * 2));
     }
-
-    const int num_molecules = group_idxs_.size();
-    gpuErrchk(cudaMemsetAsync(d_centroids_, 0, num_molecules * 3 * sizeof(*d_centroids_), stream));
-
-    k_setup_barostat_move<RealType><<<1, 1, 0, stream>>>(
-        adaptive_scaling_enabled_, d_rand_ + random_offset, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
-    gpuErrchk(cudaPeekAtLastError());
-
-    // Create duplicates of the coords/box that we can modify
-    gpuErrchk(cudaMemcpyAsync(d_x_after_, d_x, N_ * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-    gpuErrchk(cudaMemcpyAsync(d_box_after_, d_box, 3 * 3 * sizeof(*d_box_after_), cudaMemcpyDeviceToDevice, stream));
-
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     // TBD: For larger systems (20k >) may be better to reduce the number of blocks, rather than
     // matching the number of blocks to be ceil_divide(units_of_work, tpb). The kernels already support this, but
     // at the moment we match the blocks * tpb to equal units_of_work
     const int blocks = ceil_divide(num_grouped_atoms_, tpb);
+
+    const int num_molecules = group_idxs_.size();
+
+    k_setup_barostat_move<RealType><<<ceil_divide(N_, tpb), tpb, 0, stream>>>(
+        N_,
+        num_molecules,
+        adaptive_scaling_enabled_,
+        d_rand_ + random_offset,
+        d_x,
+        d_box,
+        d_x_after_,
+        d_box_after_,
+        d_centroids_,
+        d_volume_delta_,
+        d_volume_scale_,
+        d_length_scale_);
+    gpuErrchk(cudaPeekAtLastError());
 
     k_find_group_centroids<RealType>
         <<<blocks, tpb, 0, stream>>>(num_grouped_atoms_, d_x_after_, d_atom_idxs_, d_mol_idxs_, d_centroids_);
