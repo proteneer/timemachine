@@ -449,7 +449,7 @@ def run_hrex(
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
 
-    for n_samples_batch in batches(n_samples, n_samples_per_iter):
+    for iteration, n_samples_batch in enumerate(batches(n_samples, n_samples_per_iter)):
         log_q = get_log_q(hrex.replicas)
         log_q_kl = (
             jnp.array([[log_q(ReplicaIdx(r), StateIdx(s)) for s in range(n_replicas)] for r in range(n_replicas)])
@@ -458,7 +458,7 @@ def run_hrex(
         )
 
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
-            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter, seed
+            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter, seed + iteration
         )
 
         sample_replica_ = lambda replica, state_idx: sample_replica(replica, state_idx, n_samples_batch)

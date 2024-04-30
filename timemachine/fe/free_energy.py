@@ -1094,7 +1094,7 @@ def run_sims_hrex(
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
         log_q_kl = compute_log_q_matrix(hrex.replicas)
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
-            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter, md_params.seed
+            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter, md_params.seed + iteration
         )
 
         if len(initial_states) == 2:
