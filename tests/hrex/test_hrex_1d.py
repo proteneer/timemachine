@@ -88,6 +88,7 @@ def run_hrex_with_local_proposal(
     states: Sequence[Distribution],
     initial_replicas: Sequence[float],
     proposal: Callable[[float], Distribution],
+    seed: int,
     n_samples=10_000,
     n_samples_per_iter=20,
 ):
@@ -121,6 +122,7 @@ def run_hrex_with_local_proposal(
         replica_from_samples,
         neighbor_pairs,
         get_log_q,
+        seed=seed,
         n_samples=n_samples,
         n_samples_per_iter=n_samples_per_iter,
     )
@@ -151,7 +153,7 @@ def test_hrex_different_distributions_same_free_energy(seed):
     proposal_radius = 0.1
     proposal = lambda x: gaussian(x, proposal_radius)
 
-    samples_by_state_by_iter, diagnostics = run_hrex_with_local_proposal(states, initial_replicas, proposal)
+    samples_by_state_by_iter, diagnostics = run_hrex_with_local_proposal(states, initial_replicas, proposal, seed)
 
     samples_by_state = np.concatenate(samples_by_state_by_iter, axis=1)
 
@@ -190,7 +192,7 @@ def test_hrex_same_distributions_different_free_energies(seed):
     proposal_radius = 0.1
     proposal = lambda x: gaussian(x, proposal_radius)
 
-    samples_by_state_by_iter, diagnostics = run_hrex_with_local_proposal(states, initial_replicas, proposal)
+    samples_by_state_by_iter, diagnostics = run_hrex_with_local_proposal(states, initial_replicas, proposal, seed)
 
     samples_by_state = np.concatenate(samples_by_state_by_iter, axis=1)
 
@@ -232,7 +234,7 @@ def test_hrex_gaussian_mixture(seed):
     proposal_radius = 0.1
     proposal = lambda x: gaussian(x, proposal_radius)
 
-    samples_by_state_by_iter, diagnostics = run_hrex_with_local_proposal(states, initial_replicas, proposal)
+    samples_by_state_by_iter, diagnostics = run_hrex_with_local_proposal(states, initial_replicas, proposal, seed)
 
     samples_by_state = np.concatenate(samples_by_state_by_iter, axis=1)
     hrex_samples = samples_by_state[0]  # samples from gaussian mixture
