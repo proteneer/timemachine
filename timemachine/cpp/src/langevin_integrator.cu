@@ -38,7 +38,7 @@ LangevinIntegrator<RealType>::LangevinIntegrator(
 
     cudaSafeMalloc(&d_du_dx_, N_ * 3 * sizeof(*d_du_dx_));
 
-    // Memset the forces to zero, assumes that k_update_forward_baoab will zero after every call
+    // Only need to memset the forces to zero once at initialization; k_update_forward_baoab will zero forces during every step
     gpuErrchk(cudaMemset(d_du_dx_, 0, N_ * 3 * sizeof(*d_du_dx_)));
 }
 template <typename RealType> LangevinIntegrator<RealType>::~LangevinIntegrator() {
