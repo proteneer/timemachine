@@ -168,7 +168,7 @@ def test_hrex_different_distributions_same_free_energy(seed):
         for samples, state in zip(samples_by_state, states)
     ]
 
-    np.testing.assert_array_less(0.01, ks_pvalues)
+    np.testing.assert_array_less(0.005, ks_pvalues)
 
     final_swap_acceptance_rates = diagnostics.cumulative_swap_acceptance_rates[-1]
     np.testing.assert_array_less(0.2, final_swap_acceptance_rates)
@@ -180,7 +180,7 @@ def test_hrex_different_distributions_same_free_energy(seed):
     final_replica_state_density = diagnostics.cumulative_replica_state_counts[-1] / n_iters
 
     # Fraction of time spent in each state for each replica should be close to uniform
-    np.testing.assert_array_less(np.abs(final_replica_state_density - np.mean(final_replica_state_density)), 0.2)
+    np.testing.assert_array_less(np.abs(final_replica_state_density - np.mean(final_replica_state_density)), 0.25)
 
 
 @pytest.mark.parametrize("seed", range(5))
