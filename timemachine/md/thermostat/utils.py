@@ -28,11 +28,9 @@ def sample_velocities(masses: NDArray, temperature: float, seed: Optional[int] =
     n_particles = len(masses)
     spatial_dim = 3
 
-    if seed is not None:
-        rng = np.random.default_rng(seed)
-        v_unscaled = rng.standard_normal(size=(n_particles, spatial_dim))
-    else:
-        v_unscaled = np.random.randn(n_particles, spatial_dim)
+    seed = seed if (seed is not None) else np.random.randint(100000)
+    rng = np.random.default_rng(seed)
+    v_unscaled = rng.standard_normal(size=(n_particles, spatial_dim))
 
     # intended to be consistent with timemachine.integrator:langevin_coefficients
     sigma = np.sqrt(BOLTZ * temperature) * np.sqrt(1 / masses)
