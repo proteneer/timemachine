@@ -118,7 +118,7 @@ def _run_neighbor_swaps(
         return (result, None)
 
     n_pairs, _ = neighbor_pairs.shape
-    init = (replica_idx_by_state, jnp.zeros(n_pairs), jnp.zeros(n_pairs))
+    init = (replica_idx_by_state, jnp.zeros(n_pairs, jnp.int_), jnp.zeros(n_pairs, jnp.int_))
 
     (replica_idx_by_state, proposed, accepted), _ = jax.lax.scan(run_neighbor_swap, init, (pair_idxs, uniform_samples))
 
@@ -126,13 +126,6 @@ def _run_neighbor_swaps(
 
 
 Samples = TypeVar("Samples")
-
-
-def get_jax_random_key() -> PRNGKeyArray:
-    """Return a JAX PRNG key initialized from global numpy random state"""
-    seed = np.random.randint(np.iinfo(np.uint32).max)
-    key = jax.random.key(seed)
-    return key
 
 
 @dataclass(frozen=True)
@@ -195,7 +188,7 @@ class HREX(Generic[Replica]):
         return HREX(self.replicas, replica_idx_by_state), fraction_accepted_by_pair
 
     def attempt_neighbor_swaps_fast(
-        self, neighbor_pairs: Sequence[Tuple[StateIdx, StateIdx]], log_q_kl: ArrayLike, n_swap_attempts: int
+        self, neighbor_pairs: Sequence[Tuple[StateIdx, StateIdx]], log_q_kl: ArrayLike, n_swap_attempts: int, seed: int
     ) -> Tuple["HREX[Replica]", List[Tuple[int, int]]]:
         """Run a batch of swap attempts.
 
@@ -213,13 +206,16 @@ class HREX(Generic[Replica]):
         n_swap_attempts : int
             number of individual swap attempts, each between a randomly-selected neighbor pair
 
+        seed : int
+            PRNG seed
+
         Returns
         -------
         Tuple[HREX[Replica], List[Tuple[int, int]]]
             Updated HREX state, list of (accepted, proposed) counts by neighbor pair
         """
 
-        key = get_jax_random_key()
+        key = jax.random.key(seed)
         key, subkey = jax.random.split(key)
         pair_idxs = jax.random.choice(subkey, len(neighbor_pairs), (n_swap_attempts,))
         uniform_samples = jax.random.uniform(key, (n_swap_attempts,))
@@ -386,6 +382,7 @@ def run_hrex(
     get_log_q: Callable[[List[Replica]], ArrayLike | Callable[[ReplicaIdx, StateIdx], float]],
     n_samples: int,
     n_samples_per_iter: int,
+    seed: int,
     n_swap_attempts_per_iter: Optional[int] = None,
 ) -> Tuple[List[List[Samples]], HREXDiagnostics]:
     r"""Sample from a sequence of states using Hamiltonian Replica EXchange (HREX).
@@ -426,6 +423,9 @@ def run_hrex(
     n_samples_per_iter: int
         Number of local samples (e.g. MD frames) per HREX iteration
 
+    seed: int
+        PRNG seed
+
     n_swap_attempts_per_iter: int or None, optional
         Number of neighbor swaps to attempt per iteration. Default is given by :py:func:`get_swap_attempts_per_iter_heuristic`.
 
@@ -449,7 +449,7 @@ def run_hrex(
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
 
-    for n_samples_batch in batches(n_samples, n_samples_per_iter):
+    for iteration, n_samples_batch in enumerate(batches(n_samples, n_samples_per_iter)):
         log_q = get_log_q(hrex.replicas)
         log_q_kl = (
             jnp.array([[log_q(ReplicaIdx(r), StateIdx(s)) for s in range(n_replicas)] for r in range(n_replicas)])
@@ -458,7 +458,7 @@ def run_hrex(
         )
 
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
-            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter
+            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter, seed + iteration
         )
 
         sample_replica_ = lambda replica, state_idx: sample_replica(replica, state_idx, n_samples_batch)
