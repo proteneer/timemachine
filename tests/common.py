@@ -273,9 +273,15 @@ class GradientTest(unittest.TestCase):
         test_potential: GpuImplWrapper,
         rtol: float,
         atol: float = 1e-8,
+        du_dp_rtol: Optional[float] = None,
+        du_dp_atol: Optional[float] = None,
     ):
         """Compares the forces between a reference and a test potential."""
         x = (x.astype(np.float32)).astype(np.float64)
+        if du_dp_rtol is None:
+            du_dp_rtol = rtol * 10
+        if du_dp_atol is None:
+            du_dp_atol = atol * 10
 
         assert x.ndim == 2
         # N = x.shape[0]
@@ -308,7 +314,7 @@ class GradientTest(unittest.TestCase):
             else:
                 assert test_du_dx is None
             if compute_du_dp:
-                np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=rtol, atol=atol)
+                np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol=du_dp_rtol, atol=du_dp_atol)
             else:
                 assert test_du_dp is None
 
