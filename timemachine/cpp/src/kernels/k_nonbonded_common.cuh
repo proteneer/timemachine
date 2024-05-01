@@ -12,23 +12,169 @@ static const int NONBONDED_KERNEL_THREADS_PER_BLOCK = 256;
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
-double __device__ __forceinline__ real_es_factor(double real_beta, double dij, double inv_d2ij, double &erfc_beta_dij) {
-    double beta_dij = real_beta * dij;
-    double exp_beta_dij_2 = exp(-beta_dij * beta_dij);
-    erfc_beta_dij = erfc(beta_dij);
-    return -inv_d2ij * (static_cast<double>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
+// f64 switch fxn
+double __device__ __forceinline__ switch_fn(double dij) {
+    // constants
+    constexpr double cutoff = 1.2;
+    if (dij >= cutoff) {
+        return 0.0;
+    }
+    constexpr double inv_cutoff = 1 / cutoff;
+    constexpr double pi = static_cast<double>(PI);
+
+    // (dij/cutoff)^8
+    double dij_k = dij * inv_cutoff;
+    double dij_k2 = dij_k * dij_k;
+    double dij_k4 = dij_k2 * dij_k2;
+    double dij_k8 = dij_k4 * dij_k4;
+
+    // cos(0.5*pi*(dij/cutoff)^8)^3
+    double cos_arg = cos(0.5 * pi * dij_k8);
+    double cos_arg3 = cos_arg * cos_arg * cos_arg;
+    return cos_arg3;
 }
 
-float __device__ __forceinline__ real_es_factor(float real_beta, float dij, float inv_d2ij, float &erfc_beta_dij) {
-    float beta_dij = real_beta * dij;
-    // max ulp error is: 2 + floor(abs(1.16 * x))
-    float exp_beta_dij_2 = __expf(-beta_dij * beta_dij);
-    // 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
+double __device__ __forceinline__ d_switch_fn_dr(double dij) {
+    // constants
+    constexpr double cutoff = 1.2;
+    constexpr double pi = static_cast<double>(PI);
+
+    if (dij >= cutoff) {
+        return 0.0;
+    }
+
+    // cutoff^-8
+    constexpr double inv_cutoff = 1.0 / cutoff;
+    constexpr double k2 = inv_cutoff * inv_cutoff;
+    constexpr double k4 = k2 * k2;
+    constexpr double k8 = k4 * k4;
+
+    // dij^7 and dij^8
+    double dij2 = dij * dij;
+    double dij4 = dij2 * dij2;
+    double dij7 = dij4 * dij2 * dij;
+    double dij8 = dij4 * dij4;
+
+    // arg = 0.5 * pi * (dij / cutoff)^8
+    double dij_k8 = dij8 * k8;
+    double arg = 0.5 * pi * dij_k8;
+
+    double sin_arg;
+    double cos_arg;
+    sincos(arg, &sin_arg, &cos_arg);
+
+    double cos_arg2 = cos_arg * cos_arg;
+    constexpr double minus_12_pi_k8 = -12 * pi * k8;
+
+    return dij7 * sin_arg * cos_arg2 * minus_12_pi_k8;
+}
+
+double __device__ __forceinline__ d_erfc_beta_r_dr(double beta, double dij) {
+    // -2 beta exp(-(beta dij)^2) / sqrt(pi)
+    double beta_dij = beta * dij;
+    double exp_beta_dij_2 = exp(-beta_dij * beta_dij);
+    return -static_cast<double>(TWO_OVER_SQRT_PI) * beta * exp_beta_dij_2;
+}
+
+double __device__ __forceinline__
+real_es_factor(double real_beta, double dij, double inv_dij, double inv_d2ij, double &damping_factor) {
+    double beta_dij = real_beta * dij;
+    double erfc_beta_dij = erfc(beta_dij);
+    double sr = switch_fn(dij);
+
+    // write erfc(beta * dij) * switch_fn(dij) into damping_factor
+    damping_factor = erfc_beta_dij * sr;
+
+    // chain rule
+    double dsdr = d_switch_fn_dr(dij);
+    double debd = d_erfc_beta_r_dr(real_beta, dij);
+    double damping_factor_prime = (erfc_beta_dij * dsdr) + (debd * sr);
+    double d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
+    return d_es_dr;
+}
+
+// f32 code path merges (1) switch_fn and its deriv into switch_fn_and_deriv
+// and (2) a fast erfc approximation and its deriv into fast_erfc_and_deriv
+float __device__ __forceinline__ switch_fn_and_deriv(float dij, float &dsdr) {
+
+    // constants
+    constexpr float cutoff = 1.2;
+    constexpr float pi = static_cast<float>(PI);
+    constexpr float pi_over_2 = 0.5f * pi;
+    constexpr float inv_cutoff = 1 / cutoff;
+
+    if (dij >= cutoff) {
+        dsdr = 0.0f;
+        return 0.0f;
+    }
+
+    // cutoff^-8
+    constexpr float k2 = inv_cutoff * inv_cutoff;
+    constexpr float k4 = k2 * k2;
+    constexpr float k8 = k4 * k4;
+
+    // dij^7, dij^8
+    float dij2 = dij * dij;
+    float dij4 = dij2 * dij2;
+    float dij7 = dij4 * dij2 * dij;
+    float dij8 = dij4 * dij4;
+
+    // arg = (dij/cutoff)^8 * pi/2
+    float dij_k8 = dij8 * k8;
+    float arg = pi_over_2 * dij_k8;
+
+    // sin(arg), cos(arg)
+    float sin_arg;
+    float cos_arg;
+    __sincosf(arg, &sin_arg, &cos_arg);
+
+    // exponentiation
+    float cos_arg2 = cos_arg * cos_arg;
+    float cos_arg3 = cos_arg2 * cos_arg;
+
+    // write d switch_fn d r
+    constexpr float minus_12_pi_k8 = -12 * pi * k8;
+    dsdr = minus_12_pi_k8 * dij7 * sin_arg * cos_arg2;
+
+    // return switch_fn(dij)
+    float sr = cos_arg3;
+    return sr;
+}
+
+float __device__ __forceinline__ fast_erfc_and_deriv(float x, float &dedx) {
+    // TODO: consider using fasterfc implementations listed in this thread:
+    // https://forums.developer.nvidia.com/t/calling-all-juffas-whats-up-with-erfcf-nowadays/262973/4
+
+    float exp_x2 = __expf(-x * x);
+    // (ytz) 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
     // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
-    float t = 1.0f / (1.0f + 0.3275911f * beta_dij);
-    erfc_beta_dij = (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) *
-                    t * exp_beta_dij_2;
-    return -inv_d2ij * (static_cast<float>(TWO_OVER_SQRT_PI) * beta_dij * exp_beta_dij_2 + erfc_beta_dij);
+    float t = __frcp_rn(1.0f + 0.3275911f * x);
+    float erfc_x =
+        (0.254829592f + (-0.284496736f + (1.421413741f + (-1.453152027f + 1.061405429f * t) * t) * t) * t) * t * exp_x2;
+    constexpr float minus_two_over_sqrt_pi = -static_cast<float>(TWO_OVER_SQRT_PI);
+    dedx = minus_two_over_sqrt_pi * exp_x2;
+    return erfc_x;
+}
+
+float __device__ __forceinline__
+real_es_factor(float real_beta, float dij, float inv_dij, float inv_d2ij, float &damping_factor) {
+    float beta_dij = real_beta * dij;
+
+    // f(dij) = erfc(beta * dij)
+    // ebd = f(dij), debd = f'(dij)
+    float debd;
+    float ebd = fast_erfc_and_deriv(beta_dij, debd);
+    debd = real_beta * debd;
+
+    // g(dij) = switch_fn(dij)
+    // sr = g(dij), dsdr = g'(dij)
+    float dsdr;
+    float sr = switch_fn_and_deriv(dij, dsdr);
+
+    damping_factor = ebd * sr;
+    float damping_factor_prime = (ebd * dsdr) + (debd * sr);
+    float d_es_dr = damping_factor_prime * inv_dij - damping_factor * inv_d2ij;
+    return d_es_dr;
 }
 
 // Compute the terms associated with electrostatics.
@@ -45,7 +191,7 @@ void __device__ __forceinline__ compute_electrostatics(
     RealType &dij,
     RealType &inv_dij,
     RealType &inv_d2ij,
-    RealType &ebd,
+    RealType &damping_factor,
     RealType &es_prefactor,
     RealType &u) {
     inv_dij = rsqrt(d2ij);
@@ -54,10 +200,10 @@ void __device__ __forceinline__ compute_electrostatics(
     inv_d2ij = inv_dij * inv_dij;
 
     RealType qij = qi * qj;
-    es_prefactor = charge_scale * qij * inv_dij * real_es_factor(beta, dij, inv_d2ij, ebd);
+    es_prefactor = charge_scale * qij * inv_dij * real_es_factor(beta, dij, inv_dij, inv_d2ij, damping_factor);
 
     if (COMPUTE_U) {
-        u = charge_scale * qij * inv_dij * ebd;
+        u = charge_scale * qij * inv_dij * damping_factor;
     }
 }
 
