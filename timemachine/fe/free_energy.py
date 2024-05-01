@@ -976,11 +976,6 @@ def run_sims_hrex(
     if n_swap_attempts_per_iter is None:
         n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
 
-    # Setting the numpy global PRNG state is necessary to ensure determinism in timemachine.md.moves.MonteCarloMove
-    # TODO: Avoid use of global PRNG state (see https://github.com/proteneer/timemachine/issues/980)
-    warn(f"Setting numpy global random state using seed {md_params.seed}")
-    np.random.seed(md_params.seed)
-
     # Set up overall potential and context using the first state.
     # NOTE: this assumes that states differ only in their parameters, but we do not check this!
     context = get_context(initial_states[0], md_params=md_params)
@@ -1099,7 +1094,7 @@ def run_sims_hrex(
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
         log_q_kl = compute_log_q_matrix(hrex.replicas)
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
-            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter
+            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter, md_params.seed + iteration
         )
 
         if len(initial_states) == 2:
