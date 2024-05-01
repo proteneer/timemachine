@@ -423,7 +423,7 @@ def run_hrex(
     n_samples_per_iter: int
         Number of local samples (e.g. MD frames) per HREX iteration
 
-    seed : int
+    seed: int
         PRNG seed
 
     n_swap_attempts_per_iter: int or None, optional
