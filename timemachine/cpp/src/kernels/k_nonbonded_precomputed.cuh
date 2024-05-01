@@ -83,8 +83,7 @@ void __global__ k_nonbonded_precomputed(
             if (q_ij != 0) {
 
                 RealType damping_factor;
-                RealType es_factor =
-                    real_es_factor(static_cast<RealType>(beta), d_ij, inv_dij, inv_dij * inv_dij, damping_factor);
+                RealType es_factor = real_es_factor(beta, d_ij, inv_dij, inv_dij * inv_dij, damping_factor);
 
                 if (u_buffer) {
                     // energies
