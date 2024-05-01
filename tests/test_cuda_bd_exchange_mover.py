@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
-from timemachine.fe.free_energy import HostConfig, InitialState
+from timemachine.fe.free_energy import HostConfig, InitialState, MDParams, sample
 from timemachine.fe.model_utils import apply_hmr, image_frame
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
@@ -889,61 +889,25 @@ def hif2a_rbfe_state() -> InitialState:
     st = SingleTopology(mol_a, mol_b, core, ff)
 
     initial_state = prepare_single_topology_initial_state(st, host_config)
-    conf = initial_state.x0
 
-    bond_pot = next(bp for bp in initial_state.potentials if isinstance(bp.potential, HarmonicBond)).potential
-
-    bond_list = get_bond_list(bond_pot)
-    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
-
-    bps = initial_state.potentials
-    masses = initial_state.integrator.masses
-
-    # Equilibrate the system a bit before hand, which reduces clashes in the system which results greater differences
-    # between the reference and test case.
-    temperature = DEFAULT_TEMP
-    pressure = DEFAULT_PRESSURE
-
-    masses = apply_hmr(masses, bond_list)
-    intg = initial_state.integrator.impl()
-
-    bound_impls = []
-
-    for potential in bps:
-        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
-
-    barostat_interval = 5
-    baro = MonteCarloBarostat(
-        conf.shape[0],
-        pressure,
-        temperature,
-        all_group_idxs,
-        barostat_interval,
-        seed,
+    traj = sample(
+        initial_state, MDParams(n_frames=1, n_eq_steps=0, steps_per_frame=10_000, seed=seed), max_buffer_frames=1
     )
-    baro_impl = baro.impl(bound_impls)
 
-    ctxt = custom_ops.Context(
-        conf,
-        np.zeros_like(conf),
-        box,
-        intg,
-        bound_impls,
-        movers=[baro_impl],
-    )
-    ctxt.multiple_steps(10_000)
-    conf = ctxt.get_x_t()
-    box = ctxt.get_box()
-    for bp in bound_impls:
-        du_dx, _ = bp.execute(conf, box, True, False)
+    assert len(traj.frames) == 1
+    x = traj.frames[0]
+    b = traj.boxes[0]
+
+    for bp in initial_state.potentials:
+        du_dx, _ = bp.to_gpu(np.float32).bound_impl.execute(x, b, True, False)
         check_force_norm(-du_dx)
-    return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
+    return replace(initial_state, v0=traj.final_velocities, x0=x, box0=b)
 
 
 @pytest.mark.parametrize(
     "num_proposals_per_move, total_num_proposals, batch_size",
     [
-        (20000, 200000, 200),
+        (2000, 20000, 200),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
@@ -998,7 +962,35 @@ def test_bd_moves_with_complex_and_ligand(
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, water_params, water_idxs, DEFAULT_TEMP)
 
     assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-    verify_bias_deletion_moves(
-        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
-    )
-    assert bdem.n_proposed() == total_num_proposals
+
+    md_params = MDParams(n_frames=1, n_eq_steps=0, steps_per_frame=1000, seed=seed)
+
+    iterations = 10
+    # Up to some number of iterations of MD/MC are allowed before considering the test a failure
+    # since there is relatively little space in which to insert a water. Requires MD/MC to ensure the
+    # test is not flaky.
+    for i in range(iterations):
+        try:
+            verify_bias_deletion_moves(
+                all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
+            )
+            assert bdem.n_proposed() == (i + 1) * total_num_proposals
+            # If we verified the target moves, we can exit
+            return
+        except AssertionError as e:
+            if "No moves were made, nothing was tested" in str(e):
+                traj = sample(
+                    initial_state,
+                    md_params,
+                    max_buffer_frames=1,
+                )
+
+                assert len(traj.frames) == 1
+                conf = traj.frames[0]
+                box = traj.boxes[0]
+                conf = image_frame(all_group_idxs, conf, box)
+                print("Running MD")
+                continue
+            # If an unexpect error was raised, re-raise the error
+            raise
+    assert False, f"No moves were made after {iterations}"
