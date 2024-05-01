@@ -57,19 +57,20 @@ def get_hif2a_single_topology_leg(host_name: str | None):
     scope="module", params=[None, "solvent", pytest.param("complex", marks=pytest.mark.nightly(reason="slow"))]
 )
 def hif2a_single_topology_leg(request):
-    return get_hif2a_single_topology_leg(request.param)
+    host_name = request.param
+    return host_name, get_hif2a_single_topology_leg(request.param)
 
 
 @pytest.mark.nightly(reason="Slow")
 def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
-    mol_a, mol_b, core, forcefield, host_config = hif2a_single_topology_leg
+    host_name, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
     md_params = MDParams(
         n_frames=200,
         n_eq_steps=10_000,
         steps_per_frame=400,
         seed=2024,
         hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1),
-        water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000) if host_config == "complex" else None,
+        water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000) if host_name == "complex" else None,
     )
     n_windows = 5
 
@@ -131,7 +132,7 @@ def plot_hrex_rbfe_hif2a(result: SimulationResult):
 
 
 def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg):
-    mol_a, mol_b, core, forcefield, host_config = hif2a_single_topology_leg
+    _, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
 
     md_params = MDParams(
         n_frames=10,
