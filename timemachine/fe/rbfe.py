@@ -39,6 +39,7 @@ from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import BoundPotential, jax_utils
 
@@ -156,7 +157,7 @@ def setup_initial_state(
     )
 
     # initialize velocities
-    v0 = np.zeros_like(x0)  # tbd resample from Maxwell-boltzman?
+    v0 = sample_velocities(hmr_masses, temperature, init_seed)
 
     # determine ligand idxs
 

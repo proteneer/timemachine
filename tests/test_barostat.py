@@ -105,7 +105,7 @@ def test_barostat_with_clashes():
     )
     integrator_impl = integrator.impl()
 
-    v_0 = sample_velocities(masses, temperature)
+    v_0 = sample_velocities(masses, temperature, seed)
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
@@ -206,7 +206,7 @@ def test_barostat_partial_group_idxs():
     )
     integrator_impl = integrator.impl()
 
-    v_0 = sample_velocities(masses, temperature)
+    v_0 = sample_velocities(masses, temperature, seed)
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
@@ -261,7 +261,7 @@ def test_barostat_is_deterministic():
         seed,
     )
 
-    v_0 = sample_velocities(masses, temperature)
+    v_0 = sample_velocities(masses, temperature, seed)
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
@@ -317,7 +317,7 @@ def test_barostat_varying_pressure():
     )
     integrator_impl = integrator.impl()
 
-    v_0 = sample_velocities(masses, temperature)
+    v_0 = sample_velocities(masses, temperature, seed)
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
@@ -376,7 +376,7 @@ def test_barostat_recentering_upon_acceptance():
     )
     integrator_impl = integrator.impl()
 
-    v_0 = sample_velocities(masses, temperature)
+    v_0 = sample_velocities(masses, temperature, seed)
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
@@ -476,7 +476,7 @@ def test_molecular_ideal_gas():
         )
         integrator_impl = integrator.impl()
 
-        v_0 = sample_velocities(masses, temperature)
+        v_0 = sample_velocities(masses, temperature, seed)
 
         # rescale the box to be approximately the desired box volume already
         rescaler = CentroidRescaler(group_indices)
@@ -597,7 +597,7 @@ def test_barostat_scaling_behavior():
         seed,
     )
 
-    v_0 = sample_velocities(masses, temperature)
+    v_0 = sample_velocities(masses, temperature, seed)
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
