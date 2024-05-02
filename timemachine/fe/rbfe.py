@@ -157,7 +157,7 @@ def setup_initial_state(
     )
 
     # initialize velocities
-    v0 = sample_velocities(hmr_masses, temperature, seed=init_seed)
+    v0 = sample_velocities(hmr_masses, temperature, init_seed)
 
     # determine ligand idxs
 

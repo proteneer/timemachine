@@ -1,12 +1,10 @@
-from typing import Optional
-
 import numpy as np
 from numpy.typing import NDArray
 
 from timemachine.constants import BOLTZ
 
 
-def sample_velocities(masses: NDArray, temperature: float, seed: Optional[int] = None) -> NDArray:
+def sample_velocities(masses: NDArray, temperature: float, seed: int) -> NDArray:
     """Sample Maxwell-Boltzmann velocities ~ N(0, sqrt(kB T / m)
 
     Parameters
@@ -19,7 +17,7 @@ def sample_velocities(masses: NDArray, temperature: float, seed: Optional[int] =
         float representing temperature in kelvin
 
     seed:
-        integer to use to use as seed, optional. If not provided use global RNG
+        integer to use to use as seed
 
     Returns
     -------
@@ -28,7 +26,6 @@ def sample_velocities(masses: NDArray, temperature: float, seed: Optional[int] =
     n_particles = len(masses)
     spatial_dim = 3
 
-    seed = seed if (seed is not None) else np.random.randint(100000)
     rng = np.random.default_rng(seed)
     v_unscaled = rng.standard_normal(size=(n_particles, spatial_dim))
 
