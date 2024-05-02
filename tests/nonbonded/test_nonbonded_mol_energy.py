@@ -199,7 +199,7 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
         )
 
 
-@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 3e-4)])
+@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 4e-4)])
 def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precision, atol, rtol):
     """Test that computing the per water energies of a system with a complex is equivalent."""
     ff = Forcefield.load_default()

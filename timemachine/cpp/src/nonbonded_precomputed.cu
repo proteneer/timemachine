@@ -62,7 +62,16 @@ void NonbondedPairListPrecomputed<RealType>::execute_device(
         const int blocks = ceil_divide(B_, tpb);
 
         k_nonbonded_precomputed<RealType><<<blocks, tpb, 0, stream>>>(
-            B_, d_x, d_p, d_box, d_idxs_, beta_, cutoff_, d_du_dx, d_du_dp, d_u == nullptr ? nullptr : d_u_buffer_);
+            B_,
+            d_x,
+            d_p,
+            d_box,
+            d_idxs_,
+            static_cast<RealType>(beta_),
+            static_cast<RealType>(cutoff_ * cutoff_),
+            d_du_dx,
+            d_du_dp,
+            d_u == nullptr ? nullptr : d_u_buffer_);
         gpuErrchk(cudaPeekAtLastError());
 
         if (d_u) {
