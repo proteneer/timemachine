@@ -129,9 +129,13 @@ def get_cores_and_diagnostics(
         initial_mapping=initial_mapping,
     )
 
+    old_ring_cutoff = core_kwargs["ring_cutoff"]
+
     core_kwargs["match_degree"] = False
+    core_kwargs["ring_cutoff"] = 1.0
     cores, diag0 = get_cores_and_diagnostics_impl(mol_a, mol_b, **core_kwargs)
     core_kwargs["match_degree"] = True
+    core_kwargs["ring_cutoff"] = old_ring_cutoff
     core_kwargs["initial_mapping"] = cores[0]
     cores, diag1 = get_cores_and_diagnostics_impl(mol_a, mol_b, **core_kwargs)
 

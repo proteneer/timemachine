@@ -29,7 +29,7 @@ MAX_FORCE_NORM = 50000.0  # used to check norms in the gradient computations
 
 # atom mapping parameters
 DEFAULT_ATOM_MAPPING_KWARGS = {
-    "ring_cutoff": 0.2,
+    "ring_cutoff": 0.25,
     "chain_cutoff": 0.2,
     "max_visits": 1e7,
     "connected_core": True,
