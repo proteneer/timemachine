@@ -118,7 +118,7 @@ def _run_neighbor_swaps(
         return (result, None)
 
     n_pairs, _ = neighbor_pairs.shape
-    init = (replica_idx_by_state, jnp.zeros(n_pairs, jnp.int_), jnp.zeros(n_pairs, jnp.int_))
+    init = (replica_idx_by_state, jnp.zeros(n_pairs, jnp.uint32), jnp.zeros(n_pairs, jnp.uint32))
 
     (replica_idx_by_state, proposed, accepted), _ = jax.lax.scan(run_neighbor_swap, init, (pair_idxs, uniform_samples))
 
