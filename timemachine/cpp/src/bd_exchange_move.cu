@@ -314,6 +314,7 @@ void BDExchangeMove<RealType>::compute_incremental_log_weights_device(
     cudaStream_t stream) {
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     // Scale down the y block by 16 to have each block do more work. Improves memory throughput
+    // Improves performance by about 10% on Tesla cards, may not generalize to consumer cards
     dim3 atom_by_atom_grid(ceil_divide(N, tpb), ceil_divide(mol_size_ * batch_size_, 16), 1);
 
     k_setup_proposals<<<ceil_divide(batch_size_, tpb), tpb, 0, stream>>>(
