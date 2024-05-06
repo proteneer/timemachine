@@ -247,6 +247,7 @@ def mcs(
         max_threshold,
         enforce_core_core,
         filter_fxn,
+        dict(),
     )
 
     # recursion(
@@ -297,11 +298,9 @@ def mcs(
         core_array = []
         for i, j in atom_map_1_to_2.items():
             core_array.append((i, j))
-        all_cores.append(core_array)
+        all_cores.append(np.array(core_array))
 
     print(all_cores[0])
-
-    assert 0
 
     return (
         all_cores,
@@ -341,11 +340,15 @@ def recursion_v2(
     threshold,
     enforce_core_core,
     filter_fxn,
+    canonical_visited_core_1s,
 ):
-    # see if we're lexicographical
-    if tuple(sorted(core_1)) != tuple(core_1):
-        # print("NON LEX, fast return")
-        return
+    # canonical_key = tuple(sorted(core_1))
+    # if canonical_key not in canonical_visited_core_1s:
+    #     # print("canonical")
+    #     canonical_visited_core_1s[canonical_key] = tuple(core_1)
+    # elif canonical_visited_core_1s[canonical_key] != tuple(core_1):
+    #     # print("non-canonical, returning")
+    #     return
 
     if mcs_result.nodes_visited > max_visits:
         mcs_result.timed_out = True
@@ -357,46 +360,16 @@ def recursion_v2(
 
     num_edges = _arcs_left(marcs)
     if num_edges < threshold:
-        # print(core_1, core_2)
-        # print("failed thresh", core_1, "thres", threshold, "num edges", num_edges)
+        print("failed thresh", core_1, "thres", threshold, "num edges", num_edges)
         return
 
     mcs_result.nodes_visited += 1
-    n_a = g1.n_vertices
-
-    if len(core_1) > mcs_result.num_atoms:
-        mcs_result.num_atoms = len(core_1)
-        atom_map_1_to_2 = dict()
-        for c1, c2 in zip(core_1, core_2):
-            atom_map_1_to_2[c1] = c2
-        # print(
-        #     "larger size found",
-        #     mcs_result.num_atoms,
-        #     "visits",
-        #     mcs_result.nodes_visited,
-        #     "atom mapping",
-        #     atom_map_1_to_2,
-        # )
-        print("larger core found")
-        print(core_1)
-        print(core_2)
-        # mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
-        # mcs_result.all_marcs.append(copy.copy(marcs))
-        mcs_result.all_maps = [copy.copy(atom_map_1_to_2)]
-        mcs_result.all_marcs = [copy.copy(marcs)]
-        mcs_result.num_edges = num_edges
 
     def filter_candidates(g, core):
         rem_v = [x for x in range(g.n_vertices) if x not in core]
         keep = []
-        if len(core) == 0:
-            amax = -1
-        else:
-            amax = np.amax(core)
         for v in rem_v:
             if len(core) > 0:
-                # if v < amax:
-                #     continue
                 v_is_connected = False
                 for nb in g.get_neighbors(v):
                     if nb in core:
@@ -413,30 +386,51 @@ def recursion_v2(
     nbs_1 = filter_candidates(g1, core_1)
     nbs_2 = filter_candidates(g2, core_2)
 
+    # print(core_1, core_2, "|", nbs_1, nbs_2)
+
     # print(pred_mat[0, 22])
+
+    choices = []
 
     for v1 in nbs_1:
         for v2 in nbs_2:
             # tbd: other filters
             if pred_mat[v1][v2]:
-                core_1.append(v1)
-                core_2.append(v2)
-                new_marcs = refine_marcs(g1, g2, v1, v2, marcs)
-                recursion_v2(
-                    g1,
-                    g2,
-                    core_1,
-                    core_2,
-                    new_marcs,
-                    mcs_result,
-                    pred_mat,
-                    max_visits,
-                    max_cores,
-                    threshold,
-                    enforce_core_core,
-                    filter_fxn,
-                )
-                core_1.pop()
-                core_2.pop()
+                choices.append((v1, v2))
+
+    if len(choices) == 0:
+        print("terminal_node")
+        # weird ixn with pred_mat, there may be some atoms left that just
+        # cannot be mapped and shouldn't be attempted anymore
+        if num_edges == threshold:
+            mcs_result.num_atoms = len(core_1)
+            atom_map_1_to_2 = dict()
+            for c1, c2 in zip(core_1, core_2):
+                atom_map_1_to_2[c1] = c2
+            mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
+            mcs_result.all_marcs.append(copy.copy(marcs))
+            mcs_result.num_edges = num_edges
+
+    for v1, v2 in choices:
+        core_1.append(v1)
+        core_2.append(v2)
+        new_marcs = refine_marcs(g1, g2, v1, v2, marcs)
+        recursion_v2(
+            g1,
+            g2,
+            core_1,
+            core_2,
+            new_marcs,
+            mcs_result,
+            pred_mat,
+            max_visits,
+            max_cores,
+            threshold,
+            enforce_core_core,
+            filter_fxn,
+            canonical_visited_core_1s,
+        )
+        core_1.pop()
+        core_2.pop()
 
     return
