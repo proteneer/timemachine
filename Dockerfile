@@ -101,25 +101,26 @@ RUN cd /code/timemachine && git init . && pre-commit install-hooks
 COPY ci/requirements.txt /code/timemachine/ci/requirements.txt
 RUN pip install --no-cache-dir -r timemachine/ci/requirements.txt
 
-# Dev container that contains the cuda developer tools
-FROM tm_base_env AS timemachine_dev
+# Container that contains the cuda developer tools which allows building the customs ops
+# Used as an intermediate for creating a final slimmed down container with timemachine and only the cuda runtime
+FROM tm_base_env AS timemachine_cuda_dev
 ARG CUDA_ARCH
 ENV CMAKE_ARGS="-DCUDA_ARCH:STRING=${CUDA_ARCH}"
 
 COPY . /code/timemachine/
 WORKDIR /code/timemachine/
-RUN pip install --no-cache-dir -e .[test] && rm -rf ./build
+RUN pip install --no-cache-dir -e . && rm -rf ./build
 
-# Container with only cuda runtime, half the size of dev container
+# Container with only cuda runtime, half the size of the timemachine_cuda_dev container
 FROM nvidia/cuda:11.7.1-runtime-ubuntu20.04 as timemachine
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=timemachine_dev /opt/ /opt/
-COPY --from=timemachine_dev /code/ /code/
-COPY --from=timemachine_dev /root/.bashrc /root/.bashrc
+COPY --from=timemachine_cuda_dev /opt/ /opt/
+COPY --from=timemachine_cuda_dev /code/ /code/
+COPY --from=timemachine_cuda_dev /root/.bashrc /root/.bashrc
 RUN ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh
 ARG ENV_NAME=timemachine
 ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
