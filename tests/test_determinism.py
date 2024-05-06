@@ -18,7 +18,10 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 pytestmark = [pytest.mark.memcheck]
 
 
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 1e-6)])
+@pytest.mark.parametrize(
+    "precision,rtol,atol",
+    [pytest.param(np.float64, 1e-8, 1e-8, marks=pytest.mark.nightly(reason="slow")), (np.float32, 1e-4, 1e-6)],
+)
 def test_deterministic_energies(precision, rtol, atol):
     """Verify that recomputing the energies of frames that have already had energies computed
     before, will produce the same bitwise identical energy.
