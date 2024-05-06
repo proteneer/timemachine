@@ -66,6 +66,7 @@ def get_cores_and_diagnostics_impl(
     """Same as :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
     assert max_cores > 0
 
+    print("START")
     core_kwargs = dict(
         ring_cutoff=ring_cutoff,
         chain_cutoff=chain_cutoff,
@@ -83,19 +84,20 @@ def get_cores_and_diagnostics_impl(
     )
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
-    if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
-        # adjust initial_mapping if we're swapping
-        if initial_mapping is not None and len(initial_mapping) > 0:
-            core_kwargs["initial_mapping"] = np.stack([initial_mapping[:, 1], initial_mapping[:, 0]], axis=1)
-        all_cores, mcs_diagnostics = _get_cores_impl(mol_b, mol_a, **core_kwargs)
-        new_cores = []
-        for core in all_cores:
-            core = np.array([(x[1], x[0]) for x in core], dtype=core.dtype)
-            new_cores.append(core)
-        return new_cores, mcs_diagnostics
-    else:
-        all_cores, mcs_diagnostics = _get_cores_impl(mol_a, mol_b, **core_kwargs)
-        return all_cores, mcs_diagnostics
+    # if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
+    #     print("SWAPPING")
+    #     # adjust initial_mapping if we're swapping
+    #     if initial_mapping is not None and len(initial_mapping) > 0:
+    #         core_kwargs["initial_mapping"] = np.stack([initial_mapping[:, 1], initial_mapping[:, 0]], axis=1)
+    #     all_cores, mcs_diagnostics = _get_cores_impl(mol_b, mol_a, **core_kwargs)
+    #     new_cores = []
+    #     for core in all_cores:
+    #         core = np.array([(x[1], x[0]) for x in core], dtype=core.dtype)
+    #         new_cores.append(core)
+    #     return new_cores, mcs_diagnostics
+    # else:
+    all_cores, mcs_diagnostics = _get_cores_impl(mol_a, mol_b, **core_kwargs)
+    return all_cores, mcs_diagnostics
 
 
 def get_cores_and_diagnostics(
@@ -230,7 +232,8 @@ def get_cores(
     timemachine.fe.mcgregor.NoMappingError
         If no mapping is found
     """
-    all_cores, _ = get_cores_and_diagnostics(
+    match_degree = False
+    all_cores, _ = get_cores_and_diagnostics_impl(
         mol_a,
         mol_b,
         ring_cutoff,
@@ -244,6 +247,7 @@ def get_cores(
         enforce_chiral,
         disallow_planar_torsion_flips,
         min_threshold,
+        match_degree,
         initial_mapping,
     )
 
@@ -438,7 +442,9 @@ def _get_cores_impl(
     if initial_mapping is None:
         initial_mapping = np.zeros((0, 2))
 
-    mol_a, perm, initial_mapping = reorder_atoms_by_degree_and_initial_mapping(mol_a, initial_mapping)
+    # mol_a, perm, initial_mapping = reorder_atoms_by_degree_and_initial_mapping(mol_a, initial_mapping)
+
+    perm = np.arange(mol_a.GetNumAtoms())
 
     bonds_a = get_romol_bonds(mol_a)
     bonds_b = get_romol_bonds(mol_b)
@@ -469,8 +475,8 @@ def _get_cores_impl(
                 if ring_matches_ring_only and (atom_i.IsInRing() != atom_j.IsInRing()):
                     continue
 
-                if match_degree and (atom_i.GetTotalDegree() != atom_j.GetTotalDegree()):
-                    continue
+                # if match_degree and (atom_i.GetTotalDegree() != atom_j.GetTotalDegree()):
+                # continue
 
                 cutoff = ring_cutoff if (atom_i.IsInRing() or atom_j.IsInRing()) else chain_cutoff
                 if dij < cutoff:
@@ -523,6 +529,10 @@ def _get_cores_impl(
         initial_mapping,
         filter_fxn=filter_fxn,
     )
+
+    print("RETURNING")
+
+    return all_cores, mcs_diagnostics
 
     all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
 

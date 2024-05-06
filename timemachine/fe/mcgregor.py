@@ -87,6 +87,7 @@ class MCSResult:
         self.num_edges = 0
         self.timed_out = False
         self.nodes_visited = 0
+        self.num_atoms = 0
 
 
 class Graph:
@@ -194,8 +195,6 @@ def mcs(
     initial_mapping,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
-    assert n_a <= n_b
-
     predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
     g_a = Graph(n_a, bonds_a)
     g_b = Graph(n_b, bonds_b)
@@ -203,11 +202,13 @@ def mcs(
 
     base_map_a_to_b = [UNMAPPED] * n_a
     base_map_b_to_a = [UNMAPPED] * n_b
-    if initial_mapping is not None:
-        for a, b in initial_mapping:
-            base_map_a_to_b[a] = b
-            base_map_b_to_a[b] = a
-            base_marcs = refine_marcs(g_a, g_b, a, b, base_marcs)
+
+    assert len(initial_mapping) == 0
+    # if initial_mapping is not None:
+    #     for a, b in initial_mapping:
+    #         base_map_a_to_b[a] = b
+    #         base_map_b_to_a[b] = a
+    #         base_marcs = refine_marcs(g_a, g_b, a, b, base_marcs)
 
     base_layer = len(initial_mapping)
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
@@ -219,50 +220,71 @@ def mcs(
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(base_marcs)
     total_nodes_visited = 0
-    for idx in range(max_threshold):
-        cur_threshold = max_threshold - idx
-        if cur_threshold < min_threshold:
-            raise NoMappingError(f"Unable to find mapping with at least {min_threshold} atoms")
+    # for idx in range(max_threshold):
+    #     cur_threshold = max_threshold - idx
+    #     if cur_threshold < min_threshold:
+    #         raise NoMappingError(f"Unable to find mapping with at least {min_threshold} atoms")
 
-        map_a_to_b = copy.deepcopy(base_map_a_to_b)
-        map_b_to_a = copy.deepcopy(base_map_b_to_a)
-        mcs_result = MCSResult()
-        recursion(
-            g_a,
-            g_b,
-            map_a_to_b,
-            map_b_to_a,
-            base_layer,
-            base_marcs,
-            mcs_result,
-            priority_idxs,
-            max_visits,
-            max_cores,
-            cur_threshold,
-            enforce_core_core,
-            filter_fxn,
-        )
+    #     map_a_to_b = copy.deepcopy(base_map_a_to_b)
+    #     map_b_to_a = copy.deepcopy(base_map_b_to_a)
+    mcs_result = MCSResult()
 
-        total_nodes_visited += mcs_result.nodes_visited
+    core_1 = []
+    core_2 = []
 
-        # If timed out, either due to max_visits or max_cores, raise exception.
-        if mcs_result.timed_out:
-            warnings.warn(
-                f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited. "
-                "Cores may be suboptimal.",
-                MaxVisitsWarning,
-            )
+    # print(core_1, core_2)
+    # cur_threshold = 0
+    recursion_v2(
+        g_a,
+        g_b,
+        core_1,
+        core_2,
+        base_marcs,
+        mcs_result,
+        predicate,
+        max_visits,
+        max_cores,
+        max_threshold,
+        enforce_core_core,
+        filter_fxn,
+    )
 
-        if len(mcs_result.all_maps) > 0:
-            # don't remove this comment and the one below, useful for debugging!
-            # print(
-            # f"==SUCCESS==[NODES VISITED {mcs_result.nodes_visited} | CORE_SIZE {len([x != UNMAPPED for x in mcs_result.all_maps[0]])} | NUM_CORES {len(mcs_result.all_maps)} | NUM_EDGES {mcs_result.num_edges} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
-            # )
-            break
-        # else:
-        # print(
-        # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
-        # )
+    # recursion(
+    #     g_a,
+    #     g_b,
+    #     map_a_to_b,
+    #     map_b_to_a,
+    #     base_layer,
+    #     base_marcs,
+    #     mcs_result,
+    #     priority_idxs,
+    #     max_visits,
+    #     max_cores,
+    #     cur_threshold,
+    #     enforce_core_core,
+    #     filter_fxn,
+    # )
+
+    # total_nodes_visited += mcs_result.nodes_visited
+
+    # # If timed out, either due to max_visits or max_cores, raise exception.
+    # if mcs_result.timed_out:
+    #     warnings.warn(
+    #         f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited. "
+    #         "Cores may be suboptimal.",
+    #         MaxVisitsWarning,
+    #     )
+
+    # if len(mcs_result.all_maps) > 0:
+    #     # don't remove this comment and the one below, useful for debugging!
+    #     # print(
+    #     # f"==SUCCESS==[NODES VISITED {mcs_result.nodes_visited} | CORE_SIZE {len([x != UNMAPPED for x in mcs_result.all_maps[0]])} | NUM_CORES {len(mcs_result.all_maps)} | NUM_EDGES {mcs_result.num_edges} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
+    #     # )
+    #     break
+    # # else:
+    # # print(
+    # # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
+    # # )
 
     assert mcs_result is not None
 
@@ -272,8 +294,14 @@ def mcs(
     all_cores = []
 
     for atom_map_1_to_2 in mcs_result.all_maps:
-        core_array = perm_to_core(atom_map_1_to_2)
+        core_array = []
+        for i, j in atom_map_1_to_2.items():
+            core_array.append((i, j))
         all_cores.append(core_array)
+
+    print(all_cores[0])
+
+    assert 0
 
     return (
         all_cores,
@@ -296,21 +324,29 @@ def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
     map_2_to_1[jdx] = UNMAPPED
 
 
-def recursion(
+def find_neighbors(g, atom, core):
+    return [x for x in g.get_neighbors(atom) if x not in core]
+
+
+def recursion_v2(
     g1,
     g2,
-    atom_map_1_to_2,
-    atom_map_2_to_1,
-    layer,
+    core_1,
+    core_2,
     marcs,
     mcs_result,
-    priority_idxs,
+    pred_mat,
     max_visits,
     max_cores,
     threshold,
     enforce_core_core,
     filter_fxn,
 ):
+    # see if we're lexicographical
+    if tuple(sorted(core_1)) != tuple(core_1):
+        # print("NON LEX, fast return")
+        return
+
     if mcs_result.nodes_visited > max_visits:
         mcs_result.timed_out = True
         return
@@ -321,62 +357,86 @@ def recursion(
 
     num_edges = _arcs_left(marcs)
     if num_edges < threshold:
+        # print(core_1, core_2)
+        # print("failed thresh", core_1, "thres", threshold, "num edges", num_edges)
         return
 
     mcs_result.nodes_visited += 1
     n_a = g1.n_vertices
 
-    # leaf-node, every atom has been mapped
-    if layer == n_a:
-        if num_edges == threshold:
-            mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
-            mcs_result.all_marcs.append(copy.copy(marcs))
-            mcs_result.num_edges = num_edges
-        return
+    if len(core_1) > mcs_result.num_atoms:
+        mcs_result.num_atoms = len(core_1)
+        atom_map_1_to_2 = dict()
+        for c1, c2 in zip(core_1, core_2):
+            atom_map_1_to_2[c1] = c2
+        # print(
+        #     "larger size found",
+        #     mcs_result.num_atoms,
+        #     "visits",
+        #     mcs_result.nodes_visited,
+        #     "atom mapping",
+        #     atom_map_1_to_2,
+        # )
+        print("larger core found")
+        print(core_1)
+        print(core_2)
+        # mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
+        # mcs_result.all_marcs.append(copy.copy(marcs))
+        mcs_result.all_maps = [copy.copy(atom_map_1_to_2)]
+        mcs_result.all_marcs = [copy.copy(marcs)]
+        mcs_result.num_edges = num_edges
 
-    for jdx in priority_idxs[layer]:
-        if atom_map_2_to_1[jdx] == UNMAPPED:  # optimize later
-            atom_map_add(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
-            if enforce_core_core and not _verify_core_is_connected(
-                g1, g2, layer, jdx, atom_map_1_to_2, atom_map_2_to_1
-            ):
-                pass
-            elif not filter_fxn(atom_map_1_to_2):
-                pass
+    def filter_candidates(g, core):
+        rem_v = [x for x in range(g.n_vertices) if x not in core]
+        keep = []
+        if len(core) == 0:
+            amax = -1
+        else:
+            amax = np.amax(core)
+        for v in rem_v:
+            if len(core) > 0:
+                # if v < amax:
+                #     continue
+                v_is_connected = False
+                for nb in g.get_neighbors(v):
+                    if nb in core:
+                        v_is_connected = True
+                        break
+                if v_is_connected:
+                    assert v not in keep
+                    keep.append(v)
             else:
-                new_marcs = refine_marcs(g1, g2, layer, jdx, marcs)
-                recursion(
+                assert v not in keep
+                keep.append(v)
+        return keep
+
+    nbs_1 = filter_candidates(g1, core_1)
+    nbs_2 = filter_candidates(g2, core_2)
+
+    # print(pred_mat[0, 22])
+
+    for v1 in nbs_1:
+        for v2 in nbs_2:
+            # tbd: other filters
+            if pred_mat[v1][v2]:
+                core_1.append(v1)
+                core_2.append(v2)
+                new_marcs = refine_marcs(g1, g2, v1, v2, marcs)
+                recursion_v2(
                     g1,
                     g2,
-                    atom_map_1_to_2,
-                    atom_map_2_to_1,
-                    layer + 1,
+                    core_1,
+                    core_2,
                     new_marcs,
                     mcs_result,
-                    priority_idxs,
+                    pred_mat,
                     max_visits,
                     max_cores,
                     threshold,
                     enforce_core_core,
                     filter_fxn,
                 )
-            atom_map_pop(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
+                core_1.pop()
+                core_2.pop()
 
-    # always allow for explicitly not mapping layer atom
-    # nit: don't need to check for connected core if mapping to None
-    new_marcs = refine_marcs(g1, g2, layer, UNMAPPED, marcs)
-    recursion(
-        g1,
-        g2,
-        atom_map_1_to_2,
-        atom_map_2_to_1,
-        layer + 1,
-        new_marcs,
-        mcs_result,
-        priority_idxs,
-        max_visits,
-        max_cores,
-        threshold,
-        enforce_core_core,
-        filter_fxn,
-    )
+    return

@@ -380,10 +380,11 @@ def test_all_pairs(filepath):
     mols = read_sdf(filepath)
     for idx, mol_a in enumerate(mols):
         for mol_b in mols[idx + 1 :]:
+            print(filepath, mol_a.GetProp("_Name"), mol_b.GetProp("_Name"))
             all_cores = atom_mapping.get_cores(
                 mol_a,
                 mol_b,
-                ring_cutoff=0.1,
+                ring_cutoff=0.12,
                 chain_cutoff=0.2,
                 max_visits=1e7,  # 10 million max nodes to visit
                 connected_core=False,
@@ -398,12 +399,15 @@ def test_all_pairs(filepath):
             )
 
             # # useful for visualization
-            # for core_idx, core in enumerate(all_cores[:1]):
-            #     res = plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5)
-            #     with open(
-            #         f"atom_mapping_{get_mol_name(mol_a)}_to_{get_mol_name(mol_b)}_core_{core_idx}.svg", "w"
-            #     ) as fh:
-            #         fh.write(res)
+            for core_idx, core in enumerate(all_cores[:1]):
+                print("CORE", core)
+                res = plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5)
+                with open(
+                    f"atom_mapping_{get_mol_name(mol_a)}_to_{get_mol_name(mol_b)}_core_{core_idx}.svg", "w"
+                ) as fh:
+                    fh.write(res)
+
+            assert 0
 
             # note that this is probably the bottleneck for hif2a
             for core in all_cores:
