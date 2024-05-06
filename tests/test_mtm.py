@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import numpy as np
+import pytest
 
 from timemachine import testsystems
 from timemachine.constants import BOLTZ
@@ -23,6 +24,7 @@ def get_ff_am1ccc():
     return ff
 
 
+@pytest.mark.nightly
 def test_optimized_MTM():
     """
     Tests correctness of an optimized MTM in the condensed phase.
