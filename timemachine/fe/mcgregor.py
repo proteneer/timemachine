@@ -326,9 +326,9 @@ def recursion_v2(
 
     num_edges = _arcs_left(marcs)
 
-    if num_edges < threshold:
-        # print("failed thresh", threshold, "num edges", num_edges)
-        return
+    # if num_edges < threshold:
+    # print("failed thresh", threshold, "num edges", num_edges)
+    # return
 
     if mcs_result.nodes_visited % 1000 == 0:
         print(
@@ -366,30 +366,56 @@ def recursion_v2(
     nbs_1 = filter_candidates(g1, core_dict.keys())
     nbs_2 = filter_candidates(g2, core_dict.values())
     choices = []
-
+    # print("CD", core_dict, num_edges)
+    rev_core_dict = {v: k for k, v in core_dict.items()}
     for v1 in nbs_1:
         for v2 in nbs_2:
             # tbd: other filters
             if pred_mat[v1][v2] and filter_fxn(atom_map_1_to_2):
-                choices.append((v1, v2))
+                v1_core_bond_count = 0
+                for v1_nb in g1.get_neighbors(v1):
+                    # v1, v1_nb -> v2, core_dict[v1_nb]
+                    if v1_nb in core_dict.keys() and g2.cmat[v2][core_dict[v1_nb]]:
+                        v1_core_bond_count += 1
+                        # can break
+
+                v2_core_bond_count = 0
+                for v2_nb in g2.get_neighbors(v2):
+                    # v2, v2_nb -> v1, core_dict[v2_nb]
+                    if v2_nb in rev_core_dict.keys() and g1.cmat[v1][rev_core_dict[v2_nb]]:
+                        v2_core_bond_count += 1
+                        # can break
+
+                if len(core_dict) == 0 or (v1_core_bond_count and v2_core_bond_count):
+                    choices.append((v1, v2))
+                # elif len(core_dict) > 0:
+                # print("skipping")
+
+    # print("CHOICES", choices)
+    # print("LEN", len(choices))
 
     # terminal node
     # wait: did this actually terminate? is this # of truly mapped edges?
     if len(choices) == 0:
-        if num_edges == threshold:
-            print("terminal_node at threshold", core_dict, num_edges, "visited", mcs_result.nodes_visited, "nodes")
-            mcs_result.num_atoms = len(core_dict)
-            mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
-            mcs_result.all_marcs.append(copy.copy(marcs))
-            mcs_result.num_edges = num_edges
-        # else:
-        # print("!! terminal_node but not at threshold", core_dict, num_edges, "visited", mcs_result.nodes_visited)
+        # if num_edges == threshold:
+        print("terminal_node with", len(core_dict), "mapped atoms, and visited", mcs_result.nodes_visited, "nodes")
+        if len(core_dict) > 30:
+            print(core_dict)
+        mcs_result.num_atoms = len(core_dict)
+        # mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
+        # mcs_result.all_marcs.append(copy.copy(marcs))
+        mcs_result.num_edges = num_edges
+    # else:
+    # print("!! terminal_node but not at threshold", core_dict, num_edges, "visited", mcs_result.nodes_visited)
+
+    # print("number of choices", len(choices))
 
     for v1, v2 in choices:
         core_dict[v1] = v2
+        new_marcs = refine_marcs(g1, g2, v1, v2, marcs)
         core_key = hash(frozenset(core_dict.items()))
         if core_key not in canonical_visited_core_1s:
-            new_marcs = refine_marcs(g1, g2, v1, v2, marcs)
+            print("Not Skipping", len(canonical_visited_core_1s))
             recursion_v2(
                 g1,
                 g2,
@@ -403,10 +429,10 @@ def recursion_v2(
                 filter_fxn,
                 canonical_visited_core_1s,
             )
-            # mark this atom-mapping as visited only when we've recursed out
-            canonical_visited_core_1s[core_key] = num_edges
+            canonical_visited_core_1s[core_key] = _arcs_left(new_marcs)
         else:
-            assert num_edges == canonical_visited_core_1s[core_key]
+            print("Skipping", len(canonical_visited_core_1s))
+            assert _arcs_left(new_marcs) == canonical_visited_core_1s[core_key]
         core_dict.pop(v1)
 
     return
