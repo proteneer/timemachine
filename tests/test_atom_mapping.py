@@ -381,14 +381,61 @@ def test_all_pairs(filepath):
     for idx, mol_a in enumerate(mols):
         for mol_b in mols[idx + 1 :]:
             print(filepath, mol_a.GetProp("_Name"), mol_b.GetProp("_Name"))
+
+            #             mol_a = Chem.MolFromMolBlock("""
+            #   Mrv2311 05072402452D
+
+            #   9 10  0  0  0  0            999 V2000
+            #    -8.1808    1.3607    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -8.8953    0.9482    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -8.8953    0.1231    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -8.1808   -0.2893    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -7.4663    0.1231    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -7.4663    0.9482    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -6.6817   -0.1319    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -6.1968    0.5355    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -6.6816    1.2030    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #   1  2  1  0  0  0  0
+            #   1  6  1  0  0  0  0
+            #   2  3  1  0  0  0  0
+            #   3  4  1  0  0  0  0
+            #   4  5  1  0  0  0  0
+            #   5  6  1  0  0  0  0
+            #   7  8  1  0  0  0  0
+            #   8  9  1  0  0  0  0
+            #   5  7  1  0  0  0  0
+            #   6  9  1  0  0  0  0
+            # M  END
+            # $$$$
+            # """)
+            #             mol_b = Chem.MolFromMolBlock("""
+            #   Mrv2311 05072402462D
+
+            #   6  6  0  0  0  0            999 V2000
+            #    -8.1808    1.3607    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -8.8953    0.9482    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -8.8953    0.1231    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -8.1808   -0.2893    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -7.4663    0.1231    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #    -7.4663    0.9482    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+            #   1  2  1  0  0  0  0
+            #   1  6  1  0  0  0  0
+            #   2  3  1  0  0  0  0
+            #   3  4  1  0  0  0  0
+            #   4  5  1  0  0  0  0
+            #   5  6  1  0  0  0  0
+            # M  END
+            # $$$$""")
             all_cores = atom_mapping.get_cores(
                 mol_a,
                 mol_b,
-                ring_cutoff=0.12,
+                ring_cutoff=0.2,
                 chain_cutoff=0.2,
+                # ring_cutoff=np.inf,
+                # chain_cutoff=np.inf,
                 max_visits=1e7,  # 10 million max nodes to visit
                 connected_core=False,
-                max_cores=1000,
+                max_cores=1,
                 enforce_core_core=True,
                 ring_matches_ring_only=False,
                 complete_rings=False,
@@ -399,7 +446,7 @@ def test_all_pairs(filepath):
             )
 
             # # useful for visualization
-            for core_idx, core in enumerate(all_cores[:1]):
+            for core_idx, core in enumerate(all_cores[:10]):
                 print("CORE", core)
                 res = plot_atom_mapping_grid(mol_a, mol_b, core, num_rotations=5)
                 with open(

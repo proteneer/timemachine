@@ -220,72 +220,48 @@ def mcs(
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(base_marcs)
     total_nodes_visited = 0
-    # for idx in range(max_threshold):
-    #     cur_threshold = max_threshold - idx
-    #     if cur_threshold < min_threshold:
-    #         raise NoMappingError(f"Unable to find mapping with at least {min_threshold} atoms")
+    for idx in range(max_threshold):
+        cur_threshold = max_threshold - idx
+        if cur_threshold < min_threshold:
+            raise NoMappingError(f"Unable to find mapping with at least {min_threshold} atoms")
+        mcs_result = MCSResult()
+        core_dict = dict()
 
-    #     map_a_to_b = copy.deepcopy(base_map_a_to_b)
-    #     map_b_to_a = copy.deepcopy(base_map_b_to_a)
-    mcs_result = MCSResult()
+        print("CUR THRESHOLD", cur_threshold)
+        recursion_v2(
+            g_a,
+            g_b,
+            core_dict,
+            base_marcs,
+            mcs_result,
+            predicate,
+            max_visits,
+            max_cores,
+            max_threshold,
+            filter_fxn,
+            dict(),
+        )
 
-    core_1 = []
-    core_2 = []
+        total_nodes_visited += mcs_result.nodes_visited
 
-    # print(core_1, core_2)
-    # cur_threshold = 0
-    recursion_v2(
-        g_a,
-        g_b,
-        core_1,
-        core_2,
-        base_marcs,
-        mcs_result,
-        predicate,
-        max_visits,
-        max_cores,
-        max_threshold,
-        enforce_core_core,
-        filter_fxn,
-        dict(),
-    )
+        # If timed out, either due to max_visits or max_cores, raise exception.
+        if mcs_result.timed_out:
+            warnings.warn(
+                f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited. "
+                "Cores may be suboptimal.",
+                MaxVisitsWarning,
+            )
 
-    # recursion(
-    #     g_a,
-    #     g_b,
-    #     map_a_to_b,
-    #     map_b_to_a,
-    #     base_layer,
-    #     base_marcs,
-    #     mcs_result,
-    #     priority_idxs,
-    #     max_visits,
-    #     max_cores,
-    #     cur_threshold,
-    #     enforce_core_core,
-    #     filter_fxn,
-    # )
-
-    # total_nodes_visited += mcs_result.nodes_visited
-
-    # # If timed out, either due to max_visits or max_cores, raise exception.
-    # if mcs_result.timed_out:
-    #     warnings.warn(
-    #         f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited. "
-    #         "Cores may be suboptimal.",
-    #         MaxVisitsWarning,
-    #     )
-
-    # if len(mcs_result.all_maps) > 0:
-    #     # don't remove this comment and the one below, useful for debugging!
-    #     # print(
-    #     # f"==SUCCESS==[NODES VISITED {mcs_result.nodes_visited} | CORE_SIZE {len([x != UNMAPPED for x in mcs_result.all_maps[0]])} | NUM_CORES {len(mcs_result.all_maps)} | NUM_EDGES {mcs_result.num_edges} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
-    #     # )
-    #     break
-    # # else:
-    # # print(
-    # # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
-    # # )
+        if len(mcs_result.all_maps) > 0:
+            # don't remove this comment and the one below, useful for debugging!
+            # print(
+            # f"==SUCCESS==[NODES VISITED {mcs_result.nodes_visited} | CORE_SIZE {len([x != UNMAPPED for x in mcs_result.all_maps[0]])} | NUM_CORES {len(mcs_result.all_maps)} | NUM_EDGES {mcs_result.num_edges} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
+            # )
+            break
+        # else:
+        # print(
+        # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
+        # )
 
     assert mcs_result is not None
 
@@ -295,12 +271,10 @@ def mcs(
     all_cores = []
 
     for atom_map_1_to_2 in mcs_result.all_maps:
-        core_array = []
-        for i, j in atom_map_1_to_2.items():
-            core_array.append((i, j))
+        core_array = perm_to_core(atom_map_1_to_2)
         all_cores.append(np.array(core_array))
 
-    print(all_cores[0])
+    # print(all_cores[0])
 
     return (
         all_cores,
@@ -330,25 +304,17 @@ def find_neighbors(g, atom, core):
 def recursion_v2(
     g1,
     g2,
-    core_1,
-    core_2,
+    core_dict,
     marcs,
     mcs_result,
     pred_mat,
     max_visits,
     max_cores,
     threshold,
-    enforce_core_core,
     filter_fxn,
     canonical_visited_core_1s,
 ):
-    # canonical_key = tuple(sorted(core_1))
-    # if canonical_key not in canonical_visited_core_1s:
-    #     # print("canonical")
-    #     canonical_visited_core_1s[canonical_key] = tuple(core_1)
-    # elif canonical_visited_core_1s[canonical_key] != tuple(core_1):
-    #     # print("non-canonical, returning")
-    #     return
+    mcs_result.nodes_visited += 1
 
     if mcs_result.nodes_visited > max_visits:
         mcs_result.timed_out = True
@@ -359,16 +325,30 @@ def recursion_v2(
         return
 
     num_edges = _arcs_left(marcs)
+
     if num_edges < threshold:
-        print("failed thresh", core_1, "thres", threshold, "num edges", num_edges)
+        # print("failed thresh", threshold, "num edges", num_edges)
         return
 
-    mcs_result.nodes_visited += 1
+    if mcs_result.nodes_visited % 1000 == 0:
+        print(
+            "Visited",
+            mcs_result.nodes_visited,
+            "nodes",
+            len(core_dict),
+            "atoms mapped with",
+            num_edges,
+            "possible edges",
+        )
+
+    atom_map_1_to_2 = np.zeros(g1.n_vertices, dtype=np.int32) - 1
+    for c1, c2 in core_dict.items():
+        atom_map_1_to_2[c1] = c2
 
     def filter_candidates(g, core):
-        rem_v = [x for x in range(g.n_vertices) if x not in core]
+        outer_vertices = [x for x in range(g.n_vertices) if x not in core]
         keep = []
-        for v in rem_v:
+        for v in outer_vertices:
             if len(core) > 0:
                 v_is_connected = False
                 for nb in g.get_neighbors(v):
@@ -383,54 +363,50 @@ def recursion_v2(
                 keep.append(v)
         return keep
 
-    nbs_1 = filter_candidates(g1, core_1)
-    nbs_2 = filter_candidates(g2, core_2)
-
-    # print(core_1, core_2, "|", nbs_1, nbs_2)
-
-    # print(pred_mat[0, 22])
-
+    nbs_1 = filter_candidates(g1, core_dict.keys())
+    nbs_2 = filter_candidates(g2, core_dict.values())
     choices = []
 
     for v1 in nbs_1:
         for v2 in nbs_2:
             # tbd: other filters
-            if pred_mat[v1][v2]:
+            if pred_mat[v1][v2] and filter_fxn(atom_map_1_to_2):
                 choices.append((v1, v2))
 
+    # terminal node
+    # wait: did this actually terminate? is this # of truly mapped edges?
     if len(choices) == 0:
-        print("terminal_node")
-        # weird ixn with pred_mat, there may be some atoms left that just
-        # cannot be mapped and shouldn't be attempted anymore
         if num_edges == threshold:
-            mcs_result.num_atoms = len(core_1)
-            atom_map_1_to_2 = dict()
-            for c1, c2 in zip(core_1, core_2):
-                atom_map_1_to_2[c1] = c2
+            print("terminal_node at threshold", core_dict, num_edges, "visited", mcs_result.nodes_visited, "nodes")
+            mcs_result.num_atoms = len(core_dict)
             mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
             mcs_result.all_marcs.append(copy.copy(marcs))
             mcs_result.num_edges = num_edges
+        # else:
+        # print("!! terminal_node but not at threshold", core_dict, num_edges, "visited", mcs_result.nodes_visited)
 
     for v1, v2 in choices:
-        core_1.append(v1)
-        core_2.append(v2)
-        new_marcs = refine_marcs(g1, g2, v1, v2, marcs)
-        recursion_v2(
-            g1,
-            g2,
-            core_1,
-            core_2,
-            new_marcs,
-            mcs_result,
-            pred_mat,
-            max_visits,
-            max_cores,
-            threshold,
-            enforce_core_core,
-            filter_fxn,
-            canonical_visited_core_1s,
-        )
-        core_1.pop()
-        core_2.pop()
+        core_dict[v1] = v2
+        core_key = hash(frozenset(core_dict.items()))
+        if core_key not in canonical_visited_core_1s:
+            new_marcs = refine_marcs(g1, g2, v1, v2, marcs)
+            recursion_v2(
+                g1,
+                g2,
+                core_dict,
+                new_marcs,
+                mcs_result,
+                pred_mat,
+                max_visits,
+                max_cores,
+                threshold,
+                filter_fxn,
+                canonical_visited_core_1s,
+            )
+            # mark this atom-mapping as visited only when we've recursed out
+            canonical_visited_core_1s[core_key] = num_edges
+        else:
+            assert num_edges == canonical_visited_core_1s[core_key]
+        core_dict.pop(v1)
 
     return
