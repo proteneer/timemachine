@@ -186,7 +186,13 @@ def test_bd_exchange_get_set_params(precision):
 @pytest.mark.memcheck
 @pytest.mark.parametrize(
     "proposals_per_move,total_num_proposals,batch_size",
-    [(1, 1, 1), (1, 10, 1), (10, 10, 10), (1000, 10000, 1000), (1000, 10000, 333)],
+    [
+        (1, 1, 1),
+        (1, 10, 1),
+        (10, 10, 10),
+        pytest.param(1000, 10000, 1000, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1000, 10000, 333, marks=pytest.mark.nightly(reason="slow")),
+    ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-7, 5e-7), (np.float32, 1e-6, 2e-6)])
 @pytest.mark.parametrize("seed", [2023])
@@ -378,7 +384,10 @@ def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
 
 
 @pytest.mark.memcheck
-@pytest.mark.parametrize("proposals_per_move, batch_size", [(1, 1), (10, 1), (2, 2), (100, 100), (1000, 333)])
+@pytest.mark.parametrize(
+    "proposals_per_move, batch_size",
+    [(1, 1), (10, 1), (2, 2), (100, 100), pytest.param(1000, 333, marks=pytest.mark.nightly(reason="slow"))],
+)
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
 def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precision, seed):

@@ -81,10 +81,7 @@ def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpo
     return single_topology, host, host_name, n_frames, n_windows, initial_states
 
 
-@pytest.mark.nightly(reason="Slow")
-@pytest.mark.parametrize("enable_water_sampling", [False, True])
-@pytest.mark.parametrize("mode", ["sequential", "bisection", "hrex"])
-def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling):
+def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling) -> float:
     single_topology, host, host_name, n_frames, n_windows, initial_states = hif2a_single_topology_leg
     if host_name != "complex" and enable_water_sampling:
         pytest.skip("Water sampling disabled outside of complex")
@@ -94,6 +91,7 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable
         md_params = replace(md_params, water_sampling_params=WaterSamplingParams())
     temperature = DEFAULT_TEMP
 
+    run: Optional[Callable] = None
     if mode == "hrex":
         run = partial(
             run_sims_hrex,
@@ -149,6 +147,13 @@ def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable
     return ns_per_day
 
 
+@pytest.mark.nightly(reason="Slow")
+@pytest.mark.parametrize("enable_water_sampling", [False, True])
+@pytest.mark.parametrize("mode", ["sequential", "bisection", "hrex"])
+def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling):
+    run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling)
+
+
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--leg", default="vacuum", choices=["vacuum", "solvent", "complex"])
@@ -167,7 +172,7 @@ if __name__ == "__main__":
             args.leg, windows, (0.0, 1.0)
         )
         for mode in args.modes:
-            ns_per_day = test_benchmark_hif2a_single_topology(
+            ns_per_day = run_benchmark_hif2a_single_topology(
                 (single_topology, host, host_name, args.n_frames, windows, initial_states), mode, args.water_sampling
             )
             timings[mode].append(ns_per_day)
