@@ -37,6 +37,36 @@ void Potential::execute_batch_device(
     }
 }
 
+void Potential::execute_batch_sparse_device(
+    const int N,
+    const int P,
+    const int batch_size,
+    const unsigned int *coords_batch_idxs,
+    const unsigned int *params_batch_idxs,
+    const double *d_x,
+    const double *d_p,
+    const double *d_box,
+    unsigned long long *d_du_dx,
+    unsigned long long *d_du_dp,
+    __int128 *d_u,
+    cudaStream_t stream) {
+
+    for (int i = 0; i < batch_size; i++) {
+        int ic = coords_batch_idxs[i];
+        int ip = params_batch_idxs[i];
+        this->execute_device(
+            N,
+            P,
+            d_x + (ic * N * D),
+            P > 0 ? d_p + (ip * P) : nullptr,
+            d_box + (ic * D * D),
+            d_du_dx ? d_du_dx + (i * N * D) : nullptr,
+            d_du_dp ? d_du_dp + (i * P) : nullptr,
+            d_u ? d_u + i : nullptr,
+            stream);
+    }
+}
+
 void Potential::execute_batch_host(
     const int coord_batch_size,  // Number of batches of coordinates
     const int N,                 // Number of atoms
@@ -89,6 +119,84 @@ void Potential::execute_batch_host(
         N,
         param_batch_size,
         P,
+        d_x_buffer.data,
+        P > 0 ? d_p.data : nullptr,
+        d_box.data,
+        h_du_dx ? d_du_dx_buffer.data : nullptr,
+        h_du_dp ? d_du_dp_buffer.data : nullptr,
+        h_u ? d_u_buffer.data : nullptr,
+        stream);
+
+    gpuErrchk(cudaStreamSynchronize(stream));
+    gpuErrchk(cudaStreamDestroy(stream));
+
+    if (h_du_dx) {
+        d_du_dx_buffer.copy_to(h_du_dx);
+    }
+
+    if (h_du_dp) {
+        d_du_dp_buffer.copy_to(h_du_dp);
+    }
+
+    if (h_u) {
+        d_u_buffer.copy_to(h_u);
+    }
+}
+
+void Potential::execute_batch_sparse_host(
+    const int coords_size,                 // Number of coordinate arrays
+    const int N,                           // Number of atoms
+    const int params_size,                 // Number of parameter arrays
+    const int P,                           // Number of parameters
+    const int batch_size,                  // Number of evaluations
+    const unsigned int *coords_batch_idxs, // Index of the coordinates for each evaluation
+    const unsigned int *params_batch_idxs, // Index of the parameters for each evaluation
+    const double *h_x,                     // [coord_batch_size, N, 3]
+    const double *h_p,                     // [param_batch_size, P]
+    const double *h_box,                   // [coord_batch_size, 3, 3]
+    unsigned long long *h_du_dx,           // [coord_batch_size, param_batch_size, N, 3]
+    unsigned long long *h_du_dp,           // [coord_batch_size, param_batch_size, P]
+    __int128 *h_u                          // [coord_batch_size, param_batch_size]
+) {
+    DeviceBuffer<double> d_p(params_size * P);
+    if (P > 0) {
+        d_p.copy_from(h_p);
+    }
+
+    DeviceBuffer<double> d_box(coords_size * D * D);
+    d_box.copy_from(h_box);
+
+    DeviceBuffer<double> d_x_buffer(coords_size * N * D);
+    d_x_buffer.copy_from(h_x);
+
+    DeviceBuffer<unsigned long long> d_du_dx_buffer;
+    DeviceBuffer<unsigned long long> d_du_dp_buffer;
+    DeviceBuffer<__int128> d_u_buffer;
+
+    cudaStream_t stream;
+    gpuErrchk(cudaStreamCreate(&stream));
+
+    if (h_du_dx) {
+        d_du_dx_buffer.realloc(batch_size * N * D);
+        gpuErrchk(cudaMemsetAsync(d_du_dx_buffer.data, 0, d_du_dx_buffer.size(), stream));
+    }
+
+    if (h_du_dp) {
+        d_du_dp_buffer.realloc(batch_size * P);
+        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer.data, 0, d_du_dp_buffer.size(), stream));
+    }
+
+    if (h_u) {
+        d_u_buffer.realloc(batch_size);
+        gpuErrchk(cudaMemsetAsync(d_u_buffer.data, 0, d_u_buffer.size(), stream));
+    }
+
+    this->execute_batch_sparse_device(
+        N,
+        P,
+        batch_size,
+        coords_batch_idxs,
+        params_batch_idxs,
         d_x_buffer.data,
         P > 0 ? d_p.data : nullptr,
         d_box.data,
