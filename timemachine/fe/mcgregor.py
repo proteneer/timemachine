@@ -301,6 +301,38 @@ def find_neighbors(g, atom, core):
     return [x for x in g.get_neighbors(atom) if x not in core]
 
 
+# def _cbc(mol_a, mol_b, marcs):
+#     a_edges = get_edges(mol_a)
+#     b_edges = get_edges(mol_b)
+#     bond_core = {}
+#     for e_a in range(len(a_edges)):
+#         src_a, dst_a = a_edges[e_a]
+#         for e_b in range(len(b_edges)):
+#             src_b, dst_b = b_edges[e_b]
+#             if marcs[e_a][e_b]:
+#                 assert (src_a, dst_a) not in bond_core
+#                 assert (dst_a, src_a) not in bond_core
+#                 bond_core[(src_a, dst_a)] = (src_b, dst_b)
+#     return bond_core
+
+import networkx as nx
+
+
+def _verify_connectivity(g1, g2, core_dict):
+    # verify that the induced common-core is a single component
+    nxg = nx.Graph()
+    for i, j in g1.edges:
+        assert g1.cmat[i][j]
+        if i in core_dict and j in core_dict:
+            map_i = core_dict[i]
+            map_j = core_dict[j]
+            if g2.cmat[map_i][map_j]:
+                nxg.add_edge(i, j)
+
+    cc_a = list(nx.connected_components(nxg))  # this can be 0 or 1
+    assert len(cc_a) < 2
+
+
 def recursion_v2(
     g1,
     g2,
@@ -326,9 +358,26 @@ def recursion_v2(
 
     num_edges = _arcs_left(marcs)
 
+    # filter on predicates matrix and connected component size?
+    # pmat_copy = copy.deepcopy(pred_mat)
+    # for i,j in core_dict.items():
+    #     # zero out rows
+    #     pmat_copy[i] = 0
+    #     pmat_copy[:, j] = 0
+    #     pmat_copy[i,j] = 1
+
+    # num_vertices = _arcs_left(pmat_copy)
+    # print("num_vertices", num_vertices, "core_size", len(core_dict))
+
     # if num_edges < threshold:
     # print("failed thresh", threshold, "num edges", num_edges)
     # return
+
+    # debug
+    rev_core_dict = {v: k for k, v in core_dict.items()}
+    if len(core_dict) > 0:
+        _verify_connectivity(g1, g2, core_dict)
+        _verify_connectivity(g2, g1, rev_core_dict)
 
     if mcs_result.nodes_visited % 1000 == 0:
         print(
@@ -366,8 +415,7 @@ def recursion_v2(
     nbs_1 = filter_candidates(g1, core_dict.keys())
     nbs_2 = filter_candidates(g2, core_dict.values())
     choices = []
-    # print("CD", core_dict, num_edges)
-    rev_core_dict = {v: k for k, v in core_dict.items()}
+
     for v1 in nbs_1:
         for v2 in nbs_2:
             # tbd: other filters
@@ -377,19 +425,15 @@ def recursion_v2(
                     # v1, v1_nb -> v2, core_dict[v1_nb]
                     if v1_nb in core_dict.keys() and g2.cmat[v2][core_dict[v1_nb]]:
                         v1_core_bond_count += 1
-                        # can break
 
                 v2_core_bond_count = 0
                 for v2_nb in g2.get_neighbors(v2):
                     # v2, v2_nb -> v1, core_dict[v2_nb]
                     if v2_nb in rev_core_dict.keys() and g1.cmat[v1][rev_core_dict[v2_nb]]:
                         v2_core_bond_count += 1
-                        # can break
 
                 if len(core_dict) == 0 or (v1_core_bond_count and v2_core_bond_count):
                     choices.append((v1, v2))
-                # elif len(core_dict) > 0:
-                # print("skipping")
 
     # print("CHOICES", choices)
     # print("LEN", len(choices))
@@ -398,9 +442,17 @@ def recursion_v2(
     # wait: did this actually terminate? is this # of truly mapped edges?
     if len(choices) == 0:
         # if num_edges == threshold:
-        print("terminal_node with", len(core_dict), "mapped atoms, and visited", mcs_result.nodes_visited, "nodes")
-        if len(core_dict) > 30:
-            print(core_dict)
+        print(
+            "terminal_node with",
+            len(core_dict),
+            "mapped atoms, and visited",
+            "num_edges",
+            num_edges,
+            mcs_result.nodes_visited,
+            "nodes",
+        )
+        # if len(core_dict) > 30:
+        # print(core_dict)
         mcs_result.num_atoms = len(core_dict)
         # mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
         # mcs_result.all_marcs.append(copy.copy(marcs))
@@ -415,7 +467,7 @@ def recursion_v2(
         new_marcs = refine_marcs(g1, g2, v1, v2, marcs)
         core_key = hash(frozenset(core_dict.items()))
         if core_key not in canonical_visited_core_1s:
-            print("Not Skipping", len(canonical_visited_core_1s))
+            # print("Not Skipping", len(canonical_visited_core_1s))
             recursion_v2(
                 g1,
                 g2,
@@ -431,7 +483,7 @@ def recursion_v2(
             )
             canonical_visited_core_1s[core_key] = _arcs_left(new_marcs)
         else:
-            print("Skipping", len(canonical_visited_core_1s))
+            # print("Skipping", len(canonical_visited_core_1s))
             assert _arcs_left(new_marcs) == canonical_visited_core_1s[core_key]
         core_dict.pop(v1)
 
