@@ -20,8 +20,8 @@ void Potential::execute_batch_device(
     __int128 *d_u,
     cudaStream_t stream) {
 
-    for (unsigned int i = 0; i < coord_batch_size; i++) {
-        for (unsigned int j = 0; j < param_batch_size; j++) {
+    for (int i = 0; i < coord_batch_size; i++) {
+        for (int j = 0; j < param_batch_size; j++) {
             unsigned int offset_factor = (i * param_batch_size) + j;
             this->execute_device(
                 N,
