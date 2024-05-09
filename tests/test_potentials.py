@@ -319,7 +319,7 @@ def test_bound_impl_execute_batch(harmonic_bond, precision):
     with pytest.raises(RuntimeError) as e:
         _ = bound_impl.execute_batch(
             coords_batch,
-            boxes_batch[:num_coord_batches],
+            boxes_batch[: num_coord_batches - 1],
             True,
             True,
         )
