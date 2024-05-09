@@ -718,7 +718,7 @@ void declare_potential(py::module &m) {
                const bool compute_du_dx,
                const bool compute_du_dp,
                const bool compute_u) -> py::tuple {
-                if (coords.ndim() != 3 && boxes.ndim() != 3) {
+                if (coords.ndim() != 3 || boxes.ndim() != 3) {
                     throw std::runtime_error("coords and boxes must have 3 dimensions");
                 }
                 if (coords.shape()[0] != boxes.shape()[0]) {
