@@ -6,7 +6,7 @@ import pytest
 from common import GradientTest
 
 from timemachine.lib import custom_ops
-from timemachine.potentials import FanoutSummedPotential, HarmonicBond, SummedPotential
+from timemachine.potentials import BoundPotential, FanoutSummedPotential, HarmonicBond, SummedPotential
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -453,3 +453,162 @@ def test_bound_and_unbound_execute_match(harmonic_bond_test_system, precision):
         )
         np.testing.assert_array_equal(bound_du_dx, unbound_du_dx)
         np.testing.assert_array_equal(bound_u, unbound_u)
+
+
+def test_execute_batch_sparse_validation(harmonic_bond: BoundPotential[HarmonicBond]):
+    unbound_impl = harmonic_bond.potential.to_gpu(np.float32).unbound_impl
+
+    # Should verify that number of boxes and coords match
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_batch_sparse(
+            np.zeros((5, 4, 3)),
+            np.zeros((4, 3, 2)),
+            np.zeros((6, 3, 3)),  # inconsistent length
+            np.zeros(3).astype(np.uint32),
+            np.zeros(3).astype(np.uint32),
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "number of coord arrays and boxes don't match"
+
+    # Should verify that coords and boxes have 3 dimensions
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_batch_sparse(
+            np.zeros((5, 4, 3)),
+            np.zeros((4, 3, 2)),
+            np.zeros((5, 3)),  # missing dimension
+            np.zeros(3).astype(np.uint32),
+            np.zeros(3).astype(np.uint32),
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "coords and boxes must have 3 dimensions"
+
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_batch_sparse(
+            np.zeros((5, 4)),  # missing dimension
+            np.zeros((4, 3, 2)),
+            np.zeros((5, 3, 3)),
+            np.zeros(3).astype(np.uint32),
+            np.zeros(3).astype(np.uint32),
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "coords and boxes must have 3 dimensions"
+
+    # Should verify that params have at least two dimensions
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_batch_sparse(
+            np.zeros((5, 4, 3)),
+            np.zeros(4),  # 1-d
+            np.zeros((5, 3, 3)),
+            np.zeros(3).astype(np.uint32),
+            np.zeros(3).astype(np.uint32),
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "parameters must have at least 2 dimensions"
+
+    # Should verify that coords_batch_idxs and params_batch_idxs are 1-d
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_batch_sparse(
+            np.zeros((5, 4, 3)),
+            np.zeros((4, 3, 2)),
+            np.zeros((5, 3, 3)),
+            np.zeros((3, 1)).astype(np.uint32),  # 2-d
+            np.zeros(3).astype(np.uint32),
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "coords_batch_idxs and params_batch_idxs must be one-dimensional arrays"
+
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_batch_sparse(
+            np.zeros((5, 4, 3)),
+            np.zeros((4, 3, 2)),
+            np.zeros((5, 3, 3)),
+            np.zeros(3).astype(np.uint32),
+            np.array(0).astype(np.uint32),  # 0-d
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "coords_batch_idxs and params_batch_idxs must be one-dimensional arrays"
+
+    # Should verify that coords_batch_idxs and params_batch_idxs have the same length
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_batch_sparse(
+            np.zeros((5, 4, 3)),
+            np.zeros((4, 3, 2)),
+            np.zeros((5, 3, 3)),
+            np.zeros(3).astype(np.uint32),
+            np.zeros(4).astype(np.uint32),  # inconsistent length
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "coords_batch_idxs and params_batch_idxs must have the same length"
+
+
+@pytest.mark.parametrize("precision", [np.float32, np.float64])
+@pytest.mark.parametrize("coords_size", [1, 5])
+@pytest.mark.parametrize("params_size", [1, 5])
+@pytest.mark.parametrize("batch_size", [1, 5, 10])
+@pytest.mark.parametrize("seed", [2024, 2025])
+def test_execute_batch_sparse(
+    harmonic_bond: BoundPotential[HarmonicBond], precision, coords_size, params_size, batch_size, seed
+):
+    rng = np.random.default_rng(seed)
+
+    n_atoms = 5
+    coords = rng.normal(0, 1, (coords_size, n_atoms, 3))
+
+    params = rng.uniform(size=(params_size, *harmonic_bond.params.shape))
+    boxes = np.eye(3) * rng.uniform(size=(len(coords), 3))[:, :, np.newaxis]
+
+    coords_batch_idxs = rng.choice(coords_size, batch_size).astype(np.uint32)
+    params_batch_idxs = rng.choice(params_size, batch_size).astype(np.uint32)
+
+    unbound_impl = harmonic_bond.potential.to_gpu(precision).unbound_impl
+
+    def run_reference(flags):
+        results = [
+            unbound_impl.execute(coords[coords_idx], params[params_idx], boxes[coords_idx], *flags)
+            for coords_idx, params_idx in zip(coords_batch_idxs, params_batch_idxs)
+        ]
+        du_dx, du_dp, u = zip(*results)
+        return np.array(du_dx), np.array(du_dp), np.array(u)
+
+    for flags in itertools.product([False, True], repeat=3):
+        compute_du_dx, compute_du_dp, compute_u = flags
+        ref_du_dx, ref_du_dp, ref_u = run_reference(flags)
+        du_dx, du_dp, u = unbound_impl.execute_batch_sparse(
+            coords,
+            params,
+            boxes,
+            coords_batch_idxs,
+            params_batch_idxs,
+            *flags,
+        )
+        if compute_du_dx:
+            assert du_dx.shape == (batch_size, n_atoms, 3)
+            np.testing.assert_array_equal(du_dx, ref_du_dx)
+        else:
+            assert du_dx is None
+
+        if compute_du_dp:
+            assert du_dp.shape == (batch_size, *harmonic_bond.params.shape)
+            np.testing.assert_array_equal(du_dp, ref_du_dp)
+        else:
+            assert du_dp is None
+
+        if compute_u:
+            assert u.shape == (batch_size,)
+            np.testing.assert_array_equal(u, ref_u)
+        else:
+            assert u is None
