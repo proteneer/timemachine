@@ -1,5 +1,6 @@
 from functools import partial
 from importlib import resources
+from typing import List
 from unittest.mock import patch
 
 import numpy as np
@@ -21,6 +22,7 @@ from timemachine.fe.free_energy import (
     MinOverlapWarning,
     PairBarResult,
     batches,
+    compute_potential_matrix,
     estimate_free_energy_bar,
     get_water_sampler_params,
     make_pair_bar_plots,
@@ -33,7 +35,9 @@ from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
 from timemachine.md import builders
-from timemachine.potentials import Nonbonded, SummedPotential
+from timemachine.md.hrex import HREX
+from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import BoundPotential, Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -206,11 +210,16 @@ def test_vacuum_and_solvent_edge_types():
 
 
 @pytest.fixture(scope="module")
-def solvent_hif2a_ligand_pair_single_topology_lam0_state():
+def hif2a_ligand_pair_single_topology():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
+    return st, forcefield
 
+
+@pytest.fixture(scope="module")
+def solvent_hif2a_ligand_pair_single_topology_lam0_state(hif2a_ligand_pair_single_topology):
+    st, forcefield = hif2a_ligand_pair_single_topology
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(3.0, forcefield.water_ff)
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_host = setup_optimized_host(st, solvent_host_config)
@@ -405,3 +414,50 @@ def test_estimate_free_energy_bar_with_energy_overflow():
     assert result_with_nan.dG_err == result_with_inf.dG_err
     np.testing.assert_array_equal(result_with_nan.dG_err_by_component, result_with_inf.dG_err_by_component)
     np.testing.assert_array_equal(result_with_nan.overlap, result_with_inf.overlap)
+
+
+@pytest.mark.parametrize("n_states,n_neighbor_states", [(1, 1), (1, None), (1, 2), (2, 1), (6, 3), (6, None), (30, 5)])
+@pytest.mark.parametrize("seed", [2024, 2025])
+def test_compute_potential_matrix(
+    hif2a_ligand_pair_single_topology, n_states: int, n_neighbor_states: int | None, seed
+):
+    st, _ = hif2a_ligand_pair_single_topology
+    states = [st.setup_intermediate_state(lam) for lam in np.linspace(0.0, 1.0, n_states)]
+
+    def make_summed_potential(bps: List[BoundPotential]):
+        potentials = [bp.potential for bp in bps]
+        params = [bp.params for bp in bps]
+        return SummedPotential(potentials, params).bind_params_list(params)
+
+    bps = [make_summed_potential(s.get_U_fns()) for s in states]
+    potential = bps[0].potential
+    params_by_state = np.array([bp.params for bp in bps])
+
+    conf_a = utils.get_romol_conf(st.mol_a)
+    conf_b = utils.get_romol_conf(st.mol_b)
+    conf = st.combine_confs(conf_a, conf_b)
+
+    rng = np.random.default_rng(seed)
+    confs = conf + rng.normal(0.0, 0.01, (len(states), st.get_num_atoms(), 3))
+    boxes = 100.0 * np.eye(3) + rng.uniform(-1.0, 1.0, (len(states), 3, 3))
+    xvbs = [CoordsVelBox(conf, np.zeros_like(conf), box) for conf, box in zip(confs, boxes)]
+
+    unbound_impl = potential.to_gpu(np.float32).unbound_impl
+
+    _, _, U_ref = unbound_impl.execute_batch(confs, params_by_state, boxes, False, False, True)
+    assert np.all(np.isfinite(U_ref))
+
+    replica_idx_by_state = rng.choice(n_states, size=n_states, replace=False).tolist()
+    hrex = HREX(xvbs, replica_idx_by_state)
+
+    U_test = compute_potential_matrix(unbound_impl, hrex, params_by_state, n_neighbor_states)
+
+    state_idx = np.arange(n_states)
+    state_idx_by_replica = np.argsort(replica_idx_by_state)
+    is_computed = (
+        np.full((n_states, n_states), True)
+        if n_neighbor_states is None
+        else np.abs(state_idx_by_replica[:, None] - state_idx[None, :]) <= n_neighbor_states
+    )
+    np.testing.assert_array_equal(U_ref[is_computed], U_test[is_computed])
+    assert np.all(np.isinf(U_test[~is_computed]))
