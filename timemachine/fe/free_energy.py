@@ -933,24 +933,19 @@ def compute_potential_matrix(
     coords = np.array([xvb.coords for xvb in hrex.replicas])
     boxes = np.array([xvb.box for xvb in hrex.replicas])
 
-    def compute_sparse(n_neighbor_states: int):
-        n_replicas = len(hrex.replicas)
-        replica_state_pairs = np.array(
-            [
-                (replica_idx, neighbor_state_idx)
-                for state_idx, replica_idx in enumerate(hrex.replica_idx_by_state)
-                for neighbor_state_idx in range(state_idx - n_neighbor_states, state_idx + n_neighbor_states + 1)
-                if 0 <= neighbor_state_idx < n_replicas
-            ],
-            dtype=np.uint32,
-        )
-        coords_batch_idxs, params_batch_idxs = replica_state_pairs.T
+    def compute_sparse(k: int):
+        n_states = len(hrex.replicas)
+        state_idx = np.argsort(hrex.replica_idx_by_state)
+        neighbor_state_idxs = state_idx[:, None] + np.arange(-k, k + 1)[None, :]
+        valid_idxs = np.nonzero((0 <= neighbor_state_idxs) & (neighbor_state_idxs < n_states))
+        coords_batch_idxs = valid_idxs[0].astype(np.uint32)
+        params_batch_idxs = neighbor_state_idxs[valid_idxs].astype(np.uint32)
 
         _, _, U = potential.execute_batch_sparse(
             coords, params_by_state, boxes, coords_batch_idxs, params_batch_idxs, False, False, True
         )
 
-        U_kl = np.full((n_replicas, n_replicas), np.inf)
+        U_kl = np.full((n_states, n_states), np.inf)
         U_kl[coords_batch_idxs, params_batch_idxs] = U
 
         return U_kl
