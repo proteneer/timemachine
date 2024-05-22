@@ -666,6 +666,14 @@ def make_chiral_flip_pair(well_aligned=True):
     mol_b_1 = mol_dict["B_1"]
     core_0 = get_cores(mol_a, mol_b_0, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
     core_1 = get_cores(mol_a, mol_b_1, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+
+    from timemachine.fe.utils import plot_atom_mapping_grid
+
+    for core_idx, core in enumerate(core_0[:1]):
+        res = plot_atom_mapping_grid(mol_a, mol_b_0, core_0, num_rotations=5)
+        with open(f"atom_mapping_0_to_1_core_{core_idx}.svg", "w") as fh:
+            fh.write(res)
+
     assert len(core_0) == 10
     assert len(core_1) == 15
 

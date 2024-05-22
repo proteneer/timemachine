@@ -22,7 +22,7 @@ datasets = [
 
 
 @pytest.mark.nightly(reason="Slow")
-def test_connected_core_and_complete_rings_with_large_numbers_of_cores():
+def test_connected_core_with_large_numbers_of_cores():
     """The following tests that for two mols that have a large number of matching
     cores found prior to filtering out the molecules with disconnected cores and incomplete rings.
 
@@ -350,7 +350,6 @@ $$$$""",
         max_cores=1e6,  # This pair has 350k cores
         enforce_core_core=True,
         ring_matches_ring_only=False,
-        complete_rings=True,
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
@@ -390,7 +389,6 @@ def test_all_pairs(filepath):
                 max_cores=1000,
                 enforce_core_core=True,
                 ring_matches_ring_only=False,
-                complete_rings=False,
                 enforce_chiral=True,
                 disallow_planar_torsion_flips=False,
                 min_threshold=0,
@@ -420,59 +418,6 @@ def get_mol_by_name(mols, name):
             return m
 
     assert 0, "Mol not found"
-
-
-def test_complete_rings_only():
-    # this transformation has two ring changes:
-    # a 6->5 member ring size change and a unicycle to bicycle change
-    # we expect the MCS algorithm with complete rings only to map the single cycle core
-    mols = Chem.SDMolSupplier(datasets[0], removeHs=False)
-    mols = [m for m in mols]
-
-    mol_a = get_mol_by_name(mols, "43")
-    mol_b = get_mol_by_name(mols, "224")
-
-    all_cores = atom_mapping.get_cores(
-        mol_a,
-        mol_b,
-        ring_cutoff=0.1,
-        chain_cutoff=0.2,
-        max_visits=1e7,  # 10 million max nodes to visit
-        connected_core=True,
-        max_cores=1000,
-        enforce_core_core=True,
-        ring_matches_ring_only=True,
-        complete_rings=True,
-        enforce_chiral=True,
-        disallow_planar_torsion_flips=False,
-        min_threshold=0,
-    )
-
-    assert len(all_cores) == 1
-    core = all_cores[0]
-    np.testing.assert_array_equal(
-        np.array(
-            [
-                [1, 4],
-                [2, 5],
-                [3, 6],
-                [4, 7],
-                [5, 8],
-                [6, 9],
-                [7, 10],
-                [15, 12],
-                [16, 13],
-                [17, 14],
-                [18, 15],
-                [32, 18],
-                [19, 19],
-                [20, 20],
-                [26, 30],
-                [27, 31],
-            ]
-        ),
-        core,
-    )
 
 
 def tuples_to_set(arr):
@@ -579,7 +524,6 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=False,
         ring_matches_ring_only=False,
-        complete_rings=False,
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
@@ -602,7 +546,6 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
-        complete_rings=False,
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
@@ -627,7 +570,6 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
-        complete_rings=False,
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
@@ -759,7 +701,6 @@ def test_hif2a_failure():
         max_cores=1e6,
         enforce_core_core=True,
         ring_matches_ring_only=False,
-        complete_rings=True,
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
@@ -767,32 +708,38 @@ def test_hif2a_failure():
 
     expected_core = np.array(
         [
-            [24, 20],
-            [9, 9],
-            [26, 26],
-            [32, 31],
-            [6, 6],
+            [22, 15],
             [19, 12],
-            [4, 4],
-            [23, 19],
+            [3, 3],
             [2, 2],
-            [21, 14],
-            [27, 27],
+            [1, 1],
+            [18, 24],
+            [12, 21],
+            [11, 11],
+            [9, 9],
+            [8, 8],
+            [7, 7],
+            [6, 6],
+            [5, 5],
+            [4, 4],
+            [13, 22],
             [10, 10],
             [0, 0],
-            [3, 3],
-            [29, 16],
-            [25, 28],
-            [20, 13],
-            [1, 1],
-            [7, 7],
-            [22, 15],
-            [28, 17],
-            [36, 18],
-            [30, 29],
-            [5, 5],
+            [35, 33],
+            [33, 32],
+            [32, 31],
             [31, 30],
-            [8, 8],
+            [30, 29],
+            [25, 28],
+            [27, 27],
+            [26, 26],
+            [24, 20],
+            [23, 19],
+            [36, 18],
+            [28, 17],
+            [29, 16],
+            [21, 14],
+            [20, 13],
         ]
     )
 
@@ -817,7 +764,6 @@ def test_cyclohexane_stereo():
         max_cores=100000,
         enforce_core_core=True,
         ring_matches_ring_only=True,
-        complete_rings=False,
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
@@ -875,7 +821,6 @@ def test_chiral_atom_map():
         connected_core=True,
         max_cores=1e6,
         enforce_core_core=True,
-        complete_rings=False,
         disallow_planar_torsion_flips=False,
         ring_matches_ring_only=True,
         min_threshold=0,
@@ -913,7 +858,6 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
         connected_core=True,
         max_cores=1e6,
         enforce_core_core=False,
-        complete_rings=False,
         enforce_chiral=False,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
@@ -941,7 +885,6 @@ def test_max_visits_warning():
         max_cores=1000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
-        complete_rings=False,
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
@@ -962,7 +905,6 @@ def test_max_cores_warning():
         connected_core=False,
         enforce_core_core=True,
         ring_matches_ring_only=False,
-        complete_rings=False,
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
@@ -981,7 +923,6 @@ def test_min_threshold():
         max_cores=1000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
-        complete_rings=False,
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=mol_a.GetNumAtoms(),
