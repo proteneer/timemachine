@@ -80,6 +80,7 @@ def get_cores_and_diagnostics(
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
     if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
+        print("Swapping")
         all_cores, mcs_diagnostics = _get_cores_impl(mol_b, mol_a, **core_kwargs)
         new_cores = []
         for core in all_cores:
@@ -363,7 +364,8 @@ def _get_cores_impl(
     disallow_planar_torsion_flips,
     min_threshold,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
-    mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
+    # mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
+    perm = np.arange(mol_a.GetNumAtoms())  # debug
 
     bonds_a = get_romol_bonds(mol_a)
     bonds_b = get_romol_bonds(mol_b)

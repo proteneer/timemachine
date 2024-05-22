@@ -89,11 +89,15 @@ class MCSResult:
         self.nodes_visited = 0
 
 
+import networkx as nx
+
+
 class Graph:
     def __init__(self, n_vertices, edges):
         self.n_vertices = n_vertices
         self.n_edges = len(edges)
         self.edges = edges
+        self.nxg = nx.Graph(edges)  # assumes input graph is fully connected
 
         cmat = np.full((n_vertices, n_vertices), False, dtype=bool)
         for i, j in edges:
@@ -286,6 +290,36 @@ def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
     map_2_to_1[jdx] = UNMAPPED
 
 
+def _graph_is_disconnected(g1, atom_map_1_to_2, layer):
+    mapped_nodes = []  # set of nodes that are explicitly mapped
+    all_possible_nodes = []  # set of nodes that can still be possibly mapped
+    for src, dst in enumerate(atom_map_1_to_2):
+        if src < layer:
+            # visited nodes
+            if dst == UNMAPPED:
+                pass
+            else:
+                mapped_nodes.append(src)
+                all_possible_nodes.append(src)
+        else:
+            all_possible_nodes.append(src)
+            # are there unvisited nodes that can bridge the core?
+
+    if len(mapped_nodes) > 0:
+        sg_all_possible = g1.nxg.subgraph(all_possible_nodes)
+        sg_ccs = nx.connected_components(sg_all_possible)
+
+        # see if all the mapped nodes belong to the same connected component
+        for cc in sg_ccs:
+            if set(cc).intersection(mapped_nodes) == set(mapped_nodes):
+                return False
+
+        return True
+
+    else:
+        return False
+
+
 def recursion(
     g1,
     g2,
@@ -311,6 +345,9 @@ def recursion(
 
     num_edges = _arcs_left(marcs)
     if num_edges < threshold:
+        return
+
+    if _graph_is_disconnected(g1, atom_map_1_to_2, layer):
         return
 
     mcs_result.nodes_visited += 1
@@ -355,6 +392,7 @@ def recursion(
     # always allow for explicitly not mapping layer atom
     # nit: don't need to check for connected core if mapping to None
     new_marcs = refine_marcs(g1, g2, layer, UNMAPPED, marcs)
+
     recursion(
         g1,
         g2,
