@@ -383,7 +383,7 @@ def test_all_pairs(filepath):
             all_cores = atom_mapping.get_cores(
                 mol_a,
                 mol_b,
-                ring_cutoff=0.2,
+                ring_cutoff=0.1,
                 chain_cutoff=0.2,
                 max_visits=1e7,  # 10 million max nodes to visit
                 connected_core=False,
@@ -412,8 +412,6 @@ def test_all_pairs(filepath):
             print(
                 f"{mol_a.GetProp('_Name')} -> {mol_b.GetProp('_Name')} has {len(all_cores)} cores of size {len(all_cores[0])}"
             )
-
-            # assert 0
 
 
 def get_mol_by_name(mols, name):
