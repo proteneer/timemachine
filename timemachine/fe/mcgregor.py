@@ -194,6 +194,7 @@ def mcs(
     max_visits,
     max_cores,
     enforce_core_core,
+    connected_core,
     min_threshold,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
@@ -234,6 +235,7 @@ def mcs(
             max_cores,
             cur_threshold,
             enforce_core_core,
+            connected_core,
             filter_fxn,
         )
 
@@ -328,6 +330,7 @@ def recursion(
     max_cores,
     threshold,
     enforce_core_core,
+    connected_core,
     filter_fxn,
 ):
     if mcs_result.nodes_visited > max_visits:
@@ -342,39 +345,40 @@ def recursion(
     if num_edges < threshold:
         return
 
-    # process g1 using atom_map_1_to_2_information
-    g1_mapped_nodes = set()
-    g1_unmapped_nodes = set()
-    g1_unvisited_nodes = set()
-    for a1, a2 in enumerate(atom_map_1_to_2):
-        if a1 < layer:
-            # visited nodes
-            if a2 == UNMAPPED:
-                g1_unmapped_nodes.add(a1)
+    if connected_core:
+        # process g1 using atom_map_1_to_2_information
+        g1_mapped_nodes = set()
+        g1_unmapped_nodes = set()
+        g1_unvisited_nodes = set()
+        for a1, a2 in enumerate(atom_map_1_to_2):
+            if a1 < layer:
+                # visited nodes
+                if a2 == UNMAPPED:
+                    g1_unmapped_nodes.add(a1)
+                else:
+                    g1_mapped_nodes.add(a1)
             else:
-                g1_mapped_nodes.add(a1)
-        else:
-            g1_unvisited_nodes.add(a1)
-            # are there unvisited nodes that can bridge the core?
+                g1_unvisited_nodes.add(a1)
+                # are there unvisited nodes that can bridge the core?
 
-    if _graph_is_disconnected(g1, g1_mapped_nodes, g1_unmapped_nodes, g1_unvisited_nodes):
-        return
+        if _graph_is_disconnected(g1, g1_mapped_nodes, g1_unmapped_nodes, g1_unvisited_nodes):
+            return
 
-    # g2 is a little trickier to process, we need to look at the priority idxs as well
-    g2_mapped_nodes = set()
-    for a2, a1 in enumerate(atom_map_2_to_1):
-        if a1 != UNMAPPED:
-            g2_mapped_nodes.add(a2)
-    g2_unvisited_nodes = set()
-    # look up priority_idxs of remaining atoms
-    for a2_list in priority_idxs[layer:]:
-        for a2 in a2_list:
-            if a2 not in g2_mapped_nodes:
-                g2_unvisited_nodes.add(a2)
-    g2_unmapped_nodes = set(range(g2.n_vertices)).difference(g2_mapped_nodes).difference(g2_unvisited_nodes)
+        # g2 is a little trickier to process, we need to look at the priority idxs as well
+        g2_mapped_nodes = set()
+        for a2, a1 in enumerate(atom_map_2_to_1):
+            if a1 != UNMAPPED:
+                g2_mapped_nodes.add(a2)
+        g2_unvisited_nodes = set()
+        # look up priority_idxs of remaining atoms
+        for a2_list in priority_idxs[layer:]:
+            for a2 in a2_list:
+                if a2 not in g2_mapped_nodes:
+                    g2_unvisited_nodes.add(a2)
+        g2_unmapped_nodes = set(range(g2.n_vertices)).difference(g2_mapped_nodes).difference(g2_unvisited_nodes)
 
-    if _graph_is_disconnected(g2, g2_mapped_nodes, g2_unmapped_nodes, g2_unvisited_nodes):
-        return
+        if _graph_is_disconnected(g2, g2_mapped_nodes, g2_unmapped_nodes, g2_unvisited_nodes):
+            return
 
     mcs_result.nodes_visited += 1
     n_a = g1.n_vertices
@@ -411,6 +415,7 @@ def recursion(
                     max_cores,
                     threshold,
                     enforce_core_core,
+                    connected_core,
                     filter_fxn,
                 )
             atom_map_pop(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
@@ -432,5 +437,6 @@ def recursion(
         max_cores,
         threshold,
         enforce_core_core,
+        connected_core,
         filter_fxn,
     )

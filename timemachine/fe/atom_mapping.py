@@ -80,7 +80,6 @@ def get_cores_and_diagnostics(
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
     if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
-        print("Swapping")
         all_cores, mcs_diagnostics = _get_cores_impl(mol_b, mol_a, **core_kwargs)
         new_cores = []
         for core in all_cores:
@@ -435,29 +434,13 @@ def _get_cores_impl(
         max_visits,
         max_cores,
         enforce_core_core,
+        connected_core,
         min_threshold,
         filter_fxn=filter_fxn,
     )
 
     all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
-
-    if connected_core and complete_rings:
-        # 1) remove any disconnected components or lone atoms in the mapping
-        # so disconnected regions are not considered as part of the incomplete rings check.
-        # 2) deduplicate cores, to avoid checking incomplete rings on the same core
-        # 3) remove any incomplete rings
-        # 4) deduplicate cores, to avoid removing disconnections on the same core
-        # 5) remove any disconnections created by removing the incomplete rings.
-        all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
-        all_cores, all_bond_cores = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
-
-        all_cores, all_bond_cores = remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores)
-        all_cores, all_bond_cores = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
-
-        all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
-    elif connected_core and not complete_rings:
-        all_cores, all_bond_cores = remove_disconnected_components(mol_a, mol_b, all_cores, all_bond_cores)
-    elif not connected_core and complete_rings:
+    if complete_rings:
         all_cores, all_bond_cores = remove_incomplete_rings(mol_a, mol_b, all_cores, all_bond_cores)
 
     all_cores = remove_cores_smaller_than_largest(all_cores)
