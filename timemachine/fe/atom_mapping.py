@@ -363,8 +363,7 @@ def _get_cores_impl(
     disallow_planar_torsion_flips,
     min_threshold,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
-    # mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
-    perm = np.arange(mol_a.GetNumAtoms())  # debug
+    mol_a, perm = reorder_atoms_by_degree(mol_a)  # UNINVERT
 
     bonds_a = get_romol_bonds(mol_a)
     bonds_b = get_romol_bonds(mol_b)
