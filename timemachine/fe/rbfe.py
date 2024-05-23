@@ -772,29 +772,30 @@ def estimate_relative_free_energy_bisection_hrex(
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
     )
+    return initial_states
 
-    make_optimized_initial_state_fn = partial(
-        setup_optimized_initial_state,
-        single_topology,
-        host=host,
-        optimized_initial_states=initial_states,
-        temperature=temperature,
-        seed=md_params.seed,
-    )
+    # make_optimized_initial_state_fn = partial(
+    #     setup_optimized_initial_state,
+    #     single_topology,
+    #     host=host,
+    #     optimized_initial_states=initial_states,
+    #     temperature=temperature,
+    #     seed=md_params.seed,
+    # )
 
-    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
-    combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
+    # # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
+    # combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
-    return estimate_relative_free_energy_bisection_hrex_impl(
-        temperature,
-        lambda_min,
-        lambda_max,
-        md_params,
-        n_windows,
-        make_optimized_initial_state_fn,
-        combined_prefix,
-        min_overlap,
-    )
+    # return estimate_relative_free_energy_bisection_hrex_impl(
+    #     temperature,
+    #     lambda_min,
+    #     lambda_max,
+    #     md_params,
+    #     n_windows,
+    #     make_optimized_initial_state_fn,
+    #     combined_prefix,
+    #     min_overlap,
+    # )
 
 
 def run_vacuum(
