@@ -36,7 +36,6 @@ DEFAULT_ATOM_MAPPING_KWARGS = {
     "max_cores": 1e5,
     "enforce_core_core": True,
     "ring_matches_ring_only": True,
-    "complete_rings": False,
     "enforce_chiral": True,
     "disallow_planar_torsion_flips": True,
     "min_threshold": 0,
