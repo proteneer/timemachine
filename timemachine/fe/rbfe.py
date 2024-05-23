@@ -443,17 +443,18 @@ def estimate_relative_free_energy(
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_schedule, md_params.seed, min_cutoff=min_cutoff
     )
-
-    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
-    combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
-    try:
-        result, stored_trajectories = run_sims_sequential(initial_states, md_params, temperature)
-        plots = make_pair_bar_plots(result, temperature, combined_prefix)
-        return SimulationResult(result, plots, stored_trajectories, md_params, [])
-    except Exception as err:
-        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
-            pickle.dump((initial_states, md_params, err), fh)
-        raise err
+    return initial_states
+    
+    # # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
+    # combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
+    # try:
+    #     result, stored_trajectories = run_sims_sequential(initial_states, md_params, temperature)
+    #     plots = make_pair_bar_plots(result, temperature, combined_prefix)
+    #     return SimulationResult(result, plots, stored_trajectories, md_params, [])
+    # except Exception as err:
+    #     with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+    #         pickle.dump((initial_states, md_params, err), fh)
+    #     raise err
 
 
 def estimate_relative_free_energy_bisection_or_hrex(*args, **kwargs) -> SimulationResult:
@@ -551,47 +552,48 @@ def estimate_relative_free_energy_bisection(
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
     )
+    return initial_states
 
-    make_optimized_initial_state = partial(
-        setup_optimized_initial_state,
-        single_topology,
-        host=host,
-        optimized_initial_states=initial_states,
-        temperature=temperature,
-        seed=md_params.seed,
-    )
+    # make_optimized_initial_state = partial(
+    #     setup_optimized_initial_state,
+    #     single_topology,
+    #     host=host,
+    #     optimized_initial_states=initial_states,
+    #     temperature=temperature,
+    #     seed=md_params.seed,
+    # )
 
-    # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
-    combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
+    # # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
+    # combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
 
-    try:
-        results, trajectories = run_sims_bisection(
-            [lambda_min, lambda_max],
-            make_optimized_initial_state,
-            md_params,
-            n_bisections=len(lambda_grid) - 2,
-            temperature=temperature,
-            min_overlap=min_overlap,
-        )
+    # try:
+    #     results, trajectories = run_sims_bisection(
+    #         [lambda_min, lambda_max],
+    #         make_optimized_initial_state,
+    #         md_params,
+    #         n_bisections=len(lambda_grid) - 2,
+    #         temperature=temperature,
+    #         min_overlap=min_overlap,
+    #     )
 
-        final_result = results[-1]
+    #     final_result = results[-1]
 
-        plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
+    #     plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
 
-        assert len(trajectories) == len(results) + 1
+    #     assert len(trajectories) == len(results) + 1
 
-        return SimulationResult(
-            final_result,
-            plots,
-            trajectories,
-            md_params,
-            results,
-        )
+    #     return SimulationResult(
+    #         final_result,
+    #         plots,
+    #         trajectories,
+    #         md_params,
+    #         results,
+    #     )
 
-    except Exception as err:
-        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
-            pickle.dump((md_params, err), fh)
-        raise err
+    # except Exception as err:
+    #     with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+    #         pickle.dump((md_params, err), fh)
+    #     raise err
 
 
 def estimate_relative_free_energy_bisection_hrex_impl(
