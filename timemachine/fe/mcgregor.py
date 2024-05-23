@@ -310,7 +310,7 @@ def _graph_is_disconnected(g, mapped_nodes, demapped_nodes, unvisited_nodes):
         sg_ccs = nx.connected_components(sg_all_possible)
         # see if all the mapped nodes belong to the same connected component
         for cc in sg_ccs:
-            if set(cc).intersection(mapped_nodes) == set(mapped_nodes):
+            if set(mapped_nodes).issubset(cc):
                 return False
         return True
     else:
