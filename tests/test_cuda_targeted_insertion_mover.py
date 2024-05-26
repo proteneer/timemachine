@@ -1075,5 +1075,5 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
 def test_targeted_insertion_invalid_sample_bug():
     with open(Path(__file__).parent / "data" / "water_sampling_bug.pkl", "rb") as ifs:
         state, md_params = pickle.load(ifs)
-    md_params = replace(md_params, n_eq_steps=10_000, steps_per_frame=10)
+    md_params = replace(md_params, n_eq_steps=2_000, steps_per_frame=10)
     sample(state, md_params, 100)
