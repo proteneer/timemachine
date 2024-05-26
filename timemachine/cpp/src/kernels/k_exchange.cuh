@@ -201,12 +201,10 @@ void __global__ k_setup_destination_weights_for_targeted(
     RealType *__restrict__ output_weights);
 
 void __global__ k_adjust_sample_idxs(
-    const int total_proposals,
     const int batch_size,
-    const int *__restrict__ noise_offset,           // [1]
     const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ partitioned_indices,    // [K]
+    const int *__restrict__ partitioned_indices,    // [inner_count]
     int *__restrict__ sample_idxs                   // [batch_size]
 );
 
