@@ -950,7 +950,14 @@ void declare_potential(py::module &m) {
             R"pbdoc(
         Execute the potential over a batch of coordinates and parameters. Similar to execute_batch, except that instead of evaluating the potential on the dense matrix of pairs of coordinates and parameters, this accepts arrays specifying the indices of the coordinates and parameters to use for each evaluation, allowing evaluation of arbitrary elements of the matrix. The total number of evaluations is len(coords_batch_idxs) [= len(params_batch_idxs)].
 
-        Note: This function allocates memory for all of the inputs on the GPU. This may lead to OOMs.
+        Notes
+        -----
+        * This function allocates memory for all of the inputs on the GPU. This may lead to OOMs.
+        * When using with stateful potentials, care should be taken in the ordering of the evaluations (as specified by
+          coords_batch_idxs and params_batch_idxs) to maintain efficiency. For example, batch evaluation of a nonbonded
+          all-pairs potential may be most efficient in the order [(coords_1, params_1), (coords_1, params_2), ... ,
+          (coords_2, params_1), ..., (coords_n, params_n)], i.e. with an "outer loop" over the coordinates and "inner
+          loop" over parameters, to avoid unnecessary rebuilds of the neighborlist.
 
         Parameters
         ----------
