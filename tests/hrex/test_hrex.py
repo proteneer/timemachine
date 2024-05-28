@@ -1,9 +1,13 @@
+from typing import List
+
 import hypothesis.strategies as st
 import numpy as np
 import pytest
 from hypothesis import given, seed
 
-from timemachine.md.hrex import ReplicaIdx, get_samples_by_iter_by_replica
+from timemachine.md.hrex import ReplicaIdx, get_normalized_kl_divergence, get_samples_by_iter_by_replica
+
+pytestmark = [pytest.mark.nogpu]
 
 
 @given(
@@ -40,3 +44,105 @@ def test_get_samples_by_iter_by_replica_invalid_args():
         get_samples_by_iter_by_replica([[1], [2, 3]], [[ReplicaIdx(0)], [ReplicaIdx(0)]])
     with pytest.raises(AssertionError):
         get_samples_by_iter_by_replica([[1, 2], [3, 4]], [[ReplicaIdx(0)], [ReplicaIdx(0), ReplicaIdx(1)]])
+
+
+def simulate_perfect_mixing_hrex(num_states: int, num_frames: int) -> List[List[int]]:
+    """assume every step of HREX perfectly mixed all replicas"""
+    rng = np.random.default_rng(num_states)
+    inds = np.arange(num_states)
+    traj = []
+    for _ in range(num_frames):
+        rng.shuffle(inds)
+        traj.append(np.array(inds).tolist())
+    return traj
+
+
+def simulate_slow_mixing_hrex(num_states: int, num_frames: int) -> List[List[int]]:
+    """assume every step of HREX only succeeds in making K nearest-neighbor swaps"""
+    traj = [np.arange(num_states).tolist()]
+    for _ in range(num_frames - 1):
+        current_state = np.array(traj[-1])
+        for _ in range(num_states):
+            i = np.random.randint(num_states - 1)
+            j = i + 1
+
+            x_i = current_state[i]
+            x_j = current_state[j]
+
+            current_state[j] = x_i
+            current_state[i] = x_j
+
+        traj.append(current_state.tolist())
+    return traj
+
+
+def simulate_bottlenecked_hrex(num_states: int, num_frames: int) -> List[List[int]]:
+    """simulate_slow_mixing_hrex, but there's a state near K/2 that never swaps with neighbors"""
+    traj = [np.arange(num_states).tolist()]
+
+    bottleneck_i = int(round(num_states / 2))
+    for _ in range(num_frames - 1):
+        current_state = np.array(traj[-1])
+        for _ in range(num_states):
+            i = np.random.randint(num_states - 1)
+            j = i + 1
+
+            if i != bottleneck_i:
+                x_i = current_state[i]
+                x_j = current_state[j]
+
+                current_state[j] = x_i
+                current_state[i] = x_j
+
+        traj.append(current_state.tolist())
+    return traj
+
+
+def simulate_no_mixing_hrex(num_states: int, num_frames: int) -> List[List[int]]:
+    traj = [np.arange(num_states).tolist()] * num_frames
+    return traj
+
+
+@pytest.mark.parametrize("n_windows,frames", [(3, 2000), (16, 2000), (48, 2000)])
+@pytest.mark.parametrize(
+    "simulator",
+    [
+        simulate_perfect_mixing_hrex,
+        simulate_perfect_mixing_hrex,
+        simulate_slow_mixing_hrex,
+        simulate_bottlenecked_hrex,
+        simulate_no_mixing_hrex,
+    ],
+)
+def test_normalized_kl_divergence(simulator, n_windows, frames):
+    """Verify that given any of the expected hrex simulations produces values that are greater than 0.0"""
+    hrex_matrix = simulator(n_windows, frames)
+    res = get_normalized_kl_divergence(hrex_matrix)
+    assert res >= 0.0
+
+
+@pytest.mark.parametrize("n_windows,frames", [(16, 2000), (48, 2000)])
+def test_normalized_kl_divergence_perfect_mixing(n_windows, frames):
+    hrex_matrix = simulate_perfect_mixing_hrex(n_windows, frames)
+    res = get_normalized_kl_divergence(hrex_matrix)
+    assert res >= 0.0
+    np.testing.assert_allclose(res, 0.0, atol=0.015)
+
+
+@pytest.mark.parametrize("n_windows,frames", [(16, 2000), (48, 2000)])
+def test_normalized_kl_divergence_no_mixing(n_windows, frames):
+    """With no mixing at all, the kl divergence becomes larger than 1.0 and continues to grow with the number of windows
+
+    Verify that values are greater than one in this case.
+    """
+    hrex_matrix = simulate_no_mixing_hrex(n_windows, frames)
+    res = get_normalized_kl_divergence(hrex_matrix)
+    assert res >= 1.0
+
+
+@pytest.mark.parametrize("n_windows,frames", [(16, 2000), (48, 2000)])
+def test_normalized_kl_divergence_with_bottleneck(n_windows, frames):
+    """With a bottleneck, expect the divergence to be between 0.5 and 1.0"""
+    hrex_matrix = simulate_bottlenecked_hrex(n_windows, frames)
+    res = get_normalized_kl_divergence(hrex_matrix)
+    assert res <= 1.0 and res >= 0.5
