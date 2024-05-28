@@ -6,13 +6,8 @@ import scipy
 from jax import numpy as jnp
 from rdkit import Chem
 
-from timemachine.constants import (
-    DEFAULT_ATOM_MAPPING_KWARGS,
-    DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
-    DEFAULT_CHIRAL_BOND_RESTRAINT_K,
-)
+from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
 from timemachine.fe import topology, utils
-from timemachine.fe.atom_mapping import get_cores
 from timemachine.fe.chiral_utils import make_chiral_flip_heatmaps
 from timemachine.fe.free_energy import HREXParams
 from timemachine.fe.rbfe import DEFAULT_HREX_PARAMS, run_solvent, run_vacuum
@@ -664,10 +659,28 @@ def make_chiral_flip_pair(well_aligned=True):
     mol_a = mol_dict["A"]
     mol_b_0 = mol_dict["B_0"]
     mol_b_1 = mol_dict["B_1"]
-    core_0 = get_cores(mol_a, mol_b_0, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
-    core_1 = get_cores(mol_a, mol_b_1, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
-    assert len(core_0) == 10
-    assert len(core_1) == 15
+
+    # hard-coded core
+    core_0 = np.array([[6, 3], [4, 4], [5, 5], [3, 6], [15, 10], [14, 11], [12, 12], [13, 13], [11, 14], [10, 15]])
+    core_1 = np.array(
+        [
+            [0, 0],
+            [1, 1],
+            [2, 2],
+            [3, 3],
+            [4, 4],
+            [12, 5],
+            [6, 6],
+            [7, 7],
+            [9, 8],
+            [8, 9],
+            [10, 10],
+            [11, 11],
+            [5, 12],
+            [15, 14],
+            [14, 15],
+        ]
+    )
 
     if well_aligned:
         return AtomMapMixin(mol_a, mol_b_1, core_1)
