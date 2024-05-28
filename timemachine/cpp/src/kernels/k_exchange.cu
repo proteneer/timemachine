@@ -759,19 +759,11 @@ void __global__ k_adjust_sample_idxs(
     const int local_inner_count = *inner_count;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    while (idx < batch_size) {
-        if (idx + current_offset >= total_proposals) {
-            // The value here is not important, as the result will be ignored in subsequent kernels
-            // This is done to avoid the fact that the original sampled indices may contain invalid state
-            // thanks to the way the batching performed.
-            sample_idxs[idx] = 0;
-        } else {
-            const int target_inner = targeting_inner_volume[idx];
-            const int offset = target_inner == 1 ? local_inner_count : 0;
-            const int before = sample_idxs[idx];
-            sample_idxs[idx] = partitioned_indices[before + offset];
-            idx += gridDim.x * blockDim.x;
-        }
+    while (idx < batch_size && idx + current_offset < total_proposals) {
+        const int target_inner = targeting_inner_volume[idx];
+        const int offset = target_inner == 1 ? local_inner_count : 0;
+        const int before = sample_idxs[idx];
+        sample_idxs[idx] = partitioned_indices[before + offset];
         idx += gridDim.x * blockDim.x;
     }
 }
