@@ -752,7 +752,7 @@ void __global__ k_adjust_sample_idxs(
     const int *__restrict__ noise_offset,           // [1]
     const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ partitioned_indices,    // [K]
+    const int *__restrict__ partitioned_indices,    // [num_samples]
     int *__restrict__ sample_idxs                   // [batch_size]
 ) {
     const int current_offset = *noise_offset;
