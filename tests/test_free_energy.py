@@ -416,7 +416,9 @@ def test_estimate_free_energy_bar_with_energy_overflow():
     np.testing.assert_array_equal(result_with_nan.overlap, result_with_inf.overlap)
 
 
-@pytest.mark.parametrize("n_states,max_delta_states", [(1, 1), (1, None), (1, 2), (2, 1), (6, 3), (6, None), (30, 5)])
+@pytest.mark.parametrize(
+    "n_states,max_delta_states", [(1, 1), (1, None), (1, 2), (2, 1), (3, 6), (6, 3), (6, None), (30, 5)]
+)
 @pytest.mark.parametrize("seed", [2024, 2025])
 def test_compute_potential_matrix(hif2a_ligand_pair_single_topology, n_states: int, max_delta_states: int | None, seed):
     st, _ = hif2a_ligand_pair_single_topology
