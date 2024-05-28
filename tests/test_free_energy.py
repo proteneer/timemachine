@@ -416,11 +416,9 @@ def test_estimate_free_energy_bar_with_energy_overflow():
     np.testing.assert_array_equal(result_with_nan.overlap, result_with_inf.overlap)
 
 
-@pytest.mark.parametrize("n_states,n_neighbor_states", [(1, 1), (1, None), (1, 2), (2, 1), (6, 3), (6, None), (30, 5)])
+@pytest.mark.parametrize("n_states,max_delta_states", [(1, 1), (1, None), (1, 2), (2, 1), (6, 3), (6, None), (30, 5)])
 @pytest.mark.parametrize("seed", [2024, 2025])
-def test_compute_potential_matrix(
-    hif2a_ligand_pair_single_topology, n_states: int, n_neighbor_states: int | None, seed
-):
+def test_compute_potential_matrix(hif2a_ligand_pair_single_topology, n_states: int, max_delta_states: int | None, seed):
     st, _ = hif2a_ligand_pair_single_topology
     states = [st.setup_intermediate_state(lam) for lam in np.linspace(0.0, 1.0, n_states)]
 
@@ -450,14 +448,14 @@ def test_compute_potential_matrix(
     replica_idx_by_state = rng.choice(n_states, size=n_states, replace=False).tolist()
     hrex = HREX(xvbs, replica_idx_by_state)
 
-    U_test = compute_potential_matrix(unbound_impl, hrex, params_by_state, n_neighbor_states)
+    U_test = compute_potential_matrix(unbound_impl, hrex, params_by_state, max_delta_states)
 
     state_idx = np.arange(n_states)
     state_idx_by_replica = np.argsort(replica_idx_by_state)
     is_computed = (
         np.full((n_states, n_states), True)
-        if n_neighbor_states is None
-        else np.abs(state_idx_by_replica[:, None] - state_idx[None, :]) <= n_neighbor_states
+        if max_delta_states is None
+        else np.abs(state_idx_by_replica[:, None] - state_idx[None, :]) <= max_delta_states
     )
     np.testing.assert_array_equal(U_ref[is_computed], U_test[is_computed])
     assert np.all(np.isinf(U_test[~is_computed]))

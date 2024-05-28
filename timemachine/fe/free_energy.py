@@ -63,25 +63,26 @@ class HREXParams:
     Parameters
     ----------
 
-    n_frames_bisection:
+    n_frames_bisection: int
         Number of frames to sample using MD during the initial bisection phase used to determine lambda spacing
 
-    n_frames_per_iter:
+    n_frames_per_iter: int
         Number of frames to sample using MD per HREX iteration.
 
-    n_neighbor_states:
-        Number of neighbor states on either side of a replica's current state for which to compute U(replica, state).
-        This determines the maximum distance a replica can move in a single HREX iteration.
+    max_delta_states: int or None
+        If given, number of neighbor states on either side of a given replica's initial state for which to compute
+        potentials. This determines the maximum number of states that a replica can move from its initial state during
+        a single HREX iteration. Otherwise, compute potentials for all (replica, state) pairs.
     """
 
     n_frames_bisection: int = 100
     n_frames_per_iter: int = 1
-    n_neighbor_states: Optional[int] = 4
+    max_delta_states: Optional[int] = 4
 
     def __post_init__(self):
         assert self.n_frames_bisection > 0
         assert self.n_frames_per_iter > 0
-        assert self.n_neighbor_states is None or self.n_neighbor_states > 0
+        assert self.max_delta_states is None or self.max_delta_states > 0
 
 
 @dataclass(frozen=True)
@@ -908,10 +909,10 @@ def compute_potential_matrix(
     potential: custom_ops.Potential,
     hrex: HREX[CoordsVelBox],
     params_by_state: NDArray,
-    n_neighbor_states: Optional[int] = None,
+    max_delta_states: Optional[int] = None,
 ) -> NDArray:
     """Computes the (n_replicas, n_states) sparse matrix of potential energies, where a given element $(k, l)$ is
-    computed iff state $l$ is within `n_neighbor_states` of the current state of replica $k$, and is otherwise set to
+    computed iff state $l$ is within `max_delta_states` of the current state of replica $k$, and is otherwise set to
     `np.inf`.
 
     Parameters
@@ -925,9 +926,9 @@ def compute_potential_matrix(
     params_by_state : NDArray
         (n_states, ...) array of potential parameters for each state
 
-    n_neighbor_states : int or None, optional
-        If given, number of neighbor states on either side of a given replica's state for which to compute potentials.
-        If None, compute energies for all (replica, state) pairs.
+    max_delta_states : int or None, optional
+        If given, number of neighbor states on either side of a given replica's initial state for which to compute
+        potentials. Otherwise, compute potentials for all (replica, state) pairs.
     """
 
     coords = np.array([xvb.coords for xvb in hrex.replicas])
@@ -954,7 +955,7 @@ def compute_potential_matrix(
         _, _, U_kl = potential.execute_batch(coords, params_by_state, boxes, False, False, True)
         return U_kl
 
-    U_kl = compute_sparse(n_neighbor_states) if n_neighbor_states is not None else compute_dense()
+    U_kl = compute_sparse(max_delta_states) if max_delta_states is not None else compute_dense()
 
     return U_kl
 
@@ -1147,7 +1148,7 @@ def run_sims_hrex(
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
         assert md_params.hrex_params is not None
-        U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.n_neighbor_states)
+        U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
         log_q_kl = -U_kl / (BOLTZ * temperature)
 
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
