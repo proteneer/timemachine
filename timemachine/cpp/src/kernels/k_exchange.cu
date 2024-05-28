@@ -761,7 +761,7 @@ void __global__ k_adjust_sample_idxs(
 
     while (idx < batch_size) {
         if (idx + current_offset >= total_proposals) {
-            // The value here is not important, as the result will be ignored in subsuequent kernels
+            // The value here is not important, as the result will be ignored in subsequent kernels
             // This is done to avoid the fact that the original sampled indices may contain invalid state
             // thanks to the way the batching performed.
             sample_idxs[idx] = 0;
