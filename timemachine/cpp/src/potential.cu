@@ -149,14 +149,14 @@ void Potential::execute_batch_sparse_host(
     const int params_size,                 // Number of parameter arrays
     const int P,                           // Number of parameters
     const int batch_size,                  // Number of evaluations
-    const unsigned int *coords_batch_idxs, // Index of the coordinates for each evaluation
-    const unsigned int *params_batch_idxs, // Index of the parameters for each evaluation
-    const double *h_x,                     // [coord_batch_size, N, 3]
-    const double *h_p,                     // [param_batch_size, P]
-    const double *h_box,                   // [coord_batch_size, 3, 3]
-    unsigned long long *h_du_dx,           // [coord_batch_size, param_batch_size, N, 3]
-    unsigned long long *h_du_dp,           // [coord_batch_size, param_batch_size, P]
-    __int128 *h_u                          // [coord_batch_size, param_batch_size]
+    const unsigned int *coords_batch_idxs, // [batch_size] Index of the coordinates for each evaluation
+    const unsigned int *params_batch_idxs, // [batch_size] Index of the parameters for each evaluation
+    const double *h_x,                     // [coords_size, N, 3]
+    const double *h_p,                     // [params_size, P]
+    const double *h_box,                   // [coords_size, 3, 3]
+    unsigned long long *h_du_dx,           // [batch_size, N, 3]
+    unsigned long long *h_du_dp,           // [batch_size, P]
+    __int128 *h_u                          // [batch_size]
 ) {
     DeviceBuffer<double> d_p(params_size * P);
     if (P > 0) {

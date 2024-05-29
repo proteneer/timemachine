@@ -869,14 +869,26 @@ void declare_potential(py::module &m) {
                 if (coords_batch_idxs.size() != params_batch_idxs.size()) {
                     throw std::runtime_error("coords_batch_idxs and params_batch_idxs must have the same length");
                 }
+
+                const long unsigned int batch_size = coords_batch_idxs.size();
+                const unsigned int *coords_batch_idxs_data = coords_batch_idxs.data();
+                const unsigned int *params_batch_idxs_data = params_batch_idxs.data();
+
+                for (long unsigned int i = 0; i < batch_size; i++) {
+                    if (coords_batch_idxs_data[i] >= coords.shape()[0]) {
+                        throw std::runtime_error("coords_batch_idxs contains an index that is out of bounds");
+                    }
+                    if (params_batch_idxs_data[i] >= params.shape()[0]) {
+                        throw std::runtime_error("params_batch_idxs contains an index that is out of bounds");
+                    }
+                }
+
                 const long unsigned int coords_size = coords.shape()[0];
                 const long unsigned int N = coords.shape()[1];
                 const long unsigned int D = coords.shape()[2];
 
                 const long unsigned int params_size = params.shape()[0];
                 const long unsigned int P = params.size() / params_size;
-
-                const long unsigned int batch_size = coords_batch_idxs.size();
 
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_batch_host`)
                 // Only initialize memory when needed, as buffers can be quite large
@@ -899,8 +911,8 @@ void declare_potential(py::module &m) {
                     params_size,
                     P,
                     batch_size,
-                    coords_batch_idxs.data(),
-                    params_batch_idxs.data(),
+                    coords_batch_idxs_data,
+                    params_batch_idxs_data,
                     coords.data(),
                     params.data(),
                     boxes.data(),
@@ -948,9 +960,20 @@ void declare_potential(py::module &m) {
             py::arg("compute_du_dp"),
             py::arg("compute_u"),
             R"pbdoc(
-        Execute the potential over a batch of coordinates and parameters. Similar to execute_batch, except that instead of evaluating the potential on the dense matrix of pairs of coordinates and parameters, this accepts arrays specifying the indices of the coordinates and parameters to use for each evaluation, allowing evaluation of arbitrary elements of the matrix. The total number of evaluations is len(coords_batch_idxs) [= len(params_batch_idxs)].
+        Execute the potential over a batch of coordinates and parameters. Similar to execute_batch, except that instead
+        of evaluating the potential on the dense matrix of pairs of coordinates and parameters, this accepts arrays
+        specifying the indices of the coordinates and parameters to use for each evaluation, allowing evaluation of
+        arbitrary elements of the matrix. The total number of evaluations is len(coords_batch_idxs)
+        [= len(params_batch_idxs)].
 
-        Note: This function allocates memory for all of the inputs on the GPU. This may lead to OOMs.
+        Notes
+        -----
+        * This function allocates memory for all of the inputs on the GPU. This may lead to OOMs.
+        * When using with stateful potentials, care should be taken in the ordering of the evaluations (as specified by
+          coords_batch_idxs and params_batch_idxs) to maintain efficiency. For example, batch evaluation of a nonbonded
+          all-pairs potential may be most efficient in the order [(coords_1, params_1), (coords_1, params_2), ... ,
+          (coords_2, params_1), ..., (coords_n, params_n)], i.e. with an "outer loop" over the coordinates and "inner
+          loop" over parameters, to avoid unnecessary rebuilds of the neighborlist.
 
         Parameters
         ----------

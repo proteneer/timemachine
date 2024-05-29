@@ -554,6 +554,33 @@ def test_execute_batch_sparse_validation(harmonic_bond: BoundPotential[HarmonicB
         )
     assert str(e.value) == "coords_batch_idxs and params_batch_idxs must have the same length"
 
+    # Should verify that coords_batch_idxs and params_batch_idxs are in bounds
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_batch_sparse(
+            np.zeros((5, 4, 3)),
+            np.zeros((4, 3, 2)),
+            np.zeros((5, 3, 3)),
+            np.array([5]).astype(np.uint32),  # out of bounds
+            np.array([0]).astype(np.uint32),
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "coords_batch_idxs contains an index that is out of bounds"
+
+    with pytest.raises(RuntimeError) as e:
+        _ = unbound_impl.execute_batch_sparse(
+            np.zeros((5, 4, 3)),
+            np.zeros((4, 3, 2)),
+            np.zeros((5, 3, 3)),
+            np.array([0]).astype(np.uint32),
+            np.array([4]).astype(np.uint32),  # out of bounds
+            True,
+            True,
+            True,
+        )
+    assert str(e.value) == "params_batch_idxs contains an index that is out of bounds"
+
 
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
 @pytest.mark.parametrize("coords_size", [1, 5])
