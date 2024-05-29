@@ -293,7 +293,9 @@ void TIBDExchangeMove<RealType>::move(
 
         // Selected an index from the src weights, need to remap the samples idx to the mol indices
         k_adjust_sample_idxs<<<sample_blocks, tpb, 0, stream>>>(
+            this->num_proposals_per_move_,
             this->batch_size_,
+            this->d_noise_offset_.data,
             d_targeting_inner_vol_.data,
             d_inner_mols_count_.data,
             d_partitioned_indices_.data,
