@@ -260,7 +260,7 @@ def get_normalized_kl_divergence(replica_idx_by_state_by_iter: Sequence[Sequence
     count_by_replica_by_state = cumulative_counts[-1]
     fraction_by_replica_by_state = count_by_replica_by_state / n_iters
 
-    return -np.mean(entropy(fraction_by_replica_by_state)) + np.log(n_states)
+    return -np.mean(entropy(fraction_by_replica_by_state, axis=0)) + np.log(n_states)
 
 
 def get_cumulative_replica_state_counts(replica_idx_by_state_by_iter: Sequence[Sequence[ReplicaIdx]]) -> NDArray:
