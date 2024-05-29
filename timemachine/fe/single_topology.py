@@ -985,8 +985,8 @@ def check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set,
 
 def assert_chiral_consistency_and_validity(
     atom_map: AtomMapMixin,
-    src_chiral_idxs: NDArray,
-    dst_chiral_idxs: NDArray,
+    src_chiral_idxs,
+    dst_chiral_idxs,
     src_bond_idxs: NDArray,
     dst_bond_idxs: NDArray,
 ):
