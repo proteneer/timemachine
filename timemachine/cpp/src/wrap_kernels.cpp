@@ -960,7 +960,11 @@ void declare_potential(py::module &m) {
             py::arg("compute_du_dp"),
             py::arg("compute_u"),
             R"pbdoc(
-        Execute the potential over a batch of coordinates and parameters. Similar to execute_batch, except that instead of evaluating the potential on the dense matrix of pairs of coordinates and parameters, this accepts arrays specifying the indices of the coordinates and parameters to use for each evaluation, allowing evaluation of arbitrary elements of the matrix. The total number of evaluations is len(coords_batch_idxs) [= len(params_batch_idxs)].
+        Execute the potential over a batch of coordinates and parameters. Similar to execute_batch, except that instead
+        of evaluating the potential on the dense matrix of pairs of coordinates and parameters, this accepts arrays
+        specifying the indices of the coordinates and parameters to use for each evaluation, allowing evaluation of
+        arbitrary elements of the matrix. The total number of evaluations is len(coords_batch_idxs)
+        [= len(params_batch_idxs)].
 
         Notes
         -----
