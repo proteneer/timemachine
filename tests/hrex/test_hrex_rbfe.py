@@ -114,6 +114,9 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     final_replica_state_counts = result.hrex_diagnostics.cumulative_replica_state_counts[-1]
     assert np.any(np.all(final_replica_state_counts > 0, axis=0))
 
+    assert isinstance(result.hrex_diagnostics.relaxation_time, float)
+    assert result.hrex_diagnostics.normalized_kl_divergence >= 0.0
+
     # Check plots were generated
     assert result.hrex_plots
     assert result.hrex_plots.transition_matrix_png
