@@ -912,8 +912,8 @@ def compute_potential_matrix(
     max_delta_states: Optional[int] = None,
 ) -> NDArray:
     """Computes the (n_replicas, n_states) sparse matrix of potential energies, where a given element $(k, l)$ is
-    computed iff state $l$ is within `max_delta_states` of the current state of replica $k$, and is otherwise set to
-    `np.inf`.
+    computed if and only if state $l$ is within `max_delta_states` of the current state of replica $k$, and is otherwise
+    set to `np.inf`.
 
     Parameters
     ----------
