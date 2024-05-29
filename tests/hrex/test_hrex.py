@@ -149,3 +149,23 @@ def test_normalized_kl_divergence_with_bottleneck(n_windows, frames):
     hrex_matrix = simulate_bottlenecked_hrex(n_windows, frames)
     res = get_normalized_kl_divergence(hrex_matrix)
     assert res >= 0.5
+
+
+@pytest.mark.parametrize("seed", [2024])
+@pytest.mark.parametrize("iterations", [10])
+@pytest.mark.parametrize("n_windows,frames", [(5, 2000), (16, 2000), (48, 2000)])
+def test_normalized_kl_divergence_relative_values(iterations, n_windows, frames, seed):
+    """Ensure that the mean of multiple replicates of normalized KL divergence produce the right ordering.
+
+    Perfect sampling should have the lowest value, followed by slow mixing followed up by bottle necked mixing"""
+    np.random.seed(seed)
+    perfect_mixing_kl = []
+    slow_mixing_kl = []
+    bottlenecked_kl = []
+    for _ in range(iterations):
+        perfect_mixing_kl.append(get_normalized_kl_divergence(simulate_perfect_mixing_hrex(n_windows, frames)))
+        bottlenecked_kl.append(get_normalized_kl_divergence(simulate_bottlenecked_hrex(n_windows, frames)))
+        slow_mixing_kl.append(get_normalized_kl_divergence(simulate_slow_mixing_hrex(n_windows, frames)))
+
+    assert np.mean(perfect_mixing_kl) < np.mean(slow_mixing_kl)
+    assert np.mean(slow_mixing_kl) < np.mean(bottlenecked_kl)
