@@ -202,7 +202,7 @@ void __global__ k_setup_destination_weights_for_targeted(
 
 // k_adjust_sample_idxs is to to handle that in the TIBD exchange move the initial samples
 // are selected from either the inner or outer volume. So the indices will go from 0 -> len(inner) or len(outer)
-// depending on the region being sampled. All of the downstream code expect the sample idxs to be from 0 -> num_samples
+// depending on the region being sampled. All of the downstream code expect the sample idxs to be from 0 -> num_mols
 // This kernel simple adjusts the sample idxs to match that expectation.
 void __global__ k_adjust_sample_idxs(
     const int total_proposals,
@@ -210,7 +210,7 @@ void __global__ k_adjust_sample_idxs(
     const int *__restrict__ noise_offset,           // [1]
     const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ partitioned_indices,    // [num_samples]
+    const int *__restrict__ partitioned_indices,    // [num_mols]
     int *__restrict__ sample_idxs                   // [batch_size]
 );
 

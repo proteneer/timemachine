@@ -752,14 +752,17 @@ void __global__ k_adjust_sample_idxs(
     const int *__restrict__ noise_offset,           // [1]
     const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
-    const int *__restrict__ partitioned_indices,    // [num_samples]
+    const int *__restrict__ partitioned_indices,    // [num_mols] Total number of molecules being sampled
     int *__restrict__ sample_idxs                   // [batch_size]
 ) {
-    const int current_offset = *noise_offset;
+    const int num_prev_proposals = *noise_offset;
     const int local_inner_count = *inner_count;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    while (idx < batch_size && idx + current_offset < total_proposals) {
+    // Only evaluate up to idx + num_prev_proposals < total proposals. The samples beyond this point
+    // contain stale data due to k_decide_targeted_moves not constructing them. All downstream kernels will
+    // use stale samples, but no proposals past the total number proposals will be evaluated in k_accept_first_valid_move_targeted
+    while (idx < batch_size && idx + num_prev_proposals < total_proposals) {
         const int target_inner = targeting_inner_volume[idx];
         const int offset = target_inner == 1 ? local_inner_count : 0;
         const int before = sample_idxs[idx];
