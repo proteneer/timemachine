@@ -7,7 +7,7 @@ import numpy as np
 from jax import Array
 from jax.typing import ArrayLike
 from numpy.typing import NDArray
-from scipy.special import rel_entr
+from scipy.stats import entropy
 
 from timemachine.md.moves import MixtureOfMoves, MonteCarloMove
 from timemachine.utils import batches, not_ragged
@@ -240,23 +240,27 @@ class HREX(Generic[Replica]):
 
 
 def get_normalized_kl_divergence(replica_idx_by_state_by_iter: Sequence[Sequence[ReplicaIdx]]) -> float:
-    """Heuristic for the how uniformly windows were sampled within an HREX simulation.
+    r"""Heuristic for the how uniformly windows were sampled within an HREX simulation.
     Based on Eq. 5 from [1], but after summing up the divergences of each state, take the mean
     so that it is possible to compare the values between simulations of different numbers of windows.
 
-    A value closer to 0.0 indicates more uniforming sampling.
+    A value closer to 0.0 indicates more uniform sampling.
 
     References
     ----------
     [1]: https://doi.org/10.1021/acs.jctc.0c00660, https://chemrxiv.org/engage/chemrxiv/article-details/60c74d2e702a9b007018b7ef
+
+    Notes
+    -----
+    * Avoid having to generate a uniform distribution by using the identity
+      $\sum_i p_i \log (p_i / u_i) =  \sum_i p_i \log p_i + \log N = -H_p + \log N$, where $H_p$ is the entropy of $p$
     """
     cumulative_counts = get_cumulative_replica_state_counts(replica_idx_by_state_by_iter)
     n_iters, n_states, n_replicas = cumulative_counts.shape
     count_by_replica_by_state = cumulative_counts[-1]
     fraction_by_replica_by_state = count_by_replica_by_state / n_iters
-    uniform_dist = np.ones_like(fraction_by_replica_by_state) / n_states
-    # No need to add eps to the fraction_by_replica_state, as kel_entr returns a KL of 0 in that case
-    return np.sum(rel_entr(fraction_by_replica_by_state, uniform_dist)) / n_states
+
+    return -np.mean(entropy(fraction_by_replica_by_state)) + np.log(n_states)
 
 
 def get_cumulative_replica_state_counts(replica_idx_by_state_by_iter: Sequence[Sequence[ReplicaIdx]]) -> NDArray:
