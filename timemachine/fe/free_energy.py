@@ -173,7 +173,6 @@ class PairBarPlots:
 class HREXPlots:
     transition_matrix_png: bytes
     swap_acceptance_rates_convergence_png: bytes
-    replica_state_distribution_convergence_png: bytes
     replica_state_distribution_heatmap_png: bytes
 
 

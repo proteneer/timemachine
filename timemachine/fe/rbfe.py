@@ -27,7 +27,6 @@ from timemachine.fe.free_energy import (
 )
 from timemachine.fe.plots import (
     plot_as_png_fxn,
-    plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
@@ -677,9 +676,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
             swap_acceptance_rates_convergence_png=plot_as_png_fxn(
                 plot_hrex_swap_acceptance_rates_convergence, diagnostics.cumulative_swap_acceptance_rates
             ),
-            replica_state_distribution_convergence_png=plot_as_png_fxn(
-                plot_hrex_replica_state_distribution_convergence, diagnostics.cumulative_replica_state_counts
-            ),
             replica_state_distribution_heatmap_png=plot_as_png_fxn(
                 plot_hrex_replica_state_distribution_heatmap, diagnostics.cumulative_replica_state_counts
             ),
@@ -952,10 +948,6 @@ def run_edge_and_save_results(
                 complex_res.hrex_plots.swap_acceptance_rates_convergence_png,
             )
             file_client.store(
-                f"{edge_prefix}_complex_hrex_replica_state_distribution_convergence.png",
-                complex_res.hrex_plots.replica_state_distribution_convergence_png,
-            )
-            file_client.store(
                 f"{edge_prefix}_complex_hrex_replica_state_distribution_heatmap.png",
                 complex_res.hrex_plots.replica_state_distribution_heatmap_png,
             )
@@ -976,10 +968,6 @@ def run_edge_and_save_results(
             file_client.store(
                 f"{edge_prefix}_solvent_hrex_swap_acceptance_rates_convergence.png",
                 solvent_res.hrex_plots.swap_acceptance_rates_convergence_png,
-            )
-            file_client.store(
-                f"{edge_prefix}_solvent_hrex_replica_state_distribution_convergence.png",
-                solvent_res.hrex_plots.replica_state_distribution_convergence_png,
             )
             file_client.store(
                 f"{edge_prefix}_solvent_hrex_replica_state_distribution_heatmap.png",

@@ -452,45 +452,6 @@ def plot_hrex_replica_state_distribution_heatmap(
     fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_cbar_tick(x))
 
 
-def plot_hrex_replica_state_distribution_convergence(cumulative_replica_state_counts: NDArray, ncols: int = 4):
-    """Plot distribution of states as a function of iteration for each replica."""
-    n_iters, n_states, _ = cumulative_replica_state_counts.shape
-
-    # (replica, iter, state) -> int
-    count_by_state_by_iter_by_replica = np.moveaxis(cumulative_replica_state_counts, 2, 0)
-
-    ncols = min(n_states, ncols)
-    nrows = (n_states + ncols - 1) // ncols
-    fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(13, 10), sharex=True, sharey=True, squeeze=False)
-
-    # (replica, state) pairs with no observations will be colored white
-    cmap = plt.get_cmap("viridis_r")
-    cmap.set_bad("white")
-
-    for replica_idx, (count_by_state_by_iter, ax) in enumerate(zip(count_by_state_by_iter_by_replica, axs.flat)):
-        p = ax.pcolormesh(np.arange(n_iters) + 1, np.arange(n_states), np.log10(count_by_state_by_iter.T), cmap=cmap)
-        ax.set_title(f"replica = {replica_idx}")
-
-    for ax in axs[-1, :]:
-        ax.set_xlabel("iteration")
-        ax.xaxis.get_major_locator().set_params(integer=True)
-
-    for ax in axs[:, 0]:
-        ax.set_ylabel("state")
-        ax.yaxis.get_major_locator().set_params(integer=True)
-
-    # don't draw axes for empty subplots in last row
-    n_remaining = n_states % ncols
-    if n_remaining:
-        n_empty = ncols - n_remaining
-        for ax in axs.flat[-n_empty:]:
-            ax.set_visible(False)
-
-    fig.subplots_adjust(right=0.8, hspace=0.2, wspace=0.2)
-    cbar_ax = fig.add_axes((0.85, 0.15, 0.02, 0.7))
-    fig.colorbar(p, cax=cbar_ax, label=r"$\log_{10}$(number of iterations)")
-
-
 def plot_as_png_fxn(f, *args, **kwargs) -> bytes:
     """
     Given a function which generates a plot, return the plot as png bytes.

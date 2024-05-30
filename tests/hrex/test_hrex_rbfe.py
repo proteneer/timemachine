@@ -18,7 +18,6 @@ from timemachine.fe.free_energy import (
     sample_with_context,
 )
 from timemachine.fe.plots import (
-    plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
@@ -121,7 +120,6 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     assert result.hrex_plots
     assert result.hrex_plots.transition_matrix_png
     assert result.hrex_plots.swap_acceptance_rates_convergence_png
-    assert result.hrex_plots.replica_state_distribution_convergence_png
     assert result.hrex_plots.replica_state_distribution_heatmap_png
 
 
@@ -129,7 +127,6 @@ def plot_hrex_rbfe_hif2a(result: SimulationResult):
     assert result.hrex_diagnostics
     plot_hrex_swap_acceptance_rates_convergence(result.hrex_diagnostics.cumulative_swap_acceptance_rates)
     plot_hrex_transition_matrix(result.hrex_diagnostics.transition_matrix)
-    plot_hrex_replica_state_distribution_convergence(result.hrex_diagnostics.cumulative_replica_state_counts)
     plot_hrex_replica_state_distribution_heatmap(result.hrex_diagnostics.cumulative_replica_state_counts)
     plt.show()
 

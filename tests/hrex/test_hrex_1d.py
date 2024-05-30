@@ -11,7 +11,6 @@ from scipy.special import logsumexp
 
 from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution,
-    plot_hrex_replica_state_distribution_convergence,
     plot_hrex_replica_state_distribution_heatmap,
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
@@ -278,7 +277,6 @@ def plot_hrex_diagnostics(diagnostics: HREXDiagnostics):
     plot_hrex_transition_matrix(diagnostics.transition_matrix)
     plot_hrex_replica_state_distribution(diagnostics.cumulative_replica_state_counts)
     plot_hrex_replica_state_distribution_heatmap(diagnostics.cumulative_replica_state_counts)
-    plot_hrex_replica_state_distribution_convergence(diagnostics.cumulative_replica_state_counts)
 
 
 @pytest.mark.parametrize("num_states", [5])
