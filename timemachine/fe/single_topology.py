@@ -309,7 +309,7 @@ def canonicalize_chiral_atom_idxs(idxs):
     return i, jj, kk, ll
 
 
-def setup_end_state_chiral_potentials(
+def setup_end_state_bonded_and_chiral_potentials(
     ff, mol_a, mol_b, core, a_to_c, b_to_c
 ) -> Tuple[BoundPotential[HarmonicBond], BoundPotential[ChiralAtomRestraint], BoundPotential[ChiralBondRestraint]]:
     """
@@ -553,7 +553,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     mol_a_nbpl.idxs = mol_c_nbpl_idxs_canon
     nonbonded_potential = mol_a_nbpl.bind(np.array(mol_a_nbpl_params))
 
-    bond_potential, chiral_atom_potential, chiral_bond_potential = setup_end_state_chiral_potentials(
+    bond_potential, chiral_atom_potential, chiral_bond_potential = setup_end_state_bonded_and_chiral_potentials(
         ff, mol_a, mol_b, core, a_to_c, b_to_c
     )
 
@@ -1035,10 +1035,10 @@ def verify_chiral_consistency_of_core(mol_a: Chem.Mol, mol_b: Chem.Mol, core: ND
             If chiral end states are incompatible for the given core and forcefield.
     """
     atom_map = AtomMapMixin(mol_a, mol_b, core)
-    bond_pot_src, chiral_atom_pot_src, _ = setup_end_state_chiral_potentials(
+    bond_pot_src, chiral_atom_pot_src, _ = setup_end_state_bonded_and_chiral_potentials(
         forcefield, mol_a, mol_b, core, atom_map.a_to_c, atom_map.b_to_c
     )
-    bond_pot_dest, chiral_atom_pot_dest, _ = setup_end_state_chiral_potentials(
+    bond_pot_dest, chiral_atom_pot_dest, _ = setup_end_state_bonded_and_chiral_potentials(
         forcefield, mol_b, mol_a, core[:, ::-1], atom_map.b_to_c, atom_map.a_to_c
     )
     assert_chiral_consistency_and_validity(
