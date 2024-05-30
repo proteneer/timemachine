@@ -13,22 +13,21 @@ SegmentedSumExp<RealType>::SegmentedSumExp(const int max_vals_per_segment, const
     : max_vals_per_segment_(max_vals_per_segment), num_segments_(num_segments),
       d_temp_buffer_(max_vals_per_segment_ * num_segments_), temp_storage_bytes_(0), d_temp_storage_buffer_(0) {
     void *dummy_temp = nullptr;
+    int *dummy_offsets = nullptr;
     RealType *dummy_in = nullptr;
     size_t max_storage_bytes = 0;
     cub::DeviceSegmentedReduce::Max(
-        dummy_temp, max_storage_bytes, dummy_in, dummy_in, num_segments_, dummy_in, dummy_in);
+        dummy_temp, max_storage_bytes, dummy_in, dummy_in, num_segments_, dummy_offsets, dummy_offsets);
 
     size_t sum_storage_bytes = 0;
     cub::DeviceSegmentedReduce::Sum(
-        dummy_temp, sum_storage_bytes, dummy_in, dummy_in, num_segments_, dummy_in, dummy_in);
+        dummy_temp, sum_storage_bytes, dummy_in, dummy_in, num_segments_, dummy_offsets, dummy_offsets);
 
     // Allocate the larger of the two intermediate values, as we need to run both max and sum
     temp_storage_bytes_ = max(max_storage_bytes, sum_storage_bytes);
     d_temp_storage_buffer_.realloc(temp_storage_bytes_);
 };
-
 template <typename RealType> SegmentedSumExp<RealType>::~SegmentedSumExp(){};
-
 template <typename RealType>
 void SegmentedSumExp<RealType>::sum_device(
     const int total_values,
