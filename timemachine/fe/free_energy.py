@@ -31,14 +31,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import get_water_idxs
-from timemachine.md.hrex import (
-    HREX,
-    HREXDiagnostics,
-    HREXPlots,
-    ReplicaIdx,
-    StateIdx,
-    get_swap_attempts_per_iter_heuristic,
-)
+from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond, NonbondedInteractionGroup, SummedPotential
 from timemachine.utils import batches, pairwise_transform_and_combine
@@ -174,6 +167,14 @@ class PairBarPlots:
     dG_errs_png: bytes
     overlap_summary_png: bytes
     overlap_detail_png: bytes
+
+
+@dataclass
+class HREXPlots:
+    transition_matrix_png: bytes
+    swap_acceptance_rates_convergence_png: bytes
+    replica_state_distribution_convergence_png: bytes
+    replica_state_distribution_heatmap_png: bytes
 
 
 @dataclass
