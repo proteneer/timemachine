@@ -718,7 +718,7 @@ void declare_potential(py::module &m) {
                const bool compute_du_dx,
                const bool compute_du_dp,
                const bool compute_u) -> py::tuple {
-                if (coords.ndim() != 3 && boxes.ndim() != 3) {
+                if (coords.ndim() != 3 || boxes.ndim() != 3) {
                     throw std::runtime_error("coords and boxes must have 3 dimensions");
                 }
                 if (coords.shape()[0] != boxes.shape()[0]) {
@@ -841,6 +841,174 @@ void declare_potential(py::module &m) {
             du_dx has shape (coords_batch_size, param_batch_size, N, 3)
             du_dp has shape (coords_batch_size, param_batch_size, P)
             u has shape (coords_batch_size, param_batch_size)
+
+    )pbdoc")
+        .def(
+            "execute_batch_sparse",
+            [](Potential &pot,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &params,
+               const py::array_t<double, py::array::c_style> &boxes,
+               const py::array_t<unsigned int, py::array::c_style> &coords_batch_idxs,
+               const py::array_t<unsigned int, py::array::c_style> &params_batch_idxs,
+               const bool compute_du_dx,
+               const bool compute_du_dp,
+               const bool compute_u) -> py::tuple {
+                if (coords.ndim() != 3 || boxes.ndim() != 3) {
+                    throw std::runtime_error("coords and boxes must have 3 dimensions");
+                }
+                if (coords.shape()[0] != boxes.shape()[0]) {
+                    throw std::runtime_error("number of coord arrays and boxes don't match");
+                }
+                if (params.ndim() < 2) {
+                    throw std::runtime_error("parameters must have at least 2 dimensions");
+                }
+                if (coords_batch_idxs.ndim() != 1 || params_batch_idxs.ndim() != 1) {
+                    throw std::runtime_error("coords_batch_idxs and params_batch_idxs must be one-dimensional arrays");
+                }
+                if (coords_batch_idxs.size() != params_batch_idxs.size()) {
+                    throw std::runtime_error("coords_batch_idxs and params_batch_idxs must have the same length");
+                }
+
+                const long unsigned int batch_size = coords_batch_idxs.size();
+                const unsigned int *coords_batch_idxs_data = coords_batch_idxs.data();
+                const unsigned int *params_batch_idxs_data = params_batch_idxs.data();
+
+                for (long unsigned int i = 0; i < batch_size; i++) {
+                    if (coords_batch_idxs_data[i] >= coords.shape()[0]) {
+                        throw std::runtime_error("coords_batch_idxs contains an index that is out of bounds");
+                    }
+                    if (params_batch_idxs_data[i] >= params.shape()[0]) {
+                        throw std::runtime_error("params_batch_idxs contains an index that is out of bounds");
+                    }
+                }
+
+                const long unsigned int coords_size = coords.shape()[0];
+                const long unsigned int N = coords.shape()[1];
+                const long unsigned int D = coords.shape()[2];
+
+                const long unsigned int params_size = params.shape()[0];
+                const long unsigned int P = params.size() / params_size;
+
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_batch_host`)
+                // Only initialize memory when needed, as buffers can be quite large
+                std::vector<unsigned long long> du_dx;
+                if (compute_du_dx) {
+                    du_dx.assign(batch_size * N * D, 9999);
+                }
+                std::vector<unsigned long long> du_dp;
+                if (compute_du_dp) {
+                    du_dp.assign(batch_size * P, 9999);
+                }
+                std::vector<__int128> u;
+                if (compute_u) {
+                    u.assign(batch_size, 9999);
+                }
+
+                pot.execute_batch_sparse_host(
+                    coords_size,
+                    N,
+                    params_size,
+                    P,
+                    batch_size,
+                    coords_batch_idxs_data,
+                    params_batch_idxs_data,
+                    coords.data(),
+                    params.data(),
+                    boxes.data(),
+                    compute_du_dx ? du_dx.data() : nullptr,
+                    compute_du_dp ? du_dp.data() : nullptr,
+                    compute_u ? u.data() : nullptr);
+
+                auto result = py::make_tuple(py::none(), py::none(), py::none());
+                if (compute_du_dx) {
+                    py::array_t<double, py::array::c_style> py_du_dx({batch_size, N, D});
+                    for (unsigned int i = 0; i < du_dx.size(); i++) {
+                        py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+                    }
+                    result[0] = py_du_dx;
+                }
+
+                if (compute_du_dp) {
+                    std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
+                    pshape[0] = batch_size;
+
+                    py::array_t<double, py::array::c_style> py_du_dp(pshape);
+                    for (unsigned int i = 0; i < batch_size; i++) {
+                        pot.du_dp_fixed_to_float(N, P, &du_dp[0] + (i * P), py_du_dp.mutable_data() + (i * P));
+                    }
+                    result[1] = py_du_dp;
+                }
+
+                if (compute_u) {
+                    py::array_t<double, py::array::c_style> py_u(batch_size);
+
+                    for (unsigned int i = 0; i < py_u.size(); i++) {
+                        py_u.mutable_data()[i] = convert_energy_to_fp(u[i]);
+                    }
+                    result[2] = py_u;
+                }
+
+                return result;
+            },
+            py::arg("coords"),
+            py::arg("params"),
+            py::arg("boxes"),
+            py::arg("coords_batch_idxs"),
+            py::arg("params_batch_idxs"),
+            py::arg("compute_du_dx"),
+            py::arg("compute_du_dp"),
+            py::arg("compute_u"),
+            R"pbdoc(
+        Execute the potential over a batch of coordinates and parameters. Similar to execute_batch, except that instead
+        of evaluating the potential on the dense matrix of pairs of coordinates and parameters, this accepts arrays
+        specifying the indices of the coordinates and parameters to use for each evaluation, allowing evaluation of
+        arbitrary elements of the matrix. The total number of evaluations is len(coords_batch_idxs)
+        [= len(params_batch_idxs)].
+
+        Notes
+        -----
+        * This function allocates memory for all of the inputs on the GPU. This may lead to OOMs.
+        * When using with stateful potentials, care should be taken in the ordering of the evaluations (as specified by
+          coords_batch_idxs and params_batch_idxs) to maintain efficiency. For example, batch evaluation of a nonbonded
+          all-pairs potential may be most efficient in the order [(coords_1, params_1), (coords_1, params_2), ... ,
+          (coords_2, params_1), ..., (coords_n, params_n)], i.e. with an "outer loop" over the coordinates and "inner
+          loop" over parameters, to avoid unnecessary rebuilds of the neighborlist.
+
+        Parameters
+        ----------
+        coords: NDArray
+            (coords_size, n_atoms, 3) array containing multiple coordinate arrays
+
+        params: NDArray
+            (params_size, P) array containing multiple parameter arrays
+
+        boxes: NDArray
+            (coords_size, 3, 3) array containing a batch of boxes
+
+        coords_batch_idxs: NDArray
+            (batch_size,) indices of the coordinates to use for each evaluation
+
+        params_batch_idxs: NDArray
+            (batch_size,) indices of the parameters to use for each evaluation
+
+        compute_du_dx: bool
+            Indicates to compute du_dx, else returns None for du_dx
+
+        compute_du_dp: bool
+            Indicates to compute du_dp, else returns None for du_dp
+
+        compute_u: bool
+            Indicates to compute u, else returns None for u
+
+
+        Returns
+        -------
+        3-tuple of du_dx, du_dp, u
+            batch_size = coords_batch_idxs.shape[0]
+            du_dx has shape (batch_size, N, 3)
+            du_dp has shape (batch_size, P)
+            u has shape (batch_size,)
 
     )pbdoc")
         .def(
