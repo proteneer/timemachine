@@ -328,11 +328,7 @@ def plot_fwd_reverse_predictions(
     return plot_png
 
 
-def plot_chiral_restraint_energies(
-    chiral_energies: NDArray,
-    annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
-    figsize: Tuple[float, float] = (13, 10),
-):
+def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[float, float] = (13, 10)):
     """Plot matrix of chiral restraint energies as a heatmap.
 
     For use with the outputs of timemachine.fe.chiral_utils.make_chiral_flip_heatmaps.
