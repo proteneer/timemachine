@@ -15,7 +15,14 @@ def _arcs_left(marcs):
     return min(num_row_edges, num_col_edges)
 
 
-UNMAPPED = -1
+# used in main recursion() loop
+UNMAPPED = -1  # (UNVISITED) OR (VISITED AND DEMAPPED)
+
+# used in inner loop when determining whether a mapping will necessarily result
+# in a disconnected subgraph.
+NODE_STATE_VISITED_DEMAPPED = 0  # VISITED AND DEMAPPED
+NODE_STATE_VISITED_MAPPED = 1  # VISITED AND MAPPED
+NODE_STATE_UNVISITED = 2  # UNVISITED
 
 
 def _initialize_marcs_given_predicate(g1, g2, predicate):
@@ -127,6 +134,46 @@ class Graph:
         for vertex_idx, edges in enumerate(self.lol_edges):
             for edge_idx in edges:
                 self.ve_matrix[vertex_idx][edge_idx] = True
+
+    def mapping_is_disconnected(self, source, node_states, n_mapped_nodes):
+        r"""
+        Verify whether mapped nodes can still be connected in the graph. It is assumed that
+        source is a mapped node. i.e. node_states[source] == NODE_STATE_VISITED_MAPPED. If this function
+        returns True, then the resulting graph is definitely disconnected. If this function
+        returns False, then the resulting graph can still be connected.
+
+        For example, let M be mapped node, D be a demapped node, and U be an unvisited node:
+
+        1. M-U-M # returns False
+        2. M-D-M # returns True
+        3. M-M-U # returns False
+        4. M-M-D # returns False
+
+        The implementation is adapted from the _plain_bfs() method in:
+        https://networkx.org/documentation/stable/_modules/networkx/algorithms/components/connected.html
+
+        """
+        unseen = [True] * self.n_vertices
+        unseen[source] = False
+        nextlevel = [source]
+        mapped_count = 1
+
+        if mapped_count == n_mapped_nodes:
+            return False
+
+        while nextlevel:
+            thislevel = nextlevel
+            nextlevel = []
+            for v in thislevel:
+                for w in self.get_neighbors(v):
+                    if unseen[w] and node_states[w] != NODE_STATE_VISITED_DEMAPPED:
+                        if node_states[w] == NODE_STATE_VISITED_MAPPED:
+                            mapped_count += 1
+                            if mapped_count == n_mapped_nodes:
+                                return False
+                        unseen[w] = False
+                        nextlevel.append(w)
+        return True
 
     def get_neighbors(self, vertex):
         return self.lol_vertices[vertex]
@@ -292,31 +339,6 @@ def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
     map_2_to_1[jdx] = UNMAPPED
 
 
-def _graph_is_disconnected(g, mapped_nodes, demapped_nodes, unvisited_nodes):
-    mapped_nodes = set(mapped_nodes)
-    demapped_nodes = set(demapped_nodes)
-    unvisited_nodes = set(unvisited_nodes)
-
-    # check intersections
-    assert mapped_nodes.union(demapped_nodes).union(unvisited_nodes) == set(range(g.n_vertices))
-    assert len(mapped_nodes.intersection(demapped_nodes)) == 0
-    assert len(mapped_nodes.intersection(unvisited_nodes)) == 0
-    assert len(demapped_nodes.intersection(unvisited_nodes)) == 0
-
-    all_possible_nodes = mapped_nodes.union(unvisited_nodes)
-
-    if len(mapped_nodes) > 0:
-        sg_all_possible = g.nxg.subgraph(all_possible_nodes)
-        sg_ccs = nx.connected_components(sg_all_possible)
-        # see if all the mapped nodes belong to the same connected component
-        for cc in sg_ccs:
-            if set(mapped_nodes).issubset(cc):
-                return False
-        return True
-    else:
-        return False
-
-
 def recursion(
     g1,
     g2,
@@ -337,7 +359,7 @@ def recursion(
         mcs_result.timed_out = True
         return
 
-    if len(mcs_result.all_maps) > max_cores:
+    if len(mcs_result.all_maps) >= max_cores:
         mcs_result.timed_out = True
         return
 
@@ -347,37 +369,40 @@ def recursion(
 
     if connected_core:
         # process g1 using atom_map_1_to_2_information
-        g1_mapped_nodes = set()
-        g1_unmapped_nodes = set()
-        g1_unvisited_nodes = set()
+        g1_node_states = [NODE_STATE_VISITED_DEMAPPED] * g1.n_vertices
+        g1_source = None
+        g1_mapped_count = 0
         for a1, a2 in enumerate(atom_map_1_to_2):
             if a1 < layer:
                 # visited nodes
-                if a2 == UNMAPPED:
-                    g1_unmapped_nodes.add(a1)
-                else:
-                    g1_mapped_nodes.add(a1)
+                if a2 != UNMAPPED:
+                    g1_node_states[a1] = NODE_STATE_VISITED_MAPPED
+                    g1_source = a1
+                    g1_mapped_count += 1
             else:
-                g1_unvisited_nodes.add(a1)
-                # are there unvisited nodes that can bridge the core?
+                g1_node_states[a1] = NODE_STATE_UNVISITED
 
-        if _graph_is_disconnected(g1, g1_mapped_nodes, g1_unmapped_nodes, g1_unvisited_nodes):
+        if g1_source and g1.mapping_is_disconnected(g1_source, g1_node_states, g1_mapped_count):
             return
 
+        g2_node_states = [NODE_STATE_VISITED_DEMAPPED] * g2.n_vertices
+        g2_source = None
+        g2_mapped_count = 0
+
         # g2 is a little trickier to process, we need to look at the priority idxs as well
-        g2_mapped_nodes = set()
         for a2, a1 in enumerate(atom_map_2_to_1):
             if a1 != UNMAPPED:
-                g2_mapped_nodes.add(a2)
-        g2_unvisited_nodes = set()
+                g2_node_states[a2] = NODE_STATE_VISITED_MAPPED
+                g2_source = a2
+                g2_mapped_count += 1
+
         # look up priority_idxs of remaining atoms
         for a2_list in priority_idxs[layer:]:
             for a2 in a2_list:
-                if a2 not in g2_mapped_nodes:
-                    g2_unvisited_nodes.add(a2)
-        g2_unmapped_nodes = set(range(g2.n_vertices)).difference(g2_mapped_nodes).difference(g2_unvisited_nodes)
+                if g2_node_states[a2] != NODE_STATE_VISITED_MAPPED:
+                    g2_node_states[a2] = NODE_STATE_UNVISITED
 
-        if _graph_is_disconnected(g2, g2_mapped_nodes, g2_unmapped_nodes, g2_unvisited_nodes):
+        if g2_source and g2.mapping_is_disconnected(g2_source, g2_node_states, g2_mapped_count):
             return
 
     mcs_result.nodes_visited += 1
