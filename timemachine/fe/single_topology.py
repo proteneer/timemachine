@@ -309,11 +309,15 @@ def canonicalize_chiral_atom_idxs(idxs):
     return i, jj, kk, ll
 
 
-def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
+def setup_end_state_harmonic_bond_and_chiral_potentials(
+    ff, mol_a, mol_b, core, a_to_c, b_to_c
+) -> Tuple[BoundPotential[HarmonicBond], BoundPotential[ChiralAtomRestraint], BoundPotential[ChiralBondRestraint]]:
     """
-    Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
-    to the alchemical molecule with dummy atoms. Note that the bond, angle, torsion, nonbonded pairs,
-    chiral atom and chiral bond idxs are canonicalized.
+    Setup end-state potentials to verify chiral correctness for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
+    to the alchemical molecule with dummy atoms. Note that the bond, chiral atom and chiral bond idxs are canonicalized.
+
+    This code is identical to setup_end_state, but only handles chiral potentials to be used to quickly verify
+    core mappings in verify_chiral_consistency_of_core
 
     Parameters
     ----------
@@ -337,14 +341,11 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
 
     Returns
     -------
-    VacuumSystem
-        A parameterized system in the vacuum.
+    Tuple of bound HarmonicBond, ChiralAtomRestraint and ChiralBondRestraint
+        The potentials involved in checking the correctness and validity of chirality at endstates.
 
     """
-
     all_dummy_bond_idxs, all_dummy_bond_params = [], []
-    all_dummy_angle_idxs, all_dummy_angle_params = [], []
-    all_dummy_improper_idxs, all_dummy_improper_params = [], []
     all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params = [], []
 
     dummy_groups = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
@@ -356,49 +357,25 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
         )
         # append idxs
         all_dummy_bond_idxs.extend(all_idxs[0])
-        all_dummy_angle_idxs.extend(all_idxs[1])
-        all_dummy_improper_idxs.extend(all_idxs[2])
         all_dummy_chiral_atom_idxs.extend(all_idxs[3])
         # append params
         all_dummy_bond_params.extend(all_params[0])
-        all_dummy_angle_params.extend(all_params[1])
-        all_dummy_improper_params.extend(all_params[2])
         all_dummy_chiral_atom_params.extend(all_params[3])
 
     # generate parameters for mol_a
     mol_a_top = topology.BaseTopology(mol_a, ff)
     mol_a_bond_params, mol_a_hb = mol_a_top.parameterize_harmonic_bond(ff.hb_handle.params)
-    mol_a_angle_params, mol_a_ha = mol_a_top.parameterize_harmonic_angle(ff.ha_handle.params)
-    mol_a_proper_params, mol_a_pt = mol_a_top.parameterize_proper_torsion(ff.pt_handle.params)
-    mol_a_improper_params, mol_a_it = mol_a_top.parameterize_improper_torsion(ff.it_handle.params)
-    mol_a_nbpl_params, mol_a_nbpl = mol_a_top.parameterize_nonbonded_pairlist(
-        ff.q_handle.params,
-        ff.q_handle_intra.params,
-        ff.lj_handle.params,
-        ff.lj_handle_intra.params,
-        intramol_params=True,
-    )
     mol_a_chiral_atom, mol_a_chiral_bond = mol_a_top.setup_chiral_restraints(
         DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
     )
 
     mol_a_bond_params = mol_a_bond_params.tolist()
-    mol_a_angle_params = mol_a_angle_params.tolist()
-    mol_a_proper_params = mol_a_proper_params.tolist()
-    mol_a_improper_params = mol_a_improper_params.tolist()
-    mol_a_nbpl_params = mol_a_nbpl_params.tolist()
 
     mol_a_bond_idxs = recursive_map(mol_a_hb.idxs, a_to_c)
-    mol_a_angle_idxs = recursive_map(mol_a_ha.idxs, a_to_c)
-    mol_a_proper_idxs = recursive_map(mol_a_pt.idxs, a_to_c)
-    mol_a_improper_idxs = recursive_map(mol_a_it.idxs, a_to_c)
-    mol_a_nbpl_idxs = recursive_map(mol_a_nbpl.idxs, a_to_c)
     mol_a_chiral_atom_idxs = recursive_map(mol_a_chiral_atom.potential.idxs, a_to_c)
     mol_a_chiral_bond_idxs = recursive_map(mol_a_chiral_bond.potential.idxs, a_to_c)
 
     all_dummy_bond_idxs = recursive_map(all_dummy_bond_idxs, b_to_c)
-    all_dummy_angle_idxs = recursive_map(all_dummy_angle_idxs, b_to_c)
-    all_dummy_improper_idxs = recursive_map(all_dummy_improper_idxs, b_to_c)
     all_dummy_chiral_atom_idxs = recursive_map(all_dummy_chiral_atom_idxs, b_to_c)
 
     # parameterize the combined molecule
@@ -434,50 +411,12 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
         else:
             warnings.warn(f"Chiral Volume {c,i,j,k} has a disabled bond, turning off.")
 
-    mol_c_angle_idxs = mol_a_angle_idxs + all_dummy_angle_idxs
-    mol_c_angle_params = mol_a_angle_params + all_dummy_angle_params
-
-    mol_c_proper_idxs = mol_a_proper_idxs
-    mol_c_proper_params = mol_a_proper_params
-
-    mol_c_improper_idxs = mol_a_improper_idxs + all_dummy_improper_idxs
-    mol_c_improper_params = mol_a_improper_params + all_dummy_improper_params
-
-    # canonicalize improper with cw/ccw check
-    mol_c_improper_idxs = tuple([canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs])
-
     mol_c_chiral_atom_idxs = list(mol_a_chiral_atom_idxs) + list(all_proper_dummy_chiral_atom_idxs)
     mol_c_chiral_atom_params = np.concatenate([mol_a_chiral_atom.params, all_proper_dummy_chiral_atom_params])
-
-    # check that the improper idxs are canonical
-    def assert_improper_idxs_are_canonical(all_idxs):
-        for _, j, k, l in all_idxs:
-            jj, kk, ll = sorted((j, k, l))
-            assert (jj, kk, ll) == (j, k, l) or (kk, ll, jj) == (j, k, l) or (ll, jj, kk) == (j, k, l)
-
-    assert_improper_idxs_are_canonical(mol_c_improper_idxs)
-
-    # combine proper + improper
-    mol_c_torsion_idxs = mol_c_proper_idxs + mol_c_improper_idxs
-    mol_c_torsion_params = mol_c_proper_params + mol_c_improper_params
 
     # canonicalize bonds
     mol_c_bond_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_bond_idxs])
     bond_potential = HarmonicBond(mol_c_bond_idxs_canon).bind(np.array(mol_c_bond_params))
-
-    # canonicalize angles
-    mol_c_angle_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_angle_idxs])
-    mol_c_stable_angle_params = np.hstack([mol_c_angle_params, np.zeros((len(mol_c_angle_params), 1))])
-    angle_potential = HarmonicAngleStable(mol_c_angle_idxs_canon).bind(np.array(mol_c_stable_angle_params))
-
-    # canonicalize torsions with idxs[0] < idxs[-1] check
-    mol_c_torsion_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_torsion_idxs])
-    torsion_potential = PeriodicTorsion(mol_c_torsion_idxs_canon).bind(np.array(mol_c_torsion_params))
-
-    # dummy atoms do not have any nonbonded interactions, so we simply turn them off
-    mol_c_nbpl_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_a_nbpl_idxs])
-    mol_a_nbpl.idxs = mol_c_nbpl_idxs_canon
-    nonbonded_potential = mol_a_nbpl.bind(np.array(mol_a_nbpl_params))
 
     # chiral atoms need special code for canonicalization, since triple product is invariant
     # under rotational symmetry (but not something like swap symmetry)
@@ -497,6 +436,126 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
     assert (
         get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1
     ), "hybrid molecule has multiple connected components"
+    return bond_potential, chiral_atom_potential, chiral_bond_potential
+
+
+def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
+    """
+    Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
+    to the alchemical molecule with dummy atoms. Note that the bond, angle, torsion, nonbonded pairs,
+    chiral atom and chiral bond idxs are canonicalized.
+
+    Parameters
+    ----------
+    ff: forcefield.Forcefield
+        Forcefield used to parameterize the molecule
+
+    mol_a: Chem.Mol
+        Fully interacting molecule
+
+    mol_b: Chem.Mol
+        Molecule providing the dummy atoms.
+
+    core: list of 2-tuples
+        Each pair is an atom mapping from mol_a into mol_b
+
+    a_to_c: dict or array, supports []
+        mapping from a into a common core idx
+
+    b_to_c: dict or array, supports []
+        mapping from b into a common core idx
+
+    Returns
+    -------
+    VacuumSystem
+        A parameterized system in the vacuum.
+
+    """
+
+    all_dummy_angle_idxs, all_dummy_angle_params = [], []
+    all_dummy_improper_idxs, all_dummy_improper_params = [], []
+
+    dummy_groups = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
+    # gotta add 'em all!
+
+    for anchor, (nbr, dg) in dummy_groups.items():
+        all_idxs, all_params = setup_dummy_interactions_from_ff(
+            ff, mol_b, dg, anchor, nbr, core[:, 1], DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
+        )
+        # append idxs
+        all_dummy_angle_idxs.extend(all_idxs[1])
+        all_dummy_improper_idxs.extend(all_idxs[2])
+        # append params
+        all_dummy_angle_params.extend(all_params[1])
+        all_dummy_improper_params.extend(all_params[2])
+
+    # generate parameters for mol_a
+    mol_a_top = topology.BaseTopology(mol_a, ff)
+    mol_a_angle_params, mol_a_ha = mol_a_top.parameterize_harmonic_angle(ff.ha_handle.params)
+    mol_a_proper_params, mol_a_pt = mol_a_top.parameterize_proper_torsion(ff.pt_handle.params)
+    mol_a_improper_params, mol_a_it = mol_a_top.parameterize_improper_torsion(ff.it_handle.params)
+    mol_a_nbpl_params, mol_a_nbpl = mol_a_top.parameterize_nonbonded_pairlist(
+        ff.q_handle.params,
+        ff.q_handle_intra.params,
+        ff.lj_handle.params,
+        ff.lj_handle_intra.params,
+        intramol_params=True,
+    )
+
+    mol_a_angle_params = mol_a_angle_params.tolist()
+    mol_a_proper_params = mol_a_proper_params.tolist()
+    mol_a_improper_params = mol_a_improper_params.tolist()
+    mol_a_nbpl_params = mol_a_nbpl_params.tolist()
+
+    mol_a_angle_idxs = recursive_map(mol_a_ha.idxs, a_to_c)
+    mol_a_proper_idxs = recursive_map(mol_a_pt.idxs, a_to_c)
+    mol_a_improper_idxs = recursive_map(mol_a_it.idxs, a_to_c)
+    mol_a_nbpl_idxs = recursive_map(mol_a_nbpl.idxs, a_to_c)
+
+    all_dummy_angle_idxs = recursive_map(all_dummy_angle_idxs, b_to_c)
+    all_dummy_improper_idxs = recursive_map(all_dummy_improper_idxs, b_to_c)
+
+    mol_c_angle_idxs = mol_a_angle_idxs + all_dummy_angle_idxs
+    mol_c_angle_params = mol_a_angle_params + all_dummy_angle_params
+
+    mol_c_proper_idxs = mol_a_proper_idxs
+    mol_c_proper_params = mol_a_proper_params
+
+    mol_c_improper_idxs = mol_a_improper_idxs + all_dummy_improper_idxs
+    mol_c_improper_params = mol_a_improper_params + all_dummy_improper_params
+
+    # canonicalize improper with cw/ccw check
+    mol_c_improper_idxs = tuple([canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs])
+
+    # check that the improper idxs are canonical
+    def assert_improper_idxs_are_canonical(all_idxs):
+        for _, j, k, l in all_idxs:
+            jj, kk, ll = sorted((j, k, l))
+            assert (jj, kk, ll) == (j, k, l) or (kk, ll, jj) == (j, k, l) or (ll, jj, kk) == (j, k, l)
+
+    assert_improper_idxs_are_canonical(mol_c_improper_idxs)
+
+    # combine proper + improper
+    mol_c_torsion_idxs = mol_c_proper_idxs + mol_c_improper_idxs
+    mol_c_torsion_params = mol_c_proper_params + mol_c_improper_params
+
+    # canonicalize angles
+    mol_c_angle_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_angle_idxs])
+    mol_c_stable_angle_params = np.hstack([mol_c_angle_params, np.zeros((len(mol_c_angle_params), 1))])
+    angle_potential = HarmonicAngleStable(mol_c_angle_idxs_canon).bind(np.array(mol_c_stable_angle_params))
+
+    # canonicalize torsions with idxs[0] < idxs[-1] check
+    mol_c_torsion_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_torsion_idxs])
+    torsion_potential = PeriodicTorsion(mol_c_torsion_idxs_canon).bind(np.array(mol_c_torsion_params))
+
+    # dummy atoms do not have any nonbonded interactions, so we simply turn them off
+    mol_c_nbpl_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_a_nbpl_idxs])
+    mol_a_nbpl.idxs = mol_c_nbpl_idxs_canon
+    nonbonded_potential = mol_a_nbpl.bind(np.array(mol_a_nbpl_params))
+
+    bond_potential, chiral_atom_potential, chiral_bond_potential = setup_end_state_harmonic_bond_and_chiral_potentials(
+        ff, mol_a, mol_b, core, a_to_c, b_to_c
+    )
 
     return VacuumSystem(
         bond_potential,
@@ -892,6 +951,105 @@ class AtomMapMixin:
 _Bonded = TypeVar("_Bonded", bound=Union[ChiralAtomRestraint, HarmonicAngleStable, HarmonicBond, PeriodicTorsion])
 
 
+def get_neighbors(atom, bond_idxs) -> List[int]:
+    nbs = []
+    for i, j in bond_idxs:
+        if i == atom:
+            nbs.append(j)
+        elif j == atom:
+            nbs.append(i)
+    return nbs
+
+
+def check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):
+    """Raise error unless, for every chiral center, at least 1 chiral volume is defined in both end-states."""
+
+    for c in src_chiral_centers_in_mol_c:
+        nbs = get_neighbors(c, src_bond_idxs)
+        if len(nbs) == 4:
+            i, j, k, l = nbs
+            # (ytz): the ordering of i,j,k,l is random if we're reading directly from the mol graph,
+            # which can be inconsistent with the ordering used in the chiral volume definition.
+            nb_subsets = [(i, j, k), (i, j, l), (i, k, l), (j, k, l)]  # 4-choose-3 subsets
+            flags = [dst_chiral_restr_idx_set.defines((c, ii, jj, kk)) for (ii, jj, kk) in nb_subsets]
+
+            if sum(flags) == 0:
+                raise ChiralConversionError(f"len(nbs) == 4 {c, i, j, k, l}")
+
+        if len(nbs) == 3:
+            i, j, k = nbs
+            flag_0 = dst_chiral_restr_idx_set.defines((c, i, j, k))
+            if not flag_0:
+                raise ChiralConversionError(f"len(nbs) == 3 {c, i, j, k}")
+
+
+def assert_chiral_consistency_and_validity(
+    atom_map: AtomMapMixin,
+    src_chiral_idxs,
+    dst_chiral_idxs,
+    src_bond_idxs: NDArray,
+    dst_bond_idxs: NDArray,
+):
+    """
+    Assert that the given the two end states chiral and bond idxs it would be both consistent and valid.
+
+    consistency: if there are no inversions at the end-states between chiral atoms and bonds are present
+    validity: if we can directly turn on the chiral volumes (after bonds) without staggering angles
+    """
+
+    for c, i, j, k in src_chiral_idxs:
+        assert canonicalize_bond((c, i)) in src_bond_idxs
+        assert canonicalize_bond((c, j)) in src_bond_idxs
+        assert canonicalize_bond((c, k)) in src_bond_idxs
+
+    for c, i, j, k in dst_chiral_idxs:
+        assert canonicalize_bond((c, i)) in dst_bond_idxs
+        assert canonicalize_bond((c, j)) in dst_bond_idxs
+        assert canonicalize_bond((c, k)) in dst_bond_idxs
+
+    src_chiral_restr_idx_set = ChiralRestrIdxSet(src_chiral_idxs)
+    dst_chiral_restr_idx_set = ChiralRestrIdxSet(dst_chiral_idxs)
+
+    # ensure that we don't have any chiral inversions between src and dst end states
+    assert len(src_chiral_restr_idx_set.allowed_set.intersection(dst_chiral_restr_idx_set.disallowed_set)) == 0
+    assert len(dst_chiral_restr_idx_set.allowed_set.intersection(src_chiral_restr_idx_set.disallowed_set)) == 0
+
+    chiral_centers_in_mol_a = chiral_utils.find_chiral_atoms(atom_map.mol_a)
+    chiral_centers_in_mol_b = chiral_utils.find_chiral_atoms(atom_map.mol_b)
+
+    src_chiral_centers_in_mol_c = [atom_map.a_to_c[x] for x in chiral_centers_in_mol_a]
+    dst_chiral_centers_in_mol_c = [atom_map.b_to_c[x] for x in chiral_centers_in_mol_b]
+
+    check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs)
+    check_chiral_validity(dst_chiral_centers_in_mol_c, src_chiral_restr_idx_set, dst_bond_idxs)
+
+
+def verify_chiral_consistency_of_core(mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, forcefield):
+    """Verify that a core and forcefield would allow for valid chiral endstates.
+
+    Refer to `assert_chiral_consistency_and_validity` for definitions of consistency and validity.
+
+    Raises
+    ------
+        ChiralConversionError
+            If chiral end states are incompatible for the given core and forcefield.
+    """
+    atom_map = AtomMapMixin(mol_a, mol_b, core)
+    bond_pot_src, chiral_atom_pot_src, _ = setup_end_state_harmonic_bond_and_chiral_potentials(
+        forcefield, mol_a, mol_b, core, atom_map.a_to_c, atom_map.b_to_c
+    )
+    bond_pot_dest, chiral_atom_pot_dest, _ = setup_end_state_harmonic_bond_and_chiral_potentials(
+        forcefield, mol_b, mol_a, core[:, ::-1], atom_map.b_to_c, atom_map.a_to_c
+    )
+    assert_chiral_consistency_and_validity(
+        atom_map,
+        chiral_atom_pot_src.potential.idxs,
+        chiral_atom_pot_dest.potential.idxs,
+        bond_pot_src.potential.idxs,
+        bond_pot_dest.potential.idxs,
+    )
+
+
 class SingleTopology(AtomMapMixin):
     def __init__(self, mol_a, mol_b, core, forcefield):
         """
@@ -928,72 +1086,13 @@ class SingleTopology(AtomMapMixin):
         self.src_system = self._setup_end_state_src()
         self.dst_system = self._setup_end_state_dst()
 
-        self.assert_chiral_consistency_and_validity(
+        assert_chiral_consistency_and_validity(
+            self,
             self.src_system.chiral_atom.potential.idxs,
             self.dst_system.chiral_atom.potential.idxs,
             self.src_system.bond.potential.idxs,
             self.dst_system.bond.potential.idxs,
         )
-
-    def get_neighbors(self, atom, bond_idxs):
-        nbs = []
-        for i, j in bond_idxs:
-            if i == atom:
-                nbs.append(j)
-            elif j == atom:
-                nbs.append(i)
-        return nbs
-
-    def check_chiral_validity(self, src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):
-        """Raise error unless, for every chiral center, at least 1 chiral volume is defined in both end-states."""
-
-        for c in src_chiral_centers_in_mol_c:
-            nbs = self.get_neighbors(c, src_bond_idxs)
-            if len(nbs) == 4:
-                i, j, k, l = nbs
-                # (ytz): the ordering of i,j,k,l is random if we're reading directly from the mol graph,
-                # which can be inconsistent with the ordering used in the chiral volume definition.
-                nb_subsets = [(i, j, k), (i, j, l), (i, k, l), (j, k, l)]  # 4-choose-3 subsets
-                flags = [dst_chiral_restr_idx_set.defines((c, ii, jj, kk)) for (ii, jj, kk) in nb_subsets]
-
-                if sum(flags) == 0:
-                    raise ChiralConversionError(f"len(nbs) == 4 {c, i, j, k, l}")
-
-            if len(nbs) == 3:
-                i, j, k = nbs
-                flag_0 = dst_chiral_restr_idx_set.defines((c, i, j, k))
-                if not flag_0:
-                    raise ChiralConversionError(f"len(nbs) == 3 {c, i, j, k}")
-
-    def assert_chiral_consistency_and_validity(self, src_chiral_idxs, dst_chiral_idxs, src_bond_idxs, dst_bond_idxs):
-        # consistency: if there are no inversions at the end-states between chiral atoms and bonds are present
-        # validity: if we can directly turn on the chiral volumes (after bonds) without staggering angles
-
-        for c, i, j, k in src_chiral_idxs:
-            assert canonicalize_bond((c, i)) in src_bond_idxs
-            assert canonicalize_bond((c, j)) in src_bond_idxs
-            assert canonicalize_bond((c, k)) in src_bond_idxs
-
-        for c, i, j, k in dst_chiral_idxs:
-            assert canonicalize_bond((c, i)) in dst_bond_idxs
-            assert canonicalize_bond((c, j)) in dst_bond_idxs
-            assert canonicalize_bond((c, k)) in dst_bond_idxs
-
-        src_chiral_restr_idx_set = ChiralRestrIdxSet(src_chiral_idxs)
-        dst_chiral_restr_idx_set = ChiralRestrIdxSet(dst_chiral_idxs)
-
-        # ensure that we don't have any chiral inversions between src and dst end states
-        assert len(src_chiral_restr_idx_set.allowed_set.intersection(dst_chiral_restr_idx_set.disallowed_set)) == 0
-        assert len(dst_chiral_restr_idx_set.allowed_set.intersection(src_chiral_restr_idx_set.disallowed_set)) == 0
-
-        chiral_centers_in_mol_a = chiral_utils.find_chiral_atoms(self.mol_a)
-        chiral_centers_in_mol_b = chiral_utils.find_chiral_atoms(self.mol_b)
-
-        src_chiral_centers_in_mol_c = [self.a_to_c[x] for x in chiral_centers_in_mol_a]
-        dst_chiral_centers_in_mol_c = [self.b_to_c[x] for x in chiral_centers_in_mol_b]
-
-        self.check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs)
-        self.check_chiral_validity(dst_chiral_centers_in_mol_c, src_chiral_restr_idx_set, dst_bond_idxs)
 
     def combine_masses(self, use_hmr=False):
         """
@@ -1473,7 +1572,7 @@ class SingleTopology(AtomMapMixin):
         scale_factors = host_nonbonded.potential.scale_factors
 
         # Note: The choice of zeros here is arbitrary. It doesn't affect the
-        # potentials or grads, but any function like the seed could depened on these values.
+        # potentials or grads, but any function like the seed could depend on these values.
         hg_nb_params = jnp.concatenate([host_params, np.zeros((num_guest_atoms, host_params.shape[1]))])
 
         combined_nonbonded = Nonbonded(
