@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from timemachine.lib import custom_ops
 
 from . import bonded, bonded_stable, chiral_restraints, jax_interface, nonbonded, summed
-from .potential import BoundGpuImplWrapper, GpuImplWrapper, Potential, Precision
+from .potential import BoundGpuImplWrapper, BoundPotential, GpuImplWrapper, Potential, Precision
 from .types import Box, Conf, Params
 
 
@@ -245,6 +245,14 @@ class SummedPotential(Potential):
         impls = [p.to_gpu(precision).unbound_impl for p in self.potentials]
         sizes = [ps.size for ps in self.params_init]
         return SummedPotentialGpuImplWrapper(custom_ops.SummedPotential(impls, sizes, self.parallel))
+
+    def call_with_params_list(self, conf: Conf, params: Sequence[Params], box: Box) -> float | Array:
+        params_flat = jnp.concatenate([ps.reshape(-1) for ps in params])
+        return self(conf, params_flat, box)
+
+    def bind_params_list(self, params: Sequence[Params]) -> BoundPotential["SummedPotential"]:
+        params_flat = jnp.concatenate([ps.reshape(-1) for ps in params])
+        return BoundPotential(self, params_flat)
 
     @property
     def params_shapes(self):
