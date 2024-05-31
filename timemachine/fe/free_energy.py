@@ -1001,6 +1001,8 @@ def run_sims_hrex(
         HREX statistics (e.g. swap rates, replica-state distribution)
     """
 
+    assert md_params.hrex_params is not None
+
     # TODO: to support replica exchange with variable temperatures,
     #  consider modifying sample fxn to rescale velocities by sqrt(T_new/T_orig)
     def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
@@ -1147,7 +1149,6 @@ def run_sims_hrex(
             return CoordsVelBox(traj.frames[-1], traj.final_velocities, traj.boxes[-1])
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
-        assert md_params.hrex_params is not None
         U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
         log_q_kl = -U_kl / (BOLTZ * temperature)
 
