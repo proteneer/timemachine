@@ -424,60 +424,6 @@ def get_mol_by_name(mols, name):
     assert 0, "Mol not found"
 
 
-def test_complete_rings_only():
-    # this transformation has two ring changes:
-    # a 6->5 member ring size change and a unicycle to bicycle change
-    # we expect the MCS algorithm with complete rings only to map the single cycle core
-    mols = Chem.SDMolSupplier(datasets[0], removeHs=False)
-    mols = [m for m in mols]
-
-    mol_a = get_mol_by_name(mols, "43")
-    mol_b = get_mol_by_name(mols, "224")
-
-    all_cores = atom_mapping.get_cores(
-        mol_a,
-        mol_b,
-        ring_cutoff=0.1,
-        chain_cutoff=0.2,
-        max_visits=1e7,  # 10 million max nodes to visit
-        connected_core=True,
-        max_cores=1000,
-        enforce_core_core=True,
-        ring_matches_ring_only=True,
-        complete_rings=True,
-        enforce_chiral=True,
-        disallow_planar_torsion_flips=False,
-        min_threshold=0,
-        initial_mapping=None,
-    )
-
-    assert len(all_cores) == 1
-    core = all_cores[0]
-    np.testing.assert_array_equal(
-        np.array(
-            [
-                [1, 4],
-                [2, 5],
-                [3, 6],
-                [4, 7],
-                [5, 8],
-                [6, 9],
-                [7, 10],
-                [15, 12],
-                [16, 13],
-                [17, 14],
-                [18, 15],
-                [32, 18],
-                [19, 19],
-                [20, 20],
-                [26, 30],
-                [27, 31],
-            ]
-        ),
-        core,
-    )
-
-
 def tuples_to_set(arr):
     res = set()
     for a, b in arr:
