@@ -254,8 +254,6 @@ class SimulationResult:
     trajectories: List[Trajectory]
     md_params: MDParams
     intermediate_results: List[PairBarResult]
-    hrex_diagnostics: Optional[HREXDiagnostics] = None
-    hrex_plots: Optional[HREXPlots] = None
 
     @property
     def frames(self) -> List[StoredArrays]:
@@ -264,6 +262,12 @@ class SimulationResult:
     @property
     def boxes(self) -> List[NDArray]:
         return [np.array(traj.boxes) for traj in self.trajectories]
+
+
+@dataclass
+class HREXSimulationResult(SimulationResult):
+    hrex_diagnostics: HREXDiagnostics
+    hrex_plots: HREXPlots
 
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:

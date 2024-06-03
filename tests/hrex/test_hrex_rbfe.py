@@ -12,8 +12,8 @@ from scipy import stats
 from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
+    HREXSimulationResult,
     MDParams,
-    SimulationResult,
     WaterSamplingParams,
     sample_with_context,
 )
@@ -101,8 +101,6 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     if DEBUG:
         plot_hrex_rbfe_hif2a(result)
 
-    assert result.hrex_diagnostics
-
     assert result.hrex_diagnostics.cumulative_swap_acceptance_rates.shape[1] == n_windows - 1
 
     # Swap acceptance rates for all neighboring pairs should be >~ 20%
@@ -123,8 +121,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     assert result.hrex_plots.replica_state_distribution_heatmap_png
 
 
-def plot_hrex_rbfe_hif2a(result: SimulationResult):
-    assert result.hrex_diagnostics
+def plot_hrex_rbfe_hif2a(result: HREXSimulationResult):
     plot_hrex_swap_acceptance_rates_convergence(result.hrex_diagnostics.cumulative_swap_acceptance_rates)
     plot_hrex_transition_matrix(result.hrex_diagnostics.transition_matrix)
     plot_hrex_replica_state_distribution_heatmap(result.hrex_diagnostics.cumulative_replica_state_counts)

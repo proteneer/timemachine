@@ -16,6 +16,7 @@ from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
     HREXPlots,
+    HREXSimulationResult,
     InitialState,
     MDParams,
     SimulationResult,
@@ -602,7 +603,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
     make_optimized_initial_state_fn: Callable[[float], InitialState],
     combined_prefix: str,
     min_overlap: Optional[float] = None,
-) -> SimulationResult:
+) -> HREXSimulationResult:
     if n_windows is None:
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
@@ -680,7 +681,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
                 plot_hrex_replica_state_distribution_heatmap, diagnostics.cumulative_replica_state_counts
             ),
         )
-        return SimulationResult(
+        return HREXSimulationResult(
             pair_bar_result, plots, trajectories_by_state, md_params, results, diagnostics, hrex_plots
         )
 
@@ -702,7 +703,7 @@ def estimate_relative_free_energy_bisection_hrex(
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
-) -> SimulationResult:
+) -> HREXSimulationResult:
     """
     Estimate relative free energy between mol_a and mol_b using Hamiltonian Replica EXchange (HREX) sampling of a
     sequence of intermediate states determined by bisection. Molecules should be aligned to each other and within the
@@ -747,7 +748,7 @@ def estimate_relative_free_energy_bisection_hrex(
 
     Returns
     -------
-    SimulationResult
+    HREXSimulationResult
         Collected data from the simulation (see class for storage information).
 
     """
@@ -939,7 +940,7 @@ def run_edge_and_save_results(
             n_windows=n_windows,
         )
 
-        if complex_res.hrex_plots:
+        if isinstance(complex_res, HREXSimulationResult):
             file_client.store(
                 f"{edge_prefix}_complex_hrex_transition_matrix.png", complex_res.hrex_plots.transition_matrix_png
             )
@@ -961,7 +962,7 @@ def run_edge_and_save_results(
             md_params,
             n_windows=n_windows,
         )
-        if solvent_res.hrex_plots:
+        if isinstance(solvent_res, HREXSimulationResult):
             file_client.store(
                 f"{edge_prefix}_solvent_hrex_transition_matrix.png", solvent_res.hrex_plots.transition_matrix_png
             )
