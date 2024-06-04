@@ -20,7 +20,12 @@ from timemachine.fe.free_energy import (
     run_sims_hrex,
     run_sims_sequential,
 )
-from timemachine.fe.rbfe import setup_initial_states, setup_optimized_host, setup_optimized_initial_state
+from timemachine.fe.rbfe import (
+    DEFAULT_HREX_PARAMS,
+    setup_initial_states,
+    setup_optimized_host,
+    setup_optimized_initial_state,
+)
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.md import builders
@@ -96,7 +101,7 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
         run = partial(
             run_sims_hrex,
             initial_states,
-            md_params,
+            replace(md_params, hrex_params=DEFAULT_HREX_PARAMS.hrex_params),
             n_frames_per_iter=1,
             print_diagnostics_interval=None,
         )

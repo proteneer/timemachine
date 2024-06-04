@@ -56,19 +56,26 @@ class HREXParams:
     Parameters
     ----------
 
-    n_frames_bisection:
+    n_frames_bisection: int
         Number of frames to sample using MD during the initial bisection phase used to determine lambda spacing
 
-    n_frames_per_iter:
+    n_frames_per_iter: int
         Number of frames to sample using MD per HREX iteration.
+
+    max_delta_states: int or None
+        If given, number of neighbor states on either side of a given replica's initial state for which to compute
+        potentials. This determines the maximum number of states that a replica can move from its initial state during
+        a single HREX iteration. Otherwise, compute potentials for all (replica, state) pairs.
     """
 
     n_frames_bisection: int = 100
     n_frames_per_iter: int = 1
+    max_delta_states: Optional[int] = 4
 
     def __post_init__(self):
         assert self.n_frames_bisection > 0
         assert self.n_frames_per_iter > 0
+        assert self.max_delta_states is None or self.max_delta_states > 0
 
 
 @dataclass(frozen=True)
@@ -898,6 +905,61 @@ def run_sims_bisection(
     return results, trajectories
 
 
+def compute_potential_matrix(
+    potential: custom_ops.Potential,
+    hrex: HREX[CoordsVelBox],
+    params_by_state: NDArray,
+    max_delta_states: Optional[int] = None,
+) -> NDArray:
+    """Computes the (n_replicas, n_states) sparse matrix of potential energies, where a given element $(k, l)$ is
+    computed if and only if state $l$ is within `max_delta_states` of the current state of replica $k$, and is otherwise
+    set to `np.inf`.
+
+    Parameters
+    ----------
+    potential : custom_ops.Potential
+        potential to evaluate
+
+    hrex : HREX
+        HREX state (containing replica states and permutation)
+
+    params_by_state : NDArray
+        (n_states, ...) array of potential parameters for each state
+
+    max_delta_states : int or None, optional
+        If given, number of neighbor states on either side of a given replica's initial state for which to compute
+        potentials. Otherwise, compute potentials for all (replica, state) pairs.
+    """
+
+    coords = np.array([xvb.coords for xvb in hrex.replicas])
+    boxes = np.array([xvb.box for xvb in hrex.replicas])
+
+    def compute_sparse(k: int):
+        n_states = len(hrex.replicas)
+        state_idx = np.argsort(hrex.replica_idx_by_state)
+        neighbor_state_idxs = state_idx[:, None] + np.arange(-k, k + 1)[None, :]
+        valid_idxs = np.nonzero((0 <= neighbor_state_idxs) & (neighbor_state_idxs < n_states))
+        coords_batch_idxs = valid_idxs[0].astype(np.uint32)
+        params_batch_idxs = neighbor_state_idxs[valid_idxs].astype(np.uint32)
+
+        _, _, U = potential.execute_batch_sparse(
+            coords, params_by_state, boxes, coords_batch_idxs, params_batch_idxs, False, False, True
+        )
+
+        U_kl = np.full((n_states, n_states), np.inf)
+        U_kl[coords_batch_idxs, params_batch_idxs] = U
+
+        return U_kl
+
+    def compute_dense():
+        _, _, U_kl = potential.execute_batch(coords, params_by_state, boxes, False, False, True)
+        return U_kl
+
+    U_kl = compute_sparse(max_delta_states) if max_delta_states is not None else compute_dense()
+
+    return U_kl
+
+
 def run_sims_hrex(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
@@ -938,6 +1000,8 @@ def run_sims_hrex(
     HREXDiagnostics
         HREX statistics (e.g. swap rates, replica-state distribution)
     """
+
+    assert md_params.hrex_params is not None
 
     # TODO: to support replica exchange with variable temperatures,
     #  consider modifying sample fxn to rescale velocities by sqrt(T_new/T_orig)
@@ -992,13 +1056,6 @@ def run_sims_hrex(
     water_params_by_state: Optional[NDArray] = None
     if md_params.water_sampling_params is not None:
         water_params_by_state = np.array([get_water_sampler_params(initial_state) for initial_state in initial_states])
-
-    def compute_log_q_matrix(xvbs: List[CoordsVelBox]) -> NDArray:
-        coords = np.array([xvb.coords for xvb in xvbs])
-        boxes = np.array([xvb.box for xvb in xvbs])
-        _, _, U = potential.execute_batch(coords, params_by_state, boxes, False, False, True)
-        log_q = -U / (BOLTZ * temperature)
-        return log_q
 
     state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
     neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
@@ -1092,7 +1149,9 @@ def run_sims_hrex(
             return CoordsVelBox(traj.frames[-1], traj.final_velocities, traj.boxes[-1])
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
-        log_q_kl = compute_log_q_matrix(hrex.replicas)
+        U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
+        log_q_kl = -U_kl / (BOLTZ * temperature)
+
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
             neighbor_pairs, log_q_kl, n_swap_attempts_per_iter, md_params.seed + iteration
         )

@@ -379,13 +379,14 @@ def test_all_pairs(filepath):
     for idx, mol_a in enumerate(mols):
         for mol_b in mols[idx + 1 :]:
             # print("Processing", get_mol_name(mol_a), "->", get_mol_name(mol_b))
-            all_cores = atom_mapping.get_cores(
+            start_time = time.time()
+            all_cores, diagnostics = atom_mapping.get_cores_and_diagnostics(
                 mol_a,
                 mol_b,
-                ring_cutoff=0.1,
+                ring_cutoff=0.12,
                 chain_cutoff=0.2,
                 max_visits=1e7,  # 10 million max nodes to visit
-                connected_core=False,
+                connected_core=True,
                 max_cores=1000,
                 enforce_core_core=True,
                 ring_matches_ring_only=False,
@@ -393,6 +394,7 @@ def test_all_pairs(filepath):
                 disallow_planar_torsion_flips=False,
                 min_threshold=0,
             )
+            end_time = time.time()
 
             # # useful for visualization
             # for core_idx, core in enumerate(all_cores[:1]):
@@ -408,7 +410,7 @@ def test_all_pairs(filepath):
                 assert len(core) > mol_a.GetNumAtoms() // 2
 
             print(
-                f"{mol_a.GetProp('_Name')} -> {mol_b.GetProp('_Name')} has {len(all_cores)} cores of size {len(all_cores[0])}"
+                f"{mol_a.GetProp('_Name')} -> {mol_b.GetProp('_Name')} has {len(all_cores)} cores of size {len(all_cores[0])} | total nodes visited: {diagnostics.total_nodes_visited} | wall clock time: {end_time - start_time:.3f}"
             )
 
 
@@ -910,8 +912,9 @@ def test_max_cores_warning():
         min_threshold=0,
         max_visits=1e7,
     )
-    with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 2 cores"):
-        atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_cores=1)
+    with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 1 cores"):
+        all_cores = atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_cores=1)
+        assert len(all_cores) == 1
 
 
 def test_min_threshold():
