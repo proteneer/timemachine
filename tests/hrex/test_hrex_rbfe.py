@@ -114,6 +114,17 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     assert isinstance(result.hrex_diagnostics.relaxation_time, float)
     assert result.hrex_diagnostics.normalized_kl_divergence >= 0.0
 
+    n_atoms = result.final_result.initial_states[0].x0.shape[0]
+    rng = np.random.default_rng(2024)
+    n_atoms_subset = rng.choice(n_atoms)
+    atom_idxs = rng.choice(n_atoms, n_atoms_subset, replace=False)
+    trajs_by_replica = result.extract_trajectories_by_replica(atom_idxs)
+    assert trajs_by_replica.shape == (n_windows, md_params.n_frames, n_atoms_subset, 3)
+
+    ligand_trajs_by_replica = result.extract_ligand_trajectories_by_replica()
+    n_ligand_atoms = len(result.final_result.initial_states[0].ligand_idxs)
+    assert ligand_trajs_by_replica.shape == (n_windows, md_params.n_frames, n_ligand_atoms, 3)
+
     # Check plots were generated
     assert result.hrex_plots
     assert result.hrex_plots.transition_matrix_png
