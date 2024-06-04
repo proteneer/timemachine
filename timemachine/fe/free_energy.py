@@ -269,6 +269,33 @@ class HREXSimulationResult(SimulationResult):
     hrex_diagnostics: HREXDiagnostics
     hrex_plots: HREXPlots
 
+    def extract_trajectories_by_replica(self, atom_idxs: NDArray) -> NDArray:
+        """Return an array of shape (n_replicas, n_frames, len(atom_idxs), 3) of trajectories for each replica"""
+
+        def extract_frame(frames: StoredArrays, idx: int) -> NDArray:
+            return np.array(frames[idx])[atom_idxs]
+
+        def extract_frames_by_replica(iteration, replica_idx_by_state):
+            state_idx_by_replica = np.argsort(replica_idx_by_state)
+            return [extract_frame(self.trajectories[state_idx].frames, iteration) for state_idx in state_idx_by_replica]
+
+        # (n_frames, n_replicas, n_atoms, 3)
+        frames_by_replica_by_iteration = np.array(
+            [
+                extract_frames_by_replica(iteration, replica_idx_by_state)
+                for iteration, replica_idx_by_state in enumerate(self.hrex_diagnostics.replica_idx_by_state_by_iter)
+            ]
+        )
+
+        replica_trajectories = frames_by_replica_by_iteration.swapaxes(0, 1)  # (n_replicas, n_frames, n_atoms, 3)
+
+        return replica_trajectories
+
+    def extract_ligand_trajectories_by_replica(self) -> NDArray:
+        """Return an array of shape (n_replicas, n_frames, n_ligand_atoms, 3) of ligand trajectories for each replica"""
+        ligand_idxs = self.final_result.initial_states[0].ligand_idxs
+        return self.extract_trajectories_by_replica(ligand_idxs)
+
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
     """Images a sequence of frames within the periodic box given an Initial state. Recenters the simulation around the
