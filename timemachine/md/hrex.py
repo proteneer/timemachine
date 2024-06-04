@@ -384,14 +384,6 @@ class HREXDiagnostics:
         return get_normalized_kl_divergence(self.replica_idx_by_state_by_iter)
 
 
-@dataclass
-class HREXPlots:
-    transition_matrix_png: bytes
-    swap_acceptance_rates_convergence_png: bytes
-    replica_state_distribution_convergence_png: bytes
-    replica_state_distribution_heatmap_png: bytes
-
-
 def get_swap_attempts_per_iter_heuristic(n_states: int) -> int:
     """Heuristic for number of swap attempts per iteration derived from [1].
 
