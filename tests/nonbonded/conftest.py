@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import numpy as np
 import pytest
 
@@ -24,13 +26,13 @@ def example_nonbonded_potential(_example_system):
 @pytest.fixture()
 def example_conf(_example_system):
     _, _, host_conf, _ = _example_system
-    return host_conf
+    return np.array(host_conf)
 
 
 @pytest.fixture()
 def example_box(_example_system):
     _, _, _, box = _example_system
-    return box
+    return np.array(box)
 
 
 @pytest.fixture(autouse=True)
