@@ -51,7 +51,7 @@ def get_batch_u_fns(
         def batch_u_fn(xs: NDArray | StoredArrays, boxes, pot_impl, pot_params):
             # If the coordinates are already an in-memory numpy array, don't create a copy
             if isinstance(xs, StoredArrays):
-                coords = np.array([x for x in xs])
+                coords = np.array(xs)
             else:
                 coords = xs
             _, _, Us = pot_impl.execute_batch(
@@ -101,7 +101,7 @@ def compute_energy_decomposed_u_kln(states: List[EnergyDecomposedState]) -> np.n
     for l in range(K):
         # Load the frames into memory, then evaluate all of the components
         # Done to avoid repeatedly reading from disk
-        xs, boxes = np.array([x for x in states[l].frames]), states[l].boxes
+        xs, boxes = np.array(states[l].frames), states[l].boxes
         for k in range(K):
             for comp in range(n_components):
                 u_fxn = states[k].batch_u_fns[comp]
