@@ -49,9 +49,11 @@ def get_batch_u_fns(
     for p, pot in zip(params, pots):
 
         def batch_u_fn(xs: NDArray | StoredArrays, boxes, pot_impl, pot_params):
-            coords = xs
+            # If the coordinates are already an in-memory numpy array, don't create a copy
             if isinstance(xs, StoredArrays):
                 coords = np.array([x for x in xs])
+            else:
+                coords = xs
             _, _, Us = pot_impl.execute_batch(
                 coords,
                 pot_params,
