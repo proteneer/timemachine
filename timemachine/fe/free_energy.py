@@ -270,7 +270,16 @@ class HREXSimulationResult(SimulationResult):
     hrex_plots: HREXPlots
 
     def extract_trajectories_by_replica(self, atom_idxs: NDArray) -> NDArray:
-        """Return an array of shape (n_replicas, n_frames, len(atom_idxs), 3) of trajectories for each replica"""
+        """Returns an array of shape (n_replicas, n_frames, len(atom_idxs), 3) of trajectories for each replica
+
+        Note: This consumes O(n_frames * len(atom_idxs)) memory, and thus may OOM for large systems if len(atom_idxs) is
+        a significant fraction of the total number of atoms.
+
+        Parameters
+        ----------
+        atom_idxs: NDArray
+            Indices of atoms to extract
+        """
 
         # (states, frames, atoms, 3)
         trajs_by_state = np.array(
@@ -289,7 +298,7 @@ class HREXSimulationResult(SimulationResult):
         return trajs_by_replica
 
     def extract_ligand_trajectories_by_replica(self):
-        """Return an array of shape (n_replicas, n_frames, n_ligand_atoms, 3) of ligand trajectories for each replica"""
+        """Returns an array of shape (n_replicas, n_frames, n_ligand_atoms, 3) of ligand trajectories for each replica"""
         ligand_idxs = self.final_result.initial_states[0].ligand_idxs
         return self.extract_trajectories_by_replica(ligand_idxs)
 
