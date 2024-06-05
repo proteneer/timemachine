@@ -1180,6 +1180,8 @@ def run_sims_hrex(
         U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
         log_q_kl = -U_kl / (BOLTZ * temperature)
 
+        replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
+
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
             neighbor_pairs, log_q_kl, n_swap_attempts_per_iter, md_params.seed + iteration
         )
@@ -1190,7 +1192,6 @@ def run_sims_hrex(
         for samples, samples_iter in zip(samples_by_state, samples_by_state_iter):
             samples.extend(samples_iter)
 
-        replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
 
         if print_diagnostics_interval and iteration % print_diagnostics_interval == 0:
