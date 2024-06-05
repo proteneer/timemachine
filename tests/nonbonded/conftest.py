@@ -20,7 +20,8 @@ def _example_system():
 def example_nonbonded_potential(_example_system):
     host_fns, _, _, _ = _example_system
     nonbonded_bp = next(bp for bp in host_fns if isinstance(bp.potential, potentials.Nonbonded))
-    return nonbonded_bp
+    nonbonded_bp.cutoff = 1.2  # Need to set the cutoff to 1.2 to make the switch func happy
+    return deepcopy(nonbonded_bp)
 
 
 @pytest.fixture()
