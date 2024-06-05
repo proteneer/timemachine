@@ -135,6 +135,22 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     trajs_by_replica = result.extract_trajectories_by_replica(atom_idxs)
     assert trajs_by_replica.shape == (n_windows, md_params.n_frames, n_atoms_subset, 3)
 
+    # Check that the frame-to-frame rmsd is lower for replica trajectories versus state trajectories
+    def pairwise_rmsd(frames):
+        sds = np.sum(np.diff(frames, axis=0) ** 2, axis=2)
+        return np.sqrt(np.mean(sds))
+
+    # (states, frames)
+    trajs_by_state = np.array(
+        [[np.array(frame)[atom_idxs] for frame in state_traj.frames] for state_traj in result.trajectories]
+    )
+
+    assert all(
+        pairwise_rmsd(replica_traj) < pairwise_rmsd(state_traj)
+        for replica_traj, state_traj in zip(trajs_by_replica, trajs_by_state)
+    )
+
+    # Check that we can extract ligand trajectories by replica
     ligand_trajs_by_replica = result.extract_ligand_trajectories_by_replica()
     n_ligand_atoms = len(result.final_result.initial_states[0].ligand_idxs)
     assert ligand_trajs_by_replica.shape == (n_windows, md_params.n_frames, n_ligand_atoms, 3)
