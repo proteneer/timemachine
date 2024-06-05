@@ -151,7 +151,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     state_traj_rmsds = jax.vmap(pairwise_rmsd)(trajs_by_state)
 
     # should have rmsd(replica trajectory) < rmsd(state trajectory) for all pairs (replica, state)
-    assert np.all(replica_traj_rmsds[:, None] < state_traj_rmsds[None, :])
+    assert np.max(replica_traj_rmsds) < np.min(state_traj_rmsds)
 
     # Check that we can extract ligand trajectories by replica
     ligand_trajs_by_replica = result.extract_ligand_trajectories_by_replica()
