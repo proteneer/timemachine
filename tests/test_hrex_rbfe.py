@@ -138,7 +138,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     assert trajs_by_replica.shape == (n_windows, md_params.n_frames, n_atoms_subset, 3)
 
     # Check that the frame-to-frame rmsd is lower for replica trajectories versus state trajectories
-    def pairwise_rmsd(traj):
+    def time_lagged_rmsd(traj):
         sds = jnp.sum(jnp.diff(traj, axis=0) ** 2, axis=(1, 2))
         return jnp.sqrt(jnp.mean(sds))
 
@@ -147,8 +147,8 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
         [[np.array(frame)[atom_idxs] for frame in state_traj.frames] for state_traj in result.trajectories]
     )
 
-    replica_traj_rmsds = jax.vmap(pairwise_rmsd)(trajs_by_replica)
-    state_traj_rmsds = jax.vmap(pairwise_rmsd)(trajs_by_state)
+    replica_traj_rmsds = jax.vmap(time_lagged_rmsd)(trajs_by_replica)
+    state_traj_rmsds = jax.vmap(time_lagged_rmsd)(trajs_by_state)
 
     # should have rmsd(replica trajectory) < rmsd(state trajectory) for all pairs (replica, state)
     assert np.max(replica_traj_rmsds) < np.min(state_traj_rmsds)
