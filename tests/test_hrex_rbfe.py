@@ -3,6 +3,8 @@ from importlib import resources
 from typing import Optional
 from unittest.mock import patch
 
+import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -136,19 +138,20 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     assert trajs_by_replica.shape == (n_windows, md_params.n_frames, n_atoms_subset, 3)
 
     # Check that the frame-to-frame rmsd is lower for replica trajectories versus state trajectories
-    def pairwise_rmsd(frames):
-        sds = np.sum(np.diff(frames, axis=0) ** 2, axis=2)
-        return np.sqrt(np.mean(sds))
+    def pairwise_rmsd(traj):
+        sds = jnp.sum(jnp.diff(traj, axis=0) ** 2, axis=(1, 2))
+        return jnp.sqrt(jnp.mean(sds))
 
     # (states, frames)
     trajs_by_state = np.array(
         [[np.array(frame)[atom_idxs] for frame in state_traj.frames] for state_traj in result.trajectories]
     )
 
-    assert all(
-        pairwise_rmsd(replica_traj) < pairwise_rmsd(state_traj)
-        for replica_traj, state_traj in zip(trajs_by_replica, trajs_by_state)
-    )
+    replica_traj_rmsds = jax.vmap(pairwise_rmsd)(trajs_by_replica)
+    state_traj_rmsds = jax.vmap(pairwise_rmsd)(trajs_by_state)
+
+    # should have rmsd(replica trajectory) < rmsd(state trajectory) for all pairs (replica, state)
+    assert np.all(replica_traj_rmsds[:, None] < state_traj_rmsds[None, :])
 
     # Check that we can extract ligand trajectories by replica
     ligand_trajs_by_replica = result.extract_ligand_trajectories_by_replica()
