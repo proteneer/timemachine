@@ -53,14 +53,18 @@ def get_hif2a_single_topology_leg(host_name: str | None):
 
 
 @pytest.fixture(
-    scope="module", params=[None, "solvent", pytest.param("complex", marks=pytest.mark.nightly(reason="slow"))]
+    scope="module",
+    params=[
+        None,
+        pytest.param("solvent", marks=pytest.mark.nightly(reason="slow")),
+        pytest.param("complex", marks=pytest.mark.nightly(reason="slow")),
+    ],
 )
 def hif2a_single_topology_leg(request):
     host_name = request.param
     return host_name, get_hif2a_single_topology_leg(request.param)
 
 
-@pytest.mark.nightly(reason="Slow")
 def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     host_name, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
     md_params = MDParams(
@@ -115,6 +119,15 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
 
     assert isinstance(result.hrex_diagnostics.relaxation_time, float)
     assert result.hrex_diagnostics.normalized_kl_divergence >= 0.0
+
+    assert len(result.hrex_diagnostics.replica_idx_by_state_by_iter) == md_params.n_frames
+    assert all(
+        len(replica_idx_by_state) == n_windows
+        for replica_idx_by_state in result.hrex_diagnostics.replica_idx_by_state_by_iter
+    )
+
+    # Initial permutation should be the identity
+    np.testing.assert_array_equal(result.hrex_diagnostics.replica_idx_by_state_by_iter[0], np.arange(n_windows))
 
     # Check plots were generated
     assert result.hrex_plots
