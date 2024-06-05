@@ -272,26 +272,23 @@ class HREXSimulationResult(SimulationResult):
     def extract_trajectories_by_replica(self, atom_idxs: NDArray) -> NDArray:
         """Return an array of shape (n_replicas, n_frames, len(atom_idxs), 3) of trajectories for each replica"""
 
-        def extract_frame(frames: StoredArrays, idx: int) -> NDArray:
-            return np.array(frames[idx])[atom_idxs]
-
-        def extract_frames_by_replica(iteration, replica_idx_by_state):
-            state_idx_by_replica = np.argsort(replica_idx_by_state)
-            return [extract_frame(self.trajectories[state_idx].frames, iteration) for state_idx in state_idx_by_replica]
-
-        # (n_frames, n_replicas, n_atoms, 3)
-        frames_by_replica_by_iteration = np.array(
+        # (states, frames, atoms, 3)
+        trajs_by_state = np.array(
             [
-                extract_frames_by_replica(iteration, replica_idx_by_state)
-                for iteration, replica_idx_by_state in enumerate(self.hrex_diagnostics.replica_idx_by_state_by_iter)
+                np.concatenate([np.array(chunk)[:, atom_idxs] for chunk in state_traj.frames._chunks()], axis=0)
+                for state_traj in self.trajectories
             ]
         )
 
-        replica_trajectories = frames_by_replica_by_iteration.swapaxes(0, 1)  # (n_replicas, n_frames, n_atoms, 3)
+        replica_idx_by_iter_by_state = np.asarray(self.hrex_diagnostics.replica_idx_by_state_by_iter).T
+        state_idx_by_iter_by_replica = np.argsort(replica_idx_by_iter_by_state, axis=0)
 
-        return replica_trajectories
+        # (replicas, frames, atoms, 3)
+        trajs_by_replica = np.take_along_axis(trajs_by_state, state_idx_by_iter_by_replica[:, :, None, None], axis=0)
 
-    def extract_ligand_trajectories_by_replica(self) -> NDArray:
+        return trajs_by_replica
+
+    def extract_ligand_trajectories_by_replica(self):
         """Return an array of shape (n_replicas, n_frames, n_ligand_atoms, 3) of ligand trajectories for each replica"""
         ligand_idxs = self.final_result.initial_states[0].ligand_idxs
         return self.extract_trajectories_by_replica(ligand_idxs)
