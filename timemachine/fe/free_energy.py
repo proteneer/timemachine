@@ -300,6 +300,7 @@ class HREXSimulationResult(SimulationResult):
     def extract_ligand_trajectories_by_replica(self):
         """Returns an array of shape (n_replicas, n_frames, n_ligand_atoms, 3) of ligand trajectories for each replica"""
         ligand_idxs = self.final_result.initial_states[0].ligand_idxs
+        assert all(np.all(s.ligand_idxs == ligand_idxs) for s in self.final_result.initial_states)
         return self.extract_trajectories_by_replica(ligand_idxs)
 
 
