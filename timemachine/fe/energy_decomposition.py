@@ -50,10 +50,7 @@ def get_batch_u_fns(
 
         def batch_u_fn(xs: NDArray | StoredArrays, boxes, pot_impl, pot_params):
             # If the coordinates are already an in-memory numpy array, don't create a copy
-            if isinstance(xs, StoredArrays):
-                coords = np.array(xs)
-            else:
-                coords = xs
+            coords = np.asarray(xs)
             _, _, Us = pot_impl.execute_batch(
                 coords,
                 pot_params,
