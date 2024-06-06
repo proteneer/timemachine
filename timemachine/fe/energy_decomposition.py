@@ -6,7 +6,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
-from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.lib.custom_ops import Potential
 from timemachine.potentials.types import Params
 
@@ -48,7 +47,7 @@ def get_batch_u_fns(
     batch_u_fns: List[Batch_u_fn] = []
     for p, pot in zip(params, pots):
 
-        def batch_u_fn(xs: NDArray | StoredArrays, boxes, pot_impl, pot_params):
+        def batch_u_fn(xs: Frames, boxes: Boxes, pot_impl, pot_params) -> ReducedEnergies:
             # If the coordinates are already an in-memory numpy array, don't create a copy
             coords = np.asarray(xs)
             _, _, Us = pot_impl.execute_batch(
