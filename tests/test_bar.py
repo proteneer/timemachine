@@ -84,8 +84,14 @@ def test_bootstrap_bar(sigma):
 
     # estimate 3 times
     df_ref, df_err_ref = df_and_err_from_u_kln(u_kln)
-    df_0, bootstrap_samples = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
+    df_0, ddf_0, bootstrap_samples = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
     df_1, bootstrap_sigma = bar_with_bootstrapped_uncertainty(u_kln)
+
+    # Full errors should match exactly
+    assert df_err_ref == ddf_0
+
+    # The bootstrapped error should be as large or larger than the full error
+    assert bootstrap_sigma >= df_err_ref
 
     # assert estimates identical, uncertainties comparable
     print(f"bootstrap uncertainty = {bootstrap_sigma}, pymbar.MBAR uncertainty = {df_err_ref}")

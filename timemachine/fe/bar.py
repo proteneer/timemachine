@@ -151,7 +151,7 @@ def df_from_u_kln(
 
 def bootstrap_bar(
     u_kln: NDArray, n_bootstrap: int = 100, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS
-) -> Tuple[float, NDArray]:
+) -> Tuple[float, float, NDArray]:
     """Given a 2-state u_kln matrix, subsample u_kln with replacement and re-run df_from_u_kln many times
 
     Parameters
@@ -166,8 +166,12 @@ def bootstrap_bar(
     Returns
     -------
     best_estimate : float
-        BAR(w_F, w_R, computeUncertainty=False)
-    bootstrap_samples: array
+        BAR(w_F, w_R)
+
+    best_estimate_err : float
+        Full BAR(w_F, w_R) error estimate
+
+    bootstrap_samples : array
         shape (n_bootstrap,)
 
     Notes
@@ -178,7 +182,9 @@ def bootstrap_bar(
     u_kn, N_k = ukln_to_ukn(u_kln)
     mbar = pymbar.MBAR(u_kn, N_k, maximum_iterations=maximum_iterations)
 
-    full_bar_result = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0][0, 1]
+    df, ddf = mbar.getFreeEnergyDifferences()
+    full_bar_result = df[0, 1]
+    full_bar_err = ddf[0, 1]
 
     _, _, n = u_kln.shape
 
@@ -196,7 +202,7 @@ def bootstrap_bar(
         )
         bootstrap_samples.append(bar_result)
 
-    return full_bar_result, np.array(bootstrap_samples)
+    return full_bar_result, full_bar_err, np.array(bootstrap_samples)
 
 
 def bar_with_bootstrapped_uncertainty(
@@ -204,7 +210,7 @@ def bar_with_bootstrapped_uncertainty(
 ) -> Tuple[float, float]:
     """Given 2-state u_kln, returns free energy difference and uncertainty computed by bootstrapping."""
 
-    df, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap, maximum_iterations=maximum_iterations)
+    df, ddf, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap, maximum_iterations=maximum_iterations)
 
     # warn if bootstrap distribution deviates significantly from normality
     normaltest_result = normaltest(bootstrap_dfs)
@@ -212,8 +218,8 @@ def bar_with_bootstrapped_uncertainty(
     if normaltest_result.pvalue < pvalue_threshold:
         logger.warning(f"bootstrapped errors non-normal: {normaltest_result}")
 
-    # regardless, summarize as if normal
-    ddf = np.std(bootstrap_dfs)
+    # Take the max of the full error estimate and the bootstrapped error. Summarize as if normal regardless
+    ddf = max(ddf, np.std(bootstrap_dfs))
     return df, ddf
 
 
