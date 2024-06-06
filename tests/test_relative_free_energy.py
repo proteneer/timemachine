@@ -9,6 +9,7 @@ import pytest
 from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
+    HREXSimulationResult,
     MDParams,
     PairBarResult,
     SimulationResult,
@@ -59,7 +60,7 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estim
     np.testing.assert_equal(solvent_res.boxes, all_boxes)
 
 
-def run_triple(mol_a, mol_b, core, forcefield, md_params, protein_path, estimate_relative_free_energy_fn):
+def run_triple(mol_a, mol_b, core, forcefield, md_params: MDParams, protein_path, estimate_relative_free_energy_fn):
     lambda_interval = [0.01, 0.03]
     n_windows = 3
 
@@ -76,6 +77,16 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params, protein_path, estimate
         assert len(sim_res.boxes[0]) == md_params.n_frames
         assert len(sim_res.boxes[-1]) == md_params.n_frames
         assert sim_res.md_params == md_params
+
+        if isinstance(sim_res, HREXSimulationResult):
+            assert md_params.hrex_params
+            n_hrex_iters = md_params.n_frames // md_params.hrex_params.n_frames_per_iter
+
+            assert len(sim_res.hrex_diagnostics.fraction_accepted_by_pair_by_iter) == n_hrex_iters
+            assert all(len(fs) == n_windows - 1 for fs in sim_res.hrex_diagnostics.fraction_accepted_by_pair_by_iter)
+
+            assert len(sim_res.hrex_diagnostics.replica_idx_by_state_by_iter) == n_hrex_iters
+            assert all(len(fs) == n_windows for fs in sim_res.hrex_diagnostics.replica_idx_by_state_by_iter)
 
         def check_pair_bar_result(res: PairBarResult):
             n_pairs = len(res.initial_states) - 1
