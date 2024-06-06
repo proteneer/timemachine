@@ -169,7 +169,7 @@ def bootstrap_bar(
         BAR(w_F, w_R)
 
     best_estimate_err : float
-        Full BAR(w_F, w_R) error estimate
+        BAR(w_F, w_R) error estimate, using all samples
 
     bootstrap_samples : array
         shape (n_bootstrap,)
@@ -218,7 +218,7 @@ def bar_with_bootstrapped_uncertainty(
     if normaltest_result.pvalue < pvalue_threshold:
         logger.warning(f"bootstrapped errors non-normal: {normaltest_result}")
 
-    # Take the max of the full error estimate and the bootstrapped error. Summarize as if normal regardless
+    # Take the max of the BAR error estimate using all samples and the bootstrapped error. Summarize as if normal regardless
     ddf = max(ddf, np.std(bootstrap_dfs))
     return df, ddf
 
