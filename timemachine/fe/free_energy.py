@@ -254,8 +254,6 @@ class SimulationResult:
     trajectories: List[Trajectory]
     md_params: MDParams
     intermediate_results: List[PairBarResult]
-    hrex_diagnostics: Optional[HREXDiagnostics] = None
-    hrex_plots: Optional[HREXPlots] = None
 
     @property
     def frames(self) -> List[StoredArrays]:
@@ -264,6 +262,46 @@ class SimulationResult:
     @property
     def boxes(self) -> List[NDArray]:
         return [np.array(traj.boxes) for traj in self.trajectories]
+
+
+@dataclass
+class HREXSimulationResult(SimulationResult):
+    hrex_diagnostics: HREXDiagnostics
+    hrex_plots: HREXPlots
+
+    def extract_trajectories_by_replica(self, atom_idxs: NDArray) -> NDArray:
+        """Returns an array of shape (n_replicas, n_frames, len(atom_idxs), 3) of trajectories for each replica
+
+        Note: This consumes O(n_frames * len(atom_idxs)) memory, and thus may OOM for large systems if len(atom_idxs) is
+        a significant fraction of the total number of atoms.
+
+        Parameters
+        ----------
+        atom_idxs: NDArray
+            Indices of atoms to extract
+        """
+
+        # (states, frames, atoms, 3)
+        trajs_by_state = np.array(
+            [
+                np.concatenate([np.array(chunk)[:, atom_idxs] for chunk in state_traj.frames._chunks()], axis=0)
+                for state_traj in self.trajectories
+            ]
+        )
+
+        replica_idx_by_iter_by_state = np.asarray(self.hrex_diagnostics.replica_idx_by_state_by_iter).T
+        state_idx_by_iter_by_replica = np.argsort(replica_idx_by_iter_by_state, axis=0)
+
+        # (replicas, frames, atoms, 3)
+        trajs_by_replica = np.take_along_axis(trajs_by_state, state_idx_by_iter_by_replica[:, :, None, None], axis=0)
+
+        return trajs_by_replica
+
+    def extract_ligand_trajectories_by_replica(self):
+        """Returns an array of shape (n_replicas, n_frames, n_ligand_atoms, 3) of ligand trajectories for each replica"""
+        ligand_idxs = self.final_result.initial_states[0].ligand_idxs
+        assert all(np.all(s.ligand_idxs == ligand_idxs) for s in self.final_result.initial_states)
+        return self.extract_trajectories_by_replica(ligand_idxs)
 
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:

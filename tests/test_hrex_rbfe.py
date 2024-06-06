@@ -3,6 +3,8 @@ from importlib import resources
 from typing import Optional
 from unittest.mock import patch
 
+import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -12,8 +14,8 @@ from scipy import stats
 from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
+    HREXSimulationResult,
     MDParams,
-    SimulationResult,
     WaterSamplingParams,
     sample_with_context,
 )
@@ -65,13 +67,14 @@ def hif2a_single_topology_leg(request):
     return host_name, get_hif2a_single_topology_leg(request.param)
 
 
-def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
+@pytest.mark.parametrize("seed", [2024])
+def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
     host_name, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
     md_params = MDParams(
         n_frames=200,
         n_eq_steps=10_000,
         steps_per_frame=400,
-        seed=2024,
+        seed=seed,
         hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1),
         water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000) if host_name == "complex" else None,
     )
@@ -105,8 +108,6 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     if DEBUG:
         plot_hrex_rbfe_hif2a(result)
 
-    assert result.hrex_diagnostics
-
     assert result.hrex_diagnostics.cumulative_swap_acceptance_rates.shape[1] == n_windows - 1
 
     # Swap acceptance rates for all neighboring pairs should be >~ 20%
@@ -129,6 +130,35 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     # Initial permutation should be the identity
     np.testing.assert_array_equal(result.hrex_diagnostics.replica_idx_by_state_by_iter[0], np.arange(n_windows))
 
+    # Check that we can extract replica trajectories
+    n_atoms = result.final_result.initial_states[0].x0.shape[0]
+    rng = np.random.default_rng(seed)
+    n_atoms_subset = rng.choice(n_atoms) + 1  # in [1, n_atoms]
+    atom_idxs = rng.choice(n_atoms, n_atoms_subset, replace=False)
+    trajs_by_replica = result.extract_trajectories_by_replica(atom_idxs)
+    assert trajs_by_replica.shape == (n_windows, md_params.n_frames, n_atoms_subset, 3)
+
+    # Check that the frame-to-frame rmsd is lower for replica trajectories versus state trajectories
+    def time_lagged_rmsd(traj):
+        sds = jnp.sum(jnp.diff(traj, axis=0) ** 2, axis=(1, 2))
+        return jnp.sqrt(jnp.mean(sds))
+
+    # (states, frames)
+    trajs_by_state = np.array(
+        [[np.array(frame)[atom_idxs] for frame in state_traj.frames] for state_traj in result.trajectories]
+    )
+
+    replica_traj_rmsds = jax.vmap(time_lagged_rmsd)(trajs_by_replica)
+    state_traj_rmsds = jax.vmap(time_lagged_rmsd)(trajs_by_state)
+
+    # should have rmsd(replica trajectory) < rmsd(state trajectory) for all pairs (replica, state)
+    assert np.max(replica_traj_rmsds) < np.min(state_traj_rmsds)
+
+    # Check that we can extract ligand trajectories by replica
+    ligand_trajs_by_replica = result.extract_ligand_trajectories_by_replica()
+    n_ligand_atoms = len(result.final_result.initial_states[0].ligand_idxs)
+    assert ligand_trajs_by_replica.shape == (n_windows, md_params.n_frames, n_ligand_atoms, 3)
+
     # Check plots were generated
     assert result.hrex_plots
     assert result.hrex_plots.transition_matrix_png
@@ -136,22 +166,22 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
     assert result.hrex_plots.replica_state_distribution_heatmap_png
 
 
-def plot_hrex_rbfe_hif2a(result: SimulationResult):
-    assert result.hrex_diagnostics
+def plot_hrex_rbfe_hif2a(result: HREXSimulationResult):
     plot_hrex_swap_acceptance_rates_convergence(result.hrex_diagnostics.cumulative_swap_acceptance_rates)
     plot_hrex_transition_matrix(result.hrex_diagnostics.transition_matrix)
     plot_hrex_replica_state_distribution_heatmap(result.hrex_diagnostics.cumulative_replica_state_counts)
     plt.show()
 
 
-def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg):
+@pytest.mark.parametrize("seed", [2023])
+def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg, seed):
     _, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
 
     md_params = MDParams(
         n_frames=10,
         n_eq_steps=10,
         steps_per_frame=400,
-        seed=2023,
+        seed=seed,
         hrex_params=HREXParams(n_frames_bisection=1, n_frames_per_iter=1),
     )
 
@@ -166,9 +196,9 @@ def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg):
         n_windows=3,
     )
 
-    res1 = run(2023)
-    res2 = run(2023)
-    res3 = run(2024)
+    res1 = run(seed)
+    res2 = run(seed)
+    res3 = run(seed + 1)
 
     np.testing.assert_equal(res1.frames, res2.frames)
     np.testing.assert_equal(res1.boxes, res2.boxes)
