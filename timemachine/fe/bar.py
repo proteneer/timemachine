@@ -239,6 +239,9 @@ def bar_with_pessimistic_uncertainty(
 
     # Take the max of the BAR error estimate using all samples and the bootstrapped error. Summarize as if normal regardless
     # Use np.maximum to always return the NaN
+    if not np.isfinite(ddf):
+        logger.warning(f"Bar estimate is not finite, setting to zero: {ddf}")
+        ddf = np.nan_to_num(ddf, nan=0.0, posinf=0.0, neginf=0.0)
     ddf = np.maximum(ddf, np.std(bootstrap_dfs))
     return df, ddf
 

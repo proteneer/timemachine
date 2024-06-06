@@ -245,4 +245,4 @@ def test_nan_bar_error(mock_energy_diff):
     mock_energy_diff.return_value = (df, df_err)
     dummy_ukln = np.ones(shape=(2, 2, 100))
     _, boot_df_err = bar_with_pessimistic_uncertainty(dummy_ukln)
-    assert np.isnan(boot_df_err)
+    assert boot_df_err == 0.0
