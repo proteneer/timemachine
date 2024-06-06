@@ -47,8 +47,9 @@ def get_batch_u_fns(
     batch_u_fns: List[Batch_u_fn] = []
     for p, pot in zip(params, pots):
 
-        def batch_u_fn(xs, boxes, pot_impl, pot_params):
-            coords = np.array([x for x in xs])
+        def batch_u_fn(xs: Frames, boxes: Boxes, pot_impl, pot_params) -> ReducedEnergies:
+            # If the coordinates are already an in-memory numpy array, don't create a copy
+            coords = np.asarray(xs)
             _, _, Us = pot_impl.execute_batch(
                 coords,
                 pot_params,
@@ -93,11 +94,13 @@ def compute_energy_decomposed_u_kln(states: List[EnergyDecomposedState]) -> np.n
         assert len(state.batch_u_fns) == n_components
 
     u_kln_by_component = np.zeros((n_components, K, K, n_frames))
-    for comp in range(n_components):
+    for l in range(K):
+        # Load the frames into memory, then evaluate all of the components
+        # Done to avoid repeatedly reading from disk
+        xs, boxes = np.array(states[l].frames), states[l].boxes
         for k in range(K):
-            u_fxn = states[k].batch_u_fns[comp]
-            for l in range(K):
-                xs, boxes = states[l].frames, states[l].boxes
+            for comp in range(n_components):
+                u_fxn = states[k].batch_u_fns[comp]
                 u_kln_by_component[comp, k, l] = u_fxn(xs, boxes)
 
     return u_kln_by_component
