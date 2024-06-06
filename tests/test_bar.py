@@ -1,4 +1,5 @@
 from functools import partial
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
@@ -216,3 +217,15 @@ def test_compute_fwd_and_reverse_df_over_time(frames_per_step):
     # The values at the end should be nearly identical since they contain all the samples
     assert np.allclose(fwd[-1], rev[-1])
     assert np.allclose(fwd_err[-1], rev_err[-1])
+
+
+def test_bootstrap_bar_and_regular_bar_match():
+    """In cases where the u_kln has effectively no overlap, that bootstrapping returns 0.0 as the error
+    since the BAR estimate is always zero.
+    """
+    test_ukln = Path(__file__).parent / "data" / "zero_overlap_ukln.npz"
+    u_kln = np.load(open(test_ukln, "rb"))["u_kln"]
+    boot_df, boot_df_err = bar_with_bootstrapped_uncertainty(u_kln)
+    df, df_err = df_and_err_from_u_kln(u_kln)
+    assert boot_df == df
+    np.testing.assert_allclose(boot_df_err, df_err)
