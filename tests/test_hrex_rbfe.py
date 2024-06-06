@@ -67,13 +67,14 @@ def hif2a_single_topology_leg(request):
     return host_name, get_hif2a_single_topology_leg(request.param)
 
 
-def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
+@pytest.mark.parametrize("seed", [2024])
+def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
     host_name, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
     md_params = MDParams(
         n_frames=200,
         n_eq_steps=10_000,
         steps_per_frame=400,
-        seed=2024,
+        seed=seed,
         hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1),
         water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000) if host_name == "complex" else None,
     )
@@ -131,7 +132,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg):
 
     # Check that we can extract replica trajectories
     n_atoms = result.final_result.initial_states[0].x0.shape[0]
-    rng = np.random.default_rng(2024)
+    rng = np.random.default_rng(seed)
     n_atoms_subset = rng.choice(n_atoms) + 1  # in [1, n_atoms]
     atom_idxs = rng.choice(n_atoms, n_atoms_subset, replace=False)
     trajs_by_replica = result.extract_trajectories_by_replica(atom_idxs)
@@ -172,14 +173,15 @@ def plot_hrex_rbfe_hif2a(result: HREXSimulationResult):
     plt.show()
 
 
-def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg):
+@pytest.mark.parametrize("seed", [2023])
+def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg, seed):
     _, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
 
     md_params = MDParams(
         n_frames=10,
         n_eq_steps=10,
         steps_per_frame=400,
-        seed=2023,
+        seed=seed,
         hrex_params=HREXParams(n_frames_bisection=1, n_frames_per_iter=1),
     )
 
@@ -194,9 +196,9 @@ def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg):
         n_windows=3,
     )
 
-    res1 = run(2023)
-    res2 = run(2023)
-    res3 = run(2024)
+    res1 = run(seed)
+    res2 = run(seed)
+    res3 = run(seed + 1)
 
     np.testing.assert_equal(res1.frames, res2.frames)
     np.testing.assert_equal(res1.boxes, res2.boxes)
