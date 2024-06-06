@@ -205,10 +205,29 @@ def bootstrap_bar(
     return full_bar_result, full_bar_err, np.array(bootstrap_samples)
 
 
-def bar_with_bootstrapped_uncertainty(
+def bar_with_pessimistic_uncertainty(
     u_kln: NDArray, n_bootstrap=100, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS
 ) -> Tuple[float, float]:
-    """Given 2-state u_kln, returns free energy difference and uncertainty computed by bootstrapping."""
+    """Given 2-state u_kln, returns free energy difference and the uncertainty. The uncertainty can be produced either by
+    BAR using all samples or the bootstrapped error, whichever is greater.
+
+    Parameters
+    ----------
+    u_kln : array
+        2-state u_kln matrix
+    n_bootstrap : int
+        number of bootstrap samples
+    maximum_iterations : int
+        maximum number of solver iterations to use for each sample
+
+    Returns
+    -------
+    best_estimate : float
+        BAR(w_F, w_R)
+
+    uncertainty : float
+        The larger error either by bootstrapping or BAR using all samples
+    """
 
     df, ddf, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap, maximum_iterations=maximum_iterations)
 

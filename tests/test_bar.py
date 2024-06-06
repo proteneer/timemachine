@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from pymbar.testsystems import ExponentialTestCase
 
 from timemachine.fe.bar import (
-    bar_with_bootstrapped_uncertainty,
+    bar_with_pessimistic_uncertainty,
     bootstrap_bar,
     compute_fwd_and_reverse_df_over_time,
     df_and_err_from_u_kln,
@@ -85,7 +85,7 @@ def test_bootstrap_bar(sigma):
     # estimate 3 times
     df_ref, df_err_ref = df_and_err_from_u_kln(u_kln)
     df_0, ddf_0, bootstrap_samples = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
-    df_1, bootstrap_sigma = bar_with_bootstrapped_uncertainty(u_kln)
+    df_1, bootstrap_sigma = bar_with_pessimistic_uncertainty(u_kln)
 
     # Full errors should match exactly
     assert df_err_ref == ddf_0
@@ -231,7 +231,7 @@ def test_bootstrap_bar_and_regular_bar_match():
     """
     test_ukln = Path(__file__).parent / "data" / "zero_overlap_ukln.npz"
     u_kln = np.load(open(test_ukln, "rb"))["u_kln"]
-    boot_df, boot_df_err = bar_with_bootstrapped_uncertainty(u_kln)
+    boot_df, boot_df_err = bar_with_pessimistic_uncertainty(u_kln)
     df, df_err = df_and_err_from_u_kln(u_kln)
     assert boot_df == df
     np.testing.assert_allclose(boot_df_err, df_err)
