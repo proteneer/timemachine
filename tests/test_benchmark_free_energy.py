@@ -1,3 +1,4 @@
+import json
 import time
 from argparse import ArgumentParser
 from collections import defaultdict
@@ -181,6 +182,17 @@ if __name__ == "__main__":
                 (single_topology, host, host_name, args.n_frames, windows, initial_states), mode, args.water_sampling
             )
             timings[mode].append(ns_per_day)
+    with open(f"{args.leg}_{args.n_frames}_benchmarks.json", "w") as ofs:
+        json.dump(
+            {
+                "n_windows": args.n_windows,
+                "n_frames": args.n_frames,
+                "water_sampling": args.water_sampling,
+                "leg": args.leg,
+                "timings": timings,
+            },
+            ofs,
+        )
     fig, axes = plt.subplots(ncols=len(args.modes), sharey=True)
     if len(args.modes) == 1:
         axes = [axes]
