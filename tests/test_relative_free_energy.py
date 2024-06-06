@@ -83,10 +83,10 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params: MDParams, protein_path
             n_hrex_iters = md_params.n_frames // md_params.hrex_params.n_frames_per_iter
 
             assert len(sim_res.hrex_diagnostics.fraction_accepted_by_pair_by_iter) == n_hrex_iters
-            assert all(len(xs) == n_windows - 1 for xs in sim_res.hrex_diagnostics.fraction_accepted_by_pair_by_iter)
+            assert all(len(fs) == n_windows - 1 for fs in sim_res.hrex_diagnostics.fraction_accepted_by_pair_by_iter)
 
             assert len(sim_res.hrex_diagnostics.replica_idx_by_state_by_iter) == n_hrex_iters
-            assert all(len(xs) == n_windows for xs in sim_res.hrex_diagnostics.replica_idx_by_state_by_iter)
+            assert all(len(fs) == n_windows for fs in sim_res.hrex_diagnostics.replica_idx_by_state_by_iter)
 
         def check_pair_bar_result(res: PairBarResult):
             n_pairs = len(res.initial_states) - 1
