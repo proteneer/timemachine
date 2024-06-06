@@ -238,7 +238,8 @@ def bar_with_pessimistic_uncertainty(
         logger.warning(f"bootstrapped errors non-normal: {normaltest_result}")
 
     # Take the max of the BAR error estimate using all samples and the bootstrapped error. Summarize as if normal regardless
-    ddf = max(ddf, np.std(bootstrap_dfs))
+    # Use np.maximum to always return the NaN
+    ddf = np.maximum(ddf, np.std(bootstrap_dfs))
     return df, ddf
 
 

@@ -1,6 +1,7 @@
 from functools import partial
 from pathlib import Path
 from typing import Tuple
+from unittest.mock import patch
 
 import numpy as np
 import pymbar
@@ -235,3 +236,13 @@ def test_bootstrap_bar_and_regular_bar_match():
     df, df_err = df_and_err_from_u_kln(u_kln)
     assert boot_df == df
     assert boot_df_err == df_err
+
+
+@patch("timemachine.fe.bar.pymbar.MBAR.getFreeEnergyDifferences")
+def test_nan_bar_error(mock_energy_diff):
+    df = np.zeros(shape=(1, 2))
+    df_err = np.ones(shape=(1, 2)) * np.nan
+    mock_energy_diff.return_value = (df, df_err)
+    dummy_ukln = np.ones(shape=(2, 2, 100))
+    _, boot_df_err = bar_with_pessimistic_uncertainty(dummy_ukln)
+    assert np.isnan(boot_df_err)
