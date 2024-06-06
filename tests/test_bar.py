@@ -234,4 +234,4 @@ def test_bootstrap_bar_and_regular_bar_match():
     boot_df, boot_df_err = bar_with_pessimistic_uncertainty(u_kln)
     df, df_err = df_and_err_from_u_kln(u_kln)
     assert boot_df == df
-    np.testing.assert_allclose(boot_df_err, df_err)
+    assert boot_df_err == df_err
