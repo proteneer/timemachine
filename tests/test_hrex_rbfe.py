@@ -75,7 +75,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
         n_eq_steps=10_000,
         steps_per_frame=400,
         seed=seed,
-        hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1),
+        hrex_params=HREXParams(n_frames_bisection=100),
         water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000) if host_name == "complex" else None,
     )
     n_windows = 5
@@ -182,7 +182,7 @@ def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg, seed):
         n_eq_steps=10,
         steps_per_frame=400,
         seed=seed,
-        hrex_params=HREXParams(n_frames_bisection=1, n_frames_per_iter=1),
+        hrex_params=HREXParams(n_frames_bisection=1),
     )
 
     run = lambda seed: estimate_relative_free_energy_bisection_hrex(

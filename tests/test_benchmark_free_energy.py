@@ -103,7 +103,6 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
             run_sims_hrex,
             initial_states,
             replace(md_params, hrex_params=DEFAULT_HREX_PARAMS.hrex_params),
-            n_frames_per_iter=1,
             print_diagnostics_interval=None,
         )
     elif mode == "sequential":
