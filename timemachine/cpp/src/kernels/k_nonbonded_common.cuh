@@ -19,19 +19,21 @@ double __device__ __forceinline__ switch_fn(double dij) {
     if (dij >= cutoff) {
         return 0.0;
     }
-    constexpr double inv_cutoff = 1 / cutoff;
-    constexpr double pi = static_cast<double>(PI);
+    return 1.0;
 
-    // (dij/cutoff)^8
-    double dij_k = dij * inv_cutoff;
-    double dij_k2 = dij_k * dij_k;
-    double dij_k4 = dij_k2 * dij_k2;
-    double dij_k8 = dij_k4 * dij_k4;
+    // constexpr double inv_cutoff = 1 / cutoff;
+    // constexpr double pi = static_cast<double>(PI);
 
-    // cos(0.5*pi*(dij/cutoff)^8)^3
-    double cos_arg = cos(0.5 * pi * dij_k8);
-    double cos_arg3 = cos_arg * cos_arg * cos_arg;
-    return cos_arg3;
+    // // (dij/cutoff)^8
+    // double dij_k = dij * inv_cutoff;
+    // double dij_k2 = dij_k * dij_k;
+    // double dij_k4 = dij_k2 * dij_k2;
+    // double dij_k8 = dij_k4 * dij_k4;
+
+    // // cos(0.5*pi*(dij/cutoff)^8)^3
+    // double cos_arg = cos(0.5 * pi * dij_k8);
+    // double cos_arg3 = cos_arg * cos_arg * cos_arg;
+    // return cos_arg3;
 }
 
 double __device__ __forceinline__ d_switch_fn_dr(double dij) {
@@ -42,31 +44,32 @@ double __device__ __forceinline__ d_switch_fn_dr(double dij) {
     if (dij >= cutoff) {
         return 0.0;
     }
+    return 0.0;
 
-    // cutoff^-8
-    constexpr double inv_cutoff = 1.0 / cutoff;
-    constexpr double k2 = inv_cutoff * inv_cutoff;
-    constexpr double k4 = k2 * k2;
-    constexpr double k8 = k4 * k4;
+    // // cutoff^-8
+    // constexpr double inv_cutoff = 1.0 / cutoff;
+    // constexpr double k2 = inv_cutoff * inv_cutoff;
+    // constexpr double k4 = k2 * k2;
+    // constexpr double k8 = k4 * k4;
 
-    // dij^7 and dij^8
-    double dij2 = dij * dij;
-    double dij4 = dij2 * dij2;
-    double dij7 = dij4 * dij2 * dij;
-    double dij8 = dij4 * dij4;
+    // // dij^7 and dij^8
+    // double dij2 = dij * dij;
+    // double dij4 = dij2 * dij2;
+    // double dij7 = dij4 * dij2 * dij;
+    // double dij8 = dij4 * dij4;
 
-    // arg = 0.5 * pi * (dij / cutoff)^8
-    double dij_k8 = dij8 * k8;
-    double arg = 0.5 * pi * dij_k8;
+    // // arg = 0.5 * pi * (dij / cutoff)^8
+    // double dij_k8 = dij8 * k8;
+    // double arg = 0.5 * pi * dij_k8;
 
-    double sin_arg;
-    double cos_arg;
-    sincos(arg, &sin_arg, &cos_arg);
+    // double sin_arg;
+    // double cos_arg;
+    // sincos(arg, &sin_arg, &cos_arg);
 
-    double cos_arg2 = cos_arg * cos_arg;
-    constexpr double minus_12_pi_k8 = -12 * pi * k8;
+    // double cos_arg2 = cos_arg * cos_arg;
+    // constexpr double minus_12_pi_k8 = -12 * pi * k8;
 
-    return dij7 * sin_arg * cos_arg2 * minus_12_pi_k8;
+    // return dij7 * sin_arg * cos_arg2 * minus_12_pi_k8;
 }
 
 double __device__ __forceinline__ d_erfc_beta_r_dr(double beta, double dij) {
