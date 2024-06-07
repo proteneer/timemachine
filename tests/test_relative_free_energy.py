@@ -80,12 +80,11 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params: MDParams, protein_path
 
         if isinstance(sim_res, HREXSimulationResult):
             assert md_params.hrex_params
-            n_hrex_iters = md_params.n_frames // md_params.hrex_params.n_frames_per_iter
 
-            assert len(sim_res.hrex_diagnostics.fraction_accepted_by_pair_by_iter) == n_hrex_iters
+            assert len(sim_res.hrex_diagnostics.fraction_accepted_by_pair_by_iter) == md_params.n_frames
             assert all(len(fs) == n_windows - 1 for fs in sim_res.hrex_diagnostics.fraction_accepted_by_pair_by_iter)
 
-            assert len(sim_res.hrex_diagnostics.replica_idx_by_state_by_iter) == n_hrex_iters
+            assert len(sim_res.hrex_diagnostics.replica_idx_by_state_by_iter) == md_params.n_frames
             assert all(len(fs) == n_windows for fs in sim_res.hrex_diagnostics.replica_idx_by_state_by_iter)
 
         def check_pair_bar_result(res: PairBarResult):
@@ -180,7 +179,7 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
         n_eq_steps=1000,
         steps_per_frame=100,
         seed=2023,
-        hrex_params=HREXParams(n_frames_per_iter=1),
+        hrex_params=HREXParams(),
     )
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:

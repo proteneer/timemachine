@@ -51,7 +51,7 @@ MAX_SEED_VALUE = 10000
 
 DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023, hrex_params=None)
 
-DEFAULT_HREX_PARAMS = replace(DEFAULT_MD_PARAMS, hrex_params=HREXParams(n_frames_bisection=100, n_frames_per_iter=1))
+DEFAULT_HREX_PARAMS = replace(DEFAULT_MD_PARAMS, hrex_params=HREXParams(n_frames_bisection=100))
 
 
 @dataclass
@@ -667,7 +667,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
             initial_states_hrex,
             replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
-            n_frames_per_iter=md_params.hrex_params.n_frames_per_iter,
         )
 
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
