@@ -146,7 +146,7 @@ def test_hrex():
     lambda_max = 0.4
     n_windows = 48
 
-    hrex_params = HREXParams(n_frames_bisection=min(1000, args.n_frames), n_frames_per_iter=1)
+    hrex_params = HREXParams(n_frames_bisection=min(1000, args.n_frames))
     mdp = MDParams(n_frames=args.n_frames, n_eq_steps=10_000, steps_per_frame=400, seed=2023, hrex_params=hrex_params)
     print("hrex_params:", hrex_params)
     sim_res = estimate_relative_free_energy_hrex_bb(

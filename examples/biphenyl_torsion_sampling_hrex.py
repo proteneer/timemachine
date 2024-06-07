@@ -146,7 +146,7 @@ def sample_biphenyl_hrex(
         n_eq_steps=100_000 if solvent else 10_000,
         steps_per_frame=400,
         seed=seed,
-        hrex_params=HREXParams(n_frames_bisection=n_frames_bisection, n_frames_per_iter=1),
+        hrex_params=HREXParams(n_frames_bisection=n_frames_bisection),
     )
     assert md_params.hrex_params
 
@@ -228,7 +228,6 @@ def sample_biphenyl_hrex(
     _, trajectories_by_state_hrex, diagnostics = run_sims_hrex(
         initial_states_hrex,
         replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
-        n_frames_per_iter=md_params.hrex_params.n_frames_per_iter,
     )
 
     def get_torsion_angle_traj(frames: NDArray) -> NDArray:

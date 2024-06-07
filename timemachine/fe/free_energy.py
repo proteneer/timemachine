@@ -60,7 +60,7 @@ class HREXParams:
         Number of frames to sample using MD during the initial bisection phase used to determine lambda spacing
 
     n_frames_per_iter: int
-        Number of frames to sample using MD per HREX iteration.
+        DEPRECATED, must be set to 1. Number of frames to sample using MD per HREX iteration.
 
     max_delta_states: int or None
         If given, number of neighbor states on either side of a given replica's initial state for which to compute
@@ -74,7 +74,7 @@ class HREXParams:
 
     def __post_init__(self):
         assert self.n_frames_bisection > 0
-        assert self.n_frames_per_iter > 0
+        assert self.n_frames_per_iter == 1, "n_frames_per_iter must be 1"
         assert self.max_delta_states is None or self.max_delta_states > 0
 
 
@@ -1001,7 +1001,6 @@ def compute_potential_matrix(
 def run_sims_hrex(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
-    n_frames_per_iter: int,
     n_swap_attempts_per_iter: Optional[int] = None,
     print_diagnostics_interval: Optional[int] = 10,
 ) -> Tuple[PairBarResult, List[Trajectory], HREXDiagnostics]:
@@ -1017,9 +1016,6 @@ def run_sims_hrex(
 
     md_params: MDParams
         MD parameters
-
-    n_frames_per_iter: int
-        Number of frames to sample using MD per iteration
 
     n_swap_attempts_per_iter: int or None, optional
         Number of nearest-neighbor swaps to attempt per iteration. Defaults to len(initial_states) ** 4.
@@ -1154,11 +1150,11 @@ def run_sims_hrex(
 
     if (
         md_params.water_sampling_params is not None
-        and md_params.steps_per_frame * n_frames_per_iter > md_params.water_sampling_params.interval
+        and md_params.steps_per_frame > md_params.water_sampling_params.interval
     ):
         warn("Not running any water sampling, too few steps of MD for the water sampling interval")
 
-    for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
+    for current_frame in range(md_params.n_frames):
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
             context.set_x_t(xvb.coords)
@@ -1168,7 +1164,7 @@ def run_sims_hrex(
             params = params_by_state[state_idx]
             bound_potentials[0].set_params(params)
 
-            current_step = (iteration - 1) * n_frames_per_iter * md_params.steps_per_frame
+            current_step = current_frame * md_params.steps_per_frame
             # Setup the MC movers of the Context
             for mover in context.get_movers():
                 if md_params.water_sampling_params is not None and isinstance(mover, WATER_SAMPLER_MOVERS):
@@ -1178,7 +1174,7 @@ def run_sims_hrex(
                 mover.set_step(current_step)
 
             md_params_replica = replace(
-                md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
+                md_params, n_frames=1, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
             )
 
             return sample_with_context(context, md_params_replica, temperature, ligand_idxs, max_buffer_frames=100)
@@ -1193,7 +1189,10 @@ def run_sims_hrex(
         replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
 
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
-            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter, md_params.seed + iteration
+            neighbor_pairs,
+            log_q_kl,
+            n_swap_attempts_per_iter,
+            md_params.seed + current_frame + 1,  # NOTE: "+ 1" is for bitwise compatibility with previous version
         )
 
         if len(initial_states) == 2:
@@ -1204,7 +1203,7 @@ def run_sims_hrex(
 
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
 
-        if print_diagnostics_interval and iteration % print_diagnostics_interval == 0:
+        if print_diagnostics_interval and (current_frame + 1) % print_diagnostics_interval == 0:
 
             def get_swap_acceptance_rates(fraction_accepted_by_pair):
                 return [
@@ -1221,7 +1220,7 @@ def run_sims_hrex(
             def format_rates(rs):
                 return " | ".join(format_rate(r) for r in rs)
 
-            print("Completed HREX iteration", iteration)
+            print("Frame ", current_frame)
             print("Acceptance rates (inst.)   :", format_rates(instantaneous_swap_acceptance_rates))
             print("Acceptance rates (average) :", format_rates(average_swap_acceptance_rates))
             print("Final replica permutation  :", hrex.replica_idx_by_state)
