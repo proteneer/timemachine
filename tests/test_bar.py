@@ -228,10 +228,16 @@ def test_compute_fwd_and_reverse_df_over_time(frames_per_step):
 
 def test_bootstrap_bar_and_regular_bar_match():
     """In cases where the u_kln has effectively no overlap, bootstrapping returns 0.0 as the error
-    since the BAR estimate is always zero. Checks that `bar_with_pessimistic_uncertainty` returns the (non-zero) error from the BAR estimate computed on all samples in these cases.
+    since the BAR estimate is always zero. Checks that `bar_with_pessimistic_uncertainty` returns the (non-zero) error
+    from the BAR estimate computed on all samples in these cases.
     """
     test_ukln = Path(__file__).parent / "data" / "zero_overlap_ukln.npz"
     u_kln = np.load(open(test_ukln, "rb"))["u_kln"]
+
+    # The overlap should be closer to zero
+    overlap = pair_overlap_from_ukln(u_kln)
+    np.testing.assert_allclose(overlap, 0.0, atol=1e-12)
+
     boot_df, boot_df_err = bar_with_pessimistic_uncertainty(u_kln)
     df, df_err = df_and_err_from_u_kln(u_kln)
     assert boot_df == df
