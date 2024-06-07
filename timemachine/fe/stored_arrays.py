@@ -90,7 +90,7 @@ class StoredArrays(Sequence[NDArray]):
         return Path(self._dir.name)
 
     def extend(self, xs: Collection[ArrayLike]):
-        np.save(self._get_chunk_path(len(self._chunk_sizes)), np.array(xs))
+        np.save(self._get_chunk_path(len(self._chunk_sizes)), np.asarray(xs))
         self._chunk_sizes.append(len(xs))
 
     @staticmethod
