@@ -540,9 +540,9 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
     return Context(initial_state.x0, initial_state.v0, initial_state.box0, intg_impl, bound_impls, movers=movers)
 
 
-def sample_with_context(
+def sample_with_context_iter(
     ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
-) -> Trajectory:
+) -> Tuple[NDArray, NDArray, NDArray]:
     # burn-in
     if md_params.n_eq_steps:
         # Set barostat interval to 15 for equilibration, then back to the original interval for production
@@ -603,17 +603,23 @@ def sample_with_context(
 
         return np.concatenate(coords), np.concatenate(boxes), final_velocities
 
-    all_coords: Union[NDArray, StoredArrays]
-
     steps_func = run_production_steps
     if md_params.local_steps > 0:
         steps_func = run_production_local_steps
 
+    for n_frames in batches(md_params.n_frames, max_buffer_frames):
+        yield steps_func(n_frames * md_params.steps_per_frame)
+
+
+def sample_with_context(
+    ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
+) -> Trajectory:
     all_coords = StoredArrays()
     all_boxes: List[NDArray] = []
     final_velocities: NDArray = None  # type: ignore # work around "possibly unbound" error
-    for n_frames in batches(md_params.n_frames, max_buffer_frames):
-        batch_coords, batch_boxes, final_velocities = steps_func(n_frames * md_params.steps_per_frame)
+    for batch_coords, batch_boxes, final_velocities in sample_with_context_iter(
+        ctxt, md_params, temperature, ligand_idxs, max_buffer_frames
+    ):
         all_coords.extend(batch_coords)
         all_boxes.extend(batch_boxes)
 
@@ -1180,11 +1186,12 @@ def run_sims_hrex(
             md_params_replica = replace(
                 md_params, n_frames=n_frames_iter, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
             )
+            assert md_params_replica.n_frames == 1
+            return list(sample_with_context_iter(context, md_params_replica, temperature, ligand_idxs, 1))
 
-            return sample_with_context(context, md_params_replica, temperature, ligand_idxs, max_buffer_frames=100)
-
-        def replica_from_samples(traj: Trajectory) -> CoordsVelBox:
-            return CoordsVelBox(traj.frames[-1], traj.final_velocities, traj.boxes[-1])
+        def replica_from_samples(traj: List[Tuple[NDArray, NDArray, NDArray]]) -> CoordsVelBox:
+            assert len(traj) == 1
+            return CoordsVelBox(traj[-1][0].squeeze(), traj[-1][2], traj[-1][1].squeeze())
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
         U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
@@ -1200,7 +1207,10 @@ def run_sims_hrex(
             fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
 
         for samples, samples_iter in zip(samples_by_state, samples_by_state_iter):
-            samples.extend(samples_iter)
+            for xs, boxes, velos in samples_iter:
+                samples.frames.extend(xs)
+                samples.boxes.extend(boxes)
+                samples.final_velocities = velos
 
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
 
