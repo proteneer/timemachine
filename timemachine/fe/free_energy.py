@@ -1184,7 +1184,10 @@ def run_sims_hrex(
         replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
 
         hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
-            neighbor_pairs, log_q_kl, n_swap_attempts_per_iter, md_params.seed + current_frame
+            neighbor_pairs,
+            log_q_kl,
+            n_swap_attempts_per_iter,
+            md_params.seed + current_frame + 1,  # NOTE: "+ 1" is for bitwise compatibility with previous version
         )
 
         if len(initial_states) == 2:
