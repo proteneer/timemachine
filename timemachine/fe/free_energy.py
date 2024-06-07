@@ -59,6 +59,9 @@ class HREXParams:
     n_frames_bisection: int
         Number of frames to sample using MD during the initial bisection phase used to determine lambda spacing
 
+    n_frames_per_iter: int
+        DEPRECATED, must be set to 1. Number of frames to sample using MD per HREX iteration.
+
     max_delta_states: int or None
         If given, number of neighbor states on either side of a given replica's initial state for which to compute
         potentials. This determines the maximum number of states that a replica can move from its initial state during
@@ -66,10 +69,12 @@ class HREXParams:
     """
 
     n_frames_bisection: int = 100
+    n_frames_per_iter: int = 1
     max_delta_states: Optional[int] = 4
 
     def __post_init__(self):
         assert self.n_frames_bisection > 0
+        assert self.n_frames_per_iter == 1, "n_frames_per_iter must be 1"
         assert self.max_delta_states is None or self.max_delta_states > 0
 
 
