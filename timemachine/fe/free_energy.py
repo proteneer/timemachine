@@ -1,6 +1,6 @@
 from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 from warnings import warn
 
 import jax
@@ -542,7 +542,7 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
 def sample_with_context_iter(
     ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
-) -> Tuple[NDArray, NDArray, NDArray]:
+) -> Iterator[Tuple[NDArray, NDArray, NDArray]]:
     # burn-in
     if md_params.n_eq_steps:
         # Set barostat interval to 15 for equilibration, then back to the original interval for production
@@ -1166,7 +1166,7 @@ def run_sims_hrex(
 
     for iteration, n_frames_iter in enumerate(batches(md_params.n_frames, n_frames_per_iter), 1):
 
-        def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
+        def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> List[Tuple[NDArray, NDArray, NDArray]]:
             context.set_x_t(xvb.coords)
             context.set_v_t(xvb.velocities)
             context.set_box(xvb.box)
