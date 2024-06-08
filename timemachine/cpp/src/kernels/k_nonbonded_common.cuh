@@ -110,38 +110,40 @@ float __device__ __forceinline__ switch_fn_and_deriv(float dij, float &dsdr) {
         dsdr = 0.0f;
         return 0.0f;
     }
+    dsdr = 0.0f;
+    return 1.0f;
 
-    // cutoff^-8
-    constexpr float k2 = inv_cutoff * inv_cutoff;
-    constexpr float k4 = k2 * k2;
-    constexpr float k8 = k4 * k4;
+    // // cutoff^-8
+    // constexpr float k2 = inv_cutoff * inv_cutoff;
+    // constexpr float k4 = k2 * k2;
+    // constexpr float k8 = k4 * k4;
 
-    // dij^7, dij^8
-    float dij2 = dij * dij;
-    float dij4 = dij2 * dij2;
-    float dij7 = dij4 * dij2 * dij;
-    float dij8 = dij4 * dij4;
+    // // dij^7, dij^8
+    // float dij2 = dij * dij;
+    // float dij4 = dij2 * dij2;
+    // float dij7 = dij4 * dij2 * dij;
+    // float dij8 = dij4 * dij4;
 
-    // arg = (dij/cutoff)^8 * pi/2
-    float dij_k8 = dij8 * k8;
-    float arg = pi_over_2 * dij_k8;
+    // // arg = (dij/cutoff)^8 * pi/2
+    // float dij_k8 = dij8 * k8;
+    // float arg = pi_over_2 * dij_k8;
 
-    // sin(arg), cos(arg)
-    float sin_arg;
-    float cos_arg;
-    __sincosf(arg, &sin_arg, &cos_arg);
+    // // sin(arg), cos(arg)
+    // float sin_arg;
+    // float cos_arg;
+    // __sincosf(arg, &sin_arg, &cos_arg);
 
-    // exponentiation
-    float cos_arg2 = cos_arg * cos_arg;
-    float cos_arg3 = cos_arg2 * cos_arg;
+    // // exponentiation
+    // float cos_arg2 = cos_arg * cos_arg;
+    // float cos_arg3 = cos_arg2 * cos_arg;
 
-    // write d switch_fn d r
-    constexpr float minus_12_pi_k8 = -12 * pi * k8;
-    dsdr = minus_12_pi_k8 * dij7 * sin_arg * cos_arg2;
+    // // write d switch_fn d r
+    // constexpr float minus_12_pi_k8 = -12 * pi * k8;
+    // dsdr = minus_12_pi_k8 * dij7 * sin_arg * cos_arg2;
 
-    // return switch_fn(dij)
-    float sr = cos_arg3;
-    return sr;
+    // // return switch_fn(dij)
+    // float sr = cos_arg3;
+    // return sr;
 }
 
 float __device__ __forceinline__ fast_erfc_and_deriv(float x, float &dedx) {
