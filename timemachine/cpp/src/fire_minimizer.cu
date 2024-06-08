@@ -51,10 +51,10 @@ void FireMinimizer<RealType>::step_fwd(
 
     const size_t tpb = DEFAULT_THREADS_PER_BLOCK;
 
-    k_fire_shift<RealType><<<thread_blocks_, tpb, 0, stream>>>(N_, d_dt_.data, d_x_t, d_v_t, d_du_dx_.data);
+    // Copy the d_du_dx values to old and set to zero
+    k_fire_shift<RealType>
+        <<<thread_blocks_, tpb, 0, stream>>>(N_, d_dt_.data, d_x_t, d_v_t, d_du_dx_.data, d_du_dx_old_.data);
     gpuErrchk(cudaPeekAtLastError());
-
-    gpuErrchk(cudaMemsetAsync(d_du_dx_.data, 0, d_du_dx_.size(), stream));
 
     runner_.execute_potentials(
         bps,
