@@ -226,7 +226,7 @@ def bar_with_pessimistic_uncertainty(
         BAR(w_F, w_R)
 
     uncertainty : float
-        The larger error either by bootstrapping or BAR using all samples
+        `max(error_estimates)` where `error_estimates = [bootstrapped_bar_stddev, two_state_mbar_uncertainty]`
     """
 
     df, ddf, bootstrap_dfs = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap, maximum_iterations=maximum_iterations)
