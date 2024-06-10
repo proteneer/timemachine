@@ -169,7 +169,7 @@ def bootstrap_bar(
         BAR(w_F, w_R)
 
     best_estimate_err : float
-        BAR(w_F, w_R) error estimate, using all samples
+        MBAR(w_F, w_R) error estimate, using all samples
 
     bootstrap_samples : array
         shape (n_bootstrap,)
