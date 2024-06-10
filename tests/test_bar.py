@@ -1,5 +1,7 @@
 from functools import partial
+from pathlib import Path
 from typing import Tuple
+from unittest.mock import patch
 
 import numpy as np
 import pymbar
@@ -8,7 +10,7 @@ from numpy.typing import NDArray
 from pymbar.testsystems import ExponentialTestCase
 
 from timemachine.fe.bar import (
-    bar_with_bootstrapped_uncertainty,
+    bar_with_pessimistic_uncertainty,
     bootstrap_bar,
     compute_fwd_and_reverse_df_over_time,
     df_and_err_from_u_kln,
@@ -83,8 +85,14 @@ def test_bootstrap_bar(sigma):
 
     # estimate 3 times
     df_ref, df_err_ref = df_and_err_from_u_kln(u_kln)
-    df_0, bootstrap_samples = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
-    df_1, bootstrap_sigma = bar_with_bootstrapped_uncertainty(u_kln)
+    df_0, ddf_0, bootstrap_samples = bootstrap_bar(u_kln, n_bootstrap=n_bootstrap)
+    df_1, bootstrap_sigma = bar_with_pessimistic_uncertainty(u_kln)
+
+    # Full errors should match exactly
+    assert df_err_ref == ddf_0
+
+    # The bootstrapped error should be as large or larger than the full error
+    assert bootstrap_sigma >= df_err_ref
 
     # assert estimates identical, uncertainties comparable
     print(f"bootstrap uncertainty = {bootstrap_sigma}, pymbar.MBAR uncertainty = {df_err_ref}")
@@ -216,3 +224,31 @@ def test_compute_fwd_and_reverse_df_over_time(frames_per_step):
     # The values at the end should be nearly identical since they contain all the samples
     assert np.allclose(fwd[-1], rev[-1])
     assert np.allclose(fwd_err[-1], rev_err[-1])
+
+
+def test_bootstrap_bar_and_regular_bar_match():
+    """In cases where the u_kln has effectively no overlap, bootstrapping returns 0.0
+    since the MBAR estimate is always zero. Checks that `bar_with_pessimistic_uncertainty` returns the (non-zero) error
+    from the MBAR estimate computed on all samples in these cases.
+    """
+    test_ukln = Path(__file__).parent / "data" / "zero_overlap_ukln.npz"
+    u_kln = np.load(open(test_ukln, "rb"))["u_kln"]
+
+    # The overlap should be closer to zero
+    overlap = pair_overlap_from_ukln(u_kln)
+    np.testing.assert_allclose(overlap, 0.0, atol=1e-12)
+
+    boot_df, boot_df_err = bar_with_pessimistic_uncertainty(u_kln)
+    df, df_err = df_and_err_from_u_kln(u_kln)
+    assert boot_df == df
+    assert boot_df_err == df_err
+
+
+@patch("timemachine.fe.bar.pymbar.MBAR.getFreeEnergyDifferences")
+def test_nan_bar_error(mock_energy_diff):
+    df = np.zeros(shape=(1, 2))
+    df_err = np.ones(shape=(1, 2)) * np.nan
+    mock_energy_diff.return_value = (df, df_err)
+    dummy_ukln = np.ones(shape=(2, 2, 100))
+    _, boot_df_err = bar_with_pessimistic_uncertainty(dummy_ukln)
+    assert boot_df_err == 0.0

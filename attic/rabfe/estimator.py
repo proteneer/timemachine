@@ -345,7 +345,7 @@ def deltaG_from_results(
         fwd_delta_u = model.beta * delta_Us[lambda_idx][0]
         rev_delta_u = model.beta * delta_Us[lambda_idx][1]
 
-        dG_exact, exact_bar_err = bar_with_bootstrapped_uncertainty(fwd_delta_u, rev_delta_u)
+        dG_exact, exact_bar_err = bar_with_pessimistic_uncertainty(fwd_delta_u, rev_delta_u)
 
         bar_dG += dG_exact / model.beta
         exact_bar_overlap = endpoint_correction.overlap_from_cdf(fwd_delta_u, rev_delta_u)
@@ -407,7 +407,7 @@ def deltaG_from_results(
             rhs_xs=results[-1].xs,
             seed=2021,
         )
-        dG_endpoint, endpoint_err = bar_with_bootstrapped_uncertainty(
+        dG_endpoint, endpoint_err = bar_with_pessimistic_uncertainty(
             model.beta * lhs_du, model.beta * np.array(rhs_du)
         )
         dG_endpoint = dG_endpoint / model.beta

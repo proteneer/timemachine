@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 from timemachine.constants import BOLTZ
 from timemachine.fe import model_utils, topology
 from timemachine.fe.bar import (
-    bar_with_bootstrapped_uncertainty,
+    bar_with_pessimistic_uncertainty,
     df_and_err_from_u_kln,
     pair_overlap_from_ukln,
     works_from_ukln,
@@ -696,7 +696,7 @@ def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) ->
 
     u_kln = u_kln_by_component.sum(0)
 
-    df, df_err = bar_with_bootstrapped_uncertainty(u_kln)  # reduced units
+    df, df_err = bar_with_pessimistic_uncertainty(u_kln)  # reduced units
 
     kBT = BOLTZ * temperature
     dG, dG_err = df * kBT, df_err * kBT  # kJ/mol
