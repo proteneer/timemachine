@@ -1220,7 +1220,7 @@ def run_sims_hrex(
             def format_rates(rs):
                 return " | ".join(format_rate(r) for r in rs)
 
-            print("Frame ", current_frame)
+            print("Frame ", current_frame + 1)
             print("Acceptance rates (inst.)   :", format_rates(instantaneous_swap_acceptance_rates))
             print("Acceptance rates (average) :", format_rates(average_swap_acceptance_rates))
             print("Final replica permutation  :", hrex.replica_idx_by_state)
