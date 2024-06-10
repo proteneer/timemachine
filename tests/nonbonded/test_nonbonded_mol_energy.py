@@ -63,13 +63,12 @@ def test_nonbonded_mol_energy_potential_validation(precision):
 
 @pytest.mark.memcheck
 @pytest.mark.parametrize("num_mols", [1, 2, 15, 100, 4085])
-@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 1e-3)])
+@pytest.mark.parametrize("precision,atol,rtol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 2e-3)])
 def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision, atol, rtol):
     """Assert that NonbondedMolEnergyPotential Cuda implementation produces the same
     energies as the reference jax version in the BDExchangeMover"""
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(5.0, ff.water_ff)
-    box += np.eye(3) * 0.1
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential

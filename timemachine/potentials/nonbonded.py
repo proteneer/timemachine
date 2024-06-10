@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, cast
+from typing import Tuple, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -19,23 +19,11 @@ from timemachine.potentials.jax_utils import (
 )
 
 
-def switch_fn(dij, cutoff=1.2):
-    """heuristic switching function
+def switch_fn(dij, cutoff):
+    return jnp.power(jnp.cos((jnp.pi * jnp.power(dij, 8)) / (2 * cutoff)), 2)
 
-    intended to:
-    * have {f, f', f''} go to 0 at cutoff
-    * keep "switch_fn(dij) * erfc(beta * dij)" as close as possible to "erfc(beta * dij)"
-        for the range dij in [0, 1.2), for beta = 2.0
 
-    usage notes:
-    * not necessarily intended for use with LJ
-
-    TODO
-    * respond to user-specified cutoff
-    """
-    cutoff = 1.2  # NOTE: intentionally overrides user input for now
-    f = jnp.power(jnp.cos((jnp.pi * jnp.power(dij / cutoff, 8)) / 2), 3)
-    return jnp.where(dij < cutoff, f, 0)
+from typing import Optional
 
 
 def combining_rule_sigma(sig_i, sig_j):
@@ -69,11 +57,6 @@ def direct_space_pme(dij, qij, beta):
     https://aip.scitation.org/doi/abs/10.1063/1.470117
     """
     return qij * erfc(beta * dij) / dij
-
-
-def switched_direct_space_pme(dij, qij, beta, cutoff):
-    """direct_space_pme * switch_fn"""
-    return direct_space_pme(dij, qij, beta) * switch_fn(dij, cutoff)
 
 
 def nonbonded_block_unsummed(
@@ -141,7 +124,7 @@ def nonbonded_block_unsummed(
 
     qij = jnp.multiply(qi, qj)
 
-    es = switched_direct_space_pme(dij, qij, beta, cutoff)
+    es = direct_space_pme(dij, qij, beta)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
     nrgs = jnp.where(dij < cutoff, es + lj, 0)
@@ -329,7 +312,7 @@ def nonbonded(
     dij = jnp.where(keep_mask, dij, 0)
 
     # funny enough lim_{x->0} erfc(x)/x = 0
-    eij_charge = jnp.where(keep_mask, switched_direct_space_pme(dij, qij, beta, cutoff), 0)  # zero out diagonals
+    eij_charge = jnp.where(keep_mask, qij * erfc(beta * dij) * inv_dij, 0)  # zero out diagonals
     if cutoff is not None:
         eij_charge = jnp.where(dij < cutoff, eij_charge, 0)
 
@@ -368,7 +351,7 @@ def nonbonded_on_specific_pairs(
     dij = distance_on_pairs(conf[inds_l], conf[inds_r], box, w_offsets)
     if cutoff is None:
         cutoff = np.inf
-    keep_mask = dij < cutoff
+    keep_mask = dij <= cutoff
 
     def apply_cutoff(x):
         return jnp.where(keep_mask, x, 0)
@@ -384,7 +367,7 @@ def nonbonded_on_specific_pairs(
 
     # Electrostatics by direct-space part of PME
     qij = apply_cutoff(charges[inds_l] * charges[inds_r])
-    electrostatics = switched_direct_space_pme(dij, qij, beta, cutoff)
+    electrostatics = direct_space_pme(dij, qij, beta)
 
     if rescale_mask is not None:
         assert rescale_mask.shape == (len(pairs), 2)
@@ -430,7 +413,7 @@ def nonbonded_on_precomputed_pairs(
     if cutoff is None:
         cutoff = np.inf
 
-    keep_mask = dij < cutoff
+    keep_mask = dij <= cutoff
 
     def apply_cutoff(x):
         return jnp.where(keep_mask, x, 0)
@@ -440,7 +423,7 @@ def nonbonded_on_precomputed_pairs(
     eps_ij = apply_cutoff(eps_ij)
 
     vdW = jnp.where(eps_ij != 0, lennard_jones(dij, sig_ij, eps_ij), 0)
-    electrostatics = jnp.where(q_ij != 0, switched_direct_space_pme(dij, q_ij, beta, cutoff), 0)
+    electrostatics = jnp.where(q_ij != 0, direct_space_pme(dij, q_ij, beta), 0)
 
     return vdW, electrostatics
 
@@ -514,7 +497,7 @@ def coulomb_prefactor_on_atom(x_i, x_others, q_others, box=None, beta=2.0, cutof
         sum_j q_j / d_ij * erfc(beta * d_ij)
     """
     d_ij = jax_utils.distance_from_one_to_others(x_i, x_others, box, cutoff)
-    prefactor_i = jnp.sum((q_others / d_ij) * erfc(beta * d_ij) * switch_fn(d_ij, cutoff))
+    prefactor_i = jnp.sum((q_others / d_ij) * erfc(beta * d_ij))
     return prefactor_i
 
 
