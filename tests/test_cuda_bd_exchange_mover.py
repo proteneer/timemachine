@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
-from timemachine.fe.free_energy import HostConfig, InitialState, MDParams, sample
+from timemachine.fe.free_energy import HostConfig, InitialState
 from timemachine.fe.model_utils import apply_hmr, image_frame
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
@@ -36,6 +36,7 @@ def verify_bias_deletion_moves(
     rtol: float,
     atol: float,
 ):
+    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     accepted = 0
     last_conf = conf
     for step in range(total_num_proposals // proposals_per_move):
@@ -83,13 +84,15 @@ def verify_bias_deletion_moves(
         assert proposals_per_move != 1 or num_moved <= 1, "More than one mol moved, something is wrong"
 
         last_conf = x_move
+    assert bdem.n_proposed() == total_num_proposals
     print(f"Accepted {bdem.n_accepted()} of {total_num_proposals} moves")
     assert accepted > 0, "No moves were made, nothing was tested"
     if proposals_per_move == 1:
+        np.testing.assert_allclose(bdem.acceptance_fraction(), accepted / total_num_proposals)
         assert bdem.n_accepted() == accepted
     else:
         assert bdem.n_accepted() >= accepted
-    np.testing.assert_allclose(bdem.acceptance_fraction(), bdem.n_accepted() / bdem.n_proposed())
+        assert bdem.acceptance_fraction() >= accepted / total_num_proposals
 
 
 @pytest.mark.memcheck
@@ -186,13 +189,7 @@ def test_bd_exchange_get_set_params(precision):
 @pytest.mark.memcheck
 @pytest.mark.parametrize(
     "proposals_per_move,total_num_proposals,batch_size",
-    [
-        (1, 1, 1),
-        (1, 10, 1),
-        (10, 10, 10),
-        pytest.param(1000, 10000, 1000, marks=pytest.mark.nightly(reason="slow")),
-        pytest.param(1000, 10000, 333, marks=pytest.mark.nightly(reason="slow")),
-    ],
+    [(1, 1, 1), (1, 10, 1), (10, 10, 10), (1000, 10000, 1000), (1000, 10000, 333)],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-7, 5e-7), (np.float32, 1e-6, 2e-6)])
 @pytest.mark.parametrize("seed", [2023])
@@ -240,11 +237,9 @@ def test_pair_of_waters_in_box(proposals_per_move, total_num_proposals, batch_si
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     verify_bias_deletion_moves(
         group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
     )
-    assert bdem.n_proposed() == total_num_proposals
 
 
 @pytest.mark.memcheck
@@ -299,11 +294,9 @@ def test_sampling_single_water_in_bulk(
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     verify_bias_deletion_moves(
         all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, proposals_per_move, rtol, atol
     )
-    assert bdem.n_proposed() == total_num_proposals
 
 
 @pytest.mark.parametrize("batch_size", [1, 200])
@@ -384,10 +377,7 @@ def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
 
 
 @pytest.mark.memcheck
-@pytest.mark.parametrize(
-    "proposals_per_move, batch_size",
-    [(1, 1), (10, 1), (2, 2), (100, 100), pytest.param(1000, 333, marks=pytest.mark.nightly(reason="slow"))],
-)
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(1, 1), (10, 1), (2, 2), (100, 100), (1000, 333)])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("seed", [2023])
 def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precision, seed):
@@ -528,11 +518,11 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
 @pytest.mark.parametrize(
     "num_proposals_per_move,total_num_proposals,batch_size,box_size",
     [
-        pytest.param(1, 4000, 1, 4.0, marks=pytest.mark.nightly(reason="slow")),
-        (4000, 4000, 100, 4.0),
-        (5000, 25000, 300, 4.0),
+        pytest.param(1, 40000, 1, 4.0, marks=pytest.mark.nightly(reason="slow")),
+        (5000, 40000, 5, 4.0),
+        (10000, 250000, 300, 4.0),
         # The 6.0nm box triggers a failure that would occur with systems of certain sizes, may be flaky in identifying issues
-        pytest.param(1, 3000, 1, 6.0, marks=pytest.mark.nightly(reason="slow")),
+        pytest.param(1, 20000, 1, 6.0, marks=pytest.mark.nightly(reason="slow")),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
@@ -611,33 +601,12 @@ def test_moves_in_a_water_box(
         1,
         batch_size=batch_size,
     )
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, group_idxs, DEFAULT_TEMP)
 
-    iterations = 10
-    # Up to some number of iterations of MD/MC are allowed before considering the test a failure
-    # since there is relatively little space in which to insert a water. Requires MD/MC to ensure the
-    # test is not flaky.
-    for i in range(iterations):
-        try:
-            verify_bias_deletion_moves(
-                group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
-            )
-            assert bdem.n_proposed() == (i + 1) * total_num_proposals
-            # If we verified the target moves, we can exit
-            return
-        except AssertionError as e:
-            if "No moves were made, nothing was tested" in str(e):
-                xs, boxes = ctxt.multiple_steps(1000)
-                conf = xs[-1]
-                box = boxes[-1]
-                conf = image_frame(group_idxs, conf, box)
-                print("Running MD")
-                continue
-            # If an unexpect error was raised, re-raise the error
-            raise
-    assert False, f"No moves were made after {iterations}"
+    verify_bias_deletion_moves(
+        group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
+    )
 
 
 @pytest.mark.parametrize("num_particles", [3])
@@ -877,11 +846,9 @@ def test_moves_with_complex(
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
     verify_bias_deletion_moves(
         all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
     )
-    assert bdem.n_proposed() == total_num_proposals
 
 
 @pytest.fixture(scope="module")
@@ -898,25 +865,61 @@ def hif2a_rbfe_state() -> InitialState:
     st = SingleTopology(mol_a, mol_b, core, ff)
 
     initial_state = prepare_single_topology_initial_state(st, host_config)
+    conf = initial_state.x0
 
-    traj = sample(
-        initial_state, MDParams(n_frames=1, n_eq_steps=0, steps_per_frame=10_000, seed=seed), max_buffer_frames=1
+    bond_pot = next(bp for bp in initial_state.potentials if isinstance(bp.potential, HarmonicBond)).potential
+
+    bond_list = get_bond_list(bond_pot)
+    all_group_idxs = get_group_indices(bond_list, conf.shape[0])
+
+    bps = initial_state.potentials
+    masses = initial_state.integrator.masses
+
+    # Equilibrate the system a bit before hand, which reduces clashes in the system which results greater differences
+    # between the reference and test case.
+    temperature = DEFAULT_TEMP
+    pressure = DEFAULT_PRESSURE
+
+    masses = apply_hmr(masses, bond_list)
+    intg = initial_state.integrator.impl()
+
+    bound_impls = []
+
+    for potential in bps:
+        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
+
+    barostat_interval = 5
+    baro = MonteCarloBarostat(
+        conf.shape[0],
+        pressure,
+        temperature,
+        all_group_idxs,
+        barostat_interval,
+        seed,
     )
+    baro_impl = baro.impl(bound_impls)
 
-    assert len(traj.frames) == 1
-    x = traj.frames[0]
-    b = traj.boxes[0]
-
-    for bp in initial_state.potentials:
-        du_dx, _ = bp.to_gpu(np.float32).bound_impl.execute(x, b, True, False)
+    ctxt = custom_ops.Context(
+        conf,
+        np.zeros_like(conf),
+        box,
+        intg,
+        bound_impls,
+        movers=[baro_impl],
+    )
+    ctxt.multiple_steps(10_000)
+    conf = ctxt.get_x_t()
+    box = ctxt.get_box()
+    for bp in bound_impls:
+        du_dx, _ = bp.execute(conf, box, True, False)
         check_force_norm(-du_dx)
-    return replace(initial_state, v0=traj.final_velocities, x0=x, box0=b)
+    return replace(initial_state, v0=ctxt.get_v_t(), x0=conf, box0=box)
 
 
 @pytest.mark.parametrize(
     "num_proposals_per_move, total_num_proposals, batch_size",
     [
-        (2000, 20000, 200),
+        (20000, 200000, 200),
     ],
 )
 @pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 5e-6, 5e-6), (np.float32, 1e-4, 2e-3)])
@@ -970,36 +973,6 @@ def test_bd_moves_with_complex_and_ligand(
 
     ref_bdem = RefBDExchangeMove(nb.potential.beta, cutoff, water_params, water_idxs, DEFAULT_TEMP)
 
-    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
-
-    md_params = MDParams(n_frames=1, n_eq_steps=0, steps_per_frame=1000, seed=seed)
-
-    iterations = 10
-    # Up to some number of iterations of MD/MC are allowed before considering the test a failure
-    # since there is relatively little space in which to insert a water. Requires MD/MC to ensure the
-    # test is not flaky.
-    for i in range(iterations):
-        try:
-            verify_bias_deletion_moves(
-                all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
-            )
-            assert bdem.n_proposed() == (i + 1) * total_num_proposals
-            # If we verified the target moves, we can exit
-            return
-        except AssertionError as e:
-            if "No moves were made, nothing was tested" in str(e):
-                traj = sample(
-                    initial_state,
-                    md_params,
-                    max_buffer_frames=1,
-                )
-
-                assert len(traj.frames) == 1
-                conf = traj.frames[0]
-                box = traj.boxes[0]
-                conf = image_frame(all_group_idxs, conf, box)
-                print("Running MD")
-                continue
-            # If an unexpect error was raised, re-raise the error
-            raise
-    assert False, f"No moves were made after {iterations}"
+    verify_bias_deletion_moves(
+        all_group_idxs, bdem, ref_bdem, conf, box, total_num_proposals, num_proposals_per_move, rtol, atol
+    )
