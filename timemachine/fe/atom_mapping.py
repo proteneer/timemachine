@@ -156,7 +156,7 @@ def get_cores(
         Filter out cores that would flip a mapped planar torsion (i.e. change the sign of the torsion volume)
 
     min_threshold: int
-        Number of atoms to require for a valid mapping
+        Number of edges to require for a valid mapping
 
     Returns
     -------
