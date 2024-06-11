@@ -265,7 +265,7 @@ def mcs(
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
-            raise NoMappingError(f"Unable to find mapping with at least {min_threshold} atoms")
+            raise NoMappingError(f"Unable to find mapping with at least {min_threshold} edges")
         map_a_to_b = [UNMAPPED] * n_a
         map_b_to_a = [UNMAPPED] * n_b
         mcs_result = MCSResult()

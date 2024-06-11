@@ -931,7 +931,7 @@ def test_min_threshold():
         min_threshold=mol_a.GetNumAtoms(),
     )
 
-    with pytest.raises(NoMappingError, match="Unable to find mapping with at least 18 atoms"):
+    with pytest.raises(NoMappingError, match="Unable to find mapping with at least 18 edges"):
         atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)
 
 
