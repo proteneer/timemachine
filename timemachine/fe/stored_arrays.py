@@ -78,10 +78,10 @@ class StoredArrays(Sequence[NDArray]):
             np.array_equal(a, b, equal_nan=True) for a, b in zip(self, other)
         )
 
-    def _chunks(self) -> Iterator[List[NDArray]]:
+    def _chunks(self) -> Iterator[NDArray]:
         """Returns an iterator over chunks.
 
-        Each chunk is a sequence of numpy arrays stored in a single .npy file
+        Each chunk is a numpy array stored in a single .npy file
         """
         for idx, _ in enumerate(self._chunk_sizes):
             yield np.load(self._get_chunk_path(idx))
