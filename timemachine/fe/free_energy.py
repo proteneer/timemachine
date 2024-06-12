@@ -284,7 +284,7 @@ class HREXSimulationResult(SimulationResult):
         # (states, frames, atoms, 3)
         trajs_by_state = np.array(
             [
-                np.concatenate([np.array(chunk)[:, atom_idxs] for chunk in state_traj.frames._chunks()], axis=0)
+                np.concatenate([chunk[:, atom_idxs] for chunk in state_traj.frames._chunks()], axis=0)
                 for state_traj in self.trajectories
             ]
         )
