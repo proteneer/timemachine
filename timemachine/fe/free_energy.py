@@ -282,6 +282,8 @@ class HREXSimulationResult(SimulationResult):
         """
 
         # (states, frames, atoms, 3)
+        # NOTE: chunk[:, atom_idxs] below returns a copy (rather than a view) due to the use of "advanced indexing".
+        # This is important because otherwise we would try to store all of the whole-system frames in memory at once.
         trajs_by_state = np.array(
             [
                 np.concatenate([chunk[:, atom_idxs] for chunk in state_traj.frames._chunks()], axis=0)
