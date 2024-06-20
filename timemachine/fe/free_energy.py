@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass, replace
 from functools import cache
 from typing import Callable, List, Optional, Sequence, Tuple, Union
@@ -1156,6 +1157,9 @@ def run_sims_hrex(
     ):
         warn("Not running any water sampling, too few steps of MD for the water sampling interval")
 
+    begin_loop_time = time.perf_counter()
+    last_update_time = begin_loop_time
+
     for current_frame in range(md_params.n_frames):
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
@@ -1206,6 +1210,7 @@ def run_sims_hrex(
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
 
         if print_diagnostics_interval and (current_frame + 1) % print_diagnostics_interval == 0:
+            current_time = time.perf_counter()
 
             def get_swap_acceptance_rates(fraction_accepted_by_pair):
                 return [
@@ -1216,17 +1221,27 @@ def run_sims_hrex(
             instantaneous_swap_acceptance_rates = get_swap_acceptance_rates(fraction_accepted_by_pair)
             average_swap_acceptance_rates = get_swap_acceptance_rates(np.sum(fraction_accepted_by_pair_by_iter, axis=0))
 
+            wall_time_per_frame_current = (current_time - last_update_time) / print_diagnostics_interval
+            wall_time_per_frame_average = (current_time - begin_loop_time) / (current_frame + 1)
+
+            def format_wall_time(time_seconds):
+                return f"{time_seconds:.2f} s"
+
             def format_rate(r):
                 return f"{r * 100.0:5.1f}%"
 
             def format_rates(rs):
                 return " | ".join(format_rate(r) for r in rs)
 
-            print("Frame ", current_frame + 1)
-            print("Acceptance rates (inst.)   :", format_rates(instantaneous_swap_acceptance_rates))
-            print("Acceptance rates (average) :", format_rates(average_swap_acceptance_rates))
-            print("Final replica permutation  :", hrex.replica_idx_by_state)
+            print("Frame", current_frame + 1)
+            print("Wall time per frame, current   :", format_wall_time(wall_time_per_frame_current))
+            print("Wall time per frame, average   :", format_wall_time(wall_time_per_frame_average))
+            print("HREX acceptance rates, current :", format_rates(instantaneous_swap_acceptance_rates))
+            print("HREX acceptance rates, average :", format_rates(average_swap_acceptance_rates))
+            print("HREX replica permutation       :", hrex.replica_idx_by_state)
             print()
+
+            last_update_time = current_time
 
     # Use the unbound potentials associated with the summed potential once to compute the u_kln
     # Avoids repeated creation of underlying GPU potentials
