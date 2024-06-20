@@ -350,7 +350,7 @@ $$$$""",
         max_cores=1e6,  # This pair has 350k cores
         enforce_core_core=True,
         ring_matches_ring_only=False,
-        enforce_chiral=True,
+        enforce_chiral=False,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
     )
@@ -390,7 +390,7 @@ def test_all_pairs(filepath):
                 max_cores=1000,
                 enforce_core_core=True,
                 ring_matches_ring_only=False,
-                enforce_chiral=True,
+                enforce_chiral=False,
                 disallow_planar_torsion_flips=False,
                 min_threshold=0,
             )
