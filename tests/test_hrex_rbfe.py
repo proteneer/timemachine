@@ -174,13 +174,18 @@ def plot_hrex_rbfe_hif2a(result: HREXSimulationResult):
 
 
 @pytest.mark.parametrize("seed", [2023])
-def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg, seed):
-    _, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
+@pytest.mark.parametrize("local_md", [True, False])
+def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg, local_md: bool, seed):
+    host_name, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
+
+    if local_md and host_name is None:
+        pytest.skip("No local MD for vacuum")
 
     md_params = MDParams(
         n_frames=10,
         n_eq_steps=10,
         steps_per_frame=400,
+        local_steps=200 if local_md else 0,
         seed=seed,
         hrex_params=HREXParams(n_frames_bisection=1),
     )
@@ -198,10 +203,11 @@ def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg, seed):
 
     res1 = run(seed)
     res2 = run(seed)
-    res3 = run(seed + 1)
-
     np.testing.assert_equal(res1.frames, res2.frames)
     np.testing.assert_equal(res1.boxes, res2.boxes)
+
+    res3 = run(seed + 1)
+
     assert not np.all(res1.frames == res3.frames)
 
     if host_config:
