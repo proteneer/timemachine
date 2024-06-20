@@ -907,7 +907,7 @@ def test_max_cores_warning():
         connected_core=False,
         enforce_core_core=True,
         ring_matches_ring_only=False,
-        enforce_chiral=True,
+        enforce_chiral=False,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         max_visits=1e7,
