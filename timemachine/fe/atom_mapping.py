@@ -402,7 +402,9 @@ def _get_cores_impl(
         perm = mcgregor.core_to_perm(core, n_a)
         return not has_chiral_atom_inconsistencies(perm, chiral_set_a, chiral_set_b)
 
-    all_cores = list(filter(chirally_valid, all_cores))
+    if enforce_chiral:
+        all_cores = list(filter(chirally_valid, all_cores))
+
     all_cores = remove_cores_smaller_than_largest(all_cores)
     all_cores, _ = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
 
