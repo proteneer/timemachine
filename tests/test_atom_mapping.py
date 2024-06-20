@@ -887,7 +887,7 @@ def test_max_visits_warning():
         max_cores=1000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
-        enforce_chiral=True,
+        enforce_chiral=False,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
     )
