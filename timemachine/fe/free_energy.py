@@ -1223,6 +1223,7 @@ def run_sims_hrex(
 
             wall_time_per_frame_current = (current_time - last_update_time) / print_diagnostics_interval
             wall_time_per_frame_average = (current_time - begin_loop_time) / (current_frame + 1)
+            estimated_wall_time_remaining = wall_time_per_frame_average * (md_params.n_frames - (current_frame + 1))
 
             def format_wall_time(time_seconds):
                 return f"{time_seconds:.2f} s"
@@ -1236,6 +1237,7 @@ def run_sims_hrex(
             print("Frame", current_frame + 1)
             print("Wall time per frame, current   :", format_wall_time(wall_time_per_frame_current))
             print("Wall time per frame, average   :", format_wall_time(wall_time_per_frame_average))
+            print("Estimated wall time remaining  :", format_wall_time(estimated_wall_time_remaining))
             print("HREX acceptance rates, current :", format_rates(instantaneous_swap_acceptance_rates))
             print("HREX acceptance rates, average :", format_rates(average_swap_acceptance_rates))
             print("HREX replica permutation       :", hrex.replica_idx_by_state)
