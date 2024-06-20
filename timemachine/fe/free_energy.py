@@ -1233,7 +1233,7 @@ def run_sims_hrex(
 
             print("Frame", current_frame + 1)
             print(
-                f"{estimated_wall_time_remaining:.2f} s remaining at "
+                f"{estimated_wall_time_remaining:.1f} s remaining at "
                 f"{wall_time_per_frame_average:.3f} s/frame "
                 f"({wall_time_per_frame_current:.3f} s/frame since last message)"
             )
