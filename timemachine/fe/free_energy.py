@@ -1233,9 +1233,9 @@ def run_sims_hrex(
 
             print("Frame", current_frame + 1)
             print(
-                f"Approximately {estimated_wall_time_remaining} s remaining at"
-                f"{wall_time_per_frame_average} s/frame "
-                f"({wall_time_per_frame_current} s/frame since last message)"
+                f"Approximately {estimated_wall_time_remaining:.2f} s remaining at "
+                f"{wall_time_per_frame_average:.3f} s/frame "
+                f"({wall_time_per_frame_current:.3f} s/frame since last message)"
             )
             print("HREX acceptance rates, current :", format_rates(instantaneous_swap_acceptance_rates))
             print("HREX acceptance rates, average :", format_rates(average_swap_acceptance_rates))
