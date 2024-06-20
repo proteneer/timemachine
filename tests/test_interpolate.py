@@ -218,7 +218,7 @@ def test_intermediate_states(num_pairs_to_setup=10):
     np.random.seed(2023)
     np.random.shuffle(pairs)
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-
+    num_pairs_tested = 0
     for mol_a, mol_b in pairs[:num_pairs_to_setup]:
         print("Checking", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
         all_cores = atom_mapping.get_cores(
@@ -226,6 +226,11 @@ def test_intermediate_states(num_pairs_to_setup=10):
             mol_b,
             **DEFAULT_ATOM_MAPPING_KWARGS,
         )
+
+        if len(all_cores) == 0:
+            print("... skipping this one since len(get_cores(a,b)) == 0")
+            continue
+        num_pairs_tested += 1
 
         core = all_cores[0]
 
@@ -257,6 +262,8 @@ def test_intermediate_states(num_pairs_to_setup=10):
             xs.append(x0 + 0.01 * np.random.randn(*x0.shape))
         for x in xs:
             np.testing.assert_almost_equal(U_ref(x), U_test(x))
+
+    assert num_pairs_tested > 0
 
 
 def test_duplicate_idxs_period_pairs():
