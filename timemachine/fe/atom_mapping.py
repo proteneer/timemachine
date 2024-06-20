@@ -451,6 +451,9 @@ def _get_cores_impl(
 
 def remove_cores_smaller_than_largest(cores):
     """measured by # mapped atoms"""
+    if len(cores) == 0:
+        return cores
+
     cores_by_size = defaultdict(list)
     for core in cores:
         cores_by_size[len(core)].append(core)
