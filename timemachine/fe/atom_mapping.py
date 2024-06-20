@@ -7,7 +7,12 @@ from numpy.typing import NDArray
 from rdkit import Chem
 
 from timemachine.fe import mcgregor
-from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
+from timemachine.fe.chiral_utils import (
+    ChiralRestrIdxSet,
+    has_chiral_atom_flips,
+    has_chiral_atom_inconsistencies,
+    setup_find_flipped_planar_torsions,
+)
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
@@ -392,6 +397,12 @@ def _get_cores_impl(
     )
 
     all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
+
+    def chirally_valid(core):
+        perm = mcgregor.core_to_perm(core, n_a)
+        return not has_chiral_atom_inconsistencies(perm, chiral_set_a, chiral_set_b)
+
+    all_cores = list(filter(chirally_valid, all_cores))
     all_cores = remove_cores_smaller_than_largest(all_cores)
     all_cores, _ = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
 

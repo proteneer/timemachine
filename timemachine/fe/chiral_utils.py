@@ -241,11 +241,14 @@ def _find_atom_map_chiral_conflicts_one_direction(
 
 
 def has_chiral_atom_flips(
-    core: Sequence[int],
+    core: Sequence[int],  # TODO: rename to `mapping_a_to_b`?
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
 ) -> bool:
-    # _find_atom_map_chiral_conflicts_one_direction, except (1) return bool not set, (2) hard-code mode = FLIP
+    """_find_atom_map_chiral_conflicts_one_direction, except
+    (1) return bool not set,
+    (2) hard-code mode = FLIP
+    """
 
     mapping_a_to_b = core
 
@@ -254,6 +257,33 @@ def has_chiral_atom_flips(
         mapped_tuple_b = mapping_a_to_b[c_a], mapping_a_to_b[i_a], mapping_a_to_b[j_a], mapping_a_to_b[k_a]
         if chiral_set_b.disallows(mapped_tuple_b):
             return True
+    return False
+
+
+def has_chiral_atom_inconsistencies(
+    core: Sequence[int],  # TODO: rename to `mapping_a_to_b`?
+    chiral_set_a: ChiralRestrIdxSet,
+    chiral_set_b: ChiralRestrIdxSet,
+) -> bool:
+    """_find_atom_map_chiral_conflicts_one_direction, except
+    (1) return bool not set,
+    (2) return True in case a conflict of either FLIP or UNDEFINED mode is found
+    """
+
+    mapping_a_to_b = core
+
+    # iterate over restraints defined in A, searching for possible conflicts
+    for c_a, i_a, j_a, k_a in chiral_set_a.restr_idxs:
+        mapped_tuple_b = mapping_a_to_b[c_a], mapping_a_to_b[i_a], mapping_a_to_b[j_a], mapping_a_to_b[k_a]
+
+        # FLIP
+        if chiral_set_b.disallows(mapped_tuple_b):
+            return True
+
+        # UNDEFINED
+        if not chiral_set_b.defines(mapped_tuple_b):
+            return True
+
     return False
 
 
