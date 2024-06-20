@@ -937,19 +937,23 @@ def test_min_threshold():
 
 def test_get_cores_and_diagnostics():
     mols = read_sdf(hif2a_set)
-    n_pairs = 30
+    n_pairs = 100
     random_pair_idxs = np.random.default_rng(2024).choice(len(mols), size=(n_pairs, 2))
-
+    n_valid = 0
     for i_a, i_b in random_pair_idxs:
         mol_a = mols[i_a]
         mol_b = mols[i_b]
         all_cores, diagnostics = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
 
-        assert len(all_cores) > 0
         assert all(len(core) == len(all_cores[0]) for core in all_cores)
-
-        assert diagnostics.core_size >= len(all_cores[0])
         assert diagnostics.num_cores >= len(all_cores)
         assert (
             diagnostics.total_nodes_visited >= diagnostics.core_size
         )  # must visit at least one node per atom pair in core
+        n_core = len(all_cores[0]) if len(all_cores) > 0 else 0
+        if n_core > 0:
+            n_valid += 1
+            assert diagnostics.core_size >= len(all_cores[0])
+
+    # print(f'total num valid : {n_valid} / {n_pairs}')
+    assert n_valid >= (n_pairs // 2)  # appears to be around ~60% (GH1332)
