@@ -1179,9 +1179,7 @@ def run_sims_hrex(
                 # Set the step so that all windows have the movers be called the same number of times.
                 mover.set_step(current_step)
 
-            md_params_replica = replace(
-                md_params, n_frames=1, n_eq_steps=0, seed=np.random.randint(np.iinfo(np.int32).max)
-            )
+            md_params_replica = replace(md_params, n_frames=1, n_eq_steps=0, seed=state_idx + current_frame)
 
             return sample_with_context(context, md_params_replica, temperature, ligand_idxs, max_buffer_frames=100)
 
