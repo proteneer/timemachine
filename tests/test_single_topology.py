@@ -1,5 +1,6 @@
 import functools
 import time
+from copy import deepcopy
 from importlib import resources
 
 import hypothesis.strategies as st
@@ -765,7 +766,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
             mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
         mol_a = mols["338"]
         mol_b = mols["43"]
-    core = _get_core_by_mcs(mol_a, mol_b)
+    core = _get_core_by_mcs(mol_a, mol_b, enforce_chiral=False)
 
     # split forcefield has different parameters for intramol and intermol terms
     ffs = load_split_forcefields()
@@ -1014,11 +1015,13 @@ def ligand_from_smiles(smiles):
     return mol
 
 
-def _get_core_by_mcs(mol_a, mol_b):
+def _get_core_by_mcs(mol_a, mol_b, enforce_chiral=True):
+    kwargs = deepcopy(test_nonbonded_intra_split)
+    kwargs["enforce_chiral"] = enforce_chiral
     all_cores = atom_mapping.get_cores(
         mol_a,
         mol_b,
-        **DEFAULT_ATOM_MAPPING_KWARGS,
+        **kwargs,
     )
 
     core = all_cores[0]
