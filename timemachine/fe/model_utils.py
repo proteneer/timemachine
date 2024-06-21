@@ -4,7 +4,6 @@ from typing import List, Optional
 import jax
 import numpy as np
 from numpy.typing import NDArray
-from openmm import app
 from rdkit import Chem
 
 from timemachine.constants import MAX_FORCE_NORM
@@ -156,6 +155,9 @@ def image_molecule(mol_coords, box):
 
 
 def generate_openmm_topology(objs, coords, out_filename=None, box=None):
+    # Avoid import openmm at the top level, as openmm may not be installed
+    from openmm import app
+
     rd_mols = []
 
     mol_sizes = []
