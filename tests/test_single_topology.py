@@ -1016,7 +1016,7 @@ def ligand_from_smiles(smiles):
 
 
 def _get_core_by_mcs(mol_a, mol_b, enforce_chiral=True):
-    kwargs = deepcopy(test_nonbonded_intra_split)
+    kwargs = deepcopy(DEFAULT_ATOM_MAPPING_KWARGS)
     kwargs["enforce_chiral"] = enforce_chiral
     all_cores = atom_mapping.get_cores(
         mol_a,
