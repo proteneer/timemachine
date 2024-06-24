@@ -547,7 +547,7 @@ def sample_with_context_iter(
     ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
 ) -> Iterator[Tuple[NDArray, NDArray, NDArray]]:
     """Sample a context using MDParams returning batches of frames up to `max_buffer_frames`. All results are returned
-    as numpy arrays that are in memory, and it is left to the user to act accordingly..
+    as numpy arrays that are in memory, and it is left to the user to act accordingly.
 
     For getting a Trajectory object that stores the frames to disk, refer to `sample_with_context`.
 
@@ -557,16 +557,17 @@ def sample_with_context_iter(
         The context to use to generate samples
 
     md_params: MDParams
-        The parameters to use to collect frames from the context
+        The parameters that define the sampling of frames from the context
 
     temperature: float
         The temperature, in kelvin, used when running Local MD moves
 
     ligand_idxs: np.ndarray
-        Array representing the indices of atoms that make up the ligand, determining the local MD region
+        Array representing the indices of atoms that make up the ligand, determines the atoms considered as the center
+        of local MD.
 
     max_buffer_frames: int
-        The most number of frames (coords and boxes) that will be kept in memory at one time
+        The most number of frames (coords and boxes) that will be kept in memory at one time.
 
     Returns
     -------
