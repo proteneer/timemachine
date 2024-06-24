@@ -577,7 +577,7 @@ def sample_with_context_iter(
     Notes
     -----
     * If md_params.n_eq_steps is greater than 0, the barostat will be set to run every 15 steps regardless of what
-      the context defined. Will be reset to the original context value for production steps.
+      the context defined. Will be reset to the original interval for production steps.
     """
     # burn-in
     if md_params.n_eq_steps:
