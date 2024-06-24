@@ -1223,16 +1223,18 @@ def run_sims_hrex(
 
             assert md_params_replica.n_frames == 1
             # Get the next set of frames from the iterator, which will be the only value returned
-            frame, box, velos = next(sample_with_context_iter(context, md_params_replica, temperature, ligand_idxs, 1))
+            frame, box, final_velos = next(
+                sample_with_context_iter(context, md_params_replica, temperature, ligand_idxs, 1)
+            )
             assert frame.shape[0] == 1
 
             final_barostat_volume_scale_factor = barostat.get_volume_scale_factor() if barostat is not None else None
 
-            return frame, box, velos, final_barostat_volume_scale_factor
+            return frame[0], box[0], final_velos, final_barostat_volume_scale_factor
 
         def replica_from_samples(last_sample: Tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
             frame, box, velos, _ = last_sample
-            return CoordsVelBox(frame.squeeze(), velos.squeeze(), box.squeeze())
+            return CoordsVelBox(frame, velos, box)
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
         U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
@@ -1253,8 +1255,8 @@ def run_sims_hrex(
         for samples, (xs, boxes, velos, final_barostat_volume_scale_factor) in zip(
             samples_by_state, samples_by_state_iter
         ):
-            samples.frames.extend(xs)
-            samples.boxes.extend(boxes)
+            samples.frames.extend([xs])
+            samples.boxes.extend([boxes])
             samples.final_velocities = velos
             samples.final_barostat_volume_scale_factor = final_barostat_volume_scale_factor
 
