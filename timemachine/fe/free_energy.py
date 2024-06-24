@@ -544,9 +544,9 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
 
 def sample_with_context_iter(
-    ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
+    ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, batch_size: int
 ) -> Iterator[Tuple[NDArray, NDArray, NDArray]]:
-    """Sample a context using MDParams returning batches of frames up to `max_buffer_frames`. All results are returned
+    """Sample a context using MDParams returning batches of frames up to `batch_size`. All results are returned
     as numpy arrays that are in memory, and it is left to the user to act accordingly.
 
     For getting a Trajectory object that stores the frames to disk, refer to `sample_with_context`.
@@ -566,7 +566,7 @@ def sample_with_context_iter(
         Array representing the indices of atoms that make up the ligand, determines the atoms considered as the center
         of local MD.
 
-    max_buffer_frames: int
+    batch_size: int
         The most number of frames (coords and boxes) that will be kept in memory at one time.
 
     Returns
@@ -641,14 +641,15 @@ def sample_with_context_iter(
     if md_params.local_steps > 0:
         steps_func = run_production_local_steps
 
-    for n_frames in batches(md_params.n_frames, max_buffer_frames):
+    for n_frames in batches(md_params.n_frames, batch_size):
         yield steps_func(n_frames * md_params.steps_per_frame)
 
 
 def sample_with_context(
     ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
 ) -> Trajectory:
-    """Wrapper for `sample_with_context_iter` that stores the frames to disk and returns a Trajectory result
+    """Wrapper for `sample_with_context_iter` that stores the frames to disk and returns a Trajectory result.
+    Stores up to `max_buffer_frames` frames in memory before writing to disk.
 
     Refer to `sample_with_context_iter` for parameter documentation
     """
