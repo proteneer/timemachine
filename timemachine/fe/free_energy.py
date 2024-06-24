@@ -1225,7 +1225,7 @@ def run_sims_hrex(
             assert md_params_replica.n_frames == 1
             # Get the next set of frames from the iterator, which will be the only value returned
             frame, box, final_velos = next(
-                sample_with_context_iter(context, md_params_replica, temperature, ligand_idxs, max_buffer_frames=1)
+                sample_with_context_iter(context, md_params_replica, temperature, ligand_idxs, batch_size=1)
             )
             assert frame.shape[0] == 1
 
