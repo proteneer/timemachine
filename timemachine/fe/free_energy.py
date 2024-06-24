@@ -1231,7 +1231,7 @@ def run_sims_hrex(
 
             final_barostat_volume_scale_factor = barostat.get_volume_scale_factor() if barostat is not None else None
 
-            return frame[0], box[0], final_velos, final_barostat_volume_scale_factor
+            return frame[-1], box[-1], final_velos, final_barostat_volume_scale_factor
 
         def replica_from_samples(last_sample: Tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
             frame, box, velos, _ = last_sample
