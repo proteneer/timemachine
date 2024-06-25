@@ -1,7 +1,7 @@
 import time
 from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 from warnings import warn
 
 import jax
@@ -543,9 +543,42 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
     return Context(initial_state.x0, initial_state.v0, initial_state.box0, intg_impl, bound_impls, movers=movers)
 
 
-def sample_with_context(
-    ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
-) -> Trajectory:
+def sample_with_context_iter(
+    ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, batch_size: int
+) -> Iterator[Tuple[NDArray, NDArray, NDArray]]:
+    """Sample a context using MDParams returning batches of frames up to `batch_size`. All results are returned
+    as numpy arrays that are in memory, and it is left to the user to act accordingly.
+
+    For getting a Trajectory object that stores the frames to disk, refer to `sample_with_context`.
+
+    Parameters
+    ----------
+    ctxt: Context
+        The context to use to generate samples
+
+    md_params: MDParams
+        The parameters that define the sampling of frames from the context
+
+    temperature: float
+        The temperature, in kelvin, used when running Local MD moves
+
+    ligand_idxs: np.ndarray
+        Array representing the indices of atoms that make up the ligand, determines the atoms considered as the center
+        of local MD.
+
+    batch_size: int
+        The most number of frames (coords and boxes) that will be kept in memory at one time.
+
+    Returns
+    -------
+    Iterator of 3-tuples
+        coords, boxes, final_velocities
+
+    Notes
+    -----
+    * If md_params.n_eq_steps is greater than 0, the barostat will be set to run every 15 steps regardless of what
+      the context defined. Will be reset to the original interval for production steps.
+    """
     # burn-in
     if md_params.n_eq_steps:
         # Set barostat interval to 15 for equilibration, then back to the original interval for production
@@ -573,7 +606,6 @@ def sample_with_context(
             n_steps=n_steps,
             store_x_interval=md_params.steps_per_frame,
         )
-        assert np.all(coords[-1] == ctxt.get_x_t())
         final_velocities = ctxt.get_v_t()
 
         return coords, boxes, final_velocities
@@ -601,22 +633,32 @@ def sample_with_context(
             coords.append(x_t)
             boxes.append(box_t)
 
-        assert np.all(coords[-1][-1] == ctxt.get_x_t())
         final_velocities = ctxt.get_v_t()
 
         return np.concatenate(coords), np.concatenate(boxes), final_velocities
-
-    all_coords: Union[NDArray, StoredArrays]
 
     steps_func = run_production_steps
     if md_params.local_steps > 0:
         steps_func = run_production_local_steps
 
+    for n_frames in batches(md_params.n_frames, batch_size):
+        yield steps_func(n_frames * md_params.steps_per_frame)
+
+
+def sample_with_context(
+    ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
+) -> Trajectory:
+    """Wrapper for `sample_with_context_iter` that stores the frames to disk and returns a Trajectory result.
+    Stores up to `max_buffer_frames` frames in memory before writing to disk.
+
+    Refer to `sample_with_context_iter` for parameter documentation
+    """
     all_coords = StoredArrays()
     all_boxes: List[NDArray] = []
     final_velocities: NDArray = None  # type: ignore # work around "possibly unbound" error
-    for n_frames in batches(md_params.n_frames, max_buffer_frames):
-        batch_coords, batch_boxes, final_velocities = steps_func(n_frames * md_params.steps_per_frame)
+    for batch_coords, batch_boxes, final_velocities in sample_with_context_iter(
+        ctxt, md_params, temperature, ligand_idxs, max_buffer_frames
+    ):
         all_coords.extend(batch_coords)
         all_boxes.extend(batch_boxes)
 
@@ -1146,7 +1188,6 @@ def run_sims_hrex(
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
 
     # Reset the barostat from the equilibration interval to the production interval
-    barostat = context.get_barostat()
     state = initial_states[0]
     if barostat is not None and state.barostat is not None:
         barostat.set_interval(state.barostat.interval)
@@ -1162,7 +1203,7 @@ def run_sims_hrex(
 
     for current_frame in range(md_params.n_frames):
 
-        def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Trajectory:
+        def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
             context.set_x_t(xvb.coords)
             context.set_v_t(xvb.velocities)
             context.set_box(xvb.box)
@@ -1181,10 +1222,20 @@ def run_sims_hrex(
 
             md_params_replica = replace(md_params, n_frames=1, n_eq_steps=0, seed=state_idx + current_frame)
 
-            return sample_with_context(context, md_params_replica, temperature, ligand_idxs, max_buffer_frames=100)
+            assert md_params_replica.n_frames == 1
+            # Get the next set of frames from the iterator, which will be the only value returned
+            frame, box, final_velos = next(
+                sample_with_context_iter(context, md_params_replica, temperature, ligand_idxs, batch_size=1)
+            )
+            assert frame.shape[0] == 1
 
-        def replica_from_samples(traj: Trajectory) -> CoordsVelBox:
-            return CoordsVelBox(traj.frames[-1], traj.final_velocities, traj.boxes[-1])
+            final_barostat_volume_scale_factor = barostat.get_volume_scale_factor() if barostat is not None else None
+
+            return frame[-1], box[-1], final_velos, final_barostat_volume_scale_factor
+
+        def replica_from_samples(last_sample: Tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
+            frame, box, velos, _ = last_sample
+            return CoordsVelBox(frame, velos, box)
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
         U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
@@ -1202,8 +1253,13 @@ def run_sims_hrex(
         if len(initial_states) == 2:
             fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
 
-        for samples, samples_iter in zip(samples_by_state, samples_by_state_iter):
-            samples.extend(samples_iter)
+        for samples, (xs, boxes, velos, final_barostat_volume_scale_factor) in zip(
+            samples_by_state, samples_by_state_iter
+        ):
+            samples.frames.extend([xs])
+            samples.boxes.extend([boxes])
+            samples.final_velocities = velos
+            samples.final_barostat_volume_scale_factor = final_barostat_volume_scale_factor
 
         fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
 

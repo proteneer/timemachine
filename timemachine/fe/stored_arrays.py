@@ -90,7 +90,7 @@ class StoredArrays(Sequence[NDArray]):
         return Path(self._dir.name)
 
     def extend(self, xs: Collection[ArrayLike]):
-        np.save(self._get_chunk_path(len(self._chunk_sizes)), np.array(xs))
+        np.save(self._get_chunk_path(len(self._chunk_sizes)), np.asarray(xs))
         self._chunk_sizes.append(len(xs))
 
     @staticmethod
@@ -115,12 +115,13 @@ class StoredArrays(Sequence[NDArray]):
         >>> StoredArrays.load(fc) == sa
         True
         """
-        for idx, chunk in enumerate(self._chunks()):
-            serialized_array = serialize_array(np.array(chunk))
-            path = self.get_chunk_path(prefix, idx)
-            if client.exists(str(path)):
-                raise FileExistsError(f"file already exists: {path}")
-            client.store(str(path), serialized_array)
+        for idx, _ in enumerate(self._chunk_sizes):
+            dest_path = self.get_chunk_path(prefix, idx)
+            if client.exists(str(dest_path)):
+                raise FileExistsError(f"file already exists: {dest_path}")
+            src_path = self._get_chunk_path(idx)
+            with open(src_path, "rb") as ifs:
+                client.store_stream(str(dest_path), ifs)
 
     @classmethod
     def load(cls: Type[_T], client: AbstractFileClient, prefix: Path = Path(".")) -> _T:
