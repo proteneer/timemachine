@@ -10,7 +10,7 @@ ARG LIBXEXT_VERSION
 ARG MINICONDA_VERSION=py310_23.1.0-1
 ARG MAKE_VERSION=4.2.1-1.2
 ARG GIT_VERSION=1:2.25.1-*
-ARG WGET_VERSION=1.20.3-1ubuntu2.1
+ARG WGET_VERSION=1.20.3-*
 RUN (apt-get update || true)  && apt-get install --no-install-recommends -y \
     wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} vim \
     && apt-get clean \
