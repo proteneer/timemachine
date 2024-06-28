@@ -262,7 +262,7 @@ def setup_optimized_initial_state(
     temperature: float,
     seed: int,
 ) -> InitialState:
-    """Use pre-optimized initial states with the closest value of lambda as a starting point for optimization."""
+    """Use the pre-optimized initial state with the closest value of lambda as a starting point for optimization."""
 
     # NOTE: The current approach for generating optimized conformations in `optimize_coordinates` creates a
     # discontinuity at lambda=0.5. Ensure that we pick a pre-optimized state on the same side of 0.5 as `lamb`
