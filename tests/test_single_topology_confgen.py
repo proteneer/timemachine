@@ -139,3 +139,41 @@ def test_confgen_spot_edges():
         mol_a = get_mol_by_name(mols, src)
         mol_b = get_mol_by_name(mols, dst)
         run_edge(mol_a, mol_b, protein_path, n_windows)
+
+
+@pytest.mark.parametrize("pair", [("35", "84")])
+@pytest.mark.parametrize("n_windows", [2])
+@pytest.mark.parametrize("seed", [2023])
+def test_min_cutoff_failure(pair, seed, n_windows):
+    """Verify that when minimizing within solvent only the ligand is considered for movement of atoms
+    during minimization. Expectation is that all atoms of the molecules will move beyond effectively zero cutoff"""
+    src, dst = pair
+    box_width = 4.0
+    min_cutoff = 1e-8
+
+    ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
+    mols = read_sdf(ligands)
+    mol_a = get_mol_by_name(mols, src)
+    mol_b = get_mol_by_name(mols, dst)
+
+    all_cores = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        **DEFAULT_ATOM_MAPPING_KWARGS,
+    )
+    core = all_cores[0]
+
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # Use the lambda grid as defined for Bisection
+    lambda_grid = np.linspace(0.0, 1.0, n_windows)
+
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, ff.water_ff)
+    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
+    solvent_host = setup_optimized_host(st, solvent_host_config)
+    ligand_idxs = np.arange(st.get_num_atoms()) + solvent_host.conf.shape[0]
+    with pytest.raises(AssertionError) as res:
+        setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_grid, seed, min_cutoff=min_cutoff)
+    assert f"moved atoms {ligand_idxs.tolist()} >" in str(res.value)
