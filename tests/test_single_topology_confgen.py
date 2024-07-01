@@ -149,6 +149,7 @@ def test_min_cutoff_failure(pair, seed, n_windows):
     during minimization. Expectation is that all atoms of the molecules will move beyond effectively zero cutoff"""
     src, dst = pair
     box_width = 4.0
+    # The cutoff is so small that any ligand pair should trigger the exception
     min_cutoff = 1e-8
 
     ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
