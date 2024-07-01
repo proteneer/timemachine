@@ -570,12 +570,12 @@ def estimate_relative_free_energy_bisection(
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
-    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
 
     temperature = DEFAULT_TEMP
 
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
+    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
     )
@@ -597,7 +597,7 @@ def estimate_relative_free_energy_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state,
             md_params,
-            n_bisections=len(lambda_grid) - 2,
+            n_bisections=n_windows - 2,
             temperature=temperature,
             min_overlap=min_overlap,
         )
@@ -636,8 +636,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
-
     try:
         # First phase: bisection to determine lambda spacing
         assert md_params.hrex_params is not None, "hrex_params must be set to use HREX"
@@ -646,7 +644,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
             [lambda_min, lambda_max],
             make_optimized_initial_state_fn,
             md_params_bisection,
-            n_bisections=len(lambda_grid) - 2,
+            n_bisections=n_windows - 2,
             temperature=temperature,
             min_overlap=min_overlap,
         )
@@ -787,12 +785,12 @@ def estimate_relative_free_energy_bisection_hrex(
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
-    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
 
     temperature = DEFAULT_TEMP
 
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
+    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
     )
