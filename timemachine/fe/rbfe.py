@@ -173,12 +173,24 @@ def setup_initial_state(
 
 
 def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
+    """
+    Optimize a SingleTopology host using minimize_host_4d
+
+    Parameters
+    ----------
+    st: SingleTopology
+        A single topology object
+
+    config: HostConfig
+        Host configuration
+
+    Returns
+    -------
+    Host
+        Minimized host state
+    """
     system, masses = convert_omm_system(config.omm_system)
-    conf = minimizer.minimize_host_4d(
-        [st.mol_a, st.mol_b],
-        config,
-        st.ff,
-    )
+    conf = minimizer.minimize_host_4d([st.mol_a, st.mol_b], config, st.ff)
     return Host(system, masses, conf, config.box, config.num_water_atoms)
 
 
@@ -250,10 +262,24 @@ def setup_optimized_initial_state(
     temperature: float,
     seed: int,
 ) -> InitialState:
-    # Use pre-optimized initial state with the closest value of lambda as a starting point for optimization.
+    """Setup an InitialState for the specified lambda and optimize the coordinates given a list of pre-optimized IntialStates.
+    If the specified lambda exists within the list of optimized_initial_states list, return the existing InitialState.
+    The coordinates of the pre-optimized initial state with the closest value of lambda will be optimized to the new lambda value.
+
+    Note
+    ----
+    When determining the nearest initial state, will only consider states on the same side of lambda=0.5 as the specified lambda value.
+    This imitates the behavior of `optimize_coordinates` which minimizes from the endstate conformations towards lambda 0.5, resulting
+    in a discontinuity in the conformation at lambda=0.5.
+
+    Returns
+    -------
+    InitialState
+        Optimized at the specified lambda value
+    """
 
     # NOTE: The current approach for generating optimized conformations in `optimize_coordinates` creates a
-    # discontinuity at lambda=0.5. Ensure that we pick a pre-optimized state on the same side of 0.5 as `lamb`:
+    # discontinuity at lambda=0.5. Ensure that we pick a pre-optimized state on the same side of 0.5 as `lamb`
     states_subset = [s for s in optimized_initial_states if (s.lamb <= 0.5) == (lamb <= 0.5)]
     nearest_optimized = min(states_subset, key=lambda s: abs(lamb - s.lamb))
 
@@ -313,7 +339,7 @@ def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[ND
     return x_traj
 
 
-def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[NDArray]:
+def optimize_coordinates(initial_states: List[InitialState], min_cutoff: Optional[float] = 0.7) -> List[NDArray]:
     """
     Optimize geometries of the initial states.
 
@@ -358,16 +384,18 @@ def optimize_coordinates(initial_states, min_cutoff=0.7) -> List[NDArray]:
             all_xs.append(xs)
 
     # sanity check that no atom has moved more than `min_cutoff` nm away
-    for state, coords in zip(initial_states, all_xs):
-        displacement_distances = jax_utils.distance_on_pairs(state.x0, coords, box=state.box0)
-        if min_cutoff is not None:
+    if min_cutoff is not None:
+        for state, coords in zip(initial_states, all_xs):
             # assert that ligand and protein atoms are not allowed to move more than min_cutoff
             restricted_idxs = np.concatenate([state.ligand_idxs, state.protein_idxs])
-
+            displacement_distances = jax_utils.distance_on_pairs(
+                state.x0[restricted_idxs], coords[restricted_idxs], box=state.box0
+            )
+            max_moved = np.max(displacement_distances)
+            moved_atoms = restricted_idxs[displacement_distances >= min_cutoff]
             assert (
-                displacement_distances[restricted_idxs] < min_cutoff
-            ).all(), f"λ = {state.lamb} moved an atom > {min_cutoff*10} Å from initial state during minimization"
-
+                len(moved_atoms) == 0
+            ), f"λ = {state.lamb} moved atoms {moved_atoms.tolist()} > {min_cutoff*10} Å from initial state during minimization. Largest displacement was {max_moved*10} Å"
     return all_xs
 
 
