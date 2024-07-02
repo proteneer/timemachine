@@ -159,6 +159,41 @@ class InitialState:
         assert self.ligand_idxs.dtype == np.int32 or self.ligand_idxs.dtype == np.int64
         assert self.protein_idxs.dtype == np.int32 or self.protein_idxs.dtype == np.int64
 
+    def get_interacting_ligand_atom_indices(self) -> NDArray:
+        """Returns the ligand atom indices that are fully interacting, IE that w == 0.0.
+
+        Note
+        ----
+        * Raises an exception in the case of vacuum
+
+        Return
+        ------
+        np.ndarray
+            Contains the indices of the ligand that are fully interacting (w coord == 0.0)
+        """
+        num_atoms = self.x0.shape[0]
+        num_ligand_atoms = len(self.ligand_idxs)
+        if num_atoms == num_ligand_atoms:
+            # TBD: Clean this up
+            raise NotImplementedError("Not implemented for vacuum")
+        elif num_atoms > num_ligand_atoms:
+            num_host_atoms = num_atoms - num_ligand_atoms
+            # Both solvent and complex can be handled the same way
+            summed_pot = next(bp.potential for bp in self.potentials if isinstance(bp.potential, SummedPotential))
+            # TBD Figure out a better way of handling the jankyness of having to select the IxnGroup that defines the Ligand-Water
+            # Currently this just hardcodes to the first ixn group potential which is the ligand-water ixn group as returned by HostTopology.parameterize_nonbonded
+            ixn_group_idx = next(
+                i for i, pot in enumerate(summed_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
+            )
+            assert isinstance(summed_pot.potentials[ixn_group_idx], NonbondedInteractionGroup)
+            water_ligand_ixn_params = summed_pot.params_init[ixn_group_idx]
+            assert water_ligand_ixn_params.shape[0] == num_atoms
+            assert water_ligand_ixn_params.shape[1] == 4
+            per_atom_w = water_ligand_ixn_params[self.ligand_idxs, 3]
+            return np.array(np.nonzero(per_atom_w == 0.0)[0].reshape(-1)) + num_host_atoms
+        else:
+            assert 0, "Invalid initial state"
+
 
 @dataclass
 class BarResult:

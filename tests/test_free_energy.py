@@ -1,6 +1,6 @@
 from functools import partial
 from importlib import resources
-from typing import List
+from typing import List, Optional
 from unittest.mock import patch
 
 import numpy as np
@@ -270,6 +270,53 @@ def hif2a_ligand_pair_single_topology_lam0_state():
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     state = setup_initial_state(st, 0.0, None, DEFAULT_TEMP, 2023)
     return state
+
+
+@pytest.mark.parametrize("seed", [2024])
+@pytest.mark.parametrize("host_name", ["solvent", "complex"])
+def test_initial_state_interacting_ligand_atoms(host_name, seed):
+    lambdas = np.linspace(0.0, 1.0, 4)
+    forcefield = Forcefield.load_default()
+    host_config: Optional[HostConfig] = None
+    host: Optional[Host] = None
+
+    if host_name == "complex":
+        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+            host_sys, host_conf, box, _, num_water_atoms = builders.build_protein_system(
+                str(protein_path), forcefield.protein_ff, forcefield.water_ff
+            )
+            box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+        host_config = HostConfig(host_sys, host_conf, box, num_water_atoms)
+    elif host_name == "solvent":
+        host_sys, host_conf, box, _ = builders.build_water_system(4.0, forcefield.water_ff)
+        box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+        host_config = HostConfig(host_sys, host_conf, box, host_conf.shape[0])
+
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    single_topology = SingleTopology(mol_a, mol_b, core, forcefield)
+
+    host_atoms = 0
+    if host_config is not None:
+        # system, masses = convert_omm_system(host_config.omm_system)
+        host = setup_optimized_host(single_topology, host_config)
+        host_atoms += len(host_conf)
+
+    initial_states = setup_initial_states(
+        single_topology, host, DEFAULT_TEMP, lambdas, seed=seed, min_cutoff=0.7 if host_name is not None else None
+    )
+
+    # print(mol_a_atoms)
+    for state in initial_states:
+        mol_a_atoms = state.ligand_idxs[single_topology.c_flags != 2]
+        mol_b_atoms = state.ligand_idxs[single_topology.c_flags != 1]
+        core_atoms = state.ligand_idxs[single_topology.c_flags == 0]
+        interacting_atom_indices = state.get_interacting_ligand_atom_indices()
+        if state.lamb == 0.0:
+            assert set(interacting_atom_indices) == set(mol_a_atoms)
+        elif state.lamb == 1.0:
+            assert set(interacting_atom_indices) == set(mol_b_atoms)
+        else:
+            assert set(interacting_atom_indices) == set(core_atoms)
 
 
 @pytest.mark.nocuda

@@ -386,8 +386,9 @@ def optimize_coordinates(initial_states: List[InitialState], min_cutoff: Optiona
     # sanity check that no atom has moved more than `min_cutoff` nm away
     if min_cutoff is not None:
         for state, coords in zip(initial_states, all_xs):
-            # assert that ligand and protein atoms are not allowed to move more than min_cutoff
-            restricted_idxs = np.concatenate([state.ligand_idxs, state.protein_idxs])
+            non_dummy_atom_indices = state.get_interacting_ligand_atom_indices()
+            # assert that interacting ligand atoms and protein atoms are not allowed to move more than min_cutoff
+            restricted_idxs = np.concatenate([non_dummy_atom_indices, state.protein_idxs])
             displacement_distances = jax_utils.distance_on_pairs(
                 state.x0[restricted_idxs], coords[restricted_idxs], box=state.box0
             )
