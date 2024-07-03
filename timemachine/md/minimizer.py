@@ -130,6 +130,7 @@ def minimize_host_4d(
     mol_coords: Optional[List[NDArray]] = None,
     windows: int = 50,
     n_steps_per_window: int = 50,
+    max_lambda: float = 0.4,
 ) -> np.ndarray:
     """
     Insert mols into a host system via 4D decoupling using Fire minimizer at lambda=1.0,
@@ -156,6 +157,14 @@ def minimize_host_4d(
 
     n_steps_per_window: integer
         Number of steps to evaluate at each window
+
+    max_lambda: float
+        The lambda value to start minimization at, will be driven to 0.0 linearly over the number of windows.
+
+    Note
+    ----
+    * max_lambda = 1.0 means that the ligand will start completely non-interacting, which combined with a large
+      number of windows or steps per window could have the host move around the ligand in unexpected ways.
 
     Returns
     -------
@@ -207,7 +216,7 @@ def minimize_host_4d(
     # Freeze the ligand atoms
     ligand_idxs = np.arange(num_host_atoms, len(combined_coords))
 
-    potentials, params = parameterize_system(hgt, ff, 1.0)
+    potentials, params = parameterize_system(hgt, ff, max_lambda)
     u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
     bound_impls = [u_impl]
     x = fire_minimize(x0, bound_impls, box, n_steps_per_window, frozen_atoms=ligand_idxs)
@@ -215,7 +224,7 @@ def minimize_host_4d(
     # No need to reconstruct the context, just change the bound potential params. Allows
     # for preserving the velocities between windows
     ctxt = custom_ops.Context(x, v0, box, intg, bound_impls)
-    for lamb in np.linspace(1.0, 0, windows):
+    for lamb in np.linspace(max_lambda, 0, windows):
         _, params = parameterize_system(hgt, ff, lamb)
         u_impl.set_params(flatten_params(params))
         xs, _ = ctxt.multiple_steps(n_steps_per_window)

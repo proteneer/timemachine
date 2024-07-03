@@ -50,7 +50,7 @@ def test_minimize_host_4d_adamantane():
     in water without issue"""
     ff = Forcefield.load_default()
     mol = Chem.AddHs(Chem.MolFromSmiles("C1C3CC2CC(CC1C2)C3"))
-    AllChem.EmbedMolecule(mol)
+    AllChem.EmbedMolecule(mol, randomSeed=2024)
     # If don't delete the relevant water this minimization fails
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, ff.water_ff, mols=[mol])
     host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords))
