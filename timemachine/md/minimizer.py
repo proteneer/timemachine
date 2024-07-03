@@ -74,7 +74,13 @@ def summed_potential_bound_impl_from_potentials_and_params(
     return SummedPotential(potentials, params).bind(flat_params).to_gpu(precision=np.float32).bound_impl
 
 
-def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box: NDArray, n_steps: int) -> NDArray:
+def fire_minimize(
+    x0: NDArray,
+    u_impls: Sequence[custom_ops.BoundPotential],
+    box: NDArray,
+    n_steps: int,
+    frozen_atoms: Optional[NDArray] = None,
+) -> NDArray:
     """
     Minimize coordinates using the FIRE algorithm
 
@@ -106,6 +112,8 @@ def fire_minimize(x0: NDArray, u_impls: Sequence[custom_ops.BoundPotential], box
         return forces
 
     def shift(d, dr):
+        if frozen_atoms is not None:
+            dr[frozen_atoms] = 0.0
         return d + dr
 
     init, f = fire_descent(force, shift)
@@ -172,8 +180,9 @@ def minimize_host_4d(
     mass_list = [np.array(host_masses)]
     conf_list = [np.array(host_config.conf)]
     for mol in mols:
-        # mass increase is to keep the ligand fixed
-        mass_list.append(get_mol_masses(mol) * 100000)
+        # Set mol masses to inf to avoid any movement, important since function only returns
+        # the host coordinates
+        mass_list.append(get_mol_masses(mol) * np.inf)
 
     if mol_coords is not None:
         for mc in mol_coords:
@@ -195,10 +204,13 @@ def minimize_host_4d(
     x0 = combined_coords
     v0 = np.zeros_like(x0)
 
+    # Freeze the ligand atoms
+    ligand_idxs = np.arange(num_host_atoms, len(combined_coords))
+
     potentials, params = parameterize_system(hgt, ff, 1.0)
     u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
     bound_impls = [u_impl]
-    x = fire_minimize(x0, bound_impls, box, n_steps_per_window)
+    x = fire_minimize(x0, bound_impls, box, n_steps_per_window, frozen_atoms=ligand_idxs)
 
     # No need to reconstruct the context, just change the bound potential params. Allows
     # for preserving the velocities between windows
@@ -209,7 +221,10 @@ def minimize_host_4d(
         xs, _ = ctxt.multiple_steps(n_steps_per_window)
         x = xs[-1]
 
-    final_coords = fire_minimize(x, bound_impls, box, n_steps_per_window)
+    final_coords = fire_minimize(x, bound_impls, box, n_steps_per_window, frozen_atoms=ligand_idxs)
+    # Verify that the final coordinates didn't move the ligand idxs
+    assert np.all(final_coords[ligand_idxs] == combined_coords[ligand_idxs])
+
     for impl in bound_impls:
         du_dx, _ = impl.execute(final_coords, box, compute_u=False)
         check_force_norm(-du_dx)
