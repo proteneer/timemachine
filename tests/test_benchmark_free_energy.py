@@ -80,7 +80,9 @@ def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpo
 
     lambdas = np.linspace(lambda_endpoints[0], lambda_endpoints[1], n_windows)
 
-    initial_states = setup_initial_states(single_topology, host, DEFAULT_TEMP, lambdas, seed=2023, min_cutoff=0.7)
+    initial_states = setup_initial_states(
+        single_topology, host, DEFAULT_TEMP, lambdas, seed=2023, min_cutoff=0.7 if host is not None else None
+    )
 
     n_frames = 500 // n_windows
 

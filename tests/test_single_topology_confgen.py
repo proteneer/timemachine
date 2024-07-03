@@ -175,6 +175,7 @@ def test_min_cutoff_failure(pair, seed, n_windows):
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_host = setup_optimized_host(st, solvent_host_config)
     ligand_idxs = np.arange(st.get_num_atoms()) + solvent_host.conf.shape[0]
+    expected_moved = ligand_idxs[st.c_flags != 2]
     with pytest.raises(AssertionError) as res:
         setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_grid, seed, min_cutoff=min_cutoff)
-    assert f"moved atoms {ligand_idxs.tolist()} >" in str(res.value)
+    assert f"moved atoms {expected_moved.tolist()} >" in str(res.value)

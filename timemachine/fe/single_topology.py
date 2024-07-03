@@ -1,5 +1,6 @@
 import warnings
 from collections.abc import Iterable
+from enum import IntEnum
 from functools import partial
 from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Tuple, TypeVar, Union, cast
 
@@ -869,6 +870,12 @@ def interpolate_w_coord(w0: float | jax.Array, w1: float | jax.Array, lamb: floa
     return interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambdas))
 
 
+class AtomMapFlags(IntEnum):
+    CORE = 0
+    MOL_A = 1
+    MOL_B = 2
+
+
 class AtomMapMixin:
     """
     A Mixin class containing the atom_mapping information. This Mixin sets up the following
@@ -902,23 +909,23 @@ class AtomMapMixin:
         self.b_to_c = np.zeros(mol_b.GetNumAtoms(), dtype=np.int32) - 1
 
         # mark membership:
-        # 0: Core
-        # 1: R_A (default)
-        # 2: R_B
-        self.c_flags = np.ones(self.get_num_atoms(), dtype=np.int32)
+        # AtomMapFlags.CORE: Core
+        # AtomMapFlags.MOL_A: R_A (default)
+        # AtomMapFlags.MOL_B: R_B
+        self.c_flags = np.ones(self.get_num_atoms(), dtype=np.int32) * AtomMapFlags.MOL_A
         # test for uniqueness in core idxs for each mol
         assert len(set(tuple(core[:, 0]))) == len(core[:, 0])
         assert len(set(tuple(core[:, 1]))) == len(core[:, 1])
 
         for a, b in core:
-            self.c_flags[a] = 0
+            self.c_flags[a] = AtomMapFlags.CORE
             self.b_to_c[b] = a
 
         iota = self.mol_a.GetNumAtoms()
         for b_idx, c_idx in enumerate(self.b_to_c):
             if c_idx == -1:
                 self.b_to_c[b_idx] = iota
-                self.c_flags[iota] = 2
+                self.c_flags[iota] = AtomMapFlags.MOL_B
                 iota += 1
 
         # setup reverse mappings
