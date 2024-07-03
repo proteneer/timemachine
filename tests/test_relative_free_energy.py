@@ -288,8 +288,8 @@ def test_local_md_parameters(freeze_reference):
         seed=seed,
         steps_per_frame=steps_per_frame,
         local_steps=steps_per_frame,
-        min_radius=0.1,
-        max_radius=0.5,
+        min_radius=0.3,
+        max_radius=1.0,
         freeze_reference=freeze_reference,
     )
 
