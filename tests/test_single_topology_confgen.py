@@ -3,7 +3,7 @@ import pytest
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, cif_writer, utils
-from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
+from timemachine.fe.lambda_schedule import construct_symmetric_pre_optimized_relative_lambda_schedule
 from timemachine.fe.rbfe import HostConfig, setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
 from timemachine.fe.utils import get_mol_name, read_sdf
@@ -43,7 +43,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     ff = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, ff)
 
-    lambda_schedule = construct_pre_optimized_relative_lambda_schedule(n_windows)
+    lambda_schedule = construct_symmetric_pre_optimized_relative_lambda_schedule(n_windows)
     seed = 2023
 
     # solvent
