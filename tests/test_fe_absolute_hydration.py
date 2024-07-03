@@ -6,7 +6,7 @@ from timemachine.fe.free_energy import MDParams
 from timemachine.ff import Forcefield
 
 
-def test_run_solvent():
+def test_run_solvent_absolute_hydration():
     seed = 2022
     n_frames = 10
     n_eq_steps = 100
@@ -28,5 +28,6 @@ def test_run_solvent():
     assert len(res.boxes[-1]) == n_frames
     assert res.md_params == md_params
     assert host_config.omm_system is not None
-    assert host_config.conf.shape == (6282, 3)
+    assert host_config.num_water_atoms > 0
+    assert host_config.conf.shape == (res.frames[0][0].shape[0] - mol.GetNumAtoms(), 3)
     assert host_config.box.shape == (3, 3)

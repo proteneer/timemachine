@@ -426,11 +426,13 @@ def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, mi
         Box margin in nm, default is 0.5 nm.
 
     minimize_energy: bool
-        whether to apply minimize_host_4d
+        whether to apply fire_minimize_host
     """
 
     # construct water box
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width, ff.water_ff)
+    water_system, water_coords, water_box, water_topology = builders.build_water_system(
+        box_width, ff.water_ff, mols=[mol]
+    )
     water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
     host_config = HostConfig(water_system, water_coords, water_box, water_coords.shape[0])
 
@@ -443,7 +445,7 @@ def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, mi
     # concatenate (optionally minimized) water_coords and ligand_coords
     ligand_coords = get_romol_conf(mol)
     if minimize_energy:
-        new_water_coords = minimizer.minimize_host_4d([mol], host_config, ff)
+        new_water_coords = minimizer.fire_minimize_host([mol], host_config, ff)
         coords = np.concatenate([new_water_coords, ligand_coords])
     else:
         coords = np.concatenate([water_coords, ligand_coords])

@@ -499,7 +499,7 @@ def benchmark_solvent(config: BenchmarkConfig):
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
-    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, forcefield.water_ff)
+    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
 
     num_water_atoms = host_coords.shape[0]
 

@@ -21,7 +21,7 @@ def remove_clashy_waters(
     box: NDArray[np.float64],
     water_idxs: NDArray,
     mols: List[Chem.Mol],
-    clash_distance: float = 0.3,
+    clash_distance: float = 0.4,
 ):
     """Remove waters from an OpenMM modeler that clash with a set of molecules
 
@@ -48,11 +48,16 @@ def remove_clashy_waters(
     water_coords = host_coords[water_idxs]
     ligand_coords = np.concatenate([get_romol_conf(mol) for mol in mols])
     clashy_idxs = idxs_within_cutoff(water_coords, ligand_coords, box, cutoff=clash_distance)
+    if len(clashy_idxs) == 0:
+        return
+    # Offset the clashy idxs with the first atom idx, else could be pointing at non-water atoms
+    clashy_idxs += np.min(water_idxs)
     all_atoms = list(modeller.topology.atoms())
     waters_to_delete = set()
     for idx in clashy_idxs:
         atom = all_atoms[idx]
         waters_to_delete.add(atom.residue)
+        assert atom.residue.name == "HOH"
     modeller.delete(list(waters_to_delete))
 
 

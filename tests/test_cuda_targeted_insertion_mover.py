@@ -368,6 +368,10 @@ def test_tibd_exchange_get_set_params(precision):
 
 @pytest.fixture(scope="module")
 def brd4_rbfe_state() -> InitialState:
+    with resources.path("timemachine.datasets.water_exchange", "brd4_pair.sdf") as ligand_path:
+        mols = read_sdf(ligand_path)
+    mol_a = mols[0]
+    mol_b = mols[1]
     seed = 2023
     # Use 0.5 lambda to ensure there is the most space in the binding pocket where both endstate's dummy atoms are
     # partially decoupled
@@ -377,13 +381,9 @@ def brd4_rbfe_state() -> InitialState:
     # the binding pocket
     with resources.path("timemachine.datasets.water_exchange", "brd4_no_water.pdb") as pdb_path:
         complex_system, complex_conf, box, _, num_water_atoms = builders.build_protein_system(
-            str(pdb_path), ff.protein_ff, ff.water_ff
+            str(pdb_path), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b]
         )
     box += np.diag([0.1, 0.1, 0.1])
-    with resources.path("timemachine.datasets.water_exchange", "brd4_pair.sdf") as ligand_path:
-        mols = read_sdf(ligand_path)
-    mol_a = mols[0]
-    mol_b = mols[1]
 
     core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
     host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
@@ -424,7 +424,7 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
 
     # Build the protein system using the solvent PDB for buckyball
     host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
-        str(host_pdb), ff.protein_ff, ff.water_ff
+        str(host_pdb), ff.protein_ff, ff.water_ff, mols=[mol]
     )
     host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)
@@ -662,7 +662,7 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
 
     # Build the protein system using the solvent PDB for buckyball
     host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
-        str(host_pdb), ff.protein_ff, ff.water_ff
+        str(host_pdb), ff.protein_ff, ff.water_ff, mols=[mol]
     )
     host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)

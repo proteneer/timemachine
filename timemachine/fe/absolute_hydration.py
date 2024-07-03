@@ -275,7 +275,7 @@ def setup_initial_states(
 
     """
     host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
-    host_conf = minimizer.minimize_host_4d(
+    host_conf = minimizer.fire_minimize_host(
         [afe.mol],
         host_config,
         ff,
