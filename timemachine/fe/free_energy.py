@@ -24,7 +24,7 @@ from timemachine.fe.plots import (
     plot_overlap_summary_figure,
 )
 from timemachine.fe.protocol_refinement import greedy_bisection_step
-from timemachine.fe.single_topology import AtomMapMixin
+from timemachine.fe.single_topology import AtomMapFlags, AtomMapMixin
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
@@ -179,11 +179,11 @@ class InitialState:
         """
         assert self.atom_map is not None, "No atom map provided, unable to provide interacting atom indices"
         if self.lamb == 0.0:
-            return self.ligand_idxs[self.atom_map.c_flags != 2]
+            return self.ligand_idxs[self.atom_map.c_flags != AtomMapFlags.MOL_B]
         elif self.lamb == 1.0:
-            return self.ligand_idxs[self.atom_map.c_flags != 1]
+            return self.ligand_idxs[self.atom_map.c_flags != AtomMapFlags.MOL_A]
         else:
-            return self.ligand_idxs[self.atom_map.c_flags == 0]
+            return self.ligand_idxs[self.atom_map.c_flags == AtomMapFlags.CORE]
 
 
 @dataclass
