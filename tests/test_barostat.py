@@ -80,10 +80,14 @@ def test_barostat_with_clashes():
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    # Set the lambda to 0.0 and don't minimize, resulting in clashes in the system
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
-        mol_a, ff, lamb=0.0, minimize_energy=False
-    )
+    # Construct water box without removing the waters around the ligand to ensure clashes
+    host_system, host_coords, box, host_top = build_water_system(3.0, ff.water_ff)
+    bt = BaseTopology(mol_a, ff)
+    afe = AbsoluteFreeEnergy(mol_a, bt)
+    host_config = HostConfig(host_system, host_coords, box, host_coords.shape[0])
+    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff.get_params(), host_config, 0.0)
+    coords = afe.prepare_combined_coords(host_coords=host_coords)
+
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
@@ -222,7 +226,6 @@ def test_barostat_is_deterministic():
     This is important to debugging as well as providing the ability to replicate
     simulations
     """
-    lam = 1.0
     temperature = DEFAULT_TEMP
     timestep = 1.5e-3
     barostat_interval = 3
@@ -235,12 +238,9 @@ def test_barostat_is_deterministic():
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    host_system, host_coords, host_box, host_top = build_water_system(3.0, ff.water_ff)
-    bt = BaseTopology(mol_a, ff)
-    afe = AbsoluteFreeEnergy(mol_a, bt)
-    host_config = HostConfig(host_system, host_coords, host_box, host_coords.shape[0])
-    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff.get_params(), host_config, lam)
-    coords = afe.prepare_combined_coords(host_coords=host_coords)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+        mol_a, ff, lamb=1.0, minimize_energy=False
+    )
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -267,16 +267,16 @@ def test_barostat_is_deterministic():
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
 
-    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, movers=[baro])
+    ctxt = custom_ops.Context(coords, v_0, box, integrator.impl(), u_impls, movers=[baro])
     ctxt.multiple_steps(15)
     atm_box = ctxt.get_box()
     # Verify that the volume of the box has changed
-    assert compute_box_volume(atm_box) != compute_box_volume(host_box)
+    assert compute_box_volume(atm_box) != compute_box_volume(box)
 
     baro = custom_ops.MonteCarloBarostat(
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
-    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, movers=[baro])
+    ctxt = custom_ops.Context(coords, v_0, box, integrator.impl(), u_impls, movers=[baro])
     ctxt.multiple_steps(15)
     # Verify that we get back bitwise reproducible boxes
     assert compute_box_volume(atm_box) == compute_box_volume(ctxt.get_box())
@@ -295,7 +295,7 @@ def test_barostat_varying_pressure():
     pressure = 1013.0
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, lam, margin=0.0)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol_a, ff, lam, margin=0.0)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -323,19 +323,19 @@ def test_barostat_varying_pressure():
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
 
-    ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, movers=[baro])
-    ctxt.multiple_steps(1000)
+    ctxt = custom_ops.Context(coords, v_0, box, integrator_impl, u_impls, movers=[baro])
+    ctxt.multiple_steps(3000)
     ten_atm_box = ctxt.get_box()
     ten_atm_box_vol = compute_box_volume(ten_atm_box)
     # Expect the box to shrink thanks to the barostat
-    assert compute_box_volume(complex_box) - ten_atm_box_vol > 0.4
+    assert compute_box_volume(box) - ten_atm_box_vol > 0.4
 
     # Set the pressure to 1 atm
     baro.set_pressure(DEFAULT_PRESSURE)
-    # Changing the barostat interval resets the barostat step.
-    baro.set_interval(2)
+    # Changing the step to 0
+    baro.set_step(0)
 
-    ctxt.multiple_steps(2000)
+    ctxt.multiple_steps(3000)
     atm_box = ctxt.get_box()
     # Box will grow thanks to the lower pressure
     assert compute_box_volume(atm_box) > ten_atm_box_vol
@@ -558,7 +558,6 @@ def test_get_group_indices():
 @pytest.mark.memcheck
 def test_barostat_scaling_behavior():
     """Verify that it is possible to retrieve and set the volume scaling factor. Also check that the adaptive behavior of the scaling can be disabled"""
-    lam = 1.0
     temperature = DEFAULT_TEMP
     timestep = 1.5e-3
     barostat_interval = 3
@@ -571,12 +570,9 @@ def test_barostat_scaling_behavior():
     mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    host_system, host_coords, host_box, host_top = build_water_system(3.0, ff.water_ff)
-    bt = BaseTopology(mol_a, ff)
-    afe = AbsoluteFreeEnergy(mol_a, bt)
-    host_config = HostConfig(host_system, host_coords, host_box, host_coords.shape[0])
-    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff.get_params(), host_config, lam)
-    coords = afe.prepare_combined_coords(host_coords=host_coords)
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+        mol_a, ff, lamb=0.0, minimize_energy=False
+    )
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -606,7 +602,7 @@ def test_barostat_scaling_behavior():
     assert baro.get_volume_scale_factor() == 0.0
     assert baro.get_adaptive_scaling()
 
-    ctxt = custom_ops.Context(coords, v_0, host_box, integrator.impl(), u_impls, movers=[baro])
+    ctxt = custom_ops.Context(coords, v_0, box, integrator.impl(), u_impls, movers=[baro])
     ctxt.multiple_steps(15)
 
     # Verify that the volume scaling is non-zero
@@ -614,7 +610,7 @@ def test_barostat_scaling_behavior():
     assert scaling > 0
 
     # Set to an intentionally bad factor to ensure it adapts
-    bad_scaling_factor = 0.5 * compute_box_volume(host_box)
+    bad_scaling_factor = 0.5 * compute_box_volume(box)
     baro.set_volume_scale_factor(bad_scaling_factor)
     assert baro.get_volume_scale_factor() == bad_scaling_factor
     ctxt.multiple_steps(100)

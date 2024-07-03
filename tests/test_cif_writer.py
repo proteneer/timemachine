@@ -19,7 +19,7 @@ def test_write_single_topology_frame():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
     top = SingleTopology(mol_a, mol_b, core, forcefield)
-    _, solvent_coords, _, solvent_top = builders.build_water_system(4.0, forcefield.water_ff)
+    _, solvent_coords, _, solvent_top = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
 
     with NamedTemporaryFile(suffix=".cif") as temp:
         writer = CIFWriter([solvent_top, mol_a, mol_b], temp.name)
@@ -76,7 +76,7 @@ def test_cif_writer(n_frames):
         assert cif.getPositions(asNumpy=True).shape == good_coords.shape
         np.testing.assert_allclose(cif.getPositions(asNumpy=True), good_coords)
 
-    _, solvent_coords, _, solvent_top = builders.build_water_system(4.0, ff.water_ff)
+    _, solvent_coords, _, solvent_top = builders.build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
 
     # test solvent
     with NamedTemporaryFile(suffix=".cif") as temp:

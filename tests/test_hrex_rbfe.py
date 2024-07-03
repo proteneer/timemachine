@@ -36,19 +36,19 @@ def get_hif2a_single_topology_leg(host_name: str | None):
     forcefield = Forcefield.load_default()
     host_config: Optional[HostConfig] = None
 
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     if host_name == "complex":
         with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
             host_sys, host_conf, box, _, num_water_atoms = builders.build_protein_system(
-                str(protein_path), forcefield.protein_ff, forcefield.water_ff
+                str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )
             box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
         host_config = HostConfig(host_sys, host_conf, box, num_water_atoms)
     elif host_name == "solvent":
-        host_sys, host_conf, box, _ = builders.build_water_system(4.0, forcefield.water_ff)
+        host_sys, host_conf, box, _ = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
         box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
         host_config = HostConfig(host_sys, host_conf, box, host_conf.shape[0])
 
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
 
     return mol_a, mol_b, core, forcefield, host_config

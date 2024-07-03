@@ -186,7 +186,7 @@ def setup_initial_state(
 
 def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
     """
-    Optimize a SingleTopology host using minimize_host_4d
+    Optimize a SingleTopology host using pre_equilibrate_host
 
     Parameters
     ----------
@@ -202,8 +202,8 @@ def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
         Minimized host state
     """
     system, masses = convert_omm_system(config.omm_system)
-    conf = minimizer.minimize_host_4d([st.mol_a, st.mol_b], config, st.ff)
-    return Host(system, masses, conf, config.box, config.num_water_atoms)
+    conf, box = minimizer.pre_equilibrate_host([st.mol_a, st.mol_b], config, st.ff)
+    return Host(system, masses, conf, box, config.num_water_atoms)
 
 
 def setup_initial_states(
@@ -212,7 +212,7 @@ def setup_initial_states(
     temperature: float,
     lambda_schedule: Union[NDArray, Sequence[float]],
     seed: int,
-    min_cutoff: Optional[float] = 0.7,
+    min_cutoff: Optional[float] = None,
 ) -> List[InitialState]:
     """
     Given a sequence of lambda values, return a list of initial states.
@@ -239,7 +239,8 @@ def setup_initial_states(
         Random number seed
 
     min_cutoff: float, optional
-        Throw error if any atom moves more than this distance (nm) after minimization
+        Throw error if any atom moves more than this distance (nm) after minimization. Typically only meaningful
+        in the complex leg where the check may indicate that the ligand is no longer posed reliably.
 
     Returns
     -------
@@ -876,7 +877,7 @@ def run_solvent(
     md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
-    min_cutoff: Optional[float] = 0.7,
+    min_cutoff: Optional[float] = 0.8,
 ):
     if md_params is not None and md_params.water_sampling_params is not None:
         md_params = replace(md_params, water_sampling_params=None)

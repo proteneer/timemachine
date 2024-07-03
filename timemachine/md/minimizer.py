@@ -1,5 +1,5 @@
 import warnings
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple
 
 import jax
 import numpy as np
@@ -7,10 +7,10 @@ import scipy.optimize
 from numpy.typing import NDArray
 from rdkit import Chem
 
-from timemachine.constants import BOLTZ, DEFAULT_TEMP, MAX_FORCE_NORM
-from timemachine.fe import model_utils, topology
+from timemachine.constants import BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP, MAX_FORCE_NORM
+from timemachine.fe import topology
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.utils import get_mol_masses, get_romol_conf, set_romol_conf
+from timemachine.fe.utils import get_romol_conf, set_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
@@ -76,10 +76,8 @@ def summed_potential_bound_impl_from_potentials_and_params(
 
 def fire_minimize(
     x0: NDArray,
-    u_impls: Sequence[custom_ops.BoundPotential],
-    box: NDArray,
+    du_dx_fxn: Callable[[NDArray], NDArray],
     n_steps: int,
-    frozen_atoms: Optional[NDArray] = None,
 ) -> NDArray:
     """
     Minimize coordinates using the FIRE algorithm
@@ -89,10 +87,7 @@ def fire_minimize(
     coords: np.ndarray
         N x 3 coordinates. units of nanometers.
 
-    u_impls: list of bound impls of potentials
-
-    box: np.ndarray [3,3]
-        Box matrix for periodic boundary conditions. units of nanometers.
+    du_dx_fxn: Function that given coordinates returns the du_dx
 
     n_steps: int
         Number of steps
@@ -105,15 +100,10 @@ def fire_minimize(
     """
 
     def force(coords):
-        forces = np.zeros_like(coords)
-        for impl in u_impls:
-            du_dx, _ = impl.execute(coords, box, compute_u=False)
-            forces -= du_dx
+        forces = -du_dx_fxn(coords)
         return forces
 
     def shift(d, dr):
-        if frozen_atoms is not None:
-            dr[frozen_atoms] = 0.0
         return d + dr
 
     init, f = fire_descent(force, shift)
@@ -123,19 +113,146 @@ def fire_minimize(
     return np.asarray(opt_state.position)
 
 
-def minimize_host_4d(
+def pre_equilibrate_host(
     mols: List[Chem.Mol],
     host_config: HostConfig,
     ff: Forcefield,
     mol_coords: Optional[List[NDArray]] = None,
-    windows: int = 50,
-    n_steps_per_window: int = 50,
-) -> np.ndarray:
-    """
-    Insert mols into a host system via 4D decoupling using Fire minimizer at lambda=1.0,
-    0 Kelvin Langevin integration at a sequence of lambda from 1.0 to 0.0, and Fire minimizer again at lambda=0.0
+    minimizer_steps: int = 1000,
+    equailibration_steps: int = 1000,
+    pressure: float = DEFAULT_PRESSURE,
+    temperature: float = DEFAULT_TEMP,
+    barostat_interval: int = 5,
+    seed: int = 2024,
+) -> Tuple[NDArray, NDArray]:
+    """pre_equilibrate_host is a utility function that performs minimization than some amount of equilibration.
 
-    The ligand coordinates are fixed during this, and only host_coords are minimized.
+    The intention of this function is to resolve any potential clashes in the system, then to equilibrate the box size, all while
+    keeping the ligand fixed. This helps set up up simulations where the local region around the ligand is optimized over a set of windows.
+
+    Parameters
+    ----------
+    mols: list of Chem.Mol
+        Ligands to be inserted. This must be of length 1 or 2 for now.
+
+    host_config: HostConfig
+        Represents the host system.
+
+    ff: ff.Forcefield
+        Wrapper class around a list of handlers
+
+    mol_coords: list of np.ndarray, optional
+        Pre-specify a list of mol coords. Else use the mol.GetConformer(0)
+
+    minimizer_steps: integer
+        Number of steps to run the FIRE minimizer with
+
+    equilibration_steps: integer
+        Number of steps to run MD with
+
+    pressure: float
+        Pressure to run barostat with
+
+    temperature: float
+        Temperature to run MD with
+
+    barostat_interval: integer
+        How often to run the barostat
+
+    seed: integer
+        Seed for barostat and integrator
+
+    Returns
+    -------
+    2-tuple of host coordinates and box
+        the minimized host_coords and the new box
+
+    """
+    box = host_config.box
+    assert box.shape == (3, 3)
+
+    minimized_host_coords = fire_minimize_host(mols, host_config, ff, mol_coords=mol_coords, n_steps=minimizer_steps)
+
+    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+
+    num_host_atoms = host_config.conf.shape[0]
+
+    if len(mols) == 1:
+        top = topology.BaseTopology(mols[0], ff)
+    elif len(mols) == 2:
+        top = topology.DualTopologyMinimization(mols[0], mols[1], ff)
+    else:
+        raise ValueError("mols must be length 1 or 2")
+
+    mass_list = [np.array(host_masses)]
+    conf_list = [minimized_host_coords]
+    for mol in mols:
+        # Set ligand masses to inf to ensure ligands don't move
+        mass_list.append(np.ones(mol.GetNumAtoms()) * np.inf)
+
+    if mol_coords is None:
+        mol_coords = [get_romol_conf(mol) for mol in mols]
+    for mc in mol_coords:
+        conf_list.append(mc)
+
+    combined_masses = np.concatenate(mass_list)
+    combined_coords = np.concatenate(conf_list)
+
+    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
+
+    intg = LangevinIntegrator(DEFAULT_TEMP, 1.5e-3, 1.0, combined_masses, seed).impl()
+
+    x0 = combined_coords
+    v0 = np.zeros_like(x0)
+
+    num_host_atoms = minimized_host_coords.shape[0]
+
+    potentials, params = parameterize_system(hgt, ff, 0.0)
+    bond_pot = next(pot for pot in potentials if isinstance(pot, HarmonicBond))
+    group_idxs = get_group_indices(get_bond_list(bond_pot), x0.shape[0])
+    # Only adjust the non-ligand group idxs, we don't want to move the ligand coordinates at all
+    non_ligand_group_idxs = [group for group in group_idxs if np.all(group < num_host_atoms)]
+
+    u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
+    bound_impls = [u_impl]
+
+    baro = MonteCarloBarostat(
+        x0.shape[0],
+        pressure,
+        temperature,
+        non_ligand_group_idxs,
+        barostat_interval,
+        seed + 1,
+    )
+    baro_impl = baro.impl(bound_impls)
+
+    ctxt = custom_ops.Context(x0, v0, box, intg, bound_impls, movers=[baro_impl])
+    xs, boxes = ctxt.multiple_steps(equailibration_steps)
+    x = xs[-1]
+    box = boxes[-1]
+
+    assert np.all(x[num_host_atoms:] == np.concatenate(mol_coords)), "Ligand atoms unexpectedly moved"
+
+    # Only evaluate the host forces, the mols may be strained at this stage. No change is made to the mols
+    # which means evaluating the mols forces may trigger spurious failures
+    for impl in bound_impls:
+        du_dx, _ = impl.execute(x, box, compute_u=False)
+        check_force_norm(-du_dx[:num_host_atoms])
+
+    return x[:num_host_atoms], box
+
+
+def fire_minimize_host(
+    mols: List[Chem.Mol],
+    host_config: HostConfig,
+    ff: Forcefield,
+    mol_coords: Optional[List[NDArray]] = None,
+    n_steps: int = 1000,
+) -> NDArray:
+    """
+    Minimize a host system using the Fire minimizer.
+
+    The ligand coordinates are fixed during minimization, and only host_coords are minimized.
 
     Parameters
     ----------
@@ -151,85 +268,25 @@ def minimize_host_4d(
     mol_coords: list of np.ndarray
         Pre-specify a list of mol coords. Else use the mol.GetConformer(0)
 
-    windows: integer
-        Number of lambda windows to lower the mols into the host via 4D decoupling
-
-    n_steps_per_window: integer
-        Number of steps to evaluate at each window
+    n_steps: integer
+        Number of steps to run the FIRE minimizer with
 
     Returns
     -------
     np.ndarray
-        This returns minimized host_coords.
+        the minimized host_coords.
 
     """
-    box = host_config.box
-    assert box.shape == (3, 3)
+    du_dx_fxn = make_host_du_dx_fxn(mols, host_config, ff, mol_coords=mol_coords)
 
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+    x_host = np.array(host_config.conf)
 
-    num_host_atoms = host_config.conf.shape[0]
+    final_host_coords = fire_minimize(x_host, du_dx_fxn, n_steps)
 
-    if len(mols) == 1:
-        top = topology.BaseTopology(mols[0], ff)
-    elif len(mols) == 2:
-        top = topology.DualTopologyMinimization(mols[0], mols[1], ff)
-    else:
-        raise ValueError("mols must be length 1 or 2")
+    du_dx = du_dx_fxn(final_host_coords)
+    check_force_norm(-du_dx)
 
-    mass_list = [np.array(host_masses)]
-    conf_list = [np.array(host_config.conf)]
-    for mol in mols:
-        # Set mol masses to inf to avoid any movement, important since function only returns
-        # the host coordinates
-        mass_list.append(get_mol_masses(mol) * np.inf)
-
-    if mol_coords is not None:
-        for mc in mol_coords:
-            conf_list.append(mc)
-    else:
-        for mol in mols:
-            conf_list.append(get_romol_conf(mol))
-
-    combined_masses = np.concatenate(mass_list)
-    combined_coords = np.concatenate(conf_list)
-
-    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
-
-    # this value doesn't matter since we will turn off the noise.
-    seed = 0
-
-    intg = LangevinIntegrator(0.0, 1.5e-3, 1.0, combined_masses, seed).impl()
-
-    x0 = combined_coords
-    v0 = np.zeros_like(x0)
-
-    # Freeze the ligand atoms
-    ligand_idxs = np.arange(num_host_atoms, len(combined_coords))
-
-    potentials, params = parameterize_system(hgt, ff, 1.0)
-    u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
-    bound_impls = [u_impl]
-    x = fire_minimize(x0, bound_impls, box, n_steps_per_window, frozen_atoms=ligand_idxs)
-
-    # No need to reconstruct the context, just change the bound potential params. Allows
-    # for preserving the velocities between windows
-    ctxt = custom_ops.Context(x, v0, box, intg, bound_impls)
-    for lamb in np.linspace(1.0, 0, windows):
-        _, params = parameterize_system(hgt, ff, lamb)
-        u_impl.set_params(flatten_params(params))
-        xs, _ = ctxt.multiple_steps(n_steps_per_window)
-        x = xs[-1]
-
-    final_coords = fire_minimize(x, bound_impls, box, n_steps_per_window, frozen_atoms=ligand_idxs)
-    # Verify that the final coordinates didn't move the ligand idxs
-    assert np.all(final_coords[ligand_idxs] == combined_coords[ligand_idxs])
-
-    for impl in bound_impls:
-        du_dx, _ = impl.execute(final_coords, box, compute_u=False)
-        check_force_norm(-du_dx)
-
-    return final_coords[:num_host_atoms]
+    return final_host_coords
 
 
 def make_host_du_dx_fxn(
@@ -297,7 +354,7 @@ def equilibrate_host_barker(
     n_steps: int = 1000,
     seed: Optional[int] = None,
 ) -> NDArray:
-    """Possible alternative to minimize_host_4d, for purposes of clash resolution and initial pre-equilibration
+    """Possible alternative to fire_minimize_host, for purposes of clash resolution and initial pre-equilibration
 
     Notes
     -----
@@ -329,113 +386,6 @@ def equilibrate_host_barker(
     check_force_norm(final_forces)
 
     return x_host
-
-
-def equilibrate_host(
-    mol: Chem.Mol,
-    host_config: HostConfig,
-    temperature: float,
-    pressure: float,
-    ff: Forcefield,
-    n_steps: int,
-    seed: Optional[int] = None,
-) -> Tuple[NDArray, NDArray]:
-    """
-    Equilibrate a host system given a reference molecule using the MonteCarloBarostat.
-
-    Useful for preparing a host that will be used for multiple FEP calculations using the same reference, IE a starmap.
-
-    Performs the following:
-    - Minimize host with rigid mol
-    - Minimize host and mol
-    - Run n_steps with HMR enabled and MonteCarloBarostat every 5 steps
-
-    Parameters
-    ----------
-    mol: Chem.Mol
-        Ligand for the host to equilibrate with.
-
-    host_config: HostConfig
-        Represents the host system.
-
-    temperature: float
-        Temperature at which to run the simulation. Units of kelvins.
-
-    pressure: float
-        Pressure at which to run the simulation. Units of bars.
-
-    ff: ff.Forcefield
-        Wrapper class around a list of handlers.
-
-    n_steps: int
-        Number of steps to run the simulation for.
-
-    seed: int or None
-        Value to seed simulation with
-
-    Returns
-    -------
-    tuple (coords, box)
-        Returns equilibrated system coords as well as the box.
-
-    """
-    # insert mol into the binding pocket.
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
-
-    min_host_coords = minimize_host_4d([mol], host_config, ff)
-
-    ligand_masses = get_mol_masses(mol)
-    ligand_coords = get_romol_conf(mol)
-
-    combined_masses = np.concatenate([host_masses, ligand_masses])
-    combined_coords = np.concatenate([min_host_coords, ligand_coords])
-
-    top = topology.BaseTopology(mol, ff)
-    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
-
-    # setup the parameter handlers for the ligand
-    potentials, params = parameterize_system(hgt, ff, 1.0)
-
-    x0 = combined_coords
-
-    # Re-minimize with the mol being flexible
-    u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)  # lambda=1
-    x0 = fire_minimize(x0, [u_impl], host_config.box, 50)
-    v0 = np.zeros_like(x0)
-
-    dt = 2.5e-3
-    friction = 1.0
-
-    if seed is None:
-        seed = np.random.randint(np.iinfo(np.int32).max)
-
-    hb_potential = next(p for p in potentials if isinstance(p, HarmonicBond))
-    bond_list = get_bond_list(hb_potential)
-    combined_masses = model_utils.apply_hmr(combined_masses, bond_list)
-
-    integrator = LangevinIntegrator(temperature, dt, friction, combined_masses, seed).impl()
-
-    group_indices = get_group_indices(bond_list, len(combined_masses))
-
-    barostat_interval = 5
-    _, params = parameterize_system(hgt, ff, 0.0)  # lambda=0
-    u_impl.set_params(flatten_params(params))
-    barostat = MonteCarloBarostat(
-        x0.shape[0],
-        pressure,
-        temperature,
-        group_indices,
-        barostat_interval,
-        seed,
-    ).impl([u_impl])
-
-    # context components: positions, velocities, box, integrator, energy fxns
-    ctxt = custom_ops.Context(x0, v0, host_config.box, integrator, [u_impl], movers=[barostat])
-
-    xs, boxes = ctxt.multiple_steps(n_steps)
-    assert len(xs) == 1
-    assert len(xs) == len(boxes)
-    return xs[-1], boxes[-1]
 
 
 def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=np.float32):

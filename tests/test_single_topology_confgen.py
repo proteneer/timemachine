@@ -1,14 +1,17 @@
+from importlib import resources
+
 import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, cif_writer, utils
-from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.rbfe import HostConfig, setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
 from timemachine.fe.utils import get_mol_name, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.md import builders
+
+DEBUG = False
 
 
 def get_mol_by_name(mols, name):
@@ -43,44 +46,50 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     ff = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, ff)
 
-    lambda_schedule = construct_pre_optimized_relative_lambda_schedule(n_windows)
+    # Use the lambda schedule that would be used in bisection
+    lambda_schedule = np.linspace(0.0, 1.0, n_windows)
     seed = 2023
 
     # solvent
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, ff.water_ff)
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
+        box_width, ff.water_ff, mols=[mol_a, mol_b]
+    )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_host = setup_optimized_host(st, solvent_host_config)
     initial_states = setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_schedule, seed)
-    all_frames = [state.x0 for state in initial_states]
-    write_trajectory_as_cif(
-        mol_a,
-        mol_b,
-        core,
-        all_frames,
-        solvent_top,
-        f"solvent_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.cif",
-    )
+
+    if DEBUG:
+        all_frames = [state.x0 for state in initial_states]
+        write_trajectory_as_cif(
+            mol_a,
+            mol_b,
+            core,
+            all_frames,
+            solvent_top,
+            f"solvent_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.cif",
+        )
 
     # complex
     complex_sys, complex_conf, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
-        protein_path, ff.protein_ff, ff.water_ff
+        protein_path, ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b]
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, num_water_atoms)
     complex_host = setup_optimized_host(st, complex_host_config)
-    initial_states = setup_initial_states(st, complex_host, DEFAULT_TEMP, lambda_schedule, seed)
+    initial_states = setup_initial_states(st, complex_host, DEFAULT_TEMP, lambda_schedule, seed, min_cutoff=0.7)
 
-    all_frames = [state.x0 for state in initial_states]
-    write_trajectory_as_cif(
-        mol_a,
-        mol_b,
-        core,
-        all_frames,
-        complex_top,
-        f"complex_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.cif",
-    )
+    if DEBUG:
+        all_frames = [state.x0 for state in initial_states]
+        write_trajectory_as_cif(
+            mol_a,
+            mol_b,
+            core,
+            all_frames,
+            complex_top,
+            f"complex_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.cif",
+        )
 
 
 @pytest.mark.nightly(reason="Takes a while to run")
@@ -108,8 +117,8 @@ def test_confgen_hard_edges():
     ]
 
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
-    ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
-    mols = read_sdf(ligands)
+    with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
+        mols = read_sdf(ligand_path)
 
     n_windows = 12
 
@@ -126,11 +135,12 @@ def test_confgen_spot_edges():
     # spot check so we have something in unit testing.
     edges = [
         ("35", "84"),  # failure, B-ring, core-hopping into oxazole, <-- this fails
+        ("41", "50"),  # failure, moves beyond 7 A in the solvent leg
     ]
 
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
-    ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
-    mols = read_sdf(ligands)
+    with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
+        mols = read_sdf(ligand_path)
 
     n_windows = 12
 
@@ -152,8 +162,8 @@ def test_min_cutoff_failure(pair, seed, n_windows):
     # The cutoff is so small that any ligand pair should trigger the exception
     min_cutoff = 1e-8
 
-    ligands = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
-    mols = read_sdf(ligands)
+    with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
+        mols = read_sdf(ligand_path)
     mol_a = get_mol_by_name(mols, src)
     mol_b = get_mol_by_name(mols, dst)
 
@@ -170,7 +180,9 @@ def test_min_cutoff_failure(pair, seed, n_windows):
     # Use the lambda grid as defined for Bisection
     lambda_grid = np.linspace(0.0, 1.0, n_windows)
 
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, ff.water_ff)
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
+        box_width, ff.water_ff, mols=[mol_a, mol_b]
+    )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_host = setup_optimized_host(st, solvent_host_config)

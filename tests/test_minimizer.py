@@ -14,7 +14,7 @@ from timemachine.md import builders, minimizer
 from timemachine.md.minimizer import equilibrate_host_barker, make_host_du_dx_fxn
 
 
-def test_minimize_host_4d_protein():
+def test_fire_minimize_host_protein():
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(path_to_ligand)
@@ -27,11 +27,11 @@ def test_minimize_host_4d_protein():
                 str(path_to_pdb), ff.protein_ff, ff.water_ff, mols=mols
             )
             host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
-        x_host = minimizer.minimize_host_4d(mols, host_config, ff)
+        x_host = minimizer.fire_minimize_host(mols, host_config, ff)
         assert x_host.shape == complex_coords.shape
 
 
-def test_minimize_host_4d_solvent():
+def test_fire_minimize_host_solvent():
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(path_to_ligand)
@@ -41,20 +41,20 @@ def test_minimize_host_4d_solvent():
     for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
         solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, ff.water_ff, mols=mols)
         host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords))
-        x_host = minimizer.minimize_host_4d(mols, host_config, ff)
+        x_host = minimizer.fire_minimize_host(mols, host_config, ff)
         assert x_host.shape == solvent_coords.shape
 
 
-def test_minimize_host_4d_adamantane():
+def test_fire_minimize_host_adamantane():
     """With cagey molecules, can trap water molecules inside of them. Verify that molecule can be minimized
     in water without issue"""
     ff = Forcefield.load_default()
     mol = Chem.AddHs(Chem.MolFromSmiles("C1C3CC2CC(CC1C2)C3"))
-    AllChem.EmbedMolecule(mol)
+    AllChem.EmbedMolecule(mol, randomSeed=2024)
     # If don't delete the relevant water this minimization fails
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, ff.water_ff, mols=[mol])
     host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords))
-    x_host = minimizer.minimize_host_4d([mol], host_config, ff)
+    x_host = minimizer.fire_minimize_host([mol], host_config, ff)
     assert x_host.shape == solvent_coords.shape
 
 
@@ -79,7 +79,7 @@ def test_equilibrate_host_barker():
     room_temperature = 300.0
     zero_temperature = 0.0
 
-    # equilibrate_host_barker and minimize_host_4d methods will throw if the minimization failed
+    # equilibrate_host_barker and fire_minimize_host methods will throw if the minimization failed
 
     setups = {"A and B simultaneously": [mol_a, mol_b], "A alone": [mol_a], "B alone": [mol_b]}
 
@@ -109,21 +109,6 @@ def test_equilibrate_host_barker():
         print(f"\tforce norm after low-temperature 'equilibration': {max_frc:.3f} kJ/mol / nm")
         print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
         print(f"\tdone in {(t1 - t0):.3f} s")
-
-
-@pytest.mark.skip(reason="Not currently used")
-def test_equilibrate_host():
-    ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf(path_to_ligand)
-    mol = mols[0]
-    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, ff.water_ff, mols=[mol])
-    host_config = HostConfig(host_system, host_coords, host_box, host_coords.shape[0])
-
-    coords, box = minimizer.equilibrate_host(mol, host_config, 300, 1.0, ff, 25, seed=2022)
-    assert coords.shape[0] == host_coords.shape[0] + mol.GetNumAtoms()
-    assert coords.shape[1] == host_coords.shape[1]
-    assert box.shape == host_box.shape
 
 
 def test_local_minimize_water_box():
