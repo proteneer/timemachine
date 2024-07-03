@@ -30,7 +30,7 @@ from timemachine.fe.free_energy import (
     sample,
 )
 from timemachine.fe.rbfe import Host, setup_initial_state, setup_initial_states, setup_optimized_host
-from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
@@ -306,9 +306,9 @@ def test_initial_state_interacting_ligand_atoms(host_name, seed):
     )
 
     for state in initial_states:
-        mol_a_atoms = state.ligand_idxs[single_topology.c_flags != 2]
-        mol_b_atoms = state.ligand_idxs[single_topology.c_flags != 1]
-        core_atoms = state.ligand_idxs[single_topology.c_flags == 0]
+        mol_a_atoms = state.ligand_idxs[single_topology.c_flags != AtomMapFlags.MOL_B]
+        mol_b_atoms = state.ligand_idxs[single_topology.c_flags != AtomMapFlags.MOL_A]
+        core_atoms = state.ligand_idxs[single_topology.c_flags == AtomMapFlags.CORE]
         interacting_atom_indices = state.get_interacting_ligand_atom_indices()
         if state.lamb == 0.0:
             assert set(interacting_atom_indices) == set(mol_a_atoms)
