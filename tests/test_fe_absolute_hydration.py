@@ -28,5 +28,5 @@ def test_run_solvent():
     assert len(res.boxes[-1]) == n_frames
     assert res.md_params == md_params
     assert host_config.omm_system is not None
-    assert host_config.conf.shape == (6282, 3)
+    assert host_config.conf.shape == (6207, 3)
     assert host_config.box.shape == (3, 3)
