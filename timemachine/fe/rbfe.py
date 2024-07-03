@@ -169,7 +169,7 @@ def setup_initial_state(
     friction = 1.0
     intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
 
-    return InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs, protein_idxs)
+    return InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs, protein_idxs, atom_map=st)
 
 
 def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:

@@ -24,6 +24,7 @@ from timemachine.fe.plots import (
     plot_overlap_summary_figure,
 )
 from timemachine.fe.protocol_refinement import greedy_bisection_step
+from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
@@ -154,45 +155,34 @@ class InitialState:
     lamb: float
     ligand_idxs: NDArray
     protein_idxs: NDArray
+    atom_map: Optional[AtomMapMixin] = None
 
     def __post_init__(self):
         assert self.ligand_idxs.dtype == np.int32 or self.ligand_idxs.dtype == np.int64
         assert self.protein_idxs.dtype == np.int32 or self.protein_idxs.dtype == np.int64
 
     def get_interacting_ligand_atom_indices(self) -> NDArray:
-        """Returns the ligand atom indices that are fully interacting, IE that w == 0.0.
+        """Returns the ligand atom indices that are fully interacting at the specific lambda.
+
+        Currently implemented by looking at the atoms in the atom_map object and either return
+        the endstates for lambda == 0.0 and lambda == 1.0 and for all other values the core atoms.
 
         Note
         ----
-        * Raises an exception in the case of vacuum
+        * Raises an exception if no atom map object is provided
 
         Return
         ------
         np.ndarray
-            Contains the indices of the ligand that are fully interacting (w coord == 0.0)
+            Contains the indices of the ligand that are not considered dummy atoms at the lambda value.
         """
-        num_atoms = self.x0.shape[0]
-        num_ligand_atoms = len(self.ligand_idxs)
-        if num_atoms == num_ligand_atoms:
-            # TBD: Clean this up
-            raise NotImplementedError("Not implemented for vacuum")
-        elif num_atoms > num_ligand_atoms:
-            num_host_atoms = num_atoms - num_ligand_atoms
-            # Both solvent and complex can be handled the same way
-            summed_pot = next(bp.potential for bp in self.potentials if isinstance(bp.potential, SummedPotential))
-            # TBD Figure out a better way of handling the jankyness of having to select the IxnGroup that defines the Ligand-Water
-            # Currently this just hardcodes to the first ixn group potential which is the ligand-water ixn group as returned by HostTopology.parameterize_nonbonded
-            ixn_group_idx = next(
-                i for i, pot in enumerate(summed_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
-            )
-            assert isinstance(summed_pot.potentials[ixn_group_idx], NonbondedInteractionGroup)
-            water_ligand_ixn_params = summed_pot.params_init[ixn_group_idx]
-            assert water_ligand_ixn_params.shape[0] == num_atoms
-            assert water_ligand_ixn_params.shape[1] == 4
-            per_atom_w = water_ligand_ixn_params[self.ligand_idxs, 3]
-            return np.array(np.nonzero(per_atom_w == 0.0)[0].reshape(-1)) + num_host_atoms
+        assert self.atom_map is not None, "No atom map provided, unable to provide interacting atom indices"
+        if self.lamb == 0.0:
+            return self.ligand_idxs[self.atom_map.c_flags != 2]
+        elif self.lamb == 1.0:
+            return self.ligand_idxs[self.atom_map.c_flags != 1]
         else:
-            assert 0, "Invalid initial state"
+            return self.ligand_idxs[self.atom_map.c_flags == 0]
 
 
 @dataclass
