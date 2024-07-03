@@ -155,6 +155,7 @@ class InitialState:
     lamb: float
     ligand_idxs: NDArray
     protein_idxs: NDArray
+    # Expected to be set in the case of Relative Free Energies
     atom_map: Optional[AtomMapMixin] = None
 
     def __post_init__(self):
