@@ -309,13 +309,13 @@ def test_initial_state_interacting_ligand_atoms(host_name, seed):
         mol_a_atoms = state.ligand_idxs[single_topology.c_flags != AtomMapFlags.MOL_B]
         mol_b_atoms = state.ligand_idxs[single_topology.c_flags != AtomMapFlags.MOL_A]
         core_atoms = state.ligand_idxs[single_topology.c_flags == AtomMapFlags.CORE]
-        interacting_atom_indices = state.get_interacting_ligand_atom_indices()
+        assert state.interacting_atoms is not None
         if state.lamb == 0.0:
-            assert set(interacting_atom_indices) == set(mol_a_atoms)
+            assert set(state.interacting_atoms) == set(mol_a_atoms)
         elif state.lamb == 1.0:
-            assert set(interacting_atom_indices) == set(mol_b_atoms)
+            assert set(state.interacting_atoms) == set(mol_b_atoms)
         else:
-            assert set(interacting_atom_indices) == set(core_atoms)
+            assert set(state.interacting_atoms) == set(core_atoms)
 
 
 @pytest.mark.nocuda

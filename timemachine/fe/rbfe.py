@@ -32,7 +32,7 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
-from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
 from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
@@ -169,7 +169,19 @@ def setup_initial_state(
     friction = 1.0
     intg = LangevinIntegrator(temperature, dt, friction, hmr_masses, run_seed)
 
-    return InitialState(potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs, protein_idxs, atom_map=st)
+    # Determine the atoms that are in the 4d plane defined by all w_coords being 0.0
+    # TBD: Do something more sophisticated depending on the actual parameters for when we vary w_coords independently.
+    # Easily done for solvent and complex, little bit trickier in the vacuum case where there is a NonbondedPairlistPrecomputed
+    if lamb == 0.0:
+        interacting_atoms = ligand_idxs[st.c_flags != AtomMapFlags.MOL_B]
+    elif lamb == 1.0:
+        interacting_atoms = ligand_idxs[st.c_flags != AtomMapFlags.MOL_A]
+    else:
+        interacting_atoms = ligand_idxs[st.c_flags == AtomMapFlags.CORE]
+
+    return InitialState(
+        potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs, protein_idxs, interacting_atoms=interacting_atoms
+    )
 
 
 def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
@@ -386,9 +398,12 @@ def optimize_coordinates(initial_states: List[InitialState], min_cutoff: Optiona
     # sanity check that no atom has moved more than `min_cutoff` nm away
     if min_cutoff is not None:
         for state, coords in zip(initial_states, all_xs):
-            non_dummy_atom_indices = state.get_interacting_ligand_atom_indices()
+            interacting_atoms = state.interacting_atoms
             # assert that interacting ligand atoms and protein atoms are not allowed to move more than min_cutoff
-            restricted_idxs = np.concatenate([non_dummy_atom_indices, state.protein_idxs])
+            if interacting_atoms is None:
+                restricted_idxs = state.protein_idxs
+            else:
+                restricted_idxs = np.concatenate([interacting_atoms, state.protein_idxs])
             displacement_distances = jax_utils.distance_on_pairs(
                 state.x0[restricted_idxs], coords[restricted_idxs], box=state.box0
             )

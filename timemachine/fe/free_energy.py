@@ -24,7 +24,6 @@ from timemachine.fe.plots import (
     plot_overlap_summary_figure,
 )
 from timemachine.fe.protocol_refinement import greedy_bisection_step
-from timemachine.fe.single_topology import AtomMapFlags, AtomMapMixin
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import ForcefieldParams
@@ -155,35 +154,12 @@ class InitialState:
     lamb: float
     ligand_idxs: NDArray
     protein_idxs: NDArray
-    # Expected to be set in the case of Relative Free Energies
-    atom_map: Optional[AtomMapMixin] = None
+    # The atoms that are in the 4d plane defined by w_coord == 0.0
+    interacting_atoms: Optional[NDArray] = None
 
     def __post_init__(self):
         assert self.ligand_idxs.dtype == np.int32 or self.ligand_idxs.dtype == np.int64
         assert self.protein_idxs.dtype == np.int32 or self.protein_idxs.dtype == np.int64
-
-    def get_interacting_ligand_atom_indices(self) -> NDArray:
-        """Returns the ligand atom indices that are fully interacting at the specific lambda.
-
-        Currently implemented by looking at the atoms in the atom_map object and either return
-        the endstates for lambda == 0.0 and lambda == 1.0 and for all other values the core atoms.
-
-        Note
-        ----
-        * Raises an exception if no atom map object is provided
-
-        Return
-        ------
-        np.ndarray
-            Contains the indices of the ligand that are not considered dummy atoms at the lambda value.
-        """
-        assert self.atom_map is not None, "No atom map provided, unable to provide interacting atom indices"
-        if self.lamb == 0.0:
-            return self.ligand_idxs[self.atom_map.c_flags != AtomMapFlags.MOL_B]
-        elif self.lamb == 1.0:
-            return self.ligand_idxs[self.atom_map.c_flags != AtomMapFlags.MOL_A]
-        else:
-            return self.ligand_idxs[self.atom_map.c_flags == AtomMapFlags.CORE]
 
 
 @dataclass
