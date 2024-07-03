@@ -88,7 +88,8 @@ def test_cif_writer(n_frames):
         cif = PDBxFile(temp.name)
         assert cif.getNumFrames() == n_frames
         assert cif.getPositions(asNumpy=True).shape == good_coords.shape
-        np.testing.assert_allclose(cif.getPositions(asNumpy=True), good_coords)
+        # Tolerance is difference due to shifting water coords such that the mols are at the center
+        np.testing.assert_allclose(cif.getPositions(asNumpy=True), good_coords, atol=1e-5)
 
     # test complex
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
