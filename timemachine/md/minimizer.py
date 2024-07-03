@@ -180,8 +180,9 @@ def minimize_host_4d(
     mass_list = [np.array(host_masses)]
     conf_list = [np.array(host_config.conf)]
     for mol in mols:
-        # mass increase is to keep the ligand fixed
-        mass_list.append(get_mol_masses(mol) * 100000)
+        # Set mol masses to inf to avoid any movement, important since function only returns
+        # the host coordinates
+        mass_list.append(get_mol_masses(mol) * np.inf)
 
     if mol_coords is not None:
         for mc in mol_coords:
@@ -221,16 +222,8 @@ def minimize_host_4d(
         x = xs[-1]
 
     final_coords = fire_minimize(x, bound_impls, box, n_steps_per_window, frozen_atoms=ligand_idxs)
-    # Verify that the final coordinates didn't move the ligand idxs beyond a small amount (fifth of an angstrom, arbitrarily chosen)
-    # Because we are enforcing the ligand atoms to not move by increasing masses there is still some movement
-    threshold = 0.01
-    if not np.allclose(final_coords[ligand_idxs], combined_coords[ligand_idxs], atol=threshold):
-        max_move = np.max(np.abs(final_coords[ligand_idxs] - combined_coords[ligand_idxs]))
-        # If it does move, provide a warning
-        warnings.warn(
-            f"WARNING: ligand atom moved more than {threshold * 10:.2f}  Å, largest move was {max_move*1.0:.3f}. Host coords may be invalid",
-            MinimizationWarning,
-        )
+    # Verify that the final coordinates didn't move the ligand idxs
+    assert np.all(final_coords[ligand_idxs] == combined_coords[ligand_idxs])
 
     for impl in bound_impls:
         du_dx, _ = impl.execute(final_coords, box, compute_u=False)
