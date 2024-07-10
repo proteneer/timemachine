@@ -2,8 +2,6 @@
 ARG LIBXRENDER_VERSION=1:0.9.10-*
 ARG LIBXEXT_VERSION=2:1.3.4-*
 
-ARG DEBUG=123
-
 FROM nvidia/cuda:11.7.1-devel-ubuntu20.04 AS tm_base_env
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
@@ -28,6 +26,7 @@ ARG CMAKE_VERSION=3.24.3
 RUN wget --quiet https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz -O cmake.tar.gz && \
     tar -xzf cmake.tar.gz && \
     rm -rf cmake.tar.gz
+RUN echo "debug 123"
 
 ENV PATH $PATH:$PWD/cmake-${CMAKE_VERSION}-linux-x86_64/bin/
 
