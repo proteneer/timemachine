@@ -452,7 +452,6 @@ def check_split_ixns(
         complex_system, host_conf, box, _, num_water_atoms = build_protein_system(
             str(path_to_pdb), ffs.ref.protein_ff, ffs.ref.water_ff
         )
-        box += np.diag([0.1, 0.1, 0.1])
 
     coords0 = np.concatenate([host_conf, ligand_conf])
     num_protein_atoms = host_conf.shape[0] - num_water_atoms

@@ -322,7 +322,6 @@ def run_solvent(
 ) -> Tuple[SimulationResult, app.topology.Topology, HostConfig]:
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_res = estimate_absolute_free_energy(
         mol,

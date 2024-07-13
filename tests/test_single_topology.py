@@ -868,7 +868,6 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
         complex_system, complex_coords, box, _, num_water_atoms = build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
-        box += np.diag([0.1, 0.1, 0.1])
 
     host_bps, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     host_system = convert_bps_into_system(host_bps)

@@ -49,7 +49,6 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     # solvent
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, ff.water_ff)
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_host = setup_optimized_host(st, solvent_host_config)
     initial_states = setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_schedule, seed)
@@ -67,7 +66,6 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     complex_sys, complex_conf, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
         protein_path, ff.protein_ff, ff.water_ff
     )
-    complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, num_water_atoms)
     complex_host = setup_optimized_host(st, complex_host_config)
     initial_states = setup_initial_states(st, complex_host, DEFAULT_TEMP, lambda_schedule, seed)
@@ -171,7 +169,6 @@ def test_min_cutoff_failure(pair, seed, n_windows):
     lambda_grid = np.linspace(0.0, 1.0, n_windows)
 
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, ff.water_ff)
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_host = setup_optimized_host(st, solvent_host_config)
     ligand_idxs = np.arange(st.get_num_atoms()) + solvent_host.conf.shape[0]

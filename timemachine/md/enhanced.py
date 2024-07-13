@@ -431,7 +431,6 @@ def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, mi
 
     # construct water box
     water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width, ff.water_ff)
-    water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
     host_config = HostConfig(water_system, water_coords, water_box, water_coords.shape[0])
 
     # construct alchemical system

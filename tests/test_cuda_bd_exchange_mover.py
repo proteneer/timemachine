@@ -260,7 +260,6 @@ def test_sampling_single_water_in_bulk(
     """Sample a single water in a box of water. Useful to verify that we are hitting the tail end of buffers"""
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(2.5, ff.water_ff)
-    box += np.diag([0.1, 0.1, 0.1])
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
@@ -312,7 +311,6 @@ def test_sampling_single_water_in_bulk(
 def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(4.0, ff.water_ff)
-    box += np.diag([0.1, 0.1, 0.1])
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
@@ -543,7 +541,6 @@ def test_moves_in_a_water_box(
     """Verify that the log acceptance probability between the reference and cuda implementation agree"""
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
-    box += np.diag([0.1, 0.1, 0.1])
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
@@ -779,7 +776,6 @@ def hif2a_complex():
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
-    box += np.diag([0.1, 0.1, 0.1])
     bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
 
@@ -892,7 +888,6 @@ def hif2a_rbfe_state() -> InitialState:
         complex_system, complex_conf, box, _, num_water_atoms = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
-    box += np.diag([0.1, 0.1, 0.1])
     host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     st = SingleTopology(mol_a, mol_b, core, ff)

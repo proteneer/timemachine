@@ -35,7 +35,6 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estim
     box_width = 4.0
     n_windows = 3
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
 
     solvent_res = estimate_relative_free_energy_fn(
@@ -123,7 +122,6 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params: MDParams, protein_path
 
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_res = estimate_relative_free_energy_fn(
         mol_a,
@@ -143,7 +141,6 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params: MDParams, protein_path
     complex_sys, complex_conf, complex_box, _, num_water_atoms = builders.build_protein_system(
         protein_path, forcefield.protein_ff, forcefield.water_ff
     )
-    complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, num_water_atoms)
     complex_res = estimate_relative_free_energy_fn(
         mol_a,

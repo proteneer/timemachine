@@ -379,7 +379,6 @@ def brd4_rbfe_state() -> InitialState:
         complex_system, complex_conf, box, _, num_water_atoms = builders.build_protein_system(
             str(pdb_path), ff.protein_ff, ff.water_ff
         )
-    box += np.diag([0.1, 0.1, 0.1])
     with resources.path("timemachine.datasets.water_exchange", "brd4_pair.sdf") as ligand_path:
         mols = read_sdf(ligand_path)
     mol_a = mols[0]
@@ -426,7 +425,6 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
     host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
         str(host_pdb), ff.protein_ff, ff.water_ff
     )
-    host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)
 
     bt = BaseTopology(mol, ff)
@@ -664,7 +662,6 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
     host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
         str(host_pdb), ff.protein_ff, ff.water_ff
     )
-    host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)
 
     bt = BaseTopology(mol, ff)

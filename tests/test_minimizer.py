@@ -110,7 +110,6 @@ def test_local_minimize_water_box():
 
     system, x0, box0, _ = builders.build_water_system(4.0, ff.water_ff)
     host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
 
     val_and_grad_fn = minimizer.get_val_and_grad_fn(host_fns, box0)
 

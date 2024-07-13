@@ -883,7 +883,6 @@ def run_solvent(
         warnings.warn("Solvent simulations don't benefit from water sampling, disabling")
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
@@ -914,7 +913,6 @@ def run_complex(
     complex_sys, complex_conf, complex_box, complex_top, nwa = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff
     )
-    complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa)
     complex_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
