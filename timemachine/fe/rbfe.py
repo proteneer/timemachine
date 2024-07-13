@@ -877,7 +877,7 @@ def run_solvent(
     md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
-    min_cutoff: Optional[float] = 0.8,
+    min_cutoff: Optional[float] = None,
 ):
     if md_params is not None and md_params.water_sampling_params is not None:
         md_params = replace(md_params, water_sampling_params=None)
@@ -888,6 +888,8 @@ def run_solvent(
     )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
+    # min_cutoff defaults to None since the original poses tend to come from posing in a complex and
+    # in solvent the molecules may adopt significantly different poses
     solvent_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
