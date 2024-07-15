@@ -36,3 +36,7 @@ Timemachine does not currently support the full OpenForceField definition. The f
 ## AM1BCC Charges
 
 The AM1BCC charges used as the basis for our CCC originally come from the [recharge](https://github.com/openforcefield/openff-recharge) project, a port of the original AM1BCC parameters by Christopher Bayly. The source of the charges comes directly from the charges defined [here](https://github.com/openforcefield/openff-recharge/blob/cf18f1920d35af0025ce90c4e1a7f7280b4bd76d/openff/recharge/data/bcc/original-am1-bcc.json).
+
+
+## Misc
+For some implementation purposes it may be convenient to produce a placeholder force field file that has the right slots, but is not necessarily chemically reasonable. `make_placeholder_ff.py` is a script that generates a forcefield .py file with a single generic type for each potential.
