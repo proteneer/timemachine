@@ -189,14 +189,11 @@ def bootstrap_bar(
     seed = 2022
     rng = np.random.default_rng(seed)
 
-    u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.MBAR(u_kn, N_k, maximum_iterations=maximum_iterations)
-
     for _ in range(n_bootstrap):
         u_kln_sample = rng.choice(u_kln, size=(n,), replace=True, axis=2)
         bar_result = df_from_u_kln(
             u_kln_sample,
-            initial_f_k=mbar.f_k,  # warm start
+            initial_f_k=np.array([0.0, full_bar_result]),  # warm start
             maximum_iterations=maximum_iterations,
         )
         bootstrap_samples.append(bar_result)
