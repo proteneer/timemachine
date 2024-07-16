@@ -8,7 +8,7 @@ from rdkit import Chem
 
 from timemachine.fe import mcgregor
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
-from timemachine.fe.single_topology import verify_chiral_consistency_of_core
+from timemachine.fe.single_topology import ChiralConversionError, verify_chiral_consistency_of_core
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 from timemachine.ff import Forcefield
 
@@ -405,7 +405,7 @@ def _get_cores_impl(
             try:
                 verify_chiral_consistency_of_core(mol_a, mol_b, core, placeholder_ff)
                 return True
-            except AssertionError:
+            except (AssertionError, ChiralConversionError):
                 return False
 
         all_cores = [core for core in all_cores if chirally_consistent(core)]
