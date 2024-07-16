@@ -8,7 +8,9 @@ from rdkit import Chem
 
 from timemachine.fe import mcgregor
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
+from timemachine.fe.single_topology import verify_chiral_consistency_of_core
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
+from timemachine.ff import Forcefield
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
 # Unless you have to. And now we have to. If you want to understand what this code is doing, it
@@ -394,6 +396,19 @@ def _get_cores_impl(
     all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
     all_cores = remove_cores_smaller_than_largest(all_cores)
     all_cores, _ = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
+
+    # stricter / more expensive than the chiral_filter fxn used in mcgregor mcs above
+    if enforce_chiral:
+        placeholder_ff = Forcefield.load_from_file("placeholder_ff.py")
+
+        def chirally_consistent(core):
+            try:
+                verify_chiral_consistency_of_core(mol_a, mol_b, core, placeholder_ff)
+                return True
+            except AssertionError:
+                return False
+
+        all_cores = [core for core in all_cores if chirally_consistent(core)]
 
     dists = []
     valence_mismatches = []
