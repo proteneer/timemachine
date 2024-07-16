@@ -12,8 +12,8 @@ from numpy.typing import NDArray
 from rdkit import Chem
 
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
-from timemachine.fe import interpolate, model_utils, topology, utils
-from timemachine.fe.chiral_utils import assert_chiral_consistency_and_validity
+from timemachine.fe import chiral_utils, interpolate, model_utils, topology, utils
+from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import canonicalize_bond, generate_anchored_dummy_group_assignments
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
@@ -966,6 +966,69 @@ def get_neighbors(atom, bond_idxs) -> List[int]:
         elif j == atom:
             nbs.append(i)
     return nbs
+
+
+def check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):
+    """Raise error unless, for every chiral center, at least 1 chiral volume is defined in both end-states."""
+
+    for c in src_chiral_centers_in_mol_c:
+        nbs = get_neighbors(c, src_bond_idxs)
+        if len(nbs) == 4:
+            i, j, k, l = nbs
+            # (ytz): the ordering of i,j,k,l is random if we're reading directly from the mol graph,
+            # which can be inconsistent with the ordering used in the chiral volume definition.
+            nb_subsets = [(i, j, k), (i, j, l), (i, k, l), (j, k, l)]  # 4-choose-3 subsets
+            flags = [dst_chiral_restr_idx_set.defines((c, ii, jj, kk)) for (ii, jj, kk) in nb_subsets]
+
+            if sum(flags) == 0:
+                raise ChiralConversionError(f"len(nbs) == 4 {c, i, j, k, l}")
+
+        if len(nbs) == 3:
+            i, j, k = nbs
+            flag_0 = dst_chiral_restr_idx_set.defines((c, i, j, k))
+            if not flag_0:
+                raise ChiralConversionError(f"len(nbs) == 3 {c, i, j, k}")
+
+
+def assert_chiral_consistency_and_validity(
+    atom_map: AtomMapMixin,
+    src_chiral_idxs,
+    dst_chiral_idxs,
+    src_bond_idxs: NDArray,
+    dst_bond_idxs: NDArray,
+):
+    """
+    Assert that the given the two end states chiral and bond idxs it would be both consistent and valid.
+
+    consistency: if there are no inversions at the end-states between chiral atoms and bonds are present
+    validity: if we can directly turn on the chiral volumes (after bonds) without staggering angles
+    """
+
+    for c, i, j, k in src_chiral_idxs:
+        assert canonicalize_bond((c, i)) in src_bond_idxs
+        assert canonicalize_bond((c, j)) in src_bond_idxs
+        assert canonicalize_bond((c, k)) in src_bond_idxs
+
+    for c, i, j, k in dst_chiral_idxs:
+        assert canonicalize_bond((c, i)) in dst_bond_idxs
+        assert canonicalize_bond((c, j)) in dst_bond_idxs
+        assert canonicalize_bond((c, k)) in dst_bond_idxs
+
+    src_chiral_restr_idx_set = ChiralRestrIdxSet(src_chiral_idxs)
+    dst_chiral_restr_idx_set = ChiralRestrIdxSet(dst_chiral_idxs)
+
+    # ensure that we don't have any chiral inversions between src and dst end states
+    assert len(src_chiral_restr_idx_set.allowed_set.intersection(dst_chiral_restr_idx_set.disallowed_set)) == 0
+    assert len(dst_chiral_restr_idx_set.allowed_set.intersection(src_chiral_restr_idx_set.disallowed_set)) == 0
+
+    chiral_centers_in_mol_a = chiral_utils.find_chiral_atoms(atom_map.mol_a)
+    chiral_centers_in_mol_b = chiral_utils.find_chiral_atoms(atom_map.mol_b)
+
+    src_chiral_centers_in_mol_c = [atom_map.a_to_c[x] for x in chiral_centers_in_mol_a]
+    dst_chiral_centers_in_mol_c = [atom_map.b_to_c[x] for x in chiral_centers_in_mol_b]
+
+    check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs)
+    check_chiral_validity(dst_chiral_centers_in_mol_c, src_chiral_restr_idx_set, dst_bond_idxs)
 
 
 def verify_chiral_consistency_of_core(mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, forcefield):
