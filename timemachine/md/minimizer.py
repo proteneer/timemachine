@@ -118,8 +118,9 @@ def pre_equilibrate_host(
     host_config: HostConfig,
     ff: Forcefield,
     mol_coords: Optional[List[NDArray]] = None,
-    minimizer_steps: int = 1000,
-    equailibration_steps: int = 1000,
+    minimizer_steps_per_window: int = 500,
+    minimizer_windows: int = 2,
+    equilibration_steps: int = 1000,
     pressure: float = DEFAULT_PRESSURE,
     temperature: float = DEFAULT_TEMP,
     barostat_interval: int = 5,
@@ -171,7 +172,14 @@ def pre_equilibrate_host(
     box = host_config.box
     assert box.shape == (3, 3)
 
-    minimized_host_coords = fire_minimize_host(mols, host_config, ff, mol_coords=mol_coords, n_steps=minimizer_steps)
+    minimized_host_coords = fire_minimize_host(
+        mols,
+        host_config,
+        ff,
+        mol_coords=mol_coords,
+        n_windows=minimizer_windows,
+        n_steps_per_window=minimizer_steps_per_window,
+    )
 
     host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
 
@@ -180,7 +188,7 @@ def pre_equilibrate_host(
     if len(mols) == 1:
         top = topology.BaseTopology(mols[0], ff)
     elif len(mols) == 2:
-        top = topology.DualTopologyMinimization(mols[0], mols[1], ff)
+        top = topology.DualTopology(mols[0], mols[1], ff)
     else:
         raise ValueError("mols must be length 1 or 2")
 
@@ -227,7 +235,7 @@ def pre_equilibrate_host(
     baro_impl = baro.impl(bound_impls)
 
     ctxt = custom_ops.Context(x0, v0, box, intg, bound_impls, movers=[baro_impl])
-    xs, boxes = ctxt.multiple_steps(equailibration_steps)
+    xs, boxes = ctxt.multiple_steps(equilibration_steps)
     x = xs[-1]
     box = boxes[-1]
 
@@ -247,7 +255,9 @@ def fire_minimize_host(
     host_config: HostConfig,
     ff: Forcefield,
     mol_coords: Optional[List[NDArray]] = None,
-    n_steps: int = 1000,
+    n_steps_per_window: int = 500,
+    max_lambda: float = 0.1,
+    n_windows: int = 2,
 ) -> NDArray:
     """
     Minimize a host system using the Fire minimizer.
@@ -268,8 +278,15 @@ def fire_minimize_host(
     mol_coords: list of np.ndarray
         Pre-specify a list of mol coords. Else use the mol.GetConformer(0)
 
-    n_steps: integer
-        Number of steps to run the FIRE minimizer with
+    n_steps_per_window: integer
+        Number of steps to run the FIRE minimizer with at each window
+
+    max_lambda: float
+        The largest lambda value to run a window at. If the value is 1.0 the mols will be
+        completely decoupled.
+
+    n_windows: integer
+        The number of windows to linearly interpolate between the max_lambda value and 0.0.
 
     Returns
     -------
@@ -277,20 +294,26 @@ def fire_minimize_host(
         the minimized host_coords.
 
     """
-    du_dx_fxn = make_host_du_dx_fxn(mols, host_config, ff, mol_coords=mol_coords)
 
-    x_host = np.array(host_config.conf)
+    assert 1.0 >= max_lambda > 0.0, "Max lambda must be greater than 0.0 and less than or equal to 1.0"
+    x_host = np.asarray(host_config.conf)
 
-    final_host_coords = fire_minimize(x_host, du_dx_fxn, n_steps)
+    for lamb in np.linspace(max_lambda, 0.0, n_windows):
+        du_dx_fxn = make_host_du_dx_fxn(mols, host_config, ff, mol_coords=mol_coords, lamb=lamb)
+        x_host = fire_minimize(x_host, du_dx_fxn, n_steps_per_window)
 
-    du_dx = du_dx_fxn(final_host_coords)
+    du_dx = du_dx_fxn(x_host)
     check_force_norm(-du_dx)
 
-    return final_host_coords
+    return x_host
 
 
 def make_host_du_dx_fxn(
-    mols: List[Chem.Mol], host_config: HostConfig, ff: Forcefield, mol_coords: Optional[List[NDArray]] = None
+    mols: List[Chem.Mol],
+    host_config: HostConfig,
+    ff: Forcefield,
+    mol_coords: Optional[List[NDArray]] = None,
+    lamb: float = 0.0,
 ):
     """construct function to compute du_dx w.r.t. host coords, given fixed mols and box"""
 
@@ -303,18 +326,14 @@ def make_host_du_dx_fxn(
     if len(mols) == 1:
         top = topology.BaseTopology(mols[0], ff)
     elif len(mols) == 2:
-        top = topology.DualTopology(mols[0], mols[1], ff)
+        top = topology.DualTopologyMinimization(mols[0], mols[1], ff)
     else:
         raise ValueError("mols must be length 1 or 2")
 
     hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
 
-    # bound impls of potentials @ lam=0 (fully coupled) endstate
-    potentials, params = parameterize_system(hgt, ff, 0.0)
-    gpu_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
-
     # read conformers from mol_coords if given, or each mol's conf0 otherwise
-    conf_list = [np.array(host_config.conf)]
+    conf_list = [np.asarray(host_config.conf)]
 
     if mol_coords is not None:
         for mc in mol_coords:
@@ -329,6 +348,10 @@ def make_host_du_dx_fxn(
         assert conf.shape == (mol.GetNumAtoms(), 3)
 
     combined_coords = np.concatenate(conf_list)
+
+    # bound impls of potentials @ lam=0 (fully coupled) endstate
+    potentials, params = parameterize_system(hgt, ff, lamb)
+    gpu_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
 
     # wrap gpu_impl, partially applying box, mol coords
     num_host_atoms = host_config.conf.shape[0]

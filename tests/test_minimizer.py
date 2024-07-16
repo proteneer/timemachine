@@ -7,26 +7,60 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.utils import read_sdf
+from timemachine.fe.utils import get_mol_name, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders, minimizer
+from timemachine.md.barostat.utils import compute_box_volume
 from timemachine.md.minimizer import equilibrate_host_barker, make_host_du_dx_fxn
 
 
-def test_fire_minimize_host_protein():
+@pytest.mark.parametrize(
+    "pdb_path, sdf_path, mol_a_name, mol_b_name",
+    [
+        (
+            resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb"),
+            resources.path("timemachine.testsystems.data", "ligands_40.sdf"),
+            "43",
+            "234",
+        ),
+        (
+            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            "20",
+            "43",
+        ),
+        (
+            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            "41",
+            "43",
+        ),
+        (
+            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            "34",
+            "37",
+        ),
+        (
+            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            "26",
+            "37",
+        ),
+    ],
+)
+def test_fire_minimize_host_protein(pdb_path, sdf_path, mol_a_name, mol_b_name):
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        all_mols = read_sdf(path_to_ligand)
-    mol_a = all_mols[1]
-    mol_b = all_mols[4]
+    all_mols = read_sdf(sdf_path)
+    mol_a = next(m for m in all_mols if get_mol_name(m) == mol_a_name)
+    mol_b = next(m for m in all_mols if get_mol_name(m) == mol_b_name)
 
     for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
-        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-            complex_system, complex_coords, complex_box, _, num_water_atoms = builders.build_protein_system(
-                str(path_to_pdb), ff.protein_ff, ff.water_ff, mols=mols
-            )
-            host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
+        complex_system, complex_coords, complex_box, _, num_water_atoms = builders.build_protein_system(
+            str(pdb_path), ff.protein_ff, ff.water_ff, mols=mols
+        )
+        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
         x_host = minimizer.fire_minimize_host(mols, host_config, ff)
         assert x_host.shape == complex_coords.shape
 
@@ -43,6 +77,30 @@ def test_fire_minimize_host_solvent():
         host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords))
         x_host = minimizer.fire_minimize_host(mols, host_config, ff)
         assert x_host.shape == solvent_coords.shape
+
+
+@pytest.mark.parametrize("host_name", ["solvent", "complex"])
+@pytest.mark.parametrize("mol_pair", [("20", "43")])
+def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
+    ff = Forcefield.load_default()
+    mol_a_name, mol_b_name = mol_pair
+    with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as path_to_ligand:
+        all_mols = read_sdf(path_to_ligand)
+    mol_a = next(m for m in all_mols if get_mol_name(m) == mol_a_name)
+    mol_b = next(m for m in all_mols if get_mol_name(m) == mol_b_name)
+    mols = [mol_a, mol_b]
+    if host_name == "solvent":
+        solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, ff.water_ff, mols=mols)
+        host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords))
+    else:
+        with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
+            complex_system, complex_coords, complex_box, _, num_water_atoms = builders.build_protein_system(
+                str(pdb_path), ff.protein_ff, ff.water_ff, mols=mols
+            )
+        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
+    x_host, x_box = minimizer.pre_equilibrate_host(mols, host_config, ff)
+    assert x_host.shape == host_config.conf.shape
+    assert compute_box_volume(x_box) < compute_box_volume(host_config.box)
 
 
 def test_fire_minimize_host_adamantane():
