@@ -180,6 +180,11 @@ def test_df_from_u_kln_does_not_raise_on_incomplete_convergence():
     assert np.isfinite(df)
     assert np.isnan(ddf)  # returns NaN for uncertainty on incomplete convergence
 
+    bootstrap_df, bootstrap_ddf = bar_with_pessimistic_uncertainty(u_kln, maximum_iterations=1)
+    np.testing.assert_equal(df, bootstrap_df)
+    # With the bootstrapping, we will compute a finite error
+    assert np.isfinite(bootstrap_ddf)
+
 
 def test_pair_overlap_from_ukln():
     # identical distributions
