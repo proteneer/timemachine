@@ -1442,7 +1442,7 @@ $$$$""",
         removeHs=False,
     )
 
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    ff = Forcefield.load_from_file("placeholder_ff.py")
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6]])
 
     with pytest.raises(ChiralConversionError):
