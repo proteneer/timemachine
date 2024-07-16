@@ -1,0 +1,12 @@
+{'HarmonicAngle': {'patterns': [('[*:1]~[*:2]~[*:3]', 100.0, 1.5707963267948966)]},
+ 'HarmonicBond': {'patterns': [('[*:1]~[*:2]', 100000.0, 0.1)]},
+ 'ImproperTorsion': {'patterns': [('[*:1]~[#6X3,#7X3:2](~[*:3])~[*:4]', 1.0, 3.141592653589793, 2.0)]},
+ 'LennardJones': {'patterns': [('[*:1]', 0.1, 1.0)]},
+ 'LennardJonesIntra': {'patterns': [('[*:1]', 0.1, 1.0)]},
+ 'LennardJonesSolvent': {'patterns': [('[*:1]', 0.1, 1.0)]},
+ 'ProperTorsion': {'patterns': [('[*:1]~[*:2]~[*:3]~[*:4]', [1.0, 0.0, 1.0])]},
+ 'ProteinForcefield': 'amber99sbildn',
+ 'SimpleCharge': {'patterns': [('[*:1]', 0.0)]},
+ 'SimpleChargeIntra': {'patterns': [('[*:1]', 0.0)]},
+ 'SimpleChargeSolvent': {'patterns': [('[*:1]', 0.0)]},
+ 'WaterForcefield': 'amber14/tip3p'}

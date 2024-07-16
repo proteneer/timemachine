@@ -97,6 +97,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
             md_params,
             lambda_interval=(0.0, 0.15),
             n_windows=n_windows,
+            min_cutoff=0.7 if host_name is not None else None,
         )
 
     # Check that memory usage is not increasing

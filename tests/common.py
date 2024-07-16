@@ -61,7 +61,9 @@ def prepare_single_topology_initial_state(st: SingleTopology, host_config: Optio
     host = None
     if host_config is not None:
         host = rbfe.setup_optimized_host(st, host_config)
-    initial_state = rbfe.setup_initial_states(st, host, temperature, [lamb], seed=2022)[0]
+    initial_state = rbfe.setup_initial_states(
+        st, host, temperature, [lamb], seed=2022, min_cutoff=0.7 if host_config is not None else None
+    )[0]
     return initial_state
 
 
