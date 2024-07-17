@@ -6,12 +6,14 @@ from timemachine.fe import model_utils
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig
 from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, custom_ops
 from timemachine.md.barostat.moves import CentroidRescaler
 from timemachine.md.barostat.utils import compute_box_center, compute_box_volume, get_bond_list, get_group_indices
 from timemachine.md.builders import build_water_system
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.thermostat.utils import sample_velocities
+from timemachine.potentials import HarmonicBond
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -283,28 +285,29 @@ def test_barostat_is_deterministic():
 
 
 def test_barostat_varying_pressure():
-    lam = 1.0
     temperature = DEFAULT_TEMP
     timestep = 1.5e-3
     barostat_interval = 3
     collision_rate = 1.0
     seed = 2021
     np.random.seed(seed)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     # Start out with a very large pressure
     pressure = 1013.0
-    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol_a, ff, lam, margin=0.0)
+    host_system, coords, box, _ = build_water_system(3.0, ff.water_ff)
+    box += np.eye(3) * 0.1
+    bps, masses_ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+
+    masses = np.array(masses_)
 
     # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = unbound_potentials[0]
+    harmonic_bond_potential = next(bp.potential for bp in bps if isinstance(bp.potential, HarmonicBond))
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list, len(masses))
 
     u_impls = []
-    for params, unbound_pot in zip(sys_params, unbound_potentials):
-        bp = unbound_pot.bind(np.asarray(params))
+    for bp in bps:
         bp_impl = bp.to_gpu(precision=np.float32).bound_impl
         u_impls.append(bp_impl)
 
@@ -324,7 +327,7 @@ def test_barostat_varying_pressure():
     )
 
     ctxt = custom_ops.Context(coords, v_0, box, integrator_impl, u_impls, movers=[baro])
-    ctxt.multiple_steps(3000)
+    ctxt.multiple_steps(1000)
     ten_atm_box = ctxt.get_box()
     ten_atm_box_vol = compute_box_volume(ten_atm_box)
     # Expect the box to shrink thanks to the barostat
@@ -335,7 +338,7 @@ def test_barostat_varying_pressure():
     # Changing the step to 0
     baro.set_step(0)
 
-    ctxt.multiple_steps(3000)
+    ctxt.multiple_steps(1000)
     atm_box = ctxt.get_box()
     # Box will grow thanks to the lower pressure
     assert compute_box_volume(atm_box) > ten_atm_box_vol
