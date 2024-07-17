@@ -120,6 +120,7 @@ def pre_equilibrate_host(
     mol_coords: Optional[List[NDArray]] = None,
     minimizer_steps_per_window: int = 500,
     minimizer_windows: int = 2,
+    minimizer_max_lambda: float = 0.1,
     equilibration_steps: int = 1000,
     pressure: float = DEFAULT_PRESSURE,
     temperature: float = DEFAULT_TEMP,
@@ -150,6 +151,10 @@ def pre_equilibrate_host(
 
     minimizer_windows: integer
         Number of windows to run FIRE minimizer over
+
+    minimizer_max_lambda: float
+        The largest lambda value to run the minimizer with. Refer to docstring of fire_minimize_host for more
+        details.
 
     equilibration_steps: integer
         Number of steps to run MD with
@@ -182,6 +187,7 @@ def pre_equilibrate_host(
         mol_coords=mol_coords,
         n_windows=minimizer_windows,
         n_steps_per_window=minimizer_steps_per_window,
+        max_lambda=minimizer_max_lambda,
     )
 
     host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
