@@ -339,7 +339,6 @@ def test_barostat_varying_pressure():
 
     # Set the pressure to 1 atm
     baro.set_pressure(DEFAULT_PRESSURE)
-    # Changing the step to 0
     baro.set_step(0)
 
     ctxt.multiple_steps(1000)
