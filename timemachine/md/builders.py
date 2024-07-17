@@ -110,21 +110,21 @@ def build_protein_system(
     )
     solvated_host_coords = strip_units(modeller.positions)
 
-    nha = host_coords.shape[0]
+    num_host_atoms = host_coords.shape[0]
     if mols is not None:
-        water_idxs = np.arange(nha, solvated_host_coords.shape[0])
+        water_idxs = np.arange(num_host_atoms, solvated_host_coords.shape[0])
         remove_clashy_waters(modeller, solvated_host_coords, box, water_idxs, mols)
         solvated_host_coords = strip_units(modeller.positions)
-    nwa = solvated_host_coords.shape[0] - nha
+    num_water_atoms = solvated_host_coords.shape[0] - num_host_atoms
 
     assert modeller.getTopology().getNumAtoms() == solvated_host_coords.shape[0]
 
-    print("building a protein system with", nha, "protein atoms and", nwa, "water atoms")
+    print("building a protein system with", num_host_atoms, "protein atoms and", num_water_atoms, "water atoms")
     solvated_host_system = host_ff.createSystem(
         modeller.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
     )
 
-    return solvated_host_system, solvated_host_coords, box, modeller.topology, nwa
+    return solvated_host_system, solvated_host_coords, box, modeller.topology, num_water_atoms
 
 
 def build_water_system(box_width: float, water_ff: str, mols: Optional[List[Chem.Mol]] = None):
