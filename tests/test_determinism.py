@@ -46,7 +46,7 @@ def test_deterministic_energies(precision, rtol, atol):
 
     # resolve host clashes
     host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
-    min_coords = minimizer.fire_minimize_host([mol_a, mol_b], host_config, ff)
+    min_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_config, ff)
 
     x0 = min_coords
     v0 = np.zeros_like(x0)

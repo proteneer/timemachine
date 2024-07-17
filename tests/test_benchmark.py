@@ -56,7 +56,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_system, host_coords, host_box, _, num_water_atoms = builders.build_protein_system(
-            str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
+            str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff
         )
     host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms)
     initial_state = prepare_single_topology_initial_state(st, host_config)
@@ -416,7 +416,7 @@ def run_single_topology_benchmarks(
                 np.array(host_masses),
                 x0,
                 v0,
-                initial_state.box0,
+                host_config.box,
                 host_fns,
                 barostat_interval=barostat_interval,
             )
@@ -483,8 +483,8 @@ def benchmark_hif2a(config: BenchmarkConfig):
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        host_system, host_coords, host_box, top, host_num_waters = builders.build_protein_system(
-            str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
+        host_system, host_coords, host_box, _, host_num_waters = builders.build_protein_system(
+            str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff
         )
 
     # resolve host clashes
@@ -499,7 +499,7 @@ def benchmark_solvent(config: BenchmarkConfig):
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
-    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
+    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, forcefield.water_ff)
 
     num_water_atoms = host_coords.shape[0]
 
