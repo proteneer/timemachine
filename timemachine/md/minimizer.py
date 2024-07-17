@@ -211,7 +211,10 @@ def pre_equilibrate_host(
 
     hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
 
-    intg = LangevinIntegrator(DEFAULT_TEMP, 1.5e-3, 1.0, combined_masses, seed).impl()
+    dt = 1.5e-3
+    friction = 1.0
+
+    intg = LangevinIntegrator(DEFAULT_TEMP, dt, friction, combined_masses, seed).impl()
 
     x0 = combined_coords
     v0 = np.zeros_like(x0)
