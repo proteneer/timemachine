@@ -424,7 +424,7 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
 
     # Build the protein system using the solvent PDB for buckyball
     host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
-        str(host_pdb), ff.protein_ff, ff.water_ff, mols=[mol]
+        str(host_pdb), ff.protein_ff, ff.water_ff
     )
     host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)
@@ -662,7 +662,7 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
 
     # Build the protein system using the solvent PDB for buckyball
     host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
-        str(host_pdb), ff.protein_ff, ff.water_ff, mols=[mol]
+        str(host_pdb), ff.protein_ff, ff.water_ff
     )
     host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)
