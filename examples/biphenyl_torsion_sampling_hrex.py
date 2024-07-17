@@ -166,7 +166,9 @@ def sample_biphenyl_hrex(
 
     if solvent:
         # construct water box
-        water_system, water_coords, water_box, _ = builders.build_water_system(box_width=3.0, water_ff=ff.water_ff)
+        water_system, water_coords, water_box, _ = builders.build_water_system(
+            box_width=3.0, water_ff=ff.water_ff, mols=[mol]
+        )
         water_box += 0.5 * np.eye(3)  # add a small margin around the box for stability
         num_water_atoms = water_coords.shape[0]
         host_config = HostConfig(water_system, water_coords, water_box, num_water_atoms)
@@ -190,7 +192,7 @@ def sample_biphenyl_hrex(
         group_idxs = get_group_indices(get_bond_list(bond_pot), len(combined_masses))
         baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, seed)
 
-        x0_env = minimizer.minimize_host_4d([mol], host_config, ff)
+        x0_env = minimizer.fire_minimize_host([mol], host_config, ff)
         x0 = np.concatenate([x0_env, x0_ligand])
         box0 = water_box
 
