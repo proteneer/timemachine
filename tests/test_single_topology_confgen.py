@@ -11,7 +11,7 @@ from timemachine.fe.utils import get_mol_name, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 
-DEBUG = False
+SAVE_FRAMES = False
 
 
 def get_mol_by_name(mols, name):
@@ -60,7 +60,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     solvent_host = setup_optimized_host(st, solvent_host_config)
     initial_states = setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_schedule, seed)
 
-    if DEBUG:
+    if SAVE_FRAMES:
         all_frames = [state.x0 for state in initial_states]
         write_trajectory_as_cif(
             mol_a,
@@ -80,7 +80,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
     complex_host = setup_optimized_host(st, complex_host_config)
     initial_states = setup_initial_states(st, complex_host, DEFAULT_TEMP, lambda_schedule, seed, min_cutoff=0.7)
 
-    if DEBUG:
+    if SAVE_FRAMES:
         all_frames = [state.x0 for state in initial_states]
         write_trajectory_as_cif(
             mol_a,
