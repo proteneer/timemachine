@@ -155,16 +155,16 @@ def pre_equilibrate_host(
         Number of steps to run MD with
 
     pressure: float
-        Pressure to run barostat with
+        in bar (used by barostat)
 
     temperature: float
-        Temperature to run MD with
+        in kelvin (used by integrator and barostat)
 
     barostat_interval: integer
-        How often to run the barostat
+        # of MD steps between barostat moves
 
     seed: integer
-        Seed for barostat and integrator
+        integrator uses `seed`, barostat uses `seed+1`
 
     Returns
     -------
