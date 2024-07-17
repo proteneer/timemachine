@@ -102,6 +102,10 @@ def test_barostat_with_clashes():
     for params, unbound_pot in zip(sys_params, unbound_potentials):
         u_impls.append(unbound_pot.bind(params).to_gpu(precision=np.float32).bound_impl)
 
+    # The energy of the system should be non-finite
+    nrg = np.sum([bp.execute(coords, box, compute_du_dx=False)[1] for bp in u_impls])
+    assert not np.isfinite(nrg)
+
     integrator = LangevinIntegrator(
         temperature,
         timestep,
