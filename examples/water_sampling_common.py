@@ -17,7 +17,7 @@ from timemachine.potentials import HarmonicBond
 
 DEFAULT_BB_RADIUS = 0.46
 # uncomment if we want to re-enable minimization
-# from timemachine.md.minimizer import fire_minimize_host
+# from timemachine.md.minimizer import minimize_host_4d
 
 
 def build_system(host_pdbfile: str, water_ff: str, padding: float):
@@ -122,7 +122,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
 
     # (YTZ): This is disabled because the initial ligand and starting waters are pre-minimized
     # print("Minimizing the host system...", end="", flush=True)
-    # host_conf = fire_minimize_host([mol], host_config, ff)
+    # host_conf = minimize_host_4d([mol], host_config, ff)
     # print("Done", flush=True)
 
     temperature = DEFAULT_TEMP

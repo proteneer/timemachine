@@ -734,7 +734,7 @@ def test_combine_with_host():
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    solvent_sys, solvent_conf, _, _ = build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
+    solvent_sys, solvent_conf, _, _ = build_water_system(4.0, ff.water_ff)
     host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
 
     st = SingleTopology(mol_a, mol_b, core, ff)
@@ -769,8 +769,8 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
 
     # split forcefield has different parameters for intramol and intermol terms
     ffs = load_split_forcefields()
-    solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ffs.ref.water_ff, mols=[mol_a, mol_b])
-    solvent_conf = minimizer.fire_minimize_host(
+    solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ffs.ref.water_ff)
+    solvent_conf = minimizer.minimize_host_4d(
         [mol_a, mol_b], HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0]), ffs.ref
     )
     solvent_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)

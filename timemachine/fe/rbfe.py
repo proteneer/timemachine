@@ -186,7 +186,7 @@ def setup_initial_state(
 
 def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
     """
-    Optimize a SingleTopology host using pre_equilibrate_host
+    Optimize a SingleTopology host using minimize_host_4d
 
     Parameters
     ----------
@@ -202,8 +202,8 @@ def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
         Minimized host state
     """
     system, masses = convert_omm_system(config.omm_system)
-    conf, box = minimizer.pre_equilibrate_host([st.mol_a, st.mol_b], config, st.ff)
-    return Host(system, masses, conf, box, config.num_water_atoms)
+    conf = minimizer.minimize_host_4d([st.mol_a, st.mol_b], config, st.ff)
+    return Host(system, masses, conf, config.box, config.num_water_atoms)
 
 
 def setup_initial_states(
@@ -212,7 +212,7 @@ def setup_initial_states(
     temperature: float,
     lambda_schedule: Union[NDArray, Sequence[float]],
     seed: int,
-    min_cutoff: Optional[float] = None,
+    min_cutoff: Optional[float] = 0.7,
 ) -> List[InitialState]:
     """
     Given a sequence of lambda values, return a list of initial states.
@@ -239,8 +239,7 @@ def setup_initial_states(
         Random number seed
 
     min_cutoff: float, optional
-        Throw error if any atom moves more than this distance (nm) after minimization. Typically only meaningful
-        in the complex leg where the check may indicate that the ligand is no longer posed reliably.
+        Throw error if any atom moves more than this distance (nm) after minimization
 
     Returns
     -------
@@ -344,12 +343,9 @@ def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[ND
     for idx, initial_state in enumerate(initial_states):
         print(f"Optimizing initial state at λ={initial_state.lamb}")
         free_idxs = get_free_idxs(initial_state)
-        try:
-            x_opt = optimize_coords_state(
-                initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0
-            )
-        except (AssertionError, minimizer.MinimizationError) as e:
-            raise minimizer.MinimizationError(f"Failed to optimized state at λ={initial_state.lamb}") from e
+        x_opt = optimize_coords_state(
+            initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0
+        )
         x_traj.append(x_opt)
 
     return x_traj
@@ -880,19 +876,15 @@ def run_solvent(
     md_params: MDParams = DEFAULT_HREX_PARAMS,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
-    min_cutoff: Optional[float] = None,
+    min_cutoff: Optional[float] = 0.7,
 ):
     if md_params is not None and md_params.water_sampling_params is not None:
         md_params = replace(md_params, water_sampling_params=None)
         warnings.warn("Solvent simulations don't benefit from water sampling, disabling")
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
-        box_width, forcefield.water_ff, mols=[mol_a, mol_b]
-    )
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
-    # min_cutoff defaults to None since the original poses tend to come from posing in a complex and
-    # in solvent the molecules may adopt significantly different poses
     solvent_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
@@ -920,7 +912,7 @@ def run_complex(
     min_cutoff: Optional[float] = 0.7,
 ):
     complex_sys, complex_conf, complex_box, complex_top, nwa = builders.build_protein_system(
-        protein, forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
+        protein, forcefield.protein_ff, forcefield.water_ff
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa)
