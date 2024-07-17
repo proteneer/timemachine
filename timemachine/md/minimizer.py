@@ -230,7 +230,9 @@ def pre_equilibrate_host(
     potentials, params = parameterize_system(hgt, ff, 0.0)
     bond_pot = next(pot for pot in potentials if isinstance(pot, HarmonicBond))
     group_idxs = get_group_indices(get_bond_list(bond_pot), x0.shape[0])
-    # Only adjust the non-ligand group idxs, we don't want to move the ligand coordinates at all
+    # Disallow the barostat from scaling the ligand coords, scale all of the other molecules to
+    # reduce 'air bubbles' within the system. Less efficient than scaling the entire system, but
+    # don't want to adjust the ligand coordinates at all.
     non_ligand_group_idxs = [group for group in group_idxs if np.all(group < num_host_atoms)]
 
     u_impl = summed_potential_bound_impl_from_potentials_and_params(potentials, params)
