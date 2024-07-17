@@ -19,7 +19,7 @@ def remove_clashy_waters(
     modeller: app.Modeller,
     host_coords: NDArray[np.float64],
     box: NDArray[np.float64],
-    water_idxs: NDArray,
+    water_idxs: NDArray[np.int_],
     mols: List[Chem.Mol],
     clash_distance: float = 0.4,
 ):
