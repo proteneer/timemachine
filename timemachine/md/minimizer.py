@@ -286,8 +286,8 @@ def fire_minimize_host(
 
     max_lambda: float
         The largest lambda value to run a window at. If the value is 1.0 the mols will be
-        completely decoupled. At lambda = 1.0 the 4D coordinate of the mols are at cutoff and
-        at lambda = 0.0, the 4D coordinate is 0.0, does not change any other parameters.
+        completely decoupled. Between lambda 1.0 and 0.0 the 4D coordinate of the mols are linearly
+        interpolated from nonbonded cutoff to 0.0, no others parameters are modified.
 
     n_windows: integer
         The number of windows to linearly interpolate between the max_lambda value and 0.0.
