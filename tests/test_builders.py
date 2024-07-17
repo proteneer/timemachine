@@ -3,6 +3,7 @@ from importlib import resources
 import numpy as np
 
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
+from timemachine.fe.utils import get_romol_conf, set_romol_conf
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.md.minimizer import check_force_norm
@@ -44,6 +45,7 @@ def test_build_water_system():
 
 
 def test_build_protein_system():
+    rng = np.random.default_rng(2024)
     mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
@@ -84,3 +86,19 @@ def test_build_protein_system():
             np.float32
         ).bound_impl.execute(mol_protein_coords, box, compute_u=False)
         check_force_norm(-du_dx)
+
+    # Pick a random water atom, will center the ligands on the atom and verify that waters get deleted while the
+    # protein is un-modified
+    water_atom_idx = rng.choice(num_water_atoms_with_mols)
+    new_ligand_center = mol_protein_coords[num_host_atoms_with_mol + water_atom_idx]
+    for mol in [mol_a, mol_b]:
+        conf = get_romol_conf(mol)
+        centroid = np.mean(conf, axis=0)
+        conf = conf - centroid + new_ligand_center
+        set_romol_conf(mol, conf)
+    _, moved_conf, _, _, num_water_after_moved = build_protein_system(
+        host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, mols=[mol_a, mol_b]
+    )
+    assert num_water_after_moved < num_water_atoms_with_mols
+    host_atoms_with_moved_ligands = moved_conf.shape[0] - num_water_after_moved
+    assert num_host_atoms == host_atoms_with_moved_ligands

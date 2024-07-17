@@ -111,11 +111,11 @@ def build_protein_system(
     solvated_host_coords = strip_units(modeller.positions)
 
     nha = host_coords.shape[0]
-    nwa = solvated_host_coords.shape[0] - nha
     if mols is not None:
         water_idxs = np.arange(nha, solvated_host_coords.shape[0])
         remove_clashy_waters(modeller, solvated_host_coords, box, water_idxs, mols)
         solvated_host_coords = strip_units(modeller.positions)
+    nwa = solvated_host_coords.shape[0] - nha
 
     assert modeller.getTopology().getNumAtoms() == solvated_host_coords.shape[0]
 
