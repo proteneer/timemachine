@@ -145,8 +145,11 @@ def pre_equilibrate_host(
     mol_coords: list of np.ndarray, optional
         Pre-specify a list of mol coords. Else use the mol.GetConformer(0)
 
-    minimizer_steps: integer
-        Number of steps to run the FIRE minimizer with
+    minimizer_steps_per_window: integer
+        Number of steps to run each window of the FIRE minimizer with
+
+    minimizer_windows: integer
+        Number of windows to run FIRE minimizer over
 
     equilibration_steps: integer
         Number of steps to run MD with
