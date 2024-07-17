@@ -37,7 +37,7 @@ def remove_clashy_waters(
         Box to evaluate PBCs under
 
     water_idxs: NDArray[int]
-        The water idxs to consider for deletion
+        The indices of all of the water atoms in the system.
 
     mols: List[Mol]
         List of molecules to determine which waters are clashy
