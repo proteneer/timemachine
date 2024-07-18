@@ -84,6 +84,8 @@ def test_barostat_with_clashes():
 
     # Construct water box without removing the waters around the ligand to ensure clashes
     host_system, host_coords, box, host_top = build_water_system(3.0, ff.water_ff)
+    # Shrink the box to ensure the energies are NaN
+    box -= np.eye(3) * 0.1
     bt = BaseTopology(mol_a, ff)
     afe = AbsoluteFreeEnergy(mol_a, bt)
     host_config = HostConfig(host_system, host_coords, box, host_coords.shape[0])
