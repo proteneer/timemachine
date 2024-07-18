@@ -1,5 +1,8 @@
+from typing import Optional
+
 import numpy as np
-from openmm import app
+from numpy.typing import NDArray
+from openmm import Vec3, app
 from openmm.app import PDBxFile
 from rdkit import Chem
 
@@ -40,7 +43,7 @@ class BondTypeError(Exception):
 
 
 class CIFWriter:
-    def __init__(self, objs, out_filepath):
+    def __init__(self, objs, out_filepath, box: Optional[NDArray[np.float64]] = None):
         """
         This class writes frames out in the mmCIF format. It supports both OpenMM topology
         formats and RDKit ROMol types. The molecules are ordered sequentially by the order
@@ -66,11 +69,16 @@ class CIFWriter:
         out_filepath: str
             Where we write out the CIF file to
 
-        """
+        box: np.ndarray
+            Set the box dimensions of the CIF file, in nanometers.
 
+        """
         assert len(objs) > 0
 
         combined_topology = app.Topology()
+        if box is not None:
+            assert box.shape == (3, 3)
+            combined_topology.setPeriodicBoxVectors([Vec3(*row) for row in box])
 
         # see if an existing topology is present
         for obj_idx, obj in enumerate(objs):
