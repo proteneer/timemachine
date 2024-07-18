@@ -15,15 +15,23 @@ def strip_units(coords) -> NDArray[np.float64]:
     return np.array(coords.value_in_unit_system(unit.md_unit_system))
 
 
-def remove_clashy_waters(
+def get_box_from_coords(coords: NDArray[np.float64]) -> NDArray[np.float64]:
+    box_lengths = np.max(coords, axis=0) - np.min(coords, axis=0)
+    return np.eye(3) * box_lengths
+
+
+def replace_clashy_waters(
     modeller: app.Modeller,
     host_coords: NDArray[np.float64],
     box: NDArray[np.float64],
     water_idxs: NDArray[np.int_],
     mols: List[Chem.Mol],
+    host_ff: app.ForceField,
+    water_ff: str,
     clash_distance: float = 0.4,
 ):
-    """Remove waters from an OpenMM modeler that clash with a set of molecules
+    """Replace waters that clash with a set of molecules with waters at the boundaries rather than
+    clashing with the molecules. The number of atoms in the system will be identical before and after
 
     Parameters
     ----------
@@ -42,6 +50,12 @@ def remove_clashy_waters(
     mols: List[Mol]
         List of molecules to determine which waters are clashy
 
+    host_ff: app.ForceField
+        The forcefield used for the host
+
+    water_ff: str
+        The water forcefield name (excluding .xml) to parametrize the water with.
+
     clash_distance: float
         Distance from a ligand atom to a water atom to consider as a clash, in nanometers
     """
@@ -52,13 +66,26 @@ def remove_clashy_waters(
         return
     # Offset the clashy idxs with the first atom idx, else could be pointing at non-water atoms
     clashy_idxs += np.min(water_idxs)
-    all_atoms = list(modeller.topology.atoms())
-    waters_to_delete = set()
-    for idx in clashy_idxs:
-        atom = all_atoms[idx]
-        waters_to_delete.add(atom.residue)
-        assert atom.residue.name == "HOH"
-    modeller.delete(list(waters_to_delete))
+
+    def get_waters_to_delete():
+        all_atoms = list(modeller.topology.atoms())
+        waters_to_delete = set()
+        for idx in clashy_idxs:
+            atom = all_atoms[idx]
+            waters_to_delete.add(atom.residue)
+            assert atom.residue.name == "HOH"
+        return waters_to_delete
+
+    # First add back in the number of waters that are clashy. Then delete the clashy waters.
+    # Done in this order so that additional waters being added will be at the boundaries, if added after deleting
+    # addSolvent fills the void intended for the mols. Need to end up with the same number of waters as originally
+    num_system_atoms = host_coords.shape[0]
+    clashy_waters = get_waters_to_delete()
+    # First add back in the number of waters that are clashy and we know we need to delete
+    modeller.addSolvent(host_ff, numAdded=len(clashy_waters), neutralize=False, model=sanitize_water_ff(water_ff))
+    clashy_waters = get_waters_to_delete()
+    modeller.delete(list(clashy_waters))
+    assert num_system_atoms == modeller.getTopology().getNumAtoms()
 
 
 def build_protein_system(
@@ -100,10 +127,8 @@ def build_protein_system(
     host_coords = strip_units(host_pdb.positions)
 
     padding = 1.0
-    box_lengths = np.amax(host_coords, axis=0) - np.amin(host_coords, axis=0)
-
-    box_lengths = box_lengths + padding
-    box = np.eye(3, dtype=np.float64) * box_lengths
+    box = get_box_from_coords(host_coords)
+    box += padding
 
     modeller.addSolvent(
         host_ff, boxSize=np.diag(box) * unit.nanometers, neutralize=False, model=sanitize_water_ff(water_ff)
@@ -113,8 +138,9 @@ def build_protein_system(
     num_host_atoms = host_coords.shape[0]
     if mols is not None:
         water_idxs = np.arange(num_host_atoms, solvated_host_coords.shape[0])
-        remove_clashy_waters(modeller, solvated_host_coords, box, water_idxs, mols)
+        replace_clashy_waters(modeller, solvated_host_coords, box, water_idxs, mols, host_ff, water_ff)
         solvated_host_coords = strip_units(modeller.positions)
+
     num_water_atoms = solvated_host_coords.shape[0] - num_host_atoms
 
     assert modeller.getTopology().getNumAtoms() == solvated_host_coords.shape[0]
@@ -123,6 +149,9 @@ def build_protein_system(
     solvated_host_system = host_ff.createSystem(
         modeller.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
     )
+
+    # Determine box from the system's coordinates
+    box = get_box_from_coords(solvated_host_coords)
 
     return solvated_host_system, solvated_host_coords, box, modeller.topology, num_water_atoms
 
@@ -174,12 +203,14 @@ def build_water_system(box_width: float, water_ff: str, mols: Optional[List[Chem
 
     if mols is not None:
         water_idxs = np.arange(solvated_host_coords.shape[0])
-        remove_clashy_waters(modeller, solvated_host_coords, box, water_idxs, mols)
+        replace_clashy_waters(modeller, solvated_host_coords, box, water_idxs, mols, ff, water_ff)
         solvated_host_coords = get_host_coords()
 
     assert modeller.getTopology().getNumAtoms() == solvated_host_coords.shape[0]
 
     system = ff.createSystem(modeller.getTopology(), nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False)
+    # Determine box from the system's coordinates
+    box = get_box_from_coords(solvated_host_coords)
 
     # TODO: minimize the water box (BFGS or scipy.optimize)
-    return system, solvated_host_coords, np.eye(3) * box_width, modeller.getTopology()
+    return system, solvated_host_coords, box, modeller.getTopology()
