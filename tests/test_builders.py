@@ -1,9 +1,13 @@
 from importlib import resources
+from tempfile import NamedTemporaryFile
 
 import numpy as np
+import pytest
+from openmm import app, unit
 
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.fe.utils import get_romol_conf, set_romol_conf
+from timemachine.ff import sanitize_water_ff
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.barostat.utils import compute_box_volume
 from timemachine.md.builders import build_protein_system, build_water_system
@@ -44,6 +48,40 @@ def test_build_water_system():
             np.float32
         ).bound_impl.execute(mol_water_coords, box_with_mols, compute_u=False)
         check_force_norm(-du_dx)
+
+
+@pytest.mark.nocuda
+def test_build_protein_system_returns_correct_water_count():
+    with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
+        protein_system, protein_coords, box, _, num_water_atoms = build_protein_system(
+            str(pdb_path), DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
+        )
+        assert protein_coords.shape[0] - num_water_atoms == 6748
+
+
+@pytest.mark.nocuda
+def test_build_protein_system_waters_before_protein():
+    num_waters = 100
+    # Construct a PDB file with the waters before the protein, should raise an exception
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+        host_pdbfile = host_pdb = app.PDBFile(str(pdb_path))
+
+    host_ff = app.ForceField(f"{DEFAULT_PROTEIN_FF}.xml", f"{DEFAULT_WATER_FF}.xml")
+
+    top = app.Topology()
+    pos = unit.Quantity((), unit.angstroms)
+    modeller = app.Modeller(top, pos)
+    modeller.addSolvent(host_ff, numAdded=num_waters, neutralize=False, model=sanitize_water_ff(DEFAULT_WATER_FF))
+    assert modeller.getTopology().getNumAtoms() == num_waters * 3
+
+    modeller.add(host_pdbfile.topology, host_pdb.positions)
+
+    with NamedTemporaryFile(suffix=".pdb") as temp:
+        with open(temp.name, "w") as ofs:
+            app.PDBFile.writeFile(modeller.getTopology(), modeller.getPositions(), file=ofs)
+
+        with pytest.raises(AssertionError, match="Waters in PDB must be at the end of the file"):
+            build_protein_system(temp.name, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
 
 
 def test_build_protein_system():

@@ -10,6 +10,8 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import sanitize_water_ff
 from timemachine.potentials.jax_utils import idxs_within_cutoff
 
+WATER_RESIDUE_NAME = "HOH"
+
 
 def strip_units(coords) -> NDArray[np.float64]:
     return np.array(coords.value_in_unit_system(unit.md_unit_system))
@@ -73,7 +75,7 @@ def replace_clashy_waters(
         for idx in clashy_idxs:
             atom = all_atoms[idx]
             waters_to_delete.add(atom.residue)
-            assert atom.residue.name == "HOH"
+            assert atom.residue.name == WATER_RESIDUE_NAME
         return waters_to_delete
 
     # First add back in the number of waters that are clashy. Then delete the clashy waters.
@@ -106,7 +108,8 @@ def build_protein_system(
         The water forcefield name (excluding .xml) to parametrize the water with.
 
     mols: optional list of mols
-        Molecules to be part of the system, will remove water molecules that clash with the mols.
+        Molecules to be part of the system, will avoid placing water molecules that clash with the mols.
+        If water molecules provided in the PDB clash with the mols, will do nothing.
 
     Returns
     -------
@@ -126,6 +129,16 @@ def build_protein_system(
     modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
     host_coords = strip_units(host_pdb.positions)
 
+    water_residues_in_pdb = [residue for residue in host_pdb.topology.residues() if residue.name == WATER_RESIDUE_NAME]
+    num_host_atoms = host_coords.shape[0]
+    if len(water_residues_in_pdb) > 0:
+        host_water_atoms = len(water_residues_in_pdb) * 3
+        # Only consider non-water atoms as the host, does count excipients as the host
+        num_host_atoms = num_host_atoms - host_water_atoms
+        water_indices = np.concatenate([[a.index for a in res.atoms()] for res in water_residues_in_pdb])
+        expected_water_indices = np.arange(host_water_atoms) + num_host_atoms
+        assert np.all(expected_water_indices == water_indices), "Waters in PDB must be at the end of the file"
+
     padding = 1.0
     box = get_box_from_coords(host_coords)
     box += padding
@@ -135,9 +148,9 @@ def build_protein_system(
     )
     solvated_host_coords = strip_units(modeller.positions)
 
-    num_host_atoms = host_coords.shape[0]
     if mols is not None:
-        water_idxs = np.arange(num_host_atoms, solvated_host_coords.shape[0])
+        # Only look at waters that we have added, ignored the waters provided in the PDB
+        water_idxs = np.arange(host_coords.shape[0], solvated_host_coords.shape[0])
         replace_clashy_waters(modeller, solvated_host_coords, box, water_idxs, mols, host_ff, water_ff)
         solvated_host_coords = strip_units(modeller.positions)
 
