@@ -137,7 +137,9 @@ def build_protein_system(
         num_host_atoms = num_host_atoms - host_water_atoms
         water_indices = np.concatenate([[a.index for a in res.atoms()] for res in water_residues_in_pdb])
         expected_water_indices = np.arange(host_water_atoms) + num_host_atoms
-        np.testing.assert_equal(water_indices, expected_water_indices, err_msg="Waters in PDB must be at the end of the file")
+        np.testing.assert_equal(
+            water_indices, expected_water_indices, err_msg="Waters in PDB must be at the end of the file"
+        )
 
     padding = 1.0
     box = get_box_from_coords(host_coords)
