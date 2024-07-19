@@ -28,7 +28,6 @@ def test_run_solvent_absolute_hydration():
     assert len(res.boxes[-1]) == n_frames
     assert res.md_params == md_params
     assert host_config.omm_system is not None
-    assert host_config.num_water_atoms > 0
     # The number of waters in the system should stay constant
     assert host_config.num_water_atoms == 6282
     assert host_config.conf.shape == (res.frames[0][0].shape[0] - mol.GetNumAtoms(), 3)
