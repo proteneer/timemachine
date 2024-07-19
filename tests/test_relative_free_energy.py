@@ -34,7 +34,9 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estim
 
     box_width = 4.0
     n_windows = 3
-    solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
+    solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(
+        box_width, forcefield.water_ff, mols=[mol_a, mol_b]
+    )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
 
@@ -122,7 +124,9 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params: MDParams, protein_path
     check_sim_result(vacuum_res)
 
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(box_width, forcefield.water_ff)
+    solvent_sys, solvent_conf, solvent_box, _ = builders.build_water_system(
+        box_width, forcefield.water_ff, mols=[mol_a, mol_b]
+    )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_res = estimate_relative_free_energy_fn(
@@ -288,8 +292,8 @@ def test_local_md_parameters(freeze_reference):
         seed=seed,
         steps_per_frame=steps_per_frame,
         local_steps=steps_per_frame,
-        min_radius=0.1,
-        max_radius=0.5,
+        min_radius=0.3,
+        max_radius=1.0,
         freeze_reference=freeze_reference,
     )
 
