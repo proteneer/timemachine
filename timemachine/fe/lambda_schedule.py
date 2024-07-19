@@ -1,4 +1,7 @@
+from typing import Optional, Tuple
+
 import numpy as np
+from numpy.typing import NDArray
 
 
 def validate_lambda_schedule(lambda_schedule, num_windows):
@@ -16,6 +19,38 @@ def interpolate_pre_optimized_protocol(pre_optimized_protocol, num_windows):
 
     validate_lambda_schedule(lambda_schedule, num_windows)
 
+    return lambda_schedule
+
+
+def bisect_lambda_schedule(
+    num_windows: int, lambda_interval: Optional[Tuple[float, float]] = None
+) -> NDArray[np.float64]:
+    """
+    Construct a lambda schedule by bisecting the largest difference in lambda value until
+    there are num_windows. Useful in the context of `run_sims_bisection` where states are created
+    on the fly with these same lambda values. Can save the cost of minimizing more often than necessary.
+    """
+    assert num_windows >= 2
+    # Could technically use np.linspace here for odd values, but produces minute floating point differences
+    # to the approach we use that relies on python math
+    lambda_interval = lambda_interval or (0.0, 1.0)
+    lambda_schedule_ = list(lambda_interval)
+    for i in range(num_windows - 2):
+        lambda_diffs = np.diff(lambda_schedule_)
+        # Alternate between the upper and lower section
+        # Do upper then lower to match with run_sims_bisections behavior
+        if i % 2 == 1:
+            diff_idx = np.argmax(lambda_diffs)
+            new_lamb = (lambda_schedule_[diff_idx + 1] + lambda_schedule_[diff_idx]) / 2
+            insert_idx = diff_idx + 1
+        else:
+            # Find the max from the upper end of the lambda schedule
+            diff_idx = (len(lambda_schedule_) - 1) - np.argmax(lambda_diffs[::-1])
+            new_lamb = (lambda_schedule_[diff_idx] + lambda_schedule_[diff_idx - 1]) / 2
+            insert_idx = diff_idx
+        lambda_schedule_.insert(insert_idx, new_lamb)
+
+    lambda_schedule = np.array(lambda_schedule_)
     return lambda_schedule
 
 
