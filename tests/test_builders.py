@@ -26,6 +26,18 @@ def test_build_water_system():
     assert len(water_coords) == len(mol_water_coords)
     assert compute_box_volume(box) < compute_box_volume(box_with_mols)
 
+    mol_coords = np.concatenate([get_romol_conf(mol_a), get_romol_conf(mol_b)])
+    mol_centroid = np.mean(mol_coords, axis=0)
+
+    water_centeroid = np.mean(water_coords, axis=0)
+
+    # The centroid of the water particles should be near the centroid of the ligand
+    mol_water_centeroid = np.mean(mol_water_coords, axis=0)
+    np.testing.assert_allclose(mol_centroid, mol_water_centeroid, atol=2e-2)
+
+    # Dependent on the molecule (where it was posed in complex), but centroid of water will not be near the ligands
+    assert not np.allclose(mol_centroid, water_centeroid, atol=2e-2)
+
     box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     box_with_mols += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
 
