@@ -97,8 +97,6 @@ def test_hrex_rbfe_hif2a_water_sampling_warning(hif2a_single_topology_leg, seed)
             n_windows=n_windows,
             min_cutoff=0.7,
         )
-    for l in captured_warnings:
-        print(l.message)
     # We have hundreds of warnings thrown by MBAR in this code, so got to sift through
     assert len(captured_warnings) >= 1
 
