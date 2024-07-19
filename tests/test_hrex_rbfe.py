@@ -2,6 +2,7 @@ from dataclasses import replace
 from importlib import resources
 from typing import Optional
 from unittest.mock import patch
+from warnings import catch_warnings
 
 import jax
 import jax.numpy as jnp
@@ -68,6 +69,43 @@ def hif2a_single_topology_leg(request):
 
 
 @pytest.mark.parametrize("seed", [2024])
+def test_hrex_rbfe_hif2a_water_sampling_warning(hif2a_single_topology_leg, seed):
+    host_name, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
+    if host_name != "complex":
+        pytest.skip("Only relevant in complex")
+    md_params = MDParams(
+        n_frames=2,
+        n_eq_steps=100,
+        steps_per_frame=10,
+        seed=seed,
+        hrex_params=HREXParams(n_frames_bisection=100),
+        water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000) if host_name == "complex" else None,
+    )
+    # Warning will only be triggered if total steps per window is less than the water sampling interval
+    assert md_params.n_frames * md_params.steps_per_frame < md_params.water_sampling_params.interval
+    n_windows = 2
+
+    with catch_warnings(record=True) as captured_warnings:
+        estimate_relative_free_energy_bisection_hrex(
+            mol_a,
+            mol_b,
+            core,
+            forcefield,
+            host_config,
+            md_params,
+            lambda_interval=(0.0, 0.15),
+            n_windows=n_windows,
+            min_cutoff=0.7,
+        )
+    for l in captured_warnings:
+        print(l.message)
+    # We have hundreds of warnings thrown by MBAR in this code, so got to sift through
+    assert len(captured_warnings) >= 1
+
+    assert any("Not running any water sampling" in str(warn.message) for warn in captured_warnings)
+
+
+@pytest.mark.parametrize("seed", [2024])
 def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
     host_name, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
     md_params = MDParams(
@@ -97,7 +135,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
             md_params,
             lambda_interval=(0.0, 0.15),
             n_windows=n_windows,
-            min_cutoff=0.7 if host_name is not None else None,
+            min_cutoff=0.7 if host_name == "complex" else None,
         )
 
     # Check that memory usage is not increasing
