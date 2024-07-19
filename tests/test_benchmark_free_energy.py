@@ -21,6 +21,7 @@ from timemachine.fe.free_energy import (
     run_sims_hrex,
     run_sims_sequential,
 )
+from timemachine.fe.lambda_schedule import bisect_lambda_schedule
 from timemachine.fe.rbfe import (
     DEFAULT_HREX_PARAMS,
     setup_initial_states,
@@ -78,10 +79,11 @@ def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpo
     single_topology = SingleTopology(mol_a, mol_b, core, forcefield)
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
-    lambdas = np.linspace(lambda_endpoints[0], lambda_endpoints[1], n_windows)
+    # Use the bisection schedule to require the least amount of minimization during bisection
+    lambda_grid = bisect_lambda_schedule(n_windows, lambda_interval=lambda_endpoints)
 
     initial_states = setup_initial_states(
-        single_topology, host, DEFAULT_TEMP, lambdas, seed=2023, min_cutoff=0.7 if host is not None else None
+        single_topology, host, DEFAULT_TEMP, lambda_grid, seed=2023, min_cutoff=0.7 if host is not None else None
     )
 
     n_frames = 500 // n_windows
