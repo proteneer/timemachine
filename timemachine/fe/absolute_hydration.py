@@ -275,7 +275,7 @@ def setup_initial_states(
 
     """
     host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
-    host_conf = minimizer.minimize_host_4d(
+    host_conf = minimizer.fire_minimize_host(
         [afe.mol],
         host_config,
         ff,
@@ -321,7 +321,9 @@ def run_solvent(
     mol, forcefield: Forcefield, _, md_params: MDParams, n_windows=16
 ) -> Tuple[SimulationResult, app.topology.Topology, HostConfig]:
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(box_width, forcefield.water_ff)
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
+        box_width, forcefield.water_ff, mols=[mol]
+    )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
     solvent_res = estimate_absolute_free_energy(

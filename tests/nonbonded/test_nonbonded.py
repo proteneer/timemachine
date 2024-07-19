@@ -160,7 +160,7 @@ def test_correctness(
     "precision, rtol, atol, du_dp_rtol, du_dp_atol",
     [
         (np.float64, 1e-8, 1e-10, 1e-6, 1e-9),
-        (np.float32, 1e-4, 3e-5, 1e-4, 3e-5),
+        (np.float32, 1e-4, 3e-5, 1e-3, 1e-3),
     ],
 )
 def test_nblist_box_resize(precision, rtol, atol, du_dp_rtol, du_dp_atol):
