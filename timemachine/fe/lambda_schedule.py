@@ -26,32 +26,14 @@ def bisect_lambda_schedule(
     num_windows: int, lambda_interval: Optional[Tuple[float, float]] = None
 ) -> NDArray[np.float64]:
     """
-    Construct a lambda schedule by bisecting the largest difference in lambda value until
-    there are num_windows. Useful in the context of `run_sims_bisection` where states are created
-    on the fly with these same lambda values. Can save the cost of minimizing more often than necessary.
+    Construct a lambda schedule with windows of size 2^N + 1 such that 2^N is the closest value to num_windows that is smaller.
+    This means that the number of windows returned may not match num_windows. Useful in the context of `run_sims_bisection`
+    where states are created on the fly with these same lambda values. Can save the cost of minimizing more often than necessary.
     """
     assert num_windows >= 2
-    # Could technically use np.linspace here for odd values, but produces minute floating point differences
-    # to the approach we use that relies on python math
-    lambda_interval = lambda_interval or (0.0, 1.0)
-    lambda_schedule_ = list(lambda_interval)
-    for i in range(num_windows - 2):
-        lambda_diffs = np.diff(lambda_schedule_)
-        # Alternate between the upper and lower section
-        # Do upper then lower to match with run_sims_bisections behavior
-        if i % 2 == 1:
-            diff_idx = np.argmax(lambda_diffs)
-            new_lamb = (lambda_schedule_[diff_idx + 1] + lambda_schedule_[diff_idx]) / 2
-            insert_idx = diff_idx + 1
-        else:
-            # Find the max from the upper end of the lambda schedule
-            diff_idx = (len(lambda_schedule_) - 1) - np.argmax(lambda_diffs[::-1])
-            new_lamb = (lambda_schedule_[diff_idx] + lambda_schedule_[diff_idx - 1]) / 2
-            insert_idx = diff_idx
-        lambda_schedule_.insert(insert_idx, new_lamb)
-
-    lambda_schedule = np.array(lambda_schedule_)
-    return lambda_schedule
+    min_lamb, max_lamb = lambda_interval or (0.0, 1.0)
+    schedule_windows = int(2 ** np.floor(np.log2(num_windows))) + 1
+    return np.linspace(min_lamb, max_lamb, schedule_windows)
 
 
 def construct_pre_optimized_absolute_lambda_schedule_solvent(num_windows, nonbonded_cutoff=1.2):

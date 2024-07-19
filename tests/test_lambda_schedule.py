@@ -55,43 +55,11 @@ def test_bisect_lambda_schedule(interval, n_windows):
         return
 
     schedule = bisect_lambda_schedule(n_windows, lambda_interval=interval)
-    if interval == (0.0, 1.0):
-        validate_lambda_schedule(schedule, n_windows)
-    else:
-        assert schedule[0] == interval[0]
-        assert schedule[-1] == interval[1]
-    if n_windows >= 3:
+    assert schedule[0] == interval[0]
+    assert schedule[-1] == interval[1]
+    assert len(schedule) <= n_windows + 1
+    if len(schedule) >= 3:
         mid_point = interval[0] + (interval[1] - interval[0]) / 2
-        assert mid_point in schedule, "midpoint must be in schedule if at least 2 windows due to bisection"
+        assert np.any(np.isclose(schedule, mid_point))
     differences = np.diff(schedule)
-    min_diff = np.min(differences)
-    max_diff = np.max(differences)
-    # For linspace the values can be off ever so slightly
-    if not np.allclose(min_diff, max_diff):
-        # As there are more windows, there end up being more 'gaps', but the values
-        # should be binary, a smallest gap and a largest gap
-        min_diffs = np.count_nonzero(differences == np.min(differences))
-        max_diffs = np.count_nonzero(differences == np.max(differences))
-        assert min_diffs + max_diffs == len(differences)
-
-        lower_half = differences[: len(differences) // 2]
-        upper_half = differences[len(differences) // 2 :]
-
-        # At most two of the smallest values will be on 'one side'.
-        # For example:
-        # with 4 windows
-        # [0.0, 1.0]
-        # Insert 0.5 on the 'lower' half
-        # [0.0, 0.5, 1.0]
-        # insert 0.75 on the 'upper' half
-        # [0.0, 0.5, 0.75, 1.0]
-        # Which leaves differences of [0.5, 0.25, 0.25]
-        # Which when split is [0.5] [0.25, 0.25]
-        np.testing.assert_allclose(
-            np.count_nonzero(lower_half == np.min(differences)),
-            np.count_nonzero(upper_half == np.min(differences)),
-            atol=2.0,
-            rtol=0.0,
-        )
-    else:
-        assert np.allclose(differences, differences[0])
+    assert np.allclose(differences, differences[0])
