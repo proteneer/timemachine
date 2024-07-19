@@ -56,6 +56,9 @@ def test_build_protein_system_returns_correct_water_count():
         protein_system, protein_coords, box, _, num_water_atoms = build_protein_system(
             str(pdb_path), DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
         )
+        # The builder should not modify the number of atoms in the protein at all
+        # Hard coded to the number of protein atoms in the PDB, refer to 6hvi_prepared.pdb for the actual
+        # number of atoms
         assert protein_coords.shape[0] - num_water_atoms == 6748
 
 
