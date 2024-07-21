@@ -971,3 +971,39 @@ def test_get_cores_and_diagnostics():
         assert (
             diagnostics.total_nodes_visited >= diagnostics.core_size
         )  # must visit at least one node per atom pair in core
+
+
+def test_max_connected_components():
+    def get_nphenyl_smiles(n):
+        def go(k):
+            return f"(c{k}ccc{go(k - 1)}cc{k})" if k > 0 else ""
+
+        return go(n)[1:-1]
+
+    def make_pentaphenyl(dihedral_deg):
+        """Make a chain of 5 benzene rings with each ring rotated `dihedral_deg` degrees with respect to the previous ring"""
+        mol = Chem.MolFromSmiles(get_nphenyl_smiles(5))
+        mol = AllChem.AddHs(mol)
+        AllChem.EmbedMolecule(mol, randomSeed=2024)
+        AllChem.SetDihedralDeg(mol.GetConformer(0), 2, 3, 4, 5, dihedral_deg)
+        AllChem.SetDihedralDeg(mol.GetConformer(0), 6, 7, 8, 9, dihedral_deg)
+        AllChem.SetDihedralDeg(mol.GetConformer(0), 10, 11, 12, 13, dihedral_deg)
+        AllChem.SetDihedralDeg(mol.GetConformer(0), 14, 15, 16, 17, dihedral_deg)
+        return mol
+
+    mol_a = make_pentaphenyl(0.0)
+    mol_b = make_pentaphenyl(90.0)
+
+    def get_core(max_connected_components):
+        return atom_mapping.get_cores(
+            mol_a, mol_b, **{**DEFAULT_ATOM_MAPPING_KWARGS, "max_connected_components": max_connected_components}
+        )[0]
+
+    assert len(get_core(1)) == 6 + 6  # maps 1 ring (6 C, 6 H)
+    assert len(get_core(2)) == 2 * (6 + 6)  # maps 2 rings
+
+    # maps 3 rings
+    core_3 = get_core(3)
+    assert len(core_3) == 3 * (6 + 6)
+
+    np.testing.assert_array_equal(core_3, get_core(None))  # n=3 and n=None return same mapping

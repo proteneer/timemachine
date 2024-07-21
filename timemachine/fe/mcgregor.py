@@ -3,7 +3,7 @@ import copy
 import time
 import warnings
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Set, Tuple
 
 import networkx as nx
 import numpy as np
@@ -18,12 +18,6 @@ def _arcs_left(marcs):
 
 # used in main recursion() loop
 UNMAPPED = -1  # (UNVISITED) OR (VISITED AND DEMAPPED)
-
-# used in inner loop when determining whether a mapping will necessarily result
-# in a disconnected subgraph.
-NODE_STATE_VISITED_DEMAPPED = 0  # VISITED AND DEMAPPED
-NODE_STATE_VISITED_MAPPED = 1  # VISITED AND MAPPED
-NODE_STATE_UNVISITED = 2  # UNVISITED
 
 
 def _initialize_marcs_given_predicate(g1, g2, predicate):
@@ -88,6 +82,20 @@ def refine_marcs(g1, g2, new_v1, new_v2, marcs):
     return new_marcs
 
 
+def connected_components(G, sources):
+    """Generate connected components.
+
+    Adapted from the networkx version to additionally accept an iterable of sources, and only generate connected
+    components containing at least one of the specified sources.
+    """
+    seen = set()
+    for v in sources:
+        if v not in seen:
+            c = nx.node_connected_component(G, v)
+            seen.update(c)
+            yield c
+
+
 class MCSResult:
     def __init__(self):
         self.all_maps = []
@@ -135,9 +143,8 @@ class Graph:
 
     def mapping_is_disconnected(
         self,
-        source,
-        node_states,
-        n_mapped_nodes,
+        mapped_nodes: Set[int],
+        unvisited_nodes: Set[int],
         max_connected_components: Optional[int],
         min_connected_component_size: int,
     ):
@@ -154,35 +161,16 @@ class Graph:
         2. M-D-M # returns True
         3. M-M-U # returns False
         4. M-M-D # returns False
-
-        The implementation is adapted from the _plain_bfs() method in:
-        https://networkx.org/documentation/stable/_modules/networkx/algorithms/components/connected.html
-
         """
-        assert max_connected_components == 1
-        assert min_connected_component_size == 1
+        sg = self.nxg.subgraph(mapped_nodes | unvisited_nodes)
 
-        unseen = [True] * self.n_vertices
-        unseen[source] = False
-        nextlevel = [source]
-        mapped_count = 1
+        for n_ccs, cc in enumerate(connected_components(sg, mapped_nodes), 1):
+            if max_connected_components and n_ccs > max_connected_components:
+                return True
+            if len(cc) < min_connected_component_size:
+                return True
 
-        if mapped_count == n_mapped_nodes:
-            return False
-
-        while nextlevel:
-            thislevel = nextlevel
-            nextlevel = []
-            for v in thislevel:
-                for w in self.get_neighbors(v):
-                    if unseen[w] and node_states[w] != NODE_STATE_VISITED_DEMAPPED:
-                        if node_states[w] == NODE_STATE_VISITED_MAPPED:
-                            mapped_count += 1
-                            if mapped_count == n_mapped_nodes:
-                                return False
-                        unseen[w] = False
-                        nextlevel.append(w)
-        return True
+        return False
 
     def get_neighbors(self, vertex):
         return self.lol_vertices[vertex]
@@ -380,46 +368,23 @@ def recursion(
         return
 
     if max_connected_components is not None or min_connected_component_size > 1:
-        # process g1 using atom_map_1_to_2_information
-        g1_node_states = [NODE_STATE_VISITED_DEMAPPED] * g1.n_vertices
-        g1_source = None
-        g1_mapped_count = 0
-        for a1, a2 in enumerate(atom_map_1_to_2):
-            if a1 < layer:
-                # visited nodes
-                if a2 != UNMAPPED:
-                    g1_node_states[a1] = NODE_STATE_VISITED_MAPPED
-                    g1_source = a1
-                    g1_mapped_count += 1
-            else:
-                g1_node_states[a1] = NODE_STATE_UNVISITED
+        g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
 
-        if g1_source and g1.mapping_is_disconnected(
-            g1_source, g1_node_states, g1_mapped_count, max_connected_components, min_connected_component_size
-        ):
-            return
+        if g1_mapped_nodes:
+            g1_unvisited_nodes = set(range(layer, g1.n_vertices))
+            if g1.mapping_is_disconnected(
+                g1_mapped_nodes, g1_unvisited_nodes, max_connected_components, min_connected_component_size
+            ):
+                return
 
-        g2_node_states = [NODE_STATE_VISITED_DEMAPPED] * g2.n_vertices
-        g2_source = None
-        g2_mapped_count = 0
+        g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
 
-        # g2 is a little trickier to process, we need to look at the priority idxs as well
-        for a2, a1 in enumerate(atom_map_2_to_1):
-            if a1 != UNMAPPED:
-                g2_node_states[a2] = NODE_STATE_VISITED_MAPPED
-                g2_source = a2
-                g2_mapped_count += 1
-
-        # look up priority_idxs of remaining atoms
-        for a2_list in priority_idxs[layer:]:
-            for a2 in a2_list:
-                if g2_node_states[a2] != NODE_STATE_VISITED_MAPPED:
-                    g2_node_states[a2] = NODE_STATE_UNVISITED
-
-        if g2_source and g2.mapping_is_disconnected(
-            g2_source, g2_node_states, g2_mapped_count, max_connected_components, min_connected_component_size
-        ):
-            return
+        if g2_mapped_nodes:
+            g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
+            if g2.mapping_is_disconnected(
+                g2_mapped_nodes, g2_unvisited_nodes, max_connected_components, min_connected_component_size
+            ):
+                return
 
     mcs_result.nodes_visited += 1
     n_a = g1.n_vertices
