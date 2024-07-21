@@ -1,5 +1,6 @@
 from collections import defaultdict
-from typing import List, Tuple
+from functools import partial
+from typing import List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
@@ -52,7 +53,8 @@ def get_cores_and_diagnostics(
     ring_cutoff,
     chain_cutoff,
     max_visits,
-    connected_core,
+    max_connected_components: Optional[int],
+    min_connected_component_size: int,
     max_cores,
     enforce_core_core,
     ring_matches_ring_only,
@@ -63,11 +65,13 @@ def get_cores_and_diagnostics(
     """Same as :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
     assert max_cores > 0
 
-    core_kwargs = dict(
+    get_cores_ = partial(
+        _get_cores_impl,
         ring_cutoff=ring_cutoff,
         chain_cutoff=chain_cutoff,
         max_visits=max_visits,
-        connected_core=connected_core,
+        max_connected_components=max_connected_components,
+        min_connected_component_size=min_connected_component_size,
         max_cores=max_cores,
         enforce_core_core=enforce_core_core,
         ring_matches_ring_only=ring_matches_ring_only,
@@ -78,14 +82,14 @@ def get_cores_and_diagnostics(
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
     if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
-        all_cores, mcs_diagnostics = _get_cores_impl(mol_b, mol_a, **core_kwargs)
+        all_cores, mcs_diagnostics = get_cores_(mol_b, mol_a)
         new_cores = []
         for core in all_cores:
             core = np.array([(x[1], x[0]) for x in core], dtype=core.dtype)
             new_cores.append(core)
         return new_cores, mcs_diagnostics
     else:
-        all_cores, mcs_diagnostics = _get_cores_impl(mol_a, mol_b, **core_kwargs)
+        all_cores, mcs_diagnostics = get_cores_(mol_a, mol_b)
         return all_cores, mcs_diagnostics
 
 
@@ -95,7 +99,8 @@ def get_cores(
     ring_cutoff,
     chain_cutoff,
     max_visits,
-    connected_core,
+    max_connected_components: Optional[int],
+    min_connected_component_size: int,
     max_cores,
     enforce_core_core,
     ring_matches_ring_only,
@@ -131,12 +136,15 @@ def get_cores(
     max_visits: int
         Maximum number of nodes we can visit for a given threshold.
 
-    connected_core: bool
-        Set to True to only keep the largest connected
-        subgraph in the mapping. The definition of connected
+    max_connected_components: int or None
+        Set to k to only keep the largest k connected
+        subgraphs in the mapping. The definition of connected
         here is different from McGregor. Here it means there
         is a way to reach the mapped atom without traversing
         over a non-mapped atom.
+
+    min_connected_component_size: int
+        Minimum size of a connected component to be considered a valid mapping
 
     max_cores: int or float
         maximum number of maximal cores to store, this can be an +np.inf if you want
@@ -173,7 +181,8 @@ def get_cores(
         ring_cutoff,
         chain_cutoff,
         max_visits,
-        connected_core,
+        max_connected_components,
+        min_connected_component_size,
         max_cores,
         enforce_core_core,
         ring_matches_ring_only,
@@ -308,7 +317,8 @@ def _get_cores_impl(
     ring_cutoff,
     chain_cutoff,
     max_visits,
-    connected_core,
+    max_connected_components: Optional[int],
+    min_connected_component_size: int,
     max_cores,
     enforce_core_core,
     ring_matches_ring_only,
@@ -386,7 +396,8 @@ def _get_cores_impl(
         max_visits,
         max_cores,
         enforce_core_core,
-        connected_core,
+        max_connected_components,
+        min_connected_component_size,
         min_threshold,
         filter_fxn=filter_fxn,
     )

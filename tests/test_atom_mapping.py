@@ -1,4 +1,5 @@
 import time
+from functools import partial
 
 import numpy as np
 import pytest
@@ -346,7 +347,8 @@ $$$$""",
         ring_cutoff=0.1,
         chain_cutoff=0.2,
         max_visits=1e7,
-        connected_core=True,
+        max_connected_components=1,
+        min_connected_component_size=1,
         max_cores=1e6,  # This pair has 350k cores
         enforce_core_core=True,
         ring_matches_ring_only=False,
@@ -386,7 +388,8 @@ def test_all_pairs(filepath):
                 ring_cutoff=0.12,
                 chain_cutoff=0.2,
                 max_visits=1e7,  # 10 million max nodes to visit
-                connected_core=True,
+                max_connected_components=1,
+                min_connected_component_size=1,
                 max_cores=1000,
                 enforce_core_core=True,
                 ring_matches_ring_only=False,
@@ -452,7 +455,7 @@ def assert_core_sets_are_equal(core_set_a, core_set_b):
 
 # spot check
 def test_linker_map():
-    # test that we can map a linker size change when connected_core=False, and enforce_core_core=False
+    # test that we can map a linker size change when max_connected_components=None, and enforce_core_core=False
     mol_a = Chem.MolFromMolBlock(
         """
   Mrv2219 11232201352D
@@ -522,7 +525,8 @@ $$$$""",
         ring_cutoff=0.05,
         chain_cutoff=0.05,
         max_visits=1e7,  # 10 million max nodes to visit
-        connected_core=False,
+        max_connected_components=None,
+        min_connected_component_size=1,
         max_cores=1000000,
         enforce_core_core=False,
         ring_matches_ring_only=False,
@@ -537,14 +541,15 @@ $$$$""",
         [[6, 6], [4, 4], [9, 9], [8, 8], [7, 7], [5, 5], [3, 3], [2, 2], [1, 1], [0, 0]], all_cores[0]
     )
 
-    # now set connected_core and enforce_core_core to True
+    # now set max_connected_components=1 and enforce_core_core to True
     all_cores = atom_mapping.get_cores(
         mol_a,
         mol_b,
         ring_cutoff=0.05,
         chain_cutoff=0.05,
         max_visits=1e7,  # 10 million max nodes to visit
-        connected_core=True,
+        max_connected_components=1,
+        min_connected_component_size=1,
         max_cores=1000000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
@@ -568,7 +573,8 @@ $$$$""",
         ring_cutoff=0.05,
         chain_cutoff=0.05,
         max_visits=1e7,  # 10 million max nodes to visit
-        connected_core=False,
+        max_connected_components=None,
+        min_connected_component_size=1,
         max_cores=1000000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
@@ -577,7 +583,7 @@ $$$$""",
         min_threshold=0,
     )
 
-    # 2 possible matches, if we do not allow for connected_core but do
+    # 2 possible matches, if we do not require max_connected_components=1 but do
     # require core_core, we have a 9-atom disconnected map, one is a 5-membered ring
     # the other is 4-membered chain. There's 2 allowed maps due to the 2 fold symmetry.
     assert len(all_cores) == 2
@@ -699,7 +705,8 @@ def test_hif2a_failure():
         ring_cutoff=0.12,
         chain_cutoff=0.2,
         max_visits=1e7,
-        connected_core=True,
+        max_connected_components=1,
+        min_connected_component_size=1,
         max_cores=1e6,
         enforce_core_core=True,
         ring_matches_ring_only=False,
@@ -762,7 +769,8 @@ def test_cyclohexane_stereo():
         ring_cutoff=0.15,
         chain_cutoff=0.30,
         max_visits=1e6,
-        connected_core=True,
+        max_connected_components=1,
+        min_connected_component_size=1,
         max_cores=100000,
         enforce_core_core=True,
         ring_matches_ring_only=True,
@@ -816,11 +824,13 @@ def test_chiral_atom_map():
     AllChem.EmbedMolecule(mol_a, randomSeed=0)
     AllChem.EmbedMolecule(mol_b, randomSeed=0)
 
-    core_kwargs = dict(
+    get_cores = partial(
+        atom_mapping.get_cores,
         ring_cutoff=np.inf,
         chain_cutoff=np.inf,
         max_visits=1e7,
-        connected_core=True,
+        max_connected_components=1,
+        min_connected_component_size=1,
         max_cores=1e6,
         enforce_core_core=True,
         disallow_planar_torsion_flips=False,
@@ -828,8 +838,8 @@ def test_chiral_atom_map():
         min_threshold=0,
     )
 
-    chiral_aware_cores = atom_mapping.get_cores(mol_a, mol_b, enforce_chiral=True, **core_kwargs)
-    chiral_oblivious_cores = atom_mapping.get_cores(mol_a, mol_b, enforce_chiral=False, **core_kwargs)
+    chiral_aware_cores = get_cores(mol_a, mol_b, enforce_chiral=True)
+    chiral_oblivious_cores = get_cores(mol_a, mol_b, enforce_chiral=False)
 
     assert len(chiral_oblivious_cores) == 4 * 3 * 2 * 1, "expected all hydrogen permutations to be valid"
     assert len(chiral_aware_cores) == (len(chiral_oblivious_cores) // 2), "expected only rotations to be valid"
@@ -853,11 +863,13 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
     mol_b = Chem.AddHs(Chem.MolFromSmiles("C(c1ccccc1)"))
     AllChem.EmbedMolecule(mol_b, randomSeed=3)
 
-    core_kwargs = dict(
+    get_cores = partial(
+        atom_mapping.get_cores,
         ring_cutoff=0.15,
         chain_cutoff=0.2,
         max_visits=1e7,
-        connected_core=True,
+        max_connected_components=1,
+        min_connected_component_size=1,
         max_cores=1e6,
         enforce_core_core=False,
         enforce_chiral=False,
@@ -865,7 +877,7 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
         min_threshold=0,
     )
 
-    cores = atom_mapping.get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring_only, **core_kwargs)
+    cores = get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring_only)
 
     assert cores
 
@@ -880,10 +892,12 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
 
 def test_max_visits_warning():
     mol_a, mol_b = get_cyclohexanes_different_confs()
-    core_kwargs = dict(
+    get_cores = partial(
+        atom_mapping.get_cores,
         ring_cutoff=0.1,
         chain_cutoff=0.2,
-        connected_core=False,
+        max_connected_components=None,
+        min_connected_component_size=1,
         max_cores=1000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
@@ -891,20 +905,22 @@ def test_max_visits_warning():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
     )
-    cores = atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)
+    cores = get_cores(mol_a, mol_b, max_visits=10000)
     assert len(cores) > 0
 
     with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 0 cores with 2 nodes visited"):
         with pytest.raises(NoMappingError):
-            atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=1)
+            get_cores(mol_a, mol_b, max_visits=1)
 
 
 def test_max_cores_warning():
     mol_a, mol_b = get_cyclohexanes_different_confs()
-    core_kwargs = dict(
+    get_cores = partial(
+        atom_mapping.get_cores,
         ring_cutoff=0.1,
         chain_cutoff=0.2,
-        connected_core=False,
+        max_connected_components=None,
+        min_connected_component_size=1,
         enforce_core_core=True,
         ring_matches_ring_only=False,
         enforce_chiral=True,
@@ -913,16 +929,18 @@ def test_max_cores_warning():
         max_visits=1e7,
     )
     with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 1 cores"):
-        all_cores = atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_cores=1)
+        all_cores = get_cores(mol_a, mol_b, max_cores=1)
         assert len(all_cores) == 1
 
 
 def test_min_threshold():
     mol_a, mol_b = get_cyclohexanes_different_confs()
-    core_kwargs = dict(
+    get_cores = partial(
+        atom_mapping.get_cores,
         ring_cutoff=0.1,
         chain_cutoff=0.2,
-        connected_core=False,
+        max_connected_components=None,
+        min_connected_component_size=1,
         max_cores=1000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
@@ -932,7 +950,7 @@ def test_min_threshold():
     )
 
     with pytest.raises(NoMappingError, match="Unable to find mapping with at least 18 edges"):
-        atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)
+        get_cores(mol_a, mol_b, max_visits=10000)
 
 
 def test_get_cores_and_diagnostics():

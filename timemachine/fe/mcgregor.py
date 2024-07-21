@@ -3,7 +3,7 @@ import copy
 import time
 import warnings
 from dataclasses import dataclass
-from typing import Callable, List, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import networkx as nx
 import numpy as np
@@ -133,14 +133,22 @@ class Graph:
             for edge_idx in edges:
                 self.ve_matrix[vertex_idx][edge_idx] = True
 
-    def mapping_is_disconnected(self, source, node_states, n_mapped_nodes):
+    def mapping_is_disconnected(
+        self,
+        source,
+        node_states,
+        n_mapped_nodes,
+        max_connected_components: Optional[int],
+        min_connected_component_size: int,
+    ):
         r"""
-        Verify whether mapped nodes can still be connected in the graph. It is assumed that
-        source is a mapped node. i.e. node_states[source] == NODE_STATE_VISITED_MAPPED. If this function
-        returns True, then the resulting graph is definitely disconnected. If this function
-        returns False, then the resulting graph can still be connected.
+        Verify whether mapped nodes can still be connected at least the specified minimum number of connected
+        components. It is assumed that source is a mapped node. i.e. node_states[source] == NODE_STATE_VISITED_MAPPED.
+        If this function returns True, then the resulting graph is definitely disconnected. If this function returns
+        False, then the resulting graph can still be connected.
 
-        For example, let M be mapped node, D be a demapped node, and U be an unvisited node:
+        For example, let M be mapped node, D be a demapped node, and U be an unvisited node. If
+        `max_connected_components=1`:
 
         1. M-U-M # returns False
         2. M-D-M # returns True
@@ -151,6 +159,9 @@ class Graph:
         https://networkx.org/documentation/stable/_modules/networkx/algorithms/components/connected.html
 
         """
+        assert max_connected_components == 1
+        assert min_connected_component_size == 1
+
         unseen = [True] * self.n_vertices
         unseen[source] = False
         nextlevel = [source]
@@ -239,7 +250,8 @@ def mcs(
     max_visits,
     max_cores,
     enforce_core_core,
-    connected_core,
+    max_connected_components: Optional[int],
+    min_connected_component_size: int,
     min_threshold,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
@@ -280,7 +292,8 @@ def mcs(
             max_cores,
             cur_threshold,
             enforce_core_core,
-            connected_core,
+            max_connected_components,
+            min_connected_component_size,
             filter_fxn,
         )
 
@@ -338,8 +351,8 @@ def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
 
 
 def recursion(
-    g1,
-    g2,
+    g1: Graph,
+    g2: Graph,
     atom_map_1_to_2,
     atom_map_2_to_1,
     layer,
@@ -350,7 +363,8 @@ def recursion(
     max_cores,
     threshold,
     enforce_core_core,
-    connected_core,
+    max_connected_components: Optional[int],
+    min_connected_component_size: int,
     filter_fxn,
 ):
     if mcs_result.nodes_visited > max_visits:
@@ -365,7 +379,7 @@ def recursion(
     if num_edges < threshold:
         return
 
-    if connected_core:
+    if max_connected_components is not None or min_connected_component_size > 1:
         # process g1 using atom_map_1_to_2_information
         g1_node_states = [NODE_STATE_VISITED_DEMAPPED] * g1.n_vertices
         g1_source = None
@@ -380,7 +394,9 @@ def recursion(
             else:
                 g1_node_states[a1] = NODE_STATE_UNVISITED
 
-        if g1_source and g1.mapping_is_disconnected(g1_source, g1_node_states, g1_mapped_count):
+        if g1_source and g1.mapping_is_disconnected(
+            g1_source, g1_node_states, g1_mapped_count, max_connected_components, min_connected_component_size
+        ):
             return
 
         g2_node_states = [NODE_STATE_VISITED_DEMAPPED] * g2.n_vertices
@@ -400,7 +416,9 @@ def recursion(
                 if g2_node_states[a2] != NODE_STATE_VISITED_MAPPED:
                     g2_node_states[a2] = NODE_STATE_UNVISITED
 
-        if g2_source and g2.mapping_is_disconnected(g2_source, g2_node_states, g2_mapped_count):
+        if g2_source and g2.mapping_is_disconnected(
+            g2_source, g2_node_states, g2_mapped_count, max_connected_components, min_connected_component_size
+        ):
             return
 
     mcs_result.nodes_visited += 1
@@ -438,7 +456,8 @@ def recursion(
                     max_cores,
                     threshold,
                     enforce_core_core,
-                    connected_core,
+                    max_connected_components,
+                    min_connected_component_size,
                     filter_fxn,
                 )
             atom_map_pop(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
@@ -460,6 +479,7 @@ def recursion(
         max_cores,
         threshold,
         enforce_core_core,
-        connected_core,
+        max_connected_components,
+        min_connected_component_size,
         filter_fxn,
     )
