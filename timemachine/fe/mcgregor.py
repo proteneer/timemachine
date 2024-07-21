@@ -5,6 +5,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Callable, List, Sequence, Tuple
 
+import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
@@ -94,9 +95,6 @@ class MCSResult:
         self.num_edges = 0
         self.timed_out = False
         self.nodes_visited = 0
-
-
-import networkx as nx
 
 
 class Graph:
