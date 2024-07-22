@@ -87,7 +87,6 @@ def node_connected_component(neighbors: Callable[[int], Iterable[int]], n_vertic
     Adapted from the networkx implementation to operate on an abstract graph represented by a neighbors function and
     number of vertices.
     """
-    n = n_vertices
     seen = {source}
     nextlevel = [source]
     while nextlevel:
@@ -98,7 +97,7 @@ def node_connected_component(neighbors: Callable[[int], Iterable[int]], n_vertic
                 if w not in seen:
                     seen.add(w)
                     nextlevel.append(w)
-            if len(seen) == n:
+            if len(seen) == n_vertices:
                 return seen
     return seen
 
