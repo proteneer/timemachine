@@ -117,9 +117,9 @@ def connected_components(
     seen = set()
     for v in sources:
         if v not in seen:
-            c = node_connected_component(neighbors, n_vertices, v)
-            seen.update(c)
-            yield c
+            cc = node_connected_component(neighbors, n_vertices, v)
+            seen.update(cc)
+            yield cc
 
 
 class MCSResult:
