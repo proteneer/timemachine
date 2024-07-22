@@ -197,6 +197,7 @@ class Graph:
         for n_ccs, cc in enumerate(ccs, 1):
             seen.update(cc)
             if n_ccs == max_connected_components:
+                # if we've seen the maximum number of connected components, we should have seen all of the mapped nodes
                 return not mapped_nodes.issubset(seen)
             if len(cc) < min_connected_component_size:
                 return True
