@@ -189,13 +189,15 @@ class Graph:
         """
 
         def neighbors(v):
-            return (w for w in self.get_neighbors(v) if w in mapped_nodes or w in unvisited_nodes)
+            return [w for w in self.get_neighbors(v) if w in mapped_nodes or w in unvisited_nodes]
 
         ccs = connected_components(neighbors, self.n_vertices, mapped_nodes)
+        seen = set()
 
         for n_ccs, cc in enumerate(ccs, 1):
-            if max_connected_components and n_ccs > max_connected_components:
-                return True
+            seen.update(cc)
+            if n_ccs == max_connected_components:
+                return not mapped_nodes.issubset(seen)
             if len(cc) < min_connected_component_size:
                 return True
 
