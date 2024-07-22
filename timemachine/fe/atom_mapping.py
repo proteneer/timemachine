@@ -82,7 +82,7 @@ def get_cores_and_diagnostics(
     if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
         # adjust initial_mapping if we're swapping
         if initial_mapping is not None and len(initial_mapping) > 0:
-            core_kwargs["initial_mapping"] = np.stack([initial_mapping[:, 1], initial_mapping[:, 0]], axis=1)
+            core_kwargs["initial_mapping"] = initial_mapping[:, ::-1]
         all_cores, mcs_diagnostics = _get_cores_impl(mol_b, mol_a, **core_kwargs)
         new_cores = []
         for core in all_cores:
