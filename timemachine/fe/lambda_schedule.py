@@ -23,7 +23,7 @@ def interpolate_pre_optimized_protocol(pre_optimized_protocol, num_windows):
 
 
 def bisect_lambda_schedule(
-    num_windows: int, lambda_interval: Optional[Tuple[float, float]] = None
+    num_windows: int, lambda_interval: Tuple[float, float] = (0.0, 1.0)
 ) -> NDArray[np.float64]:
     """
     Construct a lambda schedule with windows of size 2^N + 1 such that 2^N is the closest value to num_windows that is smaller.
@@ -31,7 +31,7 @@ def bisect_lambda_schedule(
     where states are created on the fly with these same lambda values. Can save the cost of minimizing more often than necessary.
     """
     assert num_windows >= 2
-    min_lamb, max_lamb = lambda_interval or (0.0, 1.0)
+    min_lamb, max_lamb = lambda_interval
     schedule_windows = int(2 ** np.floor(np.log2(num_windows))) + 1
     return np.linspace(min_lamb, max_lamb, schedule_windows)
 
