@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from timemachine.fe.lambda_schedule import (
-    bisect_lambda_schedule,
+    bisection_lambda_schedule,
     interpolate_pre_optimized_protocol,
     validate_lambda_schedule,
 )
@@ -48,13 +48,13 @@ def test_interpolate_pre_optimized_protocol():
 
 @pytest.mark.parametrize("interval", [(0.0, 1.0), [0.25, 0.5]])
 @pytest.mark.parametrize("n_windows", [1, 2, 3, 4, 8, 9, 16, 32, 48, 49])
-def test_bisect_lambda_schedule(interval, n_windows):
+def test_bisection_lambda_schedule(interval, n_windows):
     if n_windows < 2:
         with pytest.raises(AssertionError):
-            bisect_lambda_schedule(n_windows)
+            bisection_lambda_schedule(n_windows)
         return
 
-    schedule = bisect_lambda_schedule(n_windows, lambda_interval=interval)
+    schedule = bisection_lambda_schedule(n_windows, lambda_interval=interval)
     assert schedule[0] == interval[0]
     assert schedule[-1] == interval[1]
     assert len(schedule) <= n_windows + 1
