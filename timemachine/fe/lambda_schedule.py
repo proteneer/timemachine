@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -22,9 +22,7 @@ def interpolate_pre_optimized_protocol(pre_optimized_protocol, num_windows):
     return lambda_schedule
 
 
-def bisect_lambda_schedule(
-    num_windows: int, lambda_interval: Tuple[float, float] = (0.0, 1.0)
-) -> NDArray[np.float64]:
+def bisect_lambda_schedule(num_windows: int, lambda_interval: Tuple[float, float] = (0.0, 1.0)) -> NDArray[np.float64]:
     """
     Construct a lambda schedule with windows of size 2^N + 1 such that 2^N is the closest value to num_windows that is smaller.
     This means that the number of windows returned may not match num_windows. Useful in the context of `run_sims_bisection`
