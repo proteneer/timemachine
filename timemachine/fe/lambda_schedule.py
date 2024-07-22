@@ -26,9 +26,13 @@ def bisection_lambda_schedule(
     num_windows: int, lambda_interval: Tuple[float, float] = (0.0, 1.0)
 ) -> NDArray[np.float64]:
     """
-    Construct a lambda schedule with windows of size 2^N + 1 such that 2^N is the closest value to num_windows that is smaller.
-    The number of windows returned may not match num_windows. Useful in the context of `run_sims_bisection`
-    where states are created on the fly with these same lambda values. Can save the cost of minimizing more often than necessary.
+    Construct a lambda schedule for setting up initial states that will be used for the basis of `run_sims_bisection`.
+    The lambda schedule will contain lambda values where bisection would mostly likely run simulations, reducing the total
+    amount of computation to prepare each initial state.
+
+
+    Constructs a lambda schedule with 2^N + 1 windows such that 2^N is the closest value to num_windows less than num_windows.
+    The number of windows will be less than or equal to num_windows.
     """
     assert num_windows >= 2
     min_lamb, max_lamb = lambda_interval
