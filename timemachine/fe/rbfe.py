@@ -297,7 +297,7 @@ def setup_optimized_initial_state(
     states_subset = [s for s in optimized_initial_states if (s.lamb <= 0.5) == (lamb <= 0.5)]
     nearest_optimized = min(states_subset, key=lambda s: abs(lamb - s.lamb))
 
-    if np.allclose(lamb, nearest_optimized.lamb):
+    if np.isclose(lamb, nearest_optimized.lamb):
         return nearest_optimized
     else:
         initial_state = setup_initial_state(st, lamb, host, temperature, seed)
