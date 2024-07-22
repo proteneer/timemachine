@@ -3,9 +3,8 @@ import copy
 import time
 import warnings
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
-import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
@@ -82,16 +81,44 @@ def refine_marcs(g1, g2, new_v1, new_v2, marcs):
     return new_marcs
 
 
-def connected_components(G, sources):
+def node_connected_component(neighbors: Callable[[int], Iterable[int]], n_vertices: int, source: int) -> Set[int]:
+    """Returns the set of nodes in the component of graph containing node n.
+
+    Adapted from the networkx implementation to operate on an abstract graph represented by a neighbors function and
+    number of vertices.
+    """
+    n = n_vertices
+    seen = {source}
+    nextlevel = [source]
+    while nextlevel:
+        thislevel = nextlevel
+        nextlevel = []
+        for v in thislevel:
+            for w in neighbors(v):
+                if w not in seen:
+                    seen.add(w)
+                    nextlevel.append(w)
+            if len(seen) == n:
+                return seen
+    return seen
+
+
+def connected_components(
+    neighbors: Callable[[int], Iterable[int]], n_vertices: int, sources: Iterable[int]
+) -> Iterator[Set[int]]:
     """Generate connected components.
 
-    Adapted from the networkx version to additionally accept an iterable of sources, and only generate connected
-    components containing at least one of the specified sources.
+    Adapted from the networkx version to
+
+    * additionally accept an iterable of sources, only generating connected components containing at least one of the
+      specified sources, and
+
+    * operate on an abstract graph represented by a neighbors function and number of vertices.
     """
     seen = set()
     for v in sources:
         if v not in seen:
-            c = nx.node_connected_component(G, v)
+            c = node_connected_component(neighbors, n_vertices, v)
             seen.update(c)
             yield c
 
@@ -110,7 +137,6 @@ class Graph:
         self.n_vertices = n_vertices
         self.n_edges = len(edges)
         self.edges = edges
-        self.nxg = nx.Graph(edges)  # assumes input graph is fully connected
 
         cmat = np.full((n_vertices, n_vertices), False, dtype=bool)
         for i, j in edges:
@@ -162,9 +188,13 @@ class Graph:
         3. M-M-U # returns False
         4. M-M-D # returns False
         """
-        sg = self.nxg.subgraph(mapped_nodes | unvisited_nodes)
 
-        for n_ccs, cc in enumerate(connected_components(sg, mapped_nodes), 1):
+        def neighbors(v):
+            return (w for w in self.get_neighbors(v) if w in mapped_nodes or w in unvisited_nodes)
+
+        ccs = connected_components(neighbors, self.n_vertices, mapped_nodes)
+
+        for n_ccs, cc in enumerate(ccs, 1):
             if max_connected_components and n_ccs > max_connected_components:
                 return True
             if len(cc) < min_connected_component_size:
