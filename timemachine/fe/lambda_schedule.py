@@ -80,29 +80,3 @@ def construct_pre_optimized_relative_lambda_schedule(n_windows: int | None):
     if n_windows is not None:
         lambda_schedule = interpolate_pre_optimized_protocol(lambda_schedule, n_windows)
     return lambda_schedule
-
-
-def symmetrize_lambda_schedule(lambda_schedule: NDArray) -> NDArray:
-    ls = lambda_schedule
-    ls = ls[:-1]
-    ls = 0.5 * ls
-    ls = np.concatenate([ls, 1.0 - ls[::-1]])
-    return ls
-
-
-def construct_symmetric_pre_optimized_relative_lambda_schedule(n_windows: int | None):
-    """[DEPRECATED] Symmetrized version of :py:func:`construct_pre_optimized_relative_lambda_schedule`
-
-    Relative calculations should use :py:func:`construct_pre_optimized_relative_lambda_schedule` instead. This
-    symmetrized version was needed when w offsets for dummy group atoms were derived from a single schedule as
-
-        w_a = w(lam)
-        w_b = cutoff - w(lam)
-
-    This restriction on the functional form of w_a and w_b no longer exists.
-    """
-    lambda_schedule = construct_pre_optimized_relative_lambda_schedule(None)
-    lambda_schedule = symmetrize_lambda_schedule(lambda_schedule)
-    if n_windows is not None:
-        lambda_schedule = interpolate_pre_optimized_protocol(lambda_schedule, n_windows)
-    return lambda_schedule
