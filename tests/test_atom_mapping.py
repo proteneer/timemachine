@@ -1046,10 +1046,10 @@ def new_to_old_map_after_removing_hs(mol):
     return new_to_old_mapping
 
 
-def test_empty_initial_mapping_returns_identity(hif2a_ligands):
-    rng = np.random.default_rng(2024)
-    mols = hif2a_ligands
-    mol_a, mol_b = rng.choice(mols, 2)
+@pytest.mark.parametrize("pair", [(0, 1)])
+def test_empty_initial_mapping_returns_identity(pair, hif2a_ligands):
+    a, b = pair
+    mol_a, mol_b = hif2a_ligands[a], hif2a_ligands[b]
 
     kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
     cores = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
@@ -1065,10 +1065,11 @@ def test_empty_initial_mapping_returns_identity(hif2a_ligands):
     np.testing.assert_equal(cores, cores_empty_initial_map)
 
 
-def test_initial_mapping_returns_self_with_same_params(hif2a_ligands):
+@pytest.mark.parametrize("pair", [(0, 1)])
+def test_initial_mapping_returns_self_with_same_params(pair, hif2a_ligands):
     """If an initial map is provided for the same parameters, the values are identical"""
-    rng = np.random.default_rng(2024)
-    mol_a, mol_b = rng.choice(hif2a_ligands, 2)
+    a, b = pair
+    mol_a, mol_b = hif2a_ligands[a], hif2a_ligands[b]
 
     kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
     cores = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
@@ -1081,13 +1082,13 @@ def test_initial_mapping_returns_self_with_same_params(hif2a_ligands):
     assert len(cores) > 1
     assert len(identity_core) == 1
     # Core ordering does get shuffled, but pairs should be identical
-    assert set(tuple(pair) for pair in identity_core[0]) == set(tuple(pair) for pair in cores[0])
+    assert_cores_are_equal(identity_core[0], cores[0])
 
 
-def test_initial_mapping_always_a_subset_of_cores(hif2a_ligands):
-    rng = np.random.default_rng(2024)
-    mols = hif2a_ligands
-    mol_a, mol_b = rng.choice(mols, 2)
+@pytest.mark.parametrize("pair", [(0, 1)])
+def test_initial_mapping_always_a_subset_of_cores(pair, hif2a_ligands):
+    a, b = pair
+    mol_a, mol_b = hif2a_ligands[a], hif2a_ligands[b]
 
     kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
     cores = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
