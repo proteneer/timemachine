@@ -1196,9 +1196,9 @@ def run_sims_hrex(
 
     if (
         md_params.water_sampling_params is not None
-        and md_params.steps_per_frame > md_params.water_sampling_params.interval
+        and md_params.steps_per_frame * md_params.n_frames < md_params.water_sampling_params.interval
     ):
-        warn("Not running any water sampling, too few steps of MD for the water sampling interval")
+        warn("Not running any water sampling, too few steps of MD per window for the water sampling interval")
 
     begin_loop_time = time.perf_counter()
     last_update_time = begin_loop_time
