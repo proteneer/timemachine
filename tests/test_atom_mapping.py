@@ -1030,13 +1030,21 @@ def test_min_connected_component_size():
     mol_a = make_polyphenylene(2, 0.0)
     mol_b = make_polyphenylene(2, 90.0)
 
-    # With min_connected_component_size=1 or 2, should map one ring entirely + opposite C and H of second ring
+    # With min_connected_component_size < 3, should map one ring entirely + opposite C and H of second ring
     core_1 = get_core(mol_a, mol_b, max_connected_components=None, min_connected_component_size=1)
     assert len(core_1) == 6 + 5 + 2 + 1  # (6 C + 5 H) + (2 C + 1 H)
 
-    np.testing.assert_array_equal(
-        get_core(mol_a, mol_b, max_connected_components=None, min_connected_component_size=2), core_1
-    )
+    # Any min_connected_component_size < k for k < 3 is a no-op and returns the same result as with k=1
+    for min_connected_component_size in [-1, 0, 1, 2]:
+        np.testing.assert_array_equal(
+            get_core(
+                mol_a,
+                mol_b,
+                max_connected_components=None,
+                min_connected_component_size=min_connected_component_size,
+            ),
+            core_1,
+        )
 
     # With min_connected_component_size >= 3, can no longer map C and H of second ring
     core_3 = get_core(mol_a, mol_b, min_connected_component_size=3)
