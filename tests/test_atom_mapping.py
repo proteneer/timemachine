@@ -991,6 +991,11 @@ def make_polyphenylene(n, dihedral_deg):
     return mol
 
 
+def get_core(mol_a, mol_b, **kwargs):
+    cores = atom_mapping.get_cores(mol_a, mol_b, **{**DEFAULT_ATOM_MAPPING_KWARGS, **kwargs})
+    return cores[0]
+
+
 def test_max_connected_components():
     """Test mapping a pair of 5-phenyl mols; mol_a planar and mol_b with even rings rotated 90 degrees.
 
@@ -1001,19 +1006,16 @@ def test_max_connected_components():
     mol_a = make_polyphenylene(5, 0.0)
     mol_b = make_polyphenylene(5, 90.0)
 
-    def get_core(max_connected_components):
-        return atom_mapping.get_cores(
-            mol_a, mol_b, **{**DEFAULT_ATOM_MAPPING_KWARGS, "max_connected_components": max_connected_components}
-        )[0]
-
-    assert len(get_core(1)) == 6 + 6  # maps 1 ring (6 C, 6 H)
-    assert len(get_core(2)) == 2 * (6 + 6)  # maps 2 rings
+    assert len(get_core(mol_a, mol_b, max_connected_components=1)) == 6 + 6  # maps 1 ring (6 C, 6 H)
+    assert len(get_core(mol_a, mol_b, max_connected_components=2)) == 2 * (6 + 6)  # maps 2 rings
 
     # maps 3 rings
-    core_3 = get_core(3)
+    core_3 = get_core(mol_a, mol_b, max_connected_components=3)
     assert len(core_3) == 3 * (6 + 6)
 
-    np.testing.assert_array_equal(core_3, get_core(None))  # n=3 and n=None return same mapping
+    np.testing.assert_array_equal(
+        core_3, get_core(mol_a, mol_b, max_connected_components=None)
+    )  # n=3 and n=None return same mapping
 
 
 def test_min_connected_component_size():
@@ -1025,25 +1027,23 @@ def test_min_connected_component_size():
     mol_a = make_polyphenylene(2, 0.0)
     mol_b = make_polyphenylene(2, 90.0)
 
-    def get_core(min_connected_component_size):
-        return atom_mapping.get_cores(
-            mol_a,
-            mol_b,
-            **{
-                **DEFAULT_ATOM_MAPPING_KWARGS,
-                "max_connected_components": None,
-                "min_connected_component_size": min_connected_component_size,
-            },
-        )[0]
-
     # With min_connected_component_size=1 or 2, should map one ring entirely + opposite C and H of second ring
-    core_1 = get_core(1)
+    core_1 = get_core(mol_a, mol_b, max_connected_components=None, min_connected_component_size=1)
     assert len(core_1) == 6 + 5 + 2 + 1  # (6 C + 5 H) + (2 C + 1 H)
 
-    np.testing.assert_array_equal(get_core(2), core_1)
+    np.testing.assert_array_equal(
+        get_core(mol_a, mol_b, max_connected_components=None, min_connected_component_size=2), core_1
+    )
 
-    # With min_connected_component_size > 3, can no longer map C and H of second ring
-    core_3 = get_core(3)
+    # With min_connected_component_size >= 3, can no longer map C and H of second ring
+    core_3 = get_core(mol_a, mol_b, min_connected_component_size=3)
     assert len(core_3) == 6 + 5 + 1  # (6 C + 5 H) + (1 C)
 
-    np.testing.assert_array_equal(get_core(4), core_3)
+    np.testing.assert_array_equal(
+        get_core(mol_a, mol_b, max_connected_components=None, min_connected_component_size=4), core_3
+    )
+
+    # Check that min_connected_component_size works as expected with max_connected_components
+    core_1_1 = get_core(mol_a, mol_b, max_connected_components=1, min_connected_component_size=1)
+    assert len(core_1_1) != len(core_1)
+    np.testing.assert_array_equal(core_1_1, core_3)
