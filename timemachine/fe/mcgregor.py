@@ -425,6 +425,7 @@ def recursion(
         g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
 
         if g1_mapped_nodes:
+            # Nodes in g1 are visited in order, so nodes left to visit are [layer, layer + 1, ..., n - 1]
             g1_unvisited_nodes = set(range(layer, g1.n_vertices))
             if g1.mapping_is_disconnected(
                 g1_mapped_nodes, g1_unvisited_nodes, max_connected_components, min_connected_component_size
@@ -434,6 +435,8 @@ def recursion(
         g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
 
         if g2_mapped_nodes:
+            # Nodes in g2 are visited in the order determined by priority_idxs. Nodes may be repeated in priority_idxs,
+            # but we skip over nodes that have already been mapped.
             g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
             if g2.mapping_is_disconnected(
                 g2_mapped_nodes, g2_unvisited_nodes, max_connected_components, min_connected_component_size
