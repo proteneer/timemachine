@@ -186,11 +186,11 @@ class Graph:
                                     cc_size += 1
                                     nextlevel.append(w)
                 n_ccs += 1
+                if cc_size < min_connected_component_size:
+                    return True
                 if n_ccs == max_connected_components:
                     # if we've seen the maximum number of connected components, we should have seen all of the mapped nodes
                     return not mapped_nodes.issubset(seen)
-                if cc_size < min_connected_component_size:
-                    return True
 
         return False
 

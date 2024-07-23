@@ -1054,6 +1054,12 @@ def test_min_connected_component_size():
         get_core(mol_a, mol_b, max_connected_components=None, min_connected_component_size=4), core_3
     )
 
+    # core can't be larger than one ring plus anchor (6 C + 5 H + 1 C)
+    core_12 = get_core(mol_a, mol_b, min_connected_component_size=12)
+    assert len(core_12) == 12
+    with pytest.raises(NoMappingError):
+        _ = get_core(mol_a, mol_b, min_connected_component_size=13)
+
     # Check that min_connected_component_size works as expected with max_connected_components
     core_1_1 = get_core(mol_a, mol_b, max_connected_components=1, min_connected_component_size=1)
     assert len(core_1_1) != len(core_1)
