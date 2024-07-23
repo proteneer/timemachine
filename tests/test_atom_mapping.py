@@ -1127,8 +1127,8 @@ def test_initial_mapping_ignores_filters(hif2a_ligands, param_to_change):
         # If we remap with this core that is invalid under the mapping conditions, return the original core
         new_cores = atom_mapping.get_cores(mol_a, mol_b, **initial_map_kwargs)
         assert len(new_cores) == 1
-    else:
-        # If there is no connected core that can be made from the disconnected will raise an exception
+    elif param_to_change == "connected_core":
+        # If there is no connected core that can be made from the disconnected core, expect NoMappingError
         with pytest.raises(NoMappingError):
             atom_mapping.get_cores(mol_a, mol_b, **initial_map_kwargs)
 
