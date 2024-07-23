@@ -3,8 +3,9 @@ import copy
 import time
 import warnings
 from dataclasses import dataclass
-from typing import Callable, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import Callable, List, Optional, Sequence, Set, Tuple
 
+import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
@@ -81,47 +82,6 @@ def refine_marcs(g1, g2, new_v1, new_v2, marcs):
     return new_marcs
 
 
-def node_connected_component(neighbors: Callable[[int], Iterable[int]], n_vertices: int, source: int) -> Set[int]:
-    """Returns the set of nodes in the component of graph containing node n.
-
-    Adapted from the networkx implementation to operate on an abstract graph represented by a neighbors function and
-    number of vertices.
-    """
-    seen = {source}
-    nextlevel = [source]
-    while nextlevel:
-        thislevel = nextlevel
-        nextlevel = []
-        for v in thislevel:
-            for w in neighbors(v):
-                if w not in seen:
-                    seen.add(w)
-                    nextlevel.append(w)
-            if len(seen) == n_vertices:
-                return seen
-    return seen
-
-
-def connected_components(
-    neighbors: Callable[[int], Iterable[int]], n_vertices: int, sources: Iterable[int]
-) -> Iterator[Set[int]]:
-    """Generate connected components.
-
-    Adapted from the networkx version to
-
-    * additionally accept an iterable of sources, only generating connected components containing at least one of the
-      specified sources, and
-
-    * operate on an abstract graph represented by a neighbors function and number of vertices.
-    """
-    seen = set()
-    for v in sources:
-        if v not in seen:
-            cc = node_connected_component(neighbors, n_vertices, v)
-            seen.update(cc)
-            yield cc
-
-
 class MCSResult:
     def __init__(self):
         self.all_maps = []
@@ -173,8 +133,7 @@ class Graph:
         max_connected_components: Optional[int],
         min_connected_component_size: int,
     ):
-        r"""
-        Verify whether mapped nodes can still be connected at least the specified minimum number of connected
+        r"""Verify whether mapped nodes can still be connected at least the specified minimum number of connected
         components. It is assumed that source is a mapped node. i.e. node_states[source] == NODE_STATE_VISITED_MAPPED.
         If this function returns True, then the resulting graph is definitely disconnected. If this function returns
         False, then the resulting graph can still be connected.
@@ -186,19 +145,89 @@ class Graph:
         2. M-D-M # returns True
         3. M-M-U # returns False
         4. M-M-D # returns False
+
+        This calls an optimized implementation in mapping_is_disconnected_fast; see mapping_is_disconnected_ref for a
+        simpler-to-understand reference version.
         """
 
-        def neighbors(v):
-            return [w for w in self.get_neighbors(v) if w in mapped_nodes or w in unvisited_nodes]
+        # Uncomment to assert result of fast implementation matches the reference
+        # args = (mapped_nodes, unvisited_nodes, max_connected_components, min_connected_component_size)
+        # assert self.mapping_is_disconnected_fast(*args) == self.mapping_is_disconnected_ref(*args)
 
-        ccs = connected_components(neighbors, self.n_vertices, mapped_nodes)
+        return self.mapping_is_disconnected_fast(
+            mapped_nodes, unvisited_nodes, max_connected_components, min_connected_component_size
+        )
+
+    def mapping_is_disconnected_fast(
+        self,
+        mapped_nodes: Set[int],
+        unvisited_nodes: Set[int],
+        max_connected_components: Optional[int],
+        min_connected_component_size: int,
+    ):
+        """Optimized implementation of mapping_is_disconnected, sacrificing modularity for efficiency"""
+
         seen = set()
+        n_ccs = 0
+        for v in mapped_nodes:
+            if v not in seen:
+                # visit component containing v
+                seen.add(v)
+                cc_size = 1
+                nextlevel = [v]
+                while nextlevel:
+                    thislevel = nextlevel
+                    nextlevel = []
+                    for v in thislevel:
+                        for w in self.get_neighbors(v):
+                            if w in mapped_nodes or w in unvisited_nodes:
+                                if w not in seen:
+                                    seen.add(w)
+                                    cc_size += 1
+                                    nextlevel.append(w)
+                n_ccs += 1
+                if n_ccs == max_connected_components:
+                    # if we've seen the maximum number of connected components, we should have seen all of the mapped nodes
+                    return not mapped_nodes.issubset(seen)
+                if cc_size < min_connected_component_size:
+                    return True
+
+        return False
+
+    def mapping_is_disconnected_ref(
+        self,
+        mapped_nodes: Set[int],
+        unvisited_nodes: Set[int],
+        max_connected_components: Optional[int],
+        min_connected_component_size: int,
+    ):
+        """Reference implementation of mapping_is_disconnected, decomposing the parts of the algorithm and using
+        standard algorithms for clarity"""
+
+        g = nx.Graph(self.edges)
+
+        # Consider the subgraph induced by mapped and unvisited nodes (ignoring visited nodes that have not been mapped)
+        sg = g.subgraph(mapped_nodes | unvisited_nodes)
+
+        def connected_components(g, sources):
+            """Enumerate connected components reachable from the specified source nodes."""
+            seen = set()
+            for v in sources:
+                if v not in seen:
+                    cc = nx.node_connected_component(g, v)
+                    seen.update(cc)
+                    yield cc
+
+        ccs = connected_components(sg, mapped_nodes)
 
         for n_ccs, cc in enumerate(ccs, 1):
-            seen.update(cc)
-            if n_ccs == max_connected_components:
-                # if we've seen the maximum number of connected components, we should have seen all of the mapped nodes
-                return not mapped_nodes.issubset(seen)
+            # The number of connected components in the subgraph is a lower bound on the eventual number (since we could
+            # choose not to map nodes that are currently unvisited). Note that we do not revisit nodes that are visited
+            # but have not been mapped, so the number of connected components will not shrink.
+            if max_connected_components and n_ccs > max_connected_components:
+                return True
+
+            # The size of the connected components in the subgraph is an upper bound on their eventual size.
             if len(cc) < min_connected_component_size:
                 return True
 
