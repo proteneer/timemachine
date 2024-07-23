@@ -1137,7 +1137,15 @@ def test_initial_mapping_ignores_filters(hif2a_ligands, param_to_change):
 
 def test_hybrid_core_generation(hif2a_ligands):
     """
-    Verify that generating"""
+    Verify expectations around the generation of hybrid molecules given initial mappings generated fro molecules
+    without hydrogens.
+
+    The expectations are:
+    * Cores generated with hydrogens are as large or larger than the hybrid. The reason the core can be smaller is
+      if a terminal non-hydrogen atom is mapped to what is a terminal in the hydrogen-less molecule, but with hydrogens
+      would be non-terminal.
+    * Cores generated with the hybrid approach without hydrogens first and then with hydrogens will be strictly larger.
+    """
     mols_with_hs = hif2a_ligands
     mols_without_hs = read_sdf(hif2a_set, removeHs=True)
 
@@ -1205,9 +1213,12 @@ def test_hybrid_core_generation(hif2a_ligands):
             # hybrid_core_sizes.append(len(core_hybrid))
 
             assert len(core_no_h) < len(core_h), f"Mol {i} -> {j} failed to produce larger mapping by adding hydrogens"
-            assert len(cores_no_h) < len(
+            assert len(core_no_h) < len(
                 core_hybrid
             ), f"Mol {i} -> {j} failed to produce larger mapping by running hybrid"
+            assert len(core_hybrid) <= len(
+                core_h
+            ), f"Mol {i} -> {j} failed to produce larger mapping by running with hydrogens than hybrid"
 
     # useful diagnostics
     # import matplotlib.pyplot as plt
