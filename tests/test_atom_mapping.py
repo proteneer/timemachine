@@ -1116,12 +1116,12 @@ def test_initial_mapping_ignores_filters(hif2a_ligands, param_to_change):
 
     kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
     kwargs[param_to_change] = False
-    cores_without_ring_match_ring = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
-    # The core without the ring matches ring is larger
-    assert len(cores[0]) < len(cores_without_ring_match_ring[0])
+    unfiltered_cores = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
+    # The core without the filter `param_to_change` is larger
+    assert len(cores[0]) < len(unfiltered_cores[0])
 
     initial_map_kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
-    initial_map_kwargs["initial_mapping"] = cores_without_ring_match_ring[0]
+    initial_map_kwargs["initial_mapping"] = unfiltered_cores[0]
 
     if param_to_change == "ring_matches_ring_only":
         # If we remap with this core that is invalid under the mapping conditions, return the original core
