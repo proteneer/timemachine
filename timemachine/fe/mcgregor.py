@@ -169,12 +169,12 @@ class Graph:
 
         seen = set()
         n_ccs = 0
-        for v in mapped_nodes:
-            if v not in seen:
+        for u in mapped_nodes:
+            if u not in seen:
                 # visit component containing v
-                seen.add(v)
+                seen.add(u)
                 cc_size = 1
-                nextlevel = [v]
+                nextlevel = [u]
                 while nextlevel:
                     thislevel = nextlevel
                     nextlevel = []
