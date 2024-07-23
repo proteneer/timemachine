@@ -1,3 +1,4 @@
+import copy
 import time
 
 import numpy as np
@@ -19,6 +20,11 @@ datasets = [
     hif2a_set,
     eg5_set,
 ]
+
+
+@pytest.fixture(scope="module")
+def hif2a_ligands():
+    return read_sdf(hif2a_set)
 
 
 @pytest.mark.nightly(reason="Slow")
@@ -353,6 +359,7 @@ $$$$""",
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
+        initial_mapping=None,
     )
     assert len(all_cores) > 0
 
@@ -393,6 +400,7 @@ def test_all_pairs(filepath):
                 enforce_chiral=True,
                 disallow_planar_torsion_flips=False,
                 min_threshold=0,
+                initial_mapping=None,
             )
             end_time = time.time()
 
@@ -529,6 +537,7 @@ $$$$""",
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
+        initial_mapping=None,
     )
 
     assert len(all_cores) == 1
@@ -551,6 +560,7 @@ $$$$""",
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
+        initial_mapping=None,
     )
 
     # 2 possible matches, returned core ordering is fully determined
@@ -575,6 +585,7 @@ $$$$""",
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
+        initial_mapping=None,
     )
 
     # 2 possible matches, if we do not allow for connected_core but do
@@ -706,6 +717,7 @@ def test_hif2a_failure():
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
+        initial_mapping=None,
     )
 
     expected_core = np.array(
@@ -769,6 +781,7 @@ def test_cyclohexane_stereo():
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
+        initial_mapping=None,
     )
 
     for core_idx, core in enumerate(all_cores[:1]):
@@ -826,6 +839,7 @@ def test_chiral_atom_map():
         disallow_planar_torsion_flips=False,
         ring_matches_ring_only=True,
         min_threshold=0,
+        initial_mapping=None,
     )
 
     chiral_aware_cores = atom_mapping.get_cores(mol_a, mol_b, enforce_chiral=True, **core_kwargs)
@@ -863,6 +877,7 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
         enforce_chiral=False,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
+        initial_mapping=None,
     )
 
     cores = atom_mapping.get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring_only, **core_kwargs)
@@ -890,6 +905,7 @@ def test_max_visits_warning():
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
+        initial_mapping=None,
     )
     cores = atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_visits=10000)
     assert len(cores) > 0
@@ -911,6 +927,7 @@ def test_max_cores_warning():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         max_visits=1e7,
+        initial_mapping=None,
     )
     with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 1 cores"):
         all_cores = atom_mapping.get_cores(mol_a, mol_b, **core_kwargs, max_cores=1)
@@ -929,6 +946,7 @@ def test_min_threshold():
         enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=mol_a.GetNumAtoms(),
+        initial_mapping=None,
     )
 
     with pytest.raises(NoMappingError, match="Unable to find mapping with at least 18 edges"):
@@ -953,3 +971,303 @@ def test_get_cores_and_diagnostics():
         assert (
             diagnostics.total_nodes_visited >= diagnostics.core_size
         )  # must visit at least one node per atom pair in core
+
+
+def test_initial_mapping(hif2a_ligands):
+    # Test that we can generate an equally good mapping if we specify
+    # an initial mapping that is in the optimal mapping
+    # Note: this adjusts bumps ring_cutoff and chain cutoff both to 0.4 (from 0.12, 0.2)
+    mols = hif2a_ligands
+    mol_a, mol_b = mols[0], mols[1]
+    initial_mapping = np.array(
+        [
+            [17, 13],
+            [16, 12],
+            [14, 11],
+            [13, 10],
+            [12, 9],
+            [19, 15],
+            [11, 8],
+            [10, 7],
+            [9, 6],
+            [8, 5],
+            [7, 4],
+            [6, 3],
+            [5, 2],
+        ]
+    )
+
+    # adjust for 1-indexing when reading off the atom-mapping
+    initial_mapping = initial_mapping - 1
+
+    TEST_ATOM_MAPPING_KWARGS = {
+        # "ring_cutoff": 0.12,
+        # "chain_cutoff": 0.2,
+        "ring_cutoff": 0.4,  # bumped up to make the problem harder
+        "chain_cutoff": 0.4,  # bumped up to make the problem harder
+        "max_visits": 1e7,
+        "connected_core": True,
+        "max_cores": 1e5,
+        "enforce_core_core": True,
+        "ring_matches_ring_only": True,
+        "enforce_chiral": True,
+        "disallow_planar_torsion_flips": True,
+        "min_threshold": 0,
+        "initial_mapping": initial_mapping,
+    }
+
+    all_cores_test, diagnostics_test = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **TEST_ATOM_MAPPING_KWARGS)
+    TEST_ATOM_MAPPING_KWARGS["initial_mapping"] = None
+    all_cores_ref, diagnostics_ref = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **TEST_ATOM_MAPPING_KWARGS)
+
+    assert len(all_cores_test[0]) == len(all_cores_ref[0])
+
+    # should be something like "Test visited: 1480 Ref visited: 31796"
+    print("Test visited:", diagnostics_test.total_nodes_visited, "Ref visited:", diagnostics_ref.total_nodes_visited)
+    assert diagnostics_test.total_nodes_visited < diagnostics_ref.total_nodes_visited
+
+
+def new_to_old_map_after_removing_hs(mol):
+    # usually explicitHs are always placed at the end, but just to be safe
+    # we explicitly compute the ordering
+    atomic_nums = [a.GetAtomicNum() for a in mol.GetAtoms()]
+    old_to_new_mapping = {}
+    new_to_old_mapping = {}
+
+    # generate old to new mapping
+    for atom_idx, atom_num in enumerate(atomic_nums):
+        if atom_num != 1:
+            old_to_new_mapping[atom_idx] = len(old_to_new_mapping)
+
+    # generate new to old mapping
+    for old, new in old_to_new_mapping.items():
+        new_to_old_mapping[new] = old
+
+    return new_to_old_mapping
+
+
+@pytest.mark.parametrize("pair", [(0, 1)])
+def test_empty_initial_mapping_returns_identity(pair, hif2a_ligands):
+    a, b = pair
+    mol_a, mol_b = hif2a_ligands[a], hif2a_ligands[b]
+
+    kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
+    cores = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
+
+    # Don't change the kwargs here, besides adding an empty core
+    kwargs["initial_mapping"] = np.zeros((0, 2))
+
+    cores_empty_initial_map = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
+
+    assert len(cores) > 1
+    assert len(cores_empty_initial_map) == len(cores)
+
+    np.testing.assert_equal(cores, cores_empty_initial_map)
+
+
+@pytest.mark.parametrize("pair", [(0, 1)])
+def test_initial_mapping_returns_self_with_same_params(pair, hif2a_ligands):
+    """If an initial map is provided for the same parameters, the values are identical"""
+    a, b = pair
+    mol_a, mol_b = hif2a_ligands[a], hif2a_ligands[b]
+
+    kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
+    cores = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
+
+    kwargs["initial_mapping"] = cores[0]
+
+    # Since the initial mapping is set and no parameters are changed, should only return a single core
+    identity_core = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
+
+    assert len(cores) > 1
+    assert len(identity_core) == 1
+    # Core ordering does get shuffled, but pairs should be identical
+    assert_cores_are_equal(identity_core[0], cores[0])
+
+
+@pytest.mark.parametrize("pair", [(0, 1)])
+def test_initial_mapping_always_a_subset_of_cores(pair, hif2a_ligands):
+    a, b = pair
+    mol_a, mol_b = hif2a_ligands[a], hif2a_ligands[b]
+
+    kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
+    cores = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
+
+    initial_map = cores[0]
+
+    kwargs["initial_mapping"] = initial_map
+    kwargs["ring_cutoff"] = kwargs["ring_cutoff"] * 2.0
+    kwargs["chain_cutoff"] = kwargs["chain_cutoff"] * 2.0
+
+    cores_with_map = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
+
+    initial_pairs = set(tuple(pair) for pair in initial_map)
+    for core in cores_with_map:
+        new_pairs = set(tuple(pair) for pair in core)
+        assert new_pairs.issuperset(initial_pairs)
+
+
+@pytest.mark.parametrize(
+    "param_to_change,new_val,expect_exception",
+    [
+        ("ring_matches_ring_only", False, False),
+        ("connected_core", False, True),
+        ("enforce_core_core", False, False),
+        ("enforce_chiral", False, False),
+        ("disallow_planar_torsion_flips", False, False),
+    ],
+)
+def test_initial_mapping_ignores_filters(hif2a_ligands, param_to_change, new_val, expect_exception):
+    mol_a = hif2a_ligands[0]
+    mol_b = hif2a_ligands[1]
+    cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
+
+    assert DEFAULT_ATOM_MAPPING_KWARGS[param_to_change] != new_val
+
+    kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
+    kwargs[param_to_change] = new_val
+    unfiltered_cores = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
+    # The core without the filter `param_to_change` is equal or larger
+    assert len(cores[0]) <= len(unfiltered_cores[0])
+
+    initial_map_kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
+    initial_map_kwargs["initial_mapping"] = unfiltered_cores[0]
+
+    # if param_to_change != "ring_matches_ring_only":
+    # If we remap with this core that is invalid under the mapping conditions, return the original core
+    if expect_exception:
+        # If there is no connected core that can be made from the disconnected core, expect NoMappingError
+        with pytest.raises(NoMappingError):
+            atom_mapping.get_cores(mol_a, mol_b, **initial_map_kwargs)
+    else:
+        new_cores = atom_mapping.get_cores(mol_a, mol_b, **initial_map_kwargs)
+        assert len(new_cores) == 1
+
+
+def test_hybrid_core_generation(hif2a_ligands):
+    """
+    Verify expectations around the generation of hybrid molecules given initial mappings generated fro molecules
+    without hydrogens.
+
+    The expectations are:
+    * Cores generated with hydrogens are as large or larger than the hybrid. The reason the core can be smaller is
+      if a terminal non-hydrogen atom is mapped to what is a terminal in the hydrogen-less molecule, but with hydrogens
+      would be non-terminal.
+    * Cores generated with the hybrid approach without hydrogens first and then with hydrogens will be strictly larger.
+    """
+    mols_with_hs = hif2a_ligands
+    mols_without_hs = read_sdf(hif2a_set, removeHs=True)
+
+    n_mols = len(mols_with_hs)
+
+    # with_h_visits = []
+    # without_h_visits = []
+    # hybrid_visits = []
+
+    # with_h_core_sizes = []
+    # without_h_core_sizes = []
+    # hybrid_core_sizes = []
+
+    TEST_ATOM_MAPPING_KWARGS = copy.deepcopy(DEFAULT_ATOM_MAPPING_KWARGS)
+
+    # useful for testing larger cutoff settings
+    # TEST_ATOM_MAPPING_KWARGS["ring_cutoff"] = 0.4
+    # TEST_ATOM_MAPPING_KWARGS["chain_cutoff"] = 0.4
+
+    for i in range(n_mols):
+        for j in range(i + 1, n_mols):
+            mol_a_with_h, mol_b_with_h = mols_with_hs[i], mols_with_hs[j]
+            mol_a_without_h, mol_b_without_h = mols_without_hs[i], mols_without_hs[j]
+
+            cores_h, diagnostics_with_h = atom_mapping.get_cores_and_diagnostics(
+                mol_a_with_h, mol_b_with_h, **TEST_ATOM_MAPPING_KWARGS
+            )
+            core_h = cores_h[0]
+
+            cores_no_h, diagnostics_no_h = atom_mapping.get_cores_and_diagnostics(
+                mol_a_without_h, mol_b_without_h, **TEST_ATOM_MAPPING_KWARGS
+            )
+            core_no_h = cores_no_h[0]
+
+            # hybrid method, use core from without H atom-mapping
+            ntom_mol_a = new_to_old_map_after_removing_hs(mol_a_with_h)
+            ntom_mol_b = new_to_old_map_after_removing_hs(mol_b_with_h)
+
+            core_a_initial = [ntom_mol_a[x] for x in core_no_h[:, 0]]
+            core_b_initial = [ntom_mol_b[x] for x in core_no_h[:, 1]]
+
+            initial_mapping = np.stack([core_a_initial, core_b_initial], axis=1)
+            MAPPING_KWARGS_WITH_MAPPING = copy.deepcopy(TEST_ATOM_MAPPING_KWARGS)
+            MAPPING_KWARGS_WITH_MAPPING["initial_mapping"] = initial_mapping
+
+            cores_hybrid, diagnostics_hybrid = atom_mapping.get_cores_and_diagnostics(
+                mol_a_with_h, mol_b_with_h, **MAPPING_KWARGS_WITH_MAPPING
+            )
+
+            core_hybrid = cores_hybrid[0]
+
+            # useful printing for debugging
+            # tnv_h = diagnostics_with_h.total_nodes_visited
+            # tnv_hybrid = diagnostics_hybrid.total_nodes_visited
+            # tnv_no_h = diagnostics_no_h.total_nodes_visited
+            # print("TNV: all_hs, no_hs, hybrid", tnv_h, tnv_no_h, tnv_no_h + tnv_hybrid)
+            # print("CORE SIZE: all_hs, no_hs, hybrid", len(core_h), len(core_no_h), len(core_hybrid))
+
+            # with_h_visits.append(tnv_h)
+            # without_h_visits.append(tnv_no_h)
+            # hybrid_visits.append(tnv_no_h + tnv_hybrid)
+
+            # with_h_core_sizes.append(len(core_h))
+            # without_h_core_sizes.append(len(core_no_h))
+            # hybrid_core_sizes.append(len(core_hybrid))
+
+            assert len(core_no_h) < len(core_h), f"Mol {i} -> {j} failed to produce larger mapping by adding hydrogens"
+            assert len(core_no_h) < len(
+                core_hybrid
+            ), f"Mol {i} -> {j} failed to produce larger mapping by running hybrid"
+            assert len(core_hybrid) <= len(
+                core_h
+            ), f"Mol {i} -> {j} failed to produce larger mapping by running with hydrogens than hybrid"
+
+    # useful diagnostics
+    # import matplotlib.pyplot as plt
+    # plt.subplot(231)
+    # plt.title("with Hs visits")
+    # plt.hist(with_h_visits, label=f"mean={np.mean(with_h_visits):.2f}", bins=20)
+    # plt.xlabel("total visits")
+    # plt.legend()
+
+    # # plt.show()
+
+    # plt.subplot(232)
+    # plt.title("without Hs visits")
+    # plt.hist(without_h_visits, label=f"mean={np.mean(without_h_visits):.2f}", bins=20)
+    # plt.xlabel("total visits")
+    # plt.legend()
+    # # plt.show()
+
+    # plt.subplot(233)
+    # plt.title("hybrid visits")
+    # plt.hist(hybrid_visits, label=f"mean={np.mean(hybrid_visits):.2f}", bins=20)
+    # plt.xlabel("total visits")
+    # plt.legend()
+
+    # plt.subplot(234)
+    # plt.title("with Hs core sizes")
+    # plt.hist(with_h_core_sizes, label=f"mean={np.mean(with_h_core_sizes):.2f}", bins=20)
+    # plt.xlabel("core_size")
+    # plt.legend()
+
+    # plt.subplot(235)
+    # plt.title("without Hs core sizes")
+    # plt.hist(without_h_core_sizes, label=f"mean={np.mean(without_h_core_sizes):.2f}", bins=20)
+    # plt.xlabel("core_size")
+    # plt.legend()
+
+    # plt.subplot(236)
+    # plt.title("hybrid core sizes")
+    # plt.hist(hybrid_core_sizes, label=f"mean={np.mean(hybrid_core_sizes):.2f}", bins=20)
+    # plt.xlabel("core_size")
+    # plt.legend()
+
+    # plt.show()
