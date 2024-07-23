@@ -298,6 +298,7 @@ def mcs(
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
+    assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
 
     g_a = Graph(n_a, bonds_a)
     g_b = Graph(n_b, bonds_b)

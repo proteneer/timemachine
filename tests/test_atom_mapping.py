@@ -1006,6 +1006,9 @@ def test_max_connected_components():
     mol_a = make_polyphenylene(5, 0.0)
     mol_b = make_polyphenylene(5, 90.0)
 
+    with pytest.raises(AssertionError, match="max_connected_components > 0"):
+        get_core(mol_a, mol_b, max_connected_components=0)
+
     assert len(get_core(mol_a, mol_b, max_connected_components=1)) == 6 + 6  # maps 1 ring (6 C, 6 H)
     assert len(get_core(mol_a, mol_b, max_connected_components=2)) == 2 * (6 + 6)  # maps 2 rings
 
