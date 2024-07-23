@@ -275,8 +275,9 @@ def mcs(
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
             raise NoMappingError(f"Unable to find mapping with at least {min_threshold} edges")
-        map_a_to_b = copy.deepcopy(base_map_a_to_b)
-        map_b_to_a = copy.deepcopy(base_map_b_to_a)
+        # Construct copies of the base map
+        map_a_to_b = list(base_map_a_to_b)
+        map_b_to_a = list(base_map_b_to_a)
         mcs_result = MCSResult()
         recursion(
             g_a,
