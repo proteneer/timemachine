@@ -1131,6 +1131,8 @@ def test_initial_mapping_ignores_filters(hif2a_ligands, param_to_change):
         # If there is no connected core that can be made from the disconnected core, expect NoMappingError
         with pytest.raises(NoMappingError):
             atom_mapping.get_cores(mol_a, mol_b, **initial_map_kwargs)
+    else:
+        assert False
 
 
 def test_hybrid_core_generation(hif2a_ligands):
