@@ -867,7 +867,11 @@ def interpolate_w_coord(w0: float | jax.Array, w1: float | jax.Array, lamb: floa
     """
     lambdas = construct_pre_optimized_relative_lambda_schedule(None)
     x = jnp.linspace(0.0, 1.0, len(lambdas))
-    return interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambdas))
+    return jnp.where(
+        w0 < w1,
+        interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambdas)),
+        interpolate.linear_interpolation(w1, w0, jnp.interp(1.0 - lamb, x, lambdas)),
+    )
 
 
 class AtomMapFlags(IntEnum):
@@ -1293,7 +1297,7 @@ class SingleTopology(AtomMapMixin):
             pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
 
             # parameters for pairs that interact in both src and dst states
-            w = jax.vmap(interpolate_w_coord, (0, 0, None))(src_w, dst_w, lamb)
+            w = jax.vmap(interpolate.linear_interpolation, (0, 0, None))(src_w, dst_w, lamb)
             qlj = interpolate_qlj_fn(src_qlj, dst_qlj, lamb)
             pair_params_not_excluded = jnp.concatenate((qlj, w[:, None]), axis=1)
 
