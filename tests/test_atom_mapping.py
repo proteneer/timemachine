@@ -973,7 +973,7 @@ def test_get_cores_and_diagnostics():
         )  # must visit at least one node per atom pair in core
 
 
-def nphenyl_smiles(n):
+def polyphenylene_smiles(n):
     def go(k):
         return f"(c{k}ccc{go(k - 1)}cc{k})" if k > 0 else ""
 
@@ -982,7 +982,7 @@ def nphenyl_smiles(n):
 
 def make_polyphenylene(n, dihedral_deg):
     """Make a chain of n benzene rings with each ring rotated `dihedral_deg` degrees with respect to the previous ring"""
-    mol = Chem.MolFromSmiles(nphenyl_smiles(n))
+    mol = Chem.MolFromSmiles(polyphenylene_smiles(n))
     mol = AllChem.AddHs(mol)
     AllChem.EmbedMolecule(mol, randomSeed=2024)
     for k in range(n - 1):  # n - 1 inter-ring bonds to rotate
@@ -992,6 +992,12 @@ def make_polyphenylene(n, dihedral_deg):
 
 
 def test_max_connected_components():
+    """Test mapping a pair of 5-phenyl mols; mol_a planar and mol_b with even rings rotated 90 degrees.
+
+    For this example, setting max_connected_components=1 will only map 1 ring, max_connected_components=2 will map 2
+    rings, etc.
+    """
+
     mol_a = make_polyphenylene(5, 0.0)
     mol_b = make_polyphenylene(5, 90.0)
 
@@ -1011,6 +1017,11 @@ def test_max_connected_components():
 
 
 def test_min_connected_component_size():
+    """Test mapping a pair of biphenyl mols; mol_a planar and mol_b with the second ring rotated 90 degrees.
+
+    For this example, setting min_connected_component_size > 3 will not map the C and H in the second ring opposite the
+    inter-ring bond.
+    """
     mol_a = make_polyphenylene(2, 0.0)
     mol_b = make_polyphenylene(2, 90.0)
 

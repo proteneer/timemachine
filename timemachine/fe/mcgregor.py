@@ -201,8 +201,7 @@ class Graph:
         max_connected_components: Optional[int],
         min_connected_component_size: int,
     ):
-        """Reference implementation of mapping_is_disconnected, decomposing the parts of the algorithm and using
-        standard algorithms for clarity"""
+        """Reference implementation of mapping_is_disconnected, decomposed into standard algorithms for clarity"""
 
         g = nx.Graph(self.edges)
 
