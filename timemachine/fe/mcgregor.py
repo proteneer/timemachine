@@ -295,17 +295,26 @@ def mcs(
     max_connected_components: Optional[int],
     min_connected_component_size: int,
     min_threshold,
+    initial_mapping,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
     assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
 
+    predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
     g_a = Graph(n_a, bonds_a)
     g_b = Graph(n_b, bonds_b)
+    base_marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
 
-    predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
-    marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
+    base_map_a_to_b = [UNMAPPED] * n_a
+    base_map_b_to_a = [UNMAPPED] * n_b
+    if initial_mapping is not None:
+        for a, b in initial_mapping:
+            base_map_a_to_b[a] = b
+            base_map_b_to_a[b] = a
+            base_marcs = refine_marcs(g_a, g_b, a, b, base_marcs)
 
+    base_layer = len(initial_mapping)
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
     # Keep start time for debugging purposes below
     start_time = time.time()  # noqa
@@ -313,22 +322,23 @@ def mcs(
     mcs_result = None
 
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
-    max_threshold = _arcs_left(marcs)
+    max_threshold = _arcs_left(base_marcs)
     total_nodes_visited = 0
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
             raise NoMappingError(f"Unable to find mapping with at least {min_threshold} edges")
-        map_a_to_b = [UNMAPPED] * n_a
-        map_b_to_a = [UNMAPPED] * n_b
+        # Construct copies of the base map
+        map_a_to_b = list(base_map_a_to_b)
+        map_b_to_a = list(base_map_b_to_a)
         mcs_result = MCSResult()
         recursion(
             g_a,
             g_b,
             map_a_to_b,
             map_b_to_a,
-            0,
-            marcs,
+            base_layer,
+            base_marcs,
             mcs_result,
             priority_idxs,
             max_visits,
