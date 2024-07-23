@@ -1106,33 +1106,41 @@ def test_initial_mapping_always_a_subset_of_cores(hif2a_ligands):
         assert new_pairs.issuperset(initial_pairs)
 
 
-@pytest.mark.parametrize("param_to_change", ["ring_matches_ring_only", "connected_core"])
-def test_initial_mapping_ignores_filters(hif2a_ligands, param_to_change):
+@pytest.mark.parametrize(
+    "param_to_change,new_val,expect_exception",
+    [
+        ("ring_matches_ring_only", False, False),
+        ("connected_core", False, True),
+        ("enforce_core_core", False, False),
+        ("enforce_chiral", False, False),
+        ("disallow_planar_torsion_flips", False, False),
+    ],
+)
+def test_initial_mapping_ignores_filters(hif2a_ligands, param_to_change, new_val, expect_exception):
     mol_a = hif2a_ligands[0]
     mol_b = hif2a_ligands[1]
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
 
-    assert DEFAULT_ATOM_MAPPING_KWARGS[param_to_change]
+    assert DEFAULT_ATOM_MAPPING_KWARGS[param_to_change] != new_val
 
     kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
-    kwargs[param_to_change] = False
+    kwargs[param_to_change] = new_val
     unfiltered_cores = atom_mapping.get_cores(mol_a, mol_b, **kwargs)
-    # The core without the filter `param_to_change` is larger
-    assert len(cores[0]) < len(unfiltered_cores[0])
+    # The core without the filter `param_to_change` is equal or larger
+    assert len(cores[0]) <= len(unfiltered_cores[0])
 
     initial_map_kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
     initial_map_kwargs["initial_mapping"] = unfiltered_cores[0]
 
-    if param_to_change == "ring_matches_ring_only":
-        # If we remap with this core that is invalid under the mapping conditions, return the original core
-        new_cores = atom_mapping.get_cores(mol_a, mol_b, **initial_map_kwargs)
-        assert len(new_cores) == 1
-    elif param_to_change == "connected_core":
+    # if param_to_change != "ring_matches_ring_only":
+    # If we remap with this core that is invalid under the mapping conditions, return the original core
+    if expect_exception:
         # If there is no connected core that can be made from the disconnected core, expect NoMappingError
         with pytest.raises(NoMappingError):
             atom_mapping.get_cores(mol_a, mol_b, **initial_map_kwargs)
     else:
-        assert False
+        new_cores = atom_mapping.get_cores(mol_a, mol_b, **initial_map_kwargs)
+        assert len(new_cores) == 1
 
 
 def test_hybrid_core_generation(hif2a_ligands):
