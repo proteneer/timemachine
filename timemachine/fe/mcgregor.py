@@ -126,46 +126,49 @@ class Graph:
             for edge_idx in edges:
                 self.ve_matrix[vertex_idx][edge_idx] = True
 
-    def mapping_is_disconnected(
+    def mapping_incompatible_with_cc_constraints(
         self,
         mapped_nodes: Set[int],
         unvisited_nodes: Set[int],
         max_connected_components: Optional[int],
         min_connected_component_size: int,
     ):
-        r"""Verify whether mapped nodes can still be connected at least the specified minimum number of connected
-        components. It is assumed that source is a mapped node. i.e. node_states[source] == NODE_STATE_VISITED_MAPPED.
-        If this function returns True, then the resulting graph is definitely disconnected. If this function returns
-        False, then the resulting graph can still be connected.
+        r"""Returns whether the current search state (as specified by mapped nodes and unvisited nodes) is
+        _incompatible_ with either of the `max_connected_components` or `min_connected_component_size` constraints.
 
-        For example, let M be mapped node, D be a demapped node, and U be an unvisited node. If
-        `max_connected_components=1`:
+        For example, let M be mapped node, D be a demapped (visited but not mapped) node, and U be an unvisited node. If
+        `max_connected_components=1` and `min_connected_component_size=1`:
 
         1. M-U-M # returns False
         2. M-D-M # returns True
         3. M-M-U # returns False
         4. M-M-D # returns False
 
-        This calls an optimized implementation in mapping_is_disconnected_fast; see mapping_is_disconnected_ref for a
-        simpler-to-understand reference version.
+        With `min_connected_component_size=2`, example 1 would be incompatible and we would return True (3 and 4 would
+        still be False).
+
+        This calls an optimized implementation in mapping_incompatible_with_cc_constraints_fast; see
+        mapping_incompatible_with_cc_constraints_ref for a simpler-to-understand reference version.
         """
 
         # Uncomment to assert result of fast implementation matches the reference
         # args = (mapped_nodes, unvisited_nodes, max_connected_components, min_connected_component_size)
-        # assert self.mapping_is_disconnected_fast(*args) == self.mapping_is_disconnected_ref(*args)
+        # assert self.mapping_incompatible_with_cc_constraints_fast(
+        #     *args
+        # ) == self.mapping_incompatible_with_cc_constraints_ref(*args)
 
-        return self.mapping_is_disconnected_fast(
+        return self.mapping_incompatible_with_cc_constraints_fast(
             mapped_nodes, unvisited_nodes, max_connected_components, min_connected_component_size
         )
 
-    def mapping_is_disconnected_fast(
+    def mapping_incompatible_with_cc_constraints_fast(
         self,
         mapped_nodes: Set[int],
         unvisited_nodes: Set[int],
         max_connected_components: Optional[int],
         min_connected_component_size: int,
     ):
-        """Optimized implementation of mapping_is_disconnected, sacrificing modularity for efficiency"""
+        """Optimized implementation of mapping_incompatible_with_cc_constraints_ref, sacrificing modularity for efficiency"""
 
         seen = set()
         n_ccs = 0
@@ -194,14 +197,15 @@ class Graph:
 
         return False
 
-    def mapping_is_disconnected_ref(
+    def mapping_incompatible_with_cc_constraints_ref(
         self,
         mapped_nodes: Set[int],
         unvisited_nodes: Set[int],
         max_connected_components: Optional[int],
         min_connected_component_size: int,
     ):
-        """Reference implementation of mapping_is_disconnected, decomposed into standard algorithms for clarity"""
+        """Reference implementation of mapping_incompatible_with_cc_constraints, decomposed into standard algorithms for
+        clarity"""
 
         g = nx.Graph(self.edges)
 
@@ -438,7 +442,7 @@ def recursion(
         if g1_mapped_nodes:
             # Nodes in g1 are visited in order, so nodes left to visit are [layer, layer + 1, ..., n - 1]
             g1_unvisited_nodes = set(range(layer, g1.n_vertices))
-            if g1.mapping_is_disconnected(
+            if g1.mapping_incompatible_with_cc_constraints(
                 g1_mapped_nodes, g1_unvisited_nodes, max_connected_components, min_connected_component_size
             ):
                 return
@@ -449,7 +453,7 @@ def recursion(
             # Nodes in g2 are visited in the order determined by priority_idxs. Nodes may be repeated in priority_idxs,
             # but we skip over nodes that have already been mapped.
             g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
-            if g2.mapping_is_disconnected(
+            if g2.mapping_incompatible_with_cc_constraints(
                 g2_mapped_nodes, g2_unvisited_nodes, max_connected_components, min_connected_component_size
             ):
                 return
