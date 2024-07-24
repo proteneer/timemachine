@@ -218,13 +218,11 @@ class Graph:
             if cc.intersection(mapped_nodes):
                 n_ccs_with_mapped_nodes += 1
 
-                # The number of connected components in the subgraph is a lower bound on the eventual number (since we could
-                # choose not to map nodes that are currently unvisited). Note that we do not revisit nodes that are visited
-                # but have not been mapped, so the number of connected components will not shrink.
+                # Visiting the remaining nodes can only maintain or increase the number of connected components.
                 if max_connected_components and n_ccs_with_mapped_nodes > max_connected_components:
                     return True
 
-                # The size of the connected components in the subgraph is an upper bound on their eventual size.
+                # Visiting the remaining nodes can only shrink a connected component
                 if len(cc) < min_connected_component_size:
                     return True
 
