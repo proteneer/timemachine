@@ -222,7 +222,7 @@ class Graph:
                 if max_connected_components and n_ccs_with_mapped_nodes > max_connected_components:
                     return True
 
-                # Visiting the remaining nodes can only shrink a connected component
+                # Visiting the remaining nodes can only maintain or shrink a connected component
                 if len(cc) < min_connected_component_size:
                     return True
 
