@@ -1,7 +1,7 @@
 import hypothesis.strategies as st
 import networkx as nx
 import numpy as np
-from hypothesis import example, given, seed, settings
+from hypothesis import event, example, given, seed, settings
 
 from timemachine.fe import mcgregor
 from timemachine.fe.mcgregor import UNMAPPED, core_to_perm, perm_to_core
@@ -67,13 +67,21 @@ def test_mapping_incompatible_with_cc_constraints(
     n_nodes, edges, mapped_nodes, unvisited_nodes = graph_and_search_state
     graph = mcgregor.Graph(n_nodes, edges)
 
-    # Uncomment to verify that the test examples have a good diversity of connected components
-    # print(n_nodes)
-    # print(len(list(nx.connected_components(graph.to_networkx()))))
-    # print()
-
     args = (mapped_nodes, unvisited_nodes, max_connected_components, min_connected_component_size)
     result_fast = graph.mapping_incompatible_with_cc_constraints_fast(*args)
     result_ref = graph.mapping_incompatible_with_cc_constraints_ref(*args)
 
     assert result_fast == result_ref
+
+    # for reporting statistics with --hypothesis-show-statistics flag to pytest
+    n_ccs = len(list(nx.connected_components(graph.to_networkx())))
+    if n_ccs == 1:
+        event("n_ccs = 1")
+    elif 1 < n_ccs < n_nodes:
+        event("1 < n_ccs < n_nodes")
+    elif n_ccs == n_nodes:
+        event("n_ccs = n_nodes")
+    else:
+        assert False, "broken assumptions"
+
+    event(f"reference returned {result_ref}")
