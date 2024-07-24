@@ -1,7 +1,7 @@
 from functools import partial
 from importlib import resources
 from typing import List, Optional
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pymbar
@@ -17,10 +17,12 @@ from timemachine.fe.bar import ukln_to_ukn
 from timemachine.fe.free_energy import (
     BarResult,
     HostConfig,
+    HREXSimulationResult,
     IndeterminateEnergyWarning,
     MDParams,
     MinOverlapWarning,
     PairBarResult,
+    Trajectory,
     batches,
     compute_potential_matrix,
     estimate_free_energy_bar,
@@ -28,6 +30,7 @@ from timemachine.fe.free_energy import (
     make_pair_bar_plots,
     run_sims_bisection,
     sample,
+    trajectories_by_replica_to_by_state,
 )
 from timemachine.fe.rbfe import Host, setup_initial_state, setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
@@ -35,7 +38,7 @@ from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
 from timemachine.md import builders
-from timemachine.md.hrex import HREX
+from timemachine.md.hrex import HREX, HREXDiagnostics
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, Nonbonded, SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -511,3 +514,42 @@ def test_compute_potential_matrix(hif2a_ligand_pair_single_topology, n_states: i
     )
     np.testing.assert_array_equal(U_ref[is_computed], U_test[is_computed])
     assert np.all(np.isinf(U_test[~is_computed]))
+
+
+@pytest.mark.nogpu
+@pytest.mark.parametrize("seed", [2024])
+@pytest.mark.parametrize("n_states, n_iters", [(2, 2), (5, 10), (24, 100)])
+@pytest.mark.parametrize("n_atoms", [2182])
+def test_trajectories_by_replica_to_by_state(seed, n_states, n_iters, n_atoms):
+    rng = np.random.default_rng(seed)
+    frames = rng.uniform(size=(n_states, n_iters, n_atoms, 3))
+
+    atom_idxs = np.arange(rng.integers(n_atoms))
+
+    states = np.arange(n_states)
+    replica_idx_by_state_by_iter = [rng.choice(states, size=(n_states), replace=False).tolist() for _ in range(n_iters)]
+
+    dummy_box = np.eye(3) * 100.0
+    trajs = []
+    for state_frames in frames:
+        stored_frames = StoredArrays.from_chunks([state_frames])
+        traj = Trajectory(
+            frames=stored_frames,
+            boxes=[dummy_box] * len(stored_frames),
+            final_velocities=None,
+            final_barostat_volume_scale_factor=None,
+        )
+        trajs.append(traj)
+
+    sim_res = HREXSimulationResult(
+        final_result=Mock(),
+        plots=Mock(),
+        hrex_plots=Mock(),
+        trajectories=trajs,
+        md_params=Mock(),
+        intermediate_results=[Mock()],
+        hrex_diagnostics=HREXDiagnostics(replica_idx_by_state_by_iter, []),
+    )
+    traj_by_replica = sim_res.extract_trajectories_by_replica(atom_idxs)
+    traj_by_state = trajectories_by_replica_to_by_state(traj_by_replica, replica_idx_by_state_by_iter)
+    np.testing.assert_array_equal(traj_by_state, frames[:, :, atom_idxs])
