@@ -1117,7 +1117,8 @@ def test_initial_mapping(hif2a_ligands):
         "ring_cutoff": 0.4,  # bumped up to make the problem harder
         "chain_cutoff": 0.4,  # bumped up to make the problem harder
         "max_visits": 1e7,
-        "connected_core": True,
+        "max_connected_components": 1,
+        "min_connected_component_size": 1,
         "max_cores": 1e5,
         "enforce_core_core": True,
         "ring_matches_ring_only": True,
@@ -1222,7 +1223,7 @@ def test_initial_mapping_always_a_subset_of_cores(pair, hif2a_ligands):
     "param_to_change,new_val,expect_exception",
     [
         ("ring_matches_ring_only", False, False),
-        ("connected_core", False, True),
+        ("max_connected_components", None, 1),
         ("enforce_core_core", False, False),
         ("enforce_chiral", False, False),
         ("disallow_planar_torsion_flips", False, False),
