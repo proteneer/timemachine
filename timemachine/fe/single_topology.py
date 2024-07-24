@@ -2,7 +2,7 @@ import warnings
 from collections.abc import Iterable
 from enum import IntEnum
 from functools import partial
-from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Tuple, TypeVar, Union, cast
+from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple, TypeVar, Union, cast
 
 import jax
 import jax.numpy as jnp
@@ -18,6 +18,7 @@ from timemachine.fe.dummy import canonicalize_bond, generate_anchored_dummy_grou
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.fe.topology import get_ligand_ixn_pots_params
+from timemachine.ff import Forcefield
 from timemachine.potentials import (
     BoundPotential,
     ChiralAtomRestraint,
@@ -310,7 +311,14 @@ def canonicalize_chiral_atom_idxs(idxs):
     return i, jj, kk, ll
 
 
-def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
+def setup_end_state(
+    ff: Forcefield,
+    mol_a,
+    mol_b,
+    core: NDArray,
+    a_to_c: Sequence[int] | Dict[int, int],
+    b_to_c: Sequence[int] | Dict[int, int],
+) -> VacuumSystem:
     """
     Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
     to the alchemical molecule with dummy atoms. Note that the bond, angle, torsion, nonbonded pairs,
@@ -368,10 +376,18 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c):
 
     # generate parameters for mol_a
     mol_a_top = topology.BaseTopology(mol_a, ff)
+    assert ff.hb_handle
     mol_a_bond_params, mol_a_hb = mol_a_top.parameterize_harmonic_bond(ff.hb_handle.params)
+    assert ff.ha_handle
     mol_a_angle_params, mol_a_ha = mol_a_top.parameterize_harmonic_angle(ff.ha_handle.params)
+    assert ff.pt_handle
     mol_a_proper_params, mol_a_pt = mol_a_top.parameterize_proper_torsion(ff.pt_handle.params)
+    assert ff.it_handle
     mol_a_improper_params, mol_a_it = mol_a_top.parameterize_improper_torsion(ff.it_handle.params)
+    assert ff.q_handle
+    assert ff.q_handle_intra
+    assert ff.lj_handle
+    assert ff.lj_handle_intra
     mol_a_nbpl_params, mol_a_nbpl = mol_a_top.parameterize_nonbonded_pairlist(
         ff.q_handle.params,
         ff.q_handle_intra.params,
