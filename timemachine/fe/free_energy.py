@@ -320,11 +320,11 @@ def trajectories_by_replica_to_by_state(
     replica_idx_by_iter_by_state = np.asarray(replica_idx_by_state_by_iter).T
     assert replica_idx_by_iter_by_state.shape == trajectory_by_iter_by_replica.shape[:2]
 
-    samples_by_iter_by_state = np.take_along_axis(
+    trajectory_by_iter_by_state = np.take_along_axis(
         trajectory_by_iter_by_replica, replica_idx_by_iter_by_state[:, :, None, None], axis=0
     )
 
-    return samples_by_iter_by_state
+    return trajectory_by_iter_by_state
 
 
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
