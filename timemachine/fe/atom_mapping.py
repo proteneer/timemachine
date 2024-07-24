@@ -137,14 +137,12 @@ def get_cores(
         Maximum number of nodes we can visit for a given threshold.
 
     max_connected_components: int or None
-        Set to k to only keep the largest k connected
-        subgraphs in the mapping. The definition of connected
-        here is different from McGregor. Here it means there
-        is a way to reach the mapped atom without traversing
-        over a non-mapped atom.
+        Set to k to only keep mappings where the number of connected components is <= k.
+        The definition of connected here is different from McGregor. Here it means there is a way to reach the mapped
+        atom without traversing over a non-mapped atom.
 
     min_connected_component_size: int
-        Minimum size of a connected component to be considered a valid mapping
+        Set to n to only keep mappings where all connected components have size >= n.
 
     max_cores: int or float
         maximum number of maximal cores to store, this can be an +np.inf if you want
