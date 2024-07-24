@@ -13,6 +13,7 @@ from timemachine.md.moves import MixtureOfMoves, MonteCarloMove
 from timemachine.utils import batches, not_ragged
 
 Replica = TypeVar("Replica")
+Samples = TypeVar("Samples")
 
 StateIdx = NewType("StateIdx", int)
 ReplicaIdx = NewType("ReplicaIdx", int)
@@ -124,9 +125,6 @@ def _run_neighbor_swaps(
     (replica_idx_by_state, proposed, accepted), _ = jax.lax.scan(run_neighbor_swap, init, (pair_idxs, uniform_samples))
 
     return replica_idx_by_state, proposed, accepted
-
-
-Samples = TypeVar("Samples")
 
 
 @dataclass(frozen=True)
@@ -355,6 +353,24 @@ def get_samples_by_iter_by_replica(
     samples_by_iter_by_replica = [list(xs) for xs in zip(*samples_by_replica_by_iter)]  # transpose
 
     return samples_by_iter_by_replica
+
+
+def trajectories_by_replica_to_by_state(
+    trajectory_by_iter_by_replica: NDArray,
+    replica_idx_by_state_by_iter: Sequence[Sequence[ReplicaIdx]],
+) -> NDArray:
+    """Utility function to convert the output of `extract_trajectories_by_replica` from (replica, iters, ...) to
+    (state, iters, ...). This is useful for evaluating the trajectories of states.
+    """
+    assert len(trajectory_by_iter_by_replica.shape) == 4
+    replica_idx_by_iter_by_state = np.asarray(replica_idx_by_state_by_iter).T
+    assert replica_idx_by_iter_by_state.shape == trajectory_by_iter_by_replica.shape[:2]
+
+    samples_by_iter_by_state = np.take_along_axis(
+        trajectory_by_iter_by_replica, replica_idx_by_iter_by_state[:, :, None, None], axis=0
+    )
+
+    return samples_by_iter_by_state
 
 
 @dataclass

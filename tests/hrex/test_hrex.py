@@ -1,11 +1,20 @@
 from typing import List
+from unittest import mock
 
 import hypothesis.strategies as st
 import numpy as np
 import pytest
 from hypothesis import given, seed
 
-from timemachine.md.hrex import ReplicaIdx, get_normalized_kl_divergence, get_samples_by_iter_by_replica
+from timemachine.fe.free_energy import HREXSimulationResult, Trajectory
+from timemachine.fe.stored_arrays import StoredArrays
+from timemachine.md.hrex import (
+    HREXDiagnostics,
+    ReplicaIdx,
+    get_normalized_kl_divergence,
+    get_samples_by_iter_by_replica,
+    trajectories_by_replica_to_by_state,
+)
 
 pytestmark = [pytest.mark.nogpu]
 
@@ -54,6 +63,44 @@ def simulate_perfect_mixing_hrex(num_states: int, num_frames: int) -> List[List[
         np.random.shuffle(inds)
         traj.append(np.array(inds).tolist())
     return traj
+
+
+@pytest.mark.parametrize("seed", [2024])
+@pytest.mark.parametrize("n_states, n_iters", [(2, 2), (5, 10), (24, 100)])
+@pytest.mark.parametrize("n_atoms", [2182])
+def test_trajectories_by_replica_to_by_state(seed, n_states, n_iters, n_atoms):
+    rng = np.random.default_rng(seed)
+    frames = rng.uniform(size=(n_states, n_iters, n_atoms, 3))
+
+    atom_idxs = np.arange(rng.integers(n_atoms))
+
+    states = np.arange(n_states)
+    replica_idx_by_state_by_iter = [rng.choice(states, size=(n_states), replace=False).tolist() for _ in range(n_iters)]
+
+    dummy_box = np.eye(3) * 100.0
+    trajs = []
+    for state_frames in frames:
+        stored_frames = StoredArrays.from_chunks([state_frames])
+        traj = Trajectory(
+            frames=stored_frames,
+            boxes=[dummy_box] * len(stored_frames),
+            final_velocities=None,
+            final_barostat_volume_scale_factor=None,
+        )
+        trajs.append(traj)
+
+    sim_res = HREXSimulationResult(
+        final_result=mock.Mock(),
+        plots=mock.Mock(),
+        hrex_plots=mock.Mock(),
+        trajectories=trajs,
+        md_params=mock.Mock(),
+        intermediate_results=[mock.Mock()],
+        hrex_diagnostics=HREXDiagnostics(replica_idx_by_state_by_iter, []),
+    )
+    traj_by_replica = sim_res.extract_trajectories_by_replica(atom_idxs)
+    traj_by_state = trajectories_by_replica_to_by_state(traj_by_replica, replica_idx_by_state_by_iter)
+    np.testing.assert_array_equal(traj_by_state, frames[:, :, atom_idxs])
 
 
 def simulate_slow_mixing_hrex(num_states: int, num_frames: int) -> List[List[int]]:
