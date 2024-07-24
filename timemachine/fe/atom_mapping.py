@@ -88,7 +88,7 @@ def get_cores_and_diagnostics(
         all_cores_r, mcs_diagnostics = get_cores_(mol_b, mol_a, initial_mapping=initial_mapping_r)
         all_cores = [core_r[:, ::-1] for core_r in all_cores_r]
     else:
-        all_cores, mcs_diagnostics = get_cores_(mol_a, mol_b)
+        all_cores, mcs_diagnostics = get_cores_(mol_a, mol_b, initial_mapping=initial_mapping)
     return all_cores, mcs_diagnostics
 
 
