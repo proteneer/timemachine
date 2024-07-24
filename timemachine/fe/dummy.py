@@ -139,7 +139,8 @@ def generate_anchored_dummy_group_assignments(
     def get_angle_anchors(bond_anchor):
         valid_angle_anchors = [
             angle_anchor
-            for angle_anchor in [n for n in bond_graph_b.neighbors(bond_anchor) if n in core_atoms_b]
+            for angle_anchor in bond_graph_b.neighbors(bond_anchor)
+            if angle_anchor in core_atoms_b
             if canonicalize_bond((bond_anchor, angle_anchor)) in core_bonds_b
         ]
         return valid_angle_anchors or [None]
