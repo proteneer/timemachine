@@ -207,7 +207,7 @@ class Graph:
         """Reference implementation of mapping_incompatible_with_cc_constraints, decomposed into standard algorithms for
         clarity"""
 
-        g = nx.Graph(self.edges)
+        g = self.to_networkx()
 
         # Consider the subgraph induced by mapped and unvisited nodes (ignoring visited nodes that have not been mapped)
         sg = g.subgraph(mapped_nodes | unvisited_nodes)
@@ -236,6 +236,12 @@ class Graph:
 
     def get_edges_as_vector(self, vertex):
         return self.ve_matrix[vertex]
+
+    def to_networkx(self) -> nx.Graph:
+        g = nx.Graph()
+        g.add_nodes_from(range(self.n_vertices))
+        g.add_edges_from(self.edges)
+        return g
 
 
 def max_tree_size(priority_list):
