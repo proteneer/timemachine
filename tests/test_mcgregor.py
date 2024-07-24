@@ -40,7 +40,20 @@ def graphs(draw, number_of_nodes_min, number_of_nodes_max):
     p = (1.0 + eps) * np.log(n) / n
 
     seed = draw(st.integers())
-    return nx.fast_gnp_random_graph(n, p, seed=seed)
+    g = nx.fast_gnp_random_graph(n, p, seed=seed)
+
+    # for reporting statistics with --hypothesis-show-statistics flag to pytest
+    n_ccs = len(list(nx.connected_components(g)))
+    if n_ccs == 1:
+        event("n_ccs = 1")
+    elif 1 < n_ccs < g.number_of_nodes():
+        event("1 < n_ccs < n_nodes")
+    elif n_ccs == g.number_of_nodes():
+        event("n_ccs = n_nodes")
+    else:
+        assert False, "broken assumptions"
+
+    return g
 
 
 @st.composite
@@ -71,17 +84,6 @@ def test_mapping_incompatible_with_cc_constraints(
     result_fast = graph.mapping_incompatible_with_cc_constraints_fast(*args)
     result_ref = graph.mapping_incompatible_with_cc_constraints_ref(*args)
 
-    assert result_fast == result_ref
-
-    # for reporting statistics with --hypothesis-show-statistics flag to pytest
-    n_ccs = len(list(nx.connected_components(graph.to_networkx())))
-    if n_ccs == 1:
-        event("n_ccs = 1")
-    elif 1 < n_ccs < n_nodes:
-        event("1 < n_ccs < n_nodes")
-    elif n_ccs == n_nodes:
-        event("n_ccs = n_nodes")
-    else:
-        assert False, "broken assumptions"
-
     event(f"reference returned {result_ref}")
+
+    assert result_fast == result_ref
