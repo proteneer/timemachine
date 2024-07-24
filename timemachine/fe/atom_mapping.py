@@ -1,5 +1,6 @@
 from collections import defaultdict
-from typing import List, Tuple
+from functools import partial
+from typing import List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
@@ -52,7 +53,8 @@ def get_cores_and_diagnostics(
     ring_cutoff,
     chain_cutoff,
     max_visits,
-    connected_core,
+    max_connected_components: Optional[int],
+    min_connected_component_size: int,
     max_cores,
     enforce_core_core,
     ring_matches_ring_only,
@@ -64,34 +66,30 @@ def get_cores_and_diagnostics(
     """Same as :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
     assert max_cores > 0
 
-    core_kwargs = dict(
+    get_cores_ = partial(
+        _get_cores_impl,
         ring_cutoff=ring_cutoff,
         chain_cutoff=chain_cutoff,
         max_visits=max_visits,
-        connected_core=connected_core,
+        max_connected_components=max_connected_components,
+        min_connected_component_size=min_connected_component_size,
         max_cores=max_cores,
         enforce_core_core=enforce_core_core,
         ring_matches_ring_only=ring_matches_ring_only,
         enforce_chiral=enforce_chiral,
         disallow_planar_torsion_flips=disallow_planar_torsion_flips,
         min_threshold=min_threshold,
-        initial_mapping=initial_mapping,
     )
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
     if mol_a.GetNumAtoms() > mol_b.GetNumAtoms():
-        # adjust initial_mapping if we're swapping
-        if initial_mapping is not None and len(initial_mapping) > 0:
-            core_kwargs["initial_mapping"] = initial_mapping[:, ::-1]
-        all_cores, mcs_diagnostics = _get_cores_impl(mol_b, mol_a, **core_kwargs)
-        new_cores = []
-        for core in all_cores:
-            core = np.array([(x[1], x[0]) for x in core], dtype=core.dtype)
-            new_cores.append(core)
-        return new_cores, mcs_diagnostics
+        # reverse the columns of initial_mapping and the resulting cores
+        initial_mapping_r = initial_mapping[:, ::-1] if initial_mapping is not None else None
+        all_cores_r, mcs_diagnostics = get_cores_(mol_b, mol_a, initial_mapping=initial_mapping_r)
+        all_cores = [core_r[:, ::-1] for core_r in all_cores_r]
     else:
-        all_cores, mcs_diagnostics = _get_cores_impl(mol_a, mol_b, **core_kwargs)
-        return all_cores, mcs_diagnostics
+        all_cores, mcs_diagnostics = get_cores_(mol_a, mol_b, initial_mapping=initial_mapping)
+    return all_cores, mcs_diagnostics
 
 
 def get_cores(
@@ -100,7 +98,8 @@ def get_cores(
     ring_cutoff,
     chain_cutoff,
     max_visits,
-    connected_core,
+    max_connected_components: Optional[int],
+    min_connected_component_size: int,
     max_cores,
     enforce_core_core,
     ring_matches_ring_only,
@@ -137,12 +136,13 @@ def get_cores(
     max_visits: int
         Maximum number of nodes we can visit for a given threshold.
 
-    connected_core: bool
-        Set to True to only keep the largest connected
-        subgraph in the mapping. The definition of connected
-        here is different from McGregor. Here it means there
-        is a way to reach the mapped atom without traversing
-        over a non-mapped atom.
+    max_connected_components: int or None
+        Set to k to only keep mappings where the number of connected components is <= k.
+        The definition of connected here is different from McGregor. Here it means there is a way to reach the mapped
+        atom without traversing over a non-mapped atom.
+
+    min_connected_component_size: int
+        Set to n to only keep mappings where all connected components have size >= n.
 
     max_cores: int or float
         maximum number of maximal cores to store, this can be an +np.inf if you want
@@ -179,7 +179,8 @@ def get_cores(
         ring_cutoff,
         chain_cutoff,
         max_visits,
-        connected_core,
+        max_connected_components,
+        min_connected_component_size,
         max_cores,
         enforce_core_core,
         ring_matches_ring_only,
@@ -328,7 +329,8 @@ def _get_cores_impl(
     ring_cutoff,
     chain_cutoff,
     max_visits,
-    connected_core,
+    max_connected_components: Optional[int],
+    min_connected_component_size: int,
     max_cores,
     enforce_core_core,
     ring_matches_ring_only,
@@ -418,7 +420,8 @@ def _get_cores_impl(
         max_visits,
         max_cores,
         enforce_core_core,
-        connected_core,
+        max_connected_components,
+        min_connected_component_size,
         min_threshold,
         initial_mapping,
         filter_fxn=filter_fxn,
