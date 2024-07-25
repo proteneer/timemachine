@@ -1,3 +1,4 @@
+import logging
 import warnings
 from collections.abc import Iterable
 from enum import IntEnum
@@ -30,6 +31,8 @@ from timemachine.potentials import (
     PeriodicTorsion,
     SummedPotential,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CoreBondChangeWarning(UserWarning):
@@ -332,7 +335,14 @@ def setup_end_state(
         for system in [setup_end_state_given_dummy_groups(dummy_groups, ff, mol_a, mol_b, core, a_to_c, b_to_c)]
     ]
 
-    _, best_dummy_groups, best_system = max(candidates, key=lambda c: c[0])
+    best_score, best_dummy_groups, best_system = max(candidates, key=lambda c: c[0])
+
+    logger.info(
+        "Selected dummy groups with best score %d from %d candidates. Quartiles: %d, %d, %d",
+        best_score,
+        len(candidates),
+        *np.quantile([c[0] for c in candidates], [0.25, 0.5, 0.75]),
+    )
 
     for _, (angle_anchor, _) in best_dummy_groups.items():
         if angle_anchor is None:
