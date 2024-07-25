@@ -61,7 +61,4 @@ public:
         cudaStream_t stream) override;
 };
 
-template class LangevinIntegrator<float>;
-template class LangevinIntegrator<double>;
-
 } // end namespace timemachine
