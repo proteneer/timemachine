@@ -3,8 +3,9 @@ import copy
 import time
 import warnings
 from dataclasses import dataclass
-from typing import Callable, List, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Set, Tuple
 
+import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
@@ -17,12 +18,6 @@ def _arcs_left(marcs):
 
 # used in main recursion() loop
 UNMAPPED = -1  # (UNVISITED) OR (VISITED AND DEMAPPED)
-
-# used in inner loop when determining whether a mapping will necessarily result
-# in a disconnected subgraph.
-NODE_STATE_VISITED_DEMAPPED = 0  # VISITED AND DEMAPPED
-NODE_STATE_VISITED_MAPPED = 1  # VISITED AND MAPPED
-NODE_STATE_UNVISITED = 2  # UNVISITED
 
 
 def _initialize_marcs_given_predicate(g1, g2, predicate):
@@ -96,15 +91,11 @@ class MCSResult:
         self.nodes_visited = 0
 
 
-import networkx as nx
-
-
 class Graph:
     def __init__(self, n_vertices, edges):
         self.n_vertices = n_vertices
         self.n_edges = len(edges)
         self.edges = edges
-        self.nxg = nx.Graph(edges)  # assumes input graph is fully connected
 
         cmat = np.full((n_vertices, n_vertices), False, dtype=bool)
         for i, j in edges:
@@ -135,45 +126,107 @@ class Graph:
             for edge_idx in edges:
                 self.ve_matrix[vertex_idx][edge_idx] = True
 
-    def mapping_is_disconnected(self, source, node_states, n_mapped_nodes):
-        r"""
-        Verify whether mapped nodes can still be connected in the graph. It is assumed that
-        source is a mapped node. i.e. node_states[source] == NODE_STATE_VISITED_MAPPED. If this function
-        returns True, then the resulting graph is definitely disconnected. If this function
-        returns False, then the resulting graph can still be connected.
+    def mapping_incompatible_with_cc_constraints(
+        self,
+        mapped_nodes: Set[int],
+        unvisited_nodes: Set[int],
+        max_connected_components: Optional[int],
+        min_connected_component_size: int,
+    ):
+        r"""Returns whether the current search state (as specified by mapped nodes and unvisited nodes) is
+        _incompatible_ with either of the `max_connected_components` or `min_connected_component_size` constraints.
 
-        For example, let M be mapped node, D be a demapped node, and U be an unvisited node:
+        For example, let M be mapped node, D be a demapped (visited but not mapped) node, and U be an unvisited node. If
+        `max_connected_components=1` and `min_connected_component_size=1`:
 
         1. M-U-M # returns False
         2. M-D-M # returns True
         3. M-M-U # returns False
         4. M-M-D # returns False
 
-        The implementation is adapted from the _plain_bfs() method in:
-        https://networkx.org/documentation/stable/_modules/networkx/algorithms/components/connected.html
+        With `min_connected_component_size=2`, example 1 would be incompatible and we would return True (3 and 4 would
+        still be False).
 
+        This calls an optimized implementation in mapping_incompatible_with_cc_constraints_fast; see
+        mapping_incompatible_with_cc_constraints_ref for a simpler-to-understand reference version.
         """
-        unseen = [True] * self.n_vertices
-        unseen[source] = False
-        nextlevel = [source]
-        mapped_count = 1
 
-        if mapped_count == n_mapped_nodes:
-            return False
+        # Uncomment to assert result of fast implementation matches the reference
+        # args = (mapped_nodes, unvisited_nodes, max_connected_components, min_connected_component_size)
+        # assert self.mapping_incompatible_with_cc_constraints_fast(
+        #     *args
+        # ) == self.mapping_incompatible_with_cc_constraints_ref(*args)
 
-        while nextlevel:
-            thislevel = nextlevel
-            nextlevel = []
-            for v in thislevel:
-                for w in self.get_neighbors(v):
-                    if unseen[w] and node_states[w] != NODE_STATE_VISITED_DEMAPPED:
-                        if node_states[w] == NODE_STATE_VISITED_MAPPED:
-                            mapped_count += 1
-                            if mapped_count == n_mapped_nodes:
-                                return False
-                        unseen[w] = False
-                        nextlevel.append(w)
-        return True
+        return self.mapping_incompatible_with_cc_constraints_fast(
+            mapped_nodes, unvisited_nodes, max_connected_components, min_connected_component_size
+        )
+
+    def mapping_incompatible_with_cc_constraints_fast(
+        self,
+        mapped_nodes: Set[int],
+        unvisited_nodes: Set[int],
+        max_connected_components: Optional[int],
+        min_connected_component_size: int,
+    ):
+        """Optimized implementation of mapping_incompatible_with_cc_constraints_ref, sacrificing modularity for efficiency"""
+
+        seen = set()
+        n_ccs = 0
+        for u in mapped_nodes:
+            if u not in seen:
+                # visit component containing v
+                seen.add(u)
+                cc_size = 1
+                nextlevel = [u]
+                while nextlevel:
+                    thislevel = nextlevel
+                    nextlevel = []
+                    for v in thislevel:
+                        for w in self.get_neighbors(v):
+                            if w in mapped_nodes or w in unvisited_nodes:
+                                if w not in seen:
+                                    seen.add(w)
+                                    cc_size += 1
+                                    nextlevel.append(w)
+                n_ccs += 1
+                if cc_size < min_connected_component_size:
+                    return True
+                if max_connected_components is not None and n_ccs == max_connected_components:
+                    # if we've seen the maximum number of connected components, we should have seen all of the mapped nodes
+                    return not mapped_nodes.issubset(seen)
+
+        return False
+
+    def mapping_incompatible_with_cc_constraints_ref(
+        self,
+        mapped_nodes: Set[int],
+        unvisited_nodes: Set[int],
+        max_connected_components: Optional[int],
+        min_connected_component_size: int,
+    ):
+        """Reference implementation of mapping_incompatible_with_cc_constraints, decomposed into standard algorithms for
+        clarity"""
+
+        g = self.to_networkx()
+
+        # Consider the subgraph induced by mapped and unvisited nodes (ignoring visited nodes that have not been mapped)
+        sg = g.subgraph(mapped_nodes | unvisited_nodes)
+
+        n_ccs_with_mapped_nodes = 0
+
+        for cc in nx.connected_components(sg):
+            if cc.intersection(mapped_nodes):
+                n_ccs_with_mapped_nodes += 1
+
+                # Visiting the remaining nodes can only maintain or increase the number of connected components.
+                if max_connected_components and n_ccs_with_mapped_nodes > max_connected_components:
+                    return True
+
+                # Visiting the remaining nodes can only maintain or shrink a connected component
+                if len(cc) < min_connected_component_size:
+                    return True
+
+        return False
 
     def get_neighbors(self, vertex):
         return self.lol_vertices[vertex]
@@ -183,6 +236,12 @@ class Graph:
 
     def get_edges_as_vector(self, vertex):
         return self.ve_matrix[vertex]
+
+    def to_networkx(self) -> nx.Graph:
+        g = nx.Graph()
+        g.add_nodes_from(range(self.n_vertices))
+        g.add_edges_from(self.edges)
+        return g
 
 
 def max_tree_size(priority_list):
@@ -241,12 +300,14 @@ def mcs(
     max_visits,
     max_cores,
     enforce_core_core,
-    connected_core,
+    max_connected_components: Optional[int],
+    min_connected_component_size: int,
     min_threshold,
     initial_mapping,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
+    assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
 
     predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
     g_a = Graph(n_a, bonds_a)
@@ -292,7 +353,8 @@ def mcs(
             max_cores,
             cur_threshold,
             enforce_core_core,
-            connected_core,
+            max_connected_components,
+            min_connected_component_size,
             filter_fxn,
         )
 
@@ -350,8 +412,8 @@ def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
 
 
 def recursion(
-    g1,
-    g2,
+    g1: Graph,
+    g2: Graph,
     atom_map_1_to_2,
     atom_map_2_to_1,
     layer,
@@ -362,7 +424,8 @@ def recursion(
     max_cores,
     threshold,
     enforce_core_core,
-    connected_core,
+    max_connected_components: Optional[int],
+    min_connected_component_size: int,
     filter_fxn,
 ):
     if mcs_result.nodes_visited > max_visits:
@@ -377,43 +440,27 @@ def recursion(
     if num_edges < threshold:
         return
 
-    if connected_core:
-        # process g1 using atom_map_1_to_2_information
-        g1_node_states = [NODE_STATE_VISITED_DEMAPPED] * g1.n_vertices
-        g1_source = None
-        g1_mapped_count = 0
-        for a1, a2 in enumerate(atom_map_1_to_2):
-            if a1 < layer:
-                # visited nodes
-                if a2 != UNMAPPED:
-                    g1_node_states[a1] = NODE_STATE_VISITED_MAPPED
-                    g1_source = a1
-                    g1_mapped_count += 1
-            else:
-                g1_node_states[a1] = NODE_STATE_UNVISITED
+    if max_connected_components is not None or min_connected_component_size > 1:
+        g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
 
-        if g1_source and g1.mapping_is_disconnected(g1_source, g1_node_states, g1_mapped_count):
-            return
+        if g1_mapped_nodes:
+            # Nodes in g1 are visited in order, so nodes left to visit are [layer, layer + 1, ..., n - 1]
+            g1_unvisited_nodes = set(range(layer, g1.n_vertices))
+            if g1.mapping_incompatible_with_cc_constraints(
+                g1_mapped_nodes, g1_unvisited_nodes, max_connected_components, min_connected_component_size
+            ):
+                return
 
-        g2_node_states = [NODE_STATE_VISITED_DEMAPPED] * g2.n_vertices
-        g2_source = None
-        g2_mapped_count = 0
+        g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
 
-        # g2 is a little trickier to process, we need to look at the priority idxs as well
-        for a2, a1 in enumerate(atom_map_2_to_1):
-            if a1 != UNMAPPED:
-                g2_node_states[a2] = NODE_STATE_VISITED_MAPPED
-                g2_source = a2
-                g2_mapped_count += 1
-
-        # look up priority_idxs of remaining atoms
-        for a2_list in priority_idxs[layer:]:
-            for a2 in a2_list:
-                if g2_node_states[a2] != NODE_STATE_VISITED_MAPPED:
-                    g2_node_states[a2] = NODE_STATE_UNVISITED
-
-        if g2_source and g2.mapping_is_disconnected(g2_source, g2_node_states, g2_mapped_count):
-            return
+        if g2_mapped_nodes:
+            # Nodes in g2 are visited in the order determined by priority_idxs. Nodes may be repeated in priority_idxs,
+            # but we skip over nodes that have already been mapped.
+            g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
+            if g2.mapping_incompatible_with_cc_constraints(
+                g2_mapped_nodes, g2_unvisited_nodes, max_connected_components, min_connected_component_size
+            ):
+                return
 
     mcs_result.nodes_visited += 1
     n_a = g1.n_vertices
@@ -450,7 +497,8 @@ def recursion(
                     max_cores,
                     threshold,
                     enforce_core_core,
-                    connected_core,
+                    max_connected_components,
+                    min_connected_component_size,
                     filter_fxn,
                 )
             atom_map_pop(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
@@ -472,6 +520,7 @@ def recursion(
         max_cores,
         threshold,
         enforce_core_core,
-        connected_core,
+        max_connected_components,
+        min_connected_component_size,
         filter_fxn,
     )
