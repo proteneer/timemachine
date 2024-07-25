@@ -201,11 +201,11 @@ def test_local_minimize_water_box():
     np.testing.assert_array_equal(g_init, g_init_test)
 
 
-@pytest.mark.xfail(reason="Doesn't work currently, but should eventually")
+@pytest.mark.xfail(raises=minimizer.MinimizationError, reason="Doesn't work currently, but should eventually")
 def test_minimizer_failure_toy_system():
     """https://github.com/proteneer/timemachine/pull/1346 introduced a minimization scheme that minimizes
-    at lambda = 0.1 and at 0.0. The need for lambda = 0.1 was due to minimizing PFKFB3 with ligands
-    20 and 43, this test replicates the failure case with a small toy system to allow investigation in the future
+    at lambda = 0.1 and at 0.0. The need for lambda = 0.1 was due to certain ligands being very close to
+    protein residues, this test replicates the failure case with a small toy system to allow investigation in the future
     """
 
     # Atoms 2933 and 38815 from PFKFB3 with ligands 20, 43
@@ -219,10 +219,12 @@ def test_minimizer_failure_toy_system():
     cutoff = 1.2
     pairlist = NonbondedPairList([0, 1], [1.0, 1.0], beta, cutoff)
 
+    # Small delta in coordinate space that results in failure
+    dx = 0.04
     coords = np.array(
         [
-            [9.6643, 5.5546, 26.9625],
-            [9.65109, 5.51557, 26.93242],
+            [0.0, 0.0, 0.0],
+            [dx, dx, dx],
         ]
     )
     box = np.eye(3) * 100.0
