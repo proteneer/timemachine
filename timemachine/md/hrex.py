@@ -13,6 +13,7 @@ from timemachine.md.moves import MixtureOfMoves, MonteCarloMove
 from timemachine.utils import batches, not_ragged
 
 Replica = TypeVar("Replica")
+Samples = TypeVar("Samples")
 
 StateIdx = NewType("StateIdx", int)
 ReplicaIdx = NewType("ReplicaIdx", int)
@@ -124,9 +125,6 @@ def _run_neighbor_swaps(
     (replica_idx_by_state, proposed, accepted), _ = jax.lax.scan(run_neighbor_swap, init, (pair_idxs, uniform_samples))
 
     return replica_idx_by_state, proposed, accepted
-
-
-Samples = TypeVar("Samples")
 
 
 @dataclass(frozen=True)

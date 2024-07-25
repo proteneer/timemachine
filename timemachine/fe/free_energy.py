@@ -309,6 +309,24 @@ class HREXSimulationResult(SimulationResult):
         return self.extract_trajectories_by_replica(ligand_idxs)
 
 
+def trajectories_by_replica_to_by_state(
+    trajectory_by_iter_by_replica: NDArray,
+    replica_idx_by_state_by_iter: Sequence[Sequence[ReplicaIdx]],
+) -> NDArray:
+    """Utility function to convert the output of `extract_trajectories_by_replica` from (replica, iters, ...) to
+    (state, iters, ...). This is useful for evaluating the trajectories of states.
+    """
+    assert len(trajectory_by_iter_by_replica.shape) == 4
+    replica_idx_by_iter_by_state = np.asarray(replica_idx_by_state_by_iter).T
+    assert replica_idx_by_iter_by_state.shape == trajectory_by_iter_by_replica.shape[:2]
+
+    trajectory_by_iter_by_state = np.take_along_axis(
+        trajectory_by_iter_by_replica, replica_idx_by_iter_by_state[:, :, None, None], axis=0
+    )
+
+    return trajectory_by_iter_by_state
+
+
 def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndarray) -> np.ndarray:
     """Images a sequence of frames within the periodic box given an Initial state. Recenters the simulation around the
     centroid of the coordinates specified by initial_state.ligand_idxs prior to imaging.
