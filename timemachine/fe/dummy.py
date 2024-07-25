@@ -1,7 +1,19 @@
 import warnings
 from collections import defaultdict
 from itertools import product
-from typing import Collection, DefaultDict, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple, TypeVar
+from typing import (
+    Collection,
+    DefaultDict,
+    Dict,
+    FrozenSet,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    TypeAlias,
+    TypeVar,
+)
 
 import networkx as nx
 
@@ -88,9 +100,12 @@ def generate_dummy_group_assignments(
     return dummy_group_assignments
 
 
+AnchoredDummyGroups: TypeAlias = Dict[int, Tuple[Optional[int], FrozenSet[int]]]
+
+
 def generate_anchored_dummy_group_assignments(
     mol_a, mol_b, core_atoms_a: Collection[int], core_atoms_b: Collection[int]
-) -> Iterator[Dict[int, Tuple[Optional[int], FrozenSet[int]]]]:
+) -> Iterator[AnchoredDummyGroups]:
     """Returns an iterator over candidate anchored dummy group assignments.
 
     An anchored dummy group assignment is a set of triples (dummy group, j = bond anchor atom, k = angle anchor atom),
