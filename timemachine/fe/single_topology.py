@@ -319,8 +319,26 @@ def setup_end_state(
     a_to_c: Sequence[int] | Dict[int, int],
     b_to_c: Sequence[int] | Dict[int, int],
 ) -> VacuumSystem:
-    arbitrary_dummy_groups = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
-    return setup_end_state_given_dummy_groups(arbitrary_dummy_groups, ff, mol_a, mol_b, core, a_to_c, b_to_c)
+    def score(dummy_groups: AnchoredDummyGroups, system: VacuumSystem):
+        assert system.chiral_atom
+        n_chiral_volumes = len(system.chiral_atom.potential.idxs)
+        return n_chiral_volumes
+
+    candidate_dummy_group_assignments = generate_anchored_dummy_group_assignments(mol_a, mol_b, core[:, 0], core[:, 1])
+
+    candidates = [
+        (score(dummy_groups, system), dummy_groups, system)
+        for dummy_groups in candidate_dummy_group_assignments
+        for system in [setup_end_state_given_dummy_groups(dummy_groups, ff, mol_a, mol_b, core, a_to_c, b_to_c)]
+    ]
+
+    _, best_dummy_groups, best_system = max(candidates, key=lambda c: c[0])
+
+    for _, (angle_anchor, _) in best_dummy_groups.items():
+        if angle_anchor is None:
+            warnings.warn("Unable to find stable angle term in mol_a", CoreBondChangeWarning)
+
+    return best_system
 
 
 def setup_end_state_given_dummy_groups(
