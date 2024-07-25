@@ -14,7 +14,7 @@ from rdkit import Chem
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
 from timemachine.fe import chiral_utils, interpolate, model_utils, topology, utils
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
-from timemachine.fe.dummy import canonicalize_bond, generate_anchored_dummy_group_assignments
+from timemachine.fe.dummy import AnchoredDummyGroups, canonicalize_bond, generate_anchored_dummy_group_assignments
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.fe.topology import get_ligand_ixn_pots_params
@@ -319,6 +319,19 @@ def setup_end_state(
     a_to_c: Sequence[int] | Dict[int, int],
     b_to_c: Sequence[int] | Dict[int, int],
 ) -> VacuumSystem:
+    arbitrary_dummy_groups = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
+    return setup_end_state_given_dummy_groups(arbitrary_dummy_groups, ff, mol_a, mol_b, core, a_to_c, b_to_c)
+
+
+def setup_end_state_given_dummy_groups(
+    dummy_groups: AnchoredDummyGroups,
+    ff: Forcefield,
+    mol_a,
+    mol_b,
+    core: NDArray,
+    a_to_c: Sequence[int] | Dict[int, int],
+    b_to_c: Sequence[int] | Dict[int, int],
+) -> VacuumSystem:
     """
     Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
     to the alchemical molecule with dummy atoms. Note that the bond, angle, torsion, nonbonded pairs,
@@ -355,9 +368,6 @@ def setup_end_state(
     all_dummy_angle_idxs, all_dummy_angle_params = [], []
     all_dummy_improper_idxs, all_dummy_improper_params = [], []
     all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params = [], []
-
-    dummy_groups = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
-    # gotta add 'em all!
 
     for anchor, (nbr, dg) in dummy_groups.items():
         all_idxs, all_params = setup_dummy_interactions_from_ff(
