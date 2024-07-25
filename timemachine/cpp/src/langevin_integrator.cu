@@ -105,4 +105,7 @@ void LangevinIntegrator<RealType>::finalize(
     unsigned int *d_idxs,
     cudaStream_t stream){};
 
+template class LangevinIntegrator<float>;
+template class LangevinIntegrator<double>;
+
 } // end namespace timemachine

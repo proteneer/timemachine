@@ -26,6 +26,7 @@ from timemachine.fe.free_energy import (
     run_sims_hrex,
     run_sims_sequential,
 )
+from timemachine.fe.lambda_schedule import bisection_lambda_schedule
 from timemachine.fe.plots import (
     plot_as_png_fxn,
     plot_hrex_replica_state_distribution_heatmap,
@@ -296,7 +297,7 @@ def setup_optimized_initial_state(
     states_subset = [s for s in optimized_initial_states if (s.lamb <= 0.5) == (lamb <= 0.5)]
     nearest_optimized = min(states_subset, key=lambda s: abs(lamb - s.lamb))
 
-    if lamb == nearest_optimized.lamb:
+    if np.isclose(lamb, nearest_optimized.lamb):
         return nearest_optimized
     else:
         initial_state = setup_initial_state(st, lamb, host, temperature, seed)
@@ -589,13 +590,15 @@ def estimate_relative_free_energy_bisection(
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
-    lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
+    lambda_interval = lambda_interval or (0.0, 1.0)
+    lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
 
     temperature = DEFAULT_TEMP
 
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
-    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
+    lambda_grid = bisection_lambda_schedule(n_windows, lambda_interval=lambda_interval)
+
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
     )
@@ -804,13 +807,14 @@ def estimate_relative_free_energy_bisection_hrex(
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
-    lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
+    lambda_interval = lambda_interval or (0.0, 1.0)
+    lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
 
     temperature = DEFAULT_TEMP
 
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
-    lambda_grid = np.linspace(lambda_min, lambda_max, n_windows)
+    lambda_grid = bisection_lambda_schedule(n_windows, lambda_interval=lambda_interval)
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
     )

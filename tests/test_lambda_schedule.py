@@ -1,7 +1,11 @@
 import numpy as np
 import pytest
 
-from timemachine.fe.lambda_schedule import interpolate_pre_optimized_protocol, validate_lambda_schedule
+from timemachine.fe.lambda_schedule import (
+    bisection_lambda_schedule,
+    interpolate_pre_optimized_protocol,
+    validate_lambda_schedule,
+)
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -40,3 +44,22 @@ def test_interpolate_pre_optimized_protocol():
         # produce valid protocols when downsampling
         reduced = interpolate_pre_optimized_protocol(sched, K // 2)
         validate_lambda_schedule(reduced, K // 2)
+
+
+@pytest.mark.parametrize("interval", [(0.0, 1.0), [0.25, 0.5]])
+@pytest.mark.parametrize("n_windows", [1, 2, 3, 4, 8, 9, 16, 32, 48, 49])
+def test_bisection_lambda_schedule(interval, n_windows):
+    if n_windows < 2:
+        with pytest.raises(AssertionError):
+            bisection_lambda_schedule(n_windows)
+        return
+
+    schedule = bisection_lambda_schedule(n_windows, lambda_interval=interval)
+    assert schedule[0] == interval[0]
+    assert schedule[-1] == interval[1]
+    assert len(schedule) <= n_windows + 1
+    if len(schedule) >= 3:
+        mid_point = interval[0] + (interval[1] - interval[0]) / 2
+        assert np.any(np.isclose(schedule, mid_point))
+    differences = np.diff(schedule)
+    assert np.allclose(differences, differences[0])
