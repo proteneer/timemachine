@@ -92,3 +92,63 @@ def test_generate_dummy_group_assignments_empty_core():
     g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("OC1COO1")))
     core = []
     assert list(generate_dummy_group_assignments(g, core)) == []
+
+
+from timemachine.fe.dummy import compute_disabled_bonds_in_core, compute_disabled_bonds_in_dga
+
+
+def test_generate_dummy_group_chiral_invariant():
+    r"""
+    Check that we generate the correct set of bond masks given a set of dummy group
+    assignments:
+
+      O1
+     /  \
+    C0   C2
+     \  /
+      O3
+
+    The possible choices of dummy group assignments and bond masks are:
+
+    {0: {1, 3}} -> [1 1 0 0]
+    {0: {1}, 2: {3}} -> [1 0 0 1]
+    {2: {1}, 0: {3}} -> [0 1 1 0]
+    {2: {1, 3}} -> [0 0 1 1]
+
+    """
+    g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("C1OCO1")))
+    core = [0, 2]
+    dgas = list(generate_dummy_group_assignments(g, core))
+
+    d0 = compute_disabled_bonds_in_dga(g, core, dgas[0])
+    assert d0 == {(1, 2), (2, 3)}
+
+    d1 = compute_disabled_bonds_in_dga(g, core, dgas[1])
+    assert d1 == {(1, 2), (0, 3)}
+
+    d2 = compute_disabled_bonds_in_dga(g, core, dgas[2])
+    assert d2 == {(0, 1), (2, 3)}
+
+    d3 = compute_disabled_bonds_in_dga(g, core, dgas[3])
+    assert d3 == {(0, 1), (0, 3)}
+
+
+def test_compute_core_core_bond_masks():
+    r"""
+    Check that we can flag core-core bonds that are broken
+
+      O1            O1
+     /  \          /  \
+    C0   C2  ->  C0   C2
+     \  /             /
+      O3            O3
+
+    This should end-up disabling the offending mask.
+
+    """
+    g1 = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("C1OCO1")))
+    g2 = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("COCO")))
+    core1 = [0, 1, 2, 3]
+    core2 = [0, 1, 2, 3]
+    d0 = compute_disabled_bonds_in_core(g1, g2, core1, core2)
+    assert d0 == {(0, 3)}

@@ -96,6 +96,7 @@ class Graph:
         self.n_vertices = n_vertices
         self.n_edges = len(edges)
         self.edges = edges
+        self.nxg = nx.Graph(edges)
 
         cmat = np.full((n_vertices, n_vertices), False, dtype=bool)
         for i, j in edges:
@@ -411,6 +412,51 @@ def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
     map_2_to_1[jdx] = UNMAPPED
 
 
+from timemachine.fe.dummy import (
+    compute_disabled_bonds_in_core,
+    compute_disabled_bonds_in_dga,
+    generate_dummy_group_assignments,
+)
+
+
+def _graph_fails_chiral_assertion(g, mapped_nodes, unvisited_nodes, core_disabled_bonds):
+    """
+    A graph fails the chiral assertion if every choice of dummy group assignments fails.
+
+    A particular dummy group assignment fails if there exists a 4-connected atom with more than a single broken bond.
+
+    """
+    core_nodes = mapped_nodes.union(unvisited_nodes)
+    if len(core_nodes) == g.number_of_nodes():
+        # HACK:
+        # this logic isn't handled fully, there exists cases where only core bonds are broken, with no dummy atoms,
+        # and this should fail, but if enforce_core_core = True we can ignore this for now.
+        assert len(core_disabled_bonds) == 0
+        return False
+
+    for dga in generate_dummy_group_assignments(g, core_nodes):
+        dga_disabled_bonds = compute_disabled_bonds_in_dga(g, core_nodes, dga)
+        all_disabled_bonds = dga_disabled_bonds.union(core_disabled_bonds)
+        dga_failed = False
+        for node in g.nodes():
+            nbs = list(nx.neighbors(g, node))
+            if len(nbs) == 4:
+                disabled_bonds_count = 0
+                for nb in nbs:
+                    key = tuple(sorted((node, nb)))
+                    if key in all_disabled_bonds:
+                        disabled_bonds_count += 1
+
+                if disabled_bonds_count > 1:
+                    dga_failed = True
+                    break
+
+        if not dga_failed:
+            return False
+
+    return True
+
+
 def recursion(
     g1: Graph,
     g2: Graph,
@@ -468,6 +514,28 @@ def recursion(
     # leaf-node, every atom has been mapped
     if layer == n_a:
         if num_edges == threshold:
+            # # chiral assertion check on leaf nodes
+            g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
+            g1_unvisited_nodes = set(range(layer, g1.n_vertices))
+            g1_core_disabled_bonds = compute_disabled_bonds_in_core(g1.nxg, g2.nxg, g1_mapped_nodes, atom_map_1_to_2)
+            if enforce_core_core:
+                assert len(g1_core_disabled_bonds) == 0
+
+            if _graph_fails_chiral_assertion(g1.nxg, g1_mapped_nodes, g1_unvisited_nodes, g1_core_disabled_bonds):
+                print("g1 failed chiral assertion on final layer", layer)
+                return
+
+            g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
+            g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
+            g2_core_disabled_bonds = compute_disabled_bonds_in_core(g2.nxg, g1.nxg, g2_mapped_nodes, atom_map_2_to_1)
+
+            if enforce_core_core:
+                assert len(g2_core_disabled_bonds) == 0
+
+            if _graph_fails_chiral_assertion(g2.nxg, g2_mapped_nodes, g2_unvisited_nodes, g2_core_disabled_bonds):
+                print("g2 failed chiral assertion on final layer", layer)
+                return
+
             mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
             mcs_result.all_marcs.append(copy.copy(marcs))
             mcs_result.num_edges = num_edges
