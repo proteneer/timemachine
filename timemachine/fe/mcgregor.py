@@ -1,6 +1,5 @@
 # maximum common subgraph routines based off of the mcgregor paper
 import copy
-import time
 import warnings
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Sequence, Set, Tuple
@@ -300,6 +299,7 @@ def mcs(
     max_visits,
     max_cores,
     enforce_core_core,
+    max_node_visits: int,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
     min_threshold,
@@ -325,7 +325,8 @@ def mcs(
     base_layer = len(initial_mapping)
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
     # Keep start time for debugging purposes below
-    start_time = time.time()  # noqa
+    # import time
+    # start_time = time.time()  # noqa
 
     mcs_result = None
 
@@ -360,10 +361,15 @@ def mcs(
 
         total_nodes_visited += mcs_result.nodes_visited
 
+        if total_nodes_visited >= max_node_visits:
+            raise NoMappingError(
+                f"Exceeded the max number of nodes ({max_node_visits}) visited, visited {total_nodes_visited}"
+            )
+
         # If timed out, either due to max_visits or max_cores, raise exception.
         if mcs_result.timed_out:
             warnings.warn(
-                f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited. "
+                f"Reached max number of visits/cores per threshold: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited. "
                 "Cores may be suboptimal.",
                 MaxVisitsWarning,
             )
@@ -379,7 +385,8 @@ def mcs(
         # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
         # )
 
-    assert mcs_result is not None
+    if mcs_result is None:
+        raise NoMappingError("No thresholds evaluated when generating cores")
 
     if len(mcs_result.all_maps) == 0:
         raise NoMappingError("Unable to find mapping")

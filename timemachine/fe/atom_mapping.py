@@ -53,6 +53,7 @@ def get_cores_and_diagnostics(
     ring_cutoff,
     chain_cutoff,
     max_visits,
+    max_node_visits: int,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
     max_cores,
@@ -68,6 +69,7 @@ def get_cores_and_diagnostics(
 
     get_cores_ = partial(
         _get_cores_impl,
+        max_node_visits=max_node_visits,
         ring_cutoff=ring_cutoff,
         chain_cutoff=chain_cutoff,
         max_visits=max_visits,
@@ -98,6 +100,7 @@ def get_cores(
     ring_cutoff,
     chain_cutoff,
     max_visits,
+    max_node_visits: int,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
     max_cores,
@@ -134,7 +137,10 @@ def get_cores(
         The distance cutoff that non-ring atoms must satisfy.
 
     max_visits: int
-        Maximum number of nodes we can visit for a given threshold.
+        Maximum number of nodes we can visit for a given core size.
+
+    max_node_visits: int
+        Maximum number of nodes that can be visited overall to find a core.
 
     max_connected_components: int or None
         Set to k to only keep mappings where the number of connected components is <= k.
@@ -179,6 +185,7 @@ def get_cores(
         ring_cutoff,
         chain_cutoff,
         max_visits,
+        max_node_visits,
         max_connected_components,
         min_connected_component_size,
         max_cores,
@@ -329,6 +336,7 @@ def _get_cores_impl(
     ring_cutoff,
     chain_cutoff,
     max_visits,
+    max_node_visits: int,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
     max_cores,
@@ -420,6 +428,7 @@ def _get_cores_impl(
         max_visits,
         max_cores,
         enforce_core_core,
+        max_node_visits,
         max_connected_components,
         min_connected_component_size,
         min_threshold,
