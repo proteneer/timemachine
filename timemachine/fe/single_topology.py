@@ -10,6 +10,7 @@ import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
+from rdkit.Chem.rdmolops import FastFindRings
 
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
 from timemachine.fe import chiral_utils, interpolate, model_utils, topology, utils
@@ -1511,7 +1512,11 @@ class SingleTopology(AtomMapMixin):
                 mol.AddBond(int(i), int(j), Chem.BondType.SINGLE)
 
         # make read-only
-        return Chem.Mol(mol)
+        mol = Chem.Mol(mol)
+        # Update the properties of the mol, allowing the mol to be used more generally with RDKit
+        mol.UpdatePropertyCache(strict=False)  # If use strict will often fail
+        FastFindRings(mol)
+        return mol
 
     def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
         """
