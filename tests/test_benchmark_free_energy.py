@@ -20,6 +20,7 @@ from timemachine.fe.free_energy import (
     run_sims_bisection,
     run_sims_hrex,
     run_sims_sequential,
+    sample,
 )
 from timemachine.fe.lambda_schedule import bisection_lambda_schedule
 from timemachine.fe.rbfe import (
@@ -31,6 +32,15 @@ from timemachine.fe.rbfe import (
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.md import builders
+from timemachine.potentials import (
+    ChiralAtomRestraint,
+    HarmonicAngle,
+    HarmonicAngleStable,
+    HarmonicBond,
+    NonbondedPairList,
+    NonbondedPairListPrecomputed,
+    PeriodicTorsion,
+)
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 A = TypeVar("A")
@@ -92,6 +102,73 @@ def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpo
     return single_topology, host, host_name, n_frames, n_windows, initial_states
 
 
+def combine_vacuum_initial_states(states):
+    from collections import defaultdict
+
+    atoms_per_state = [state.x0.shape[0] for state in states]
+    combined_coords = np.concatenate([state.x0 for state in states])
+    combined_masses = np.concatenate([state.integrator.masses for state in states])
+    combined_velos = np.concatenate([state.v0 for state in states])
+    # Box doesn't really matter
+    box = max([x.box0 for x in states], key=lambda x: np.linalg.det(x))
+    potentials_by_type = defaultdict(list)
+    for state in states:
+        for pot in state.potentials:
+            potentials_by_type[type(pot.potential)].append(pot)
+    valid = [
+        HarmonicBond,
+        HarmonicAngle,
+        HarmonicAngleStable,
+        PeriodicTorsion,
+        NonbondedPairList,
+        NonbondedPairListPrecomputed,
+        ChiralAtomRestraint,
+    ]
+    for x in potentials_by_type.keys():
+        if x not in valid:
+            raise ValueError(f"{x} {valid}")
+    mega_bps = []
+    for pot_type, bps in potentials_by_type.items():
+        assert len(bps) == len(states)
+        if pot_type in (PeriodicTorsion, HarmonicBond, HarmonicAngleStable, HarmonicAngle, ChiralAtomRestraint):
+            new_idxs = []
+            new_params = []
+            offset = 0
+            for i, bp in enumerate(bps):
+                pot = bp.potential
+                # Offset the indices by the number of atoms that have come before
+                idxs = pot.idxs + offset
+                new_params.append(bp.params)
+                new_idxs.append(idxs)
+                offset += atoms_per_state[i]
+            mega_bps.append(pot_type(idxs=np.concatenate(new_idxs)).bind(np.concatenate(new_params)))
+        elif pot_type == NonbondedPairListPrecomputed:
+            new_idxs = []
+            new_params = []
+            cutoff = bps[0].potential.cutoff
+            beta = bps[0].potential.beta
+            offset = 0
+            for i, bp in enumerate(bps):
+                pot = bp.potential
+                assert pot.cutoff == cutoff
+                assert pot.beta == beta
+                # Offset the indices by the number of atoms that have come before
+                idxs = pot.idxs + offset
+                new_params.append(bp.params)
+                new_idxs.append(idxs)
+                offset += atoms_per_state[i]
+            mega_bps.append(
+                pot_type(idxs=np.concatenate(new_idxs), cutoff=cutoff, beta=beta).bind(np.concatenate(new_params))
+            )
+        else:
+            assert 0
+    assert len(mega_bps) == len(states[0].potentials)
+    new_integrator = replace(states[0].integrator, masses=combined_masses)
+    return replace(
+        states[0], integrator=new_integrator, x0=combined_coords, v0=combined_velos, box0=box, potentials=mega_bps
+    )
+
+
 def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling) -> float:
     single_topology, host, host_name, n_frames, n_windows, initial_states = hif2a_single_topology_leg
     assert n_windows >= 2
@@ -148,10 +225,22 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
             min_overlap=None,
             verbose=True,
         )
+    elif mode == "combined":
+        mega_initial_state = combine_vacuum_initial_states(initial_states)
+        run = partial(sample, mega_initial_state, md_params, max_buffer_frames=100)
     else:
         assert False
 
-    _, elapsed_ns = run_with_timing(run)
+    var, elapsed_ns = run_with_timing(run)  # type: ignore
+    if mode == "combined":
+        print(len(var.frames), var.frames[0].shape, mega_initial_state.x0.shape)
+        last_frame = var.frames[-1]
+        box = var.boxes[-1]
+        for pot in mega_initial_state.potentials:
+            from timemachine.md.minimizer import check_force_norm
+
+            du_dx, _ = pot.to_gpu(np.float32).bound_impl.execute(last_frame, box, compute_u=False)
+            check_force_norm(-du_dx)
 
     print("water sampling:", enable_water_sampling)
     print("mode:", mode)
@@ -180,7 +269,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--leg", default="vacuum", choices=["vacuum", "solvent", "complex"])
     parser.add_argument("--n_frames", default=100, type=int)
-    parser.add_argument("--modes", nargs="*", default=["sequential", "bisection", "hrex"])
+    parser.add_argument("--modes", nargs="*", default=["sequential", "bisection", "hrex", "combined"])
     parser.add_argument("--n_windows", nargs="*", type=int, default=[2, 4, 8, 16, 32, 48])
     parser.add_argument("--water_sampling", action="store_true", default=False)
     args = parser.parse_args()
