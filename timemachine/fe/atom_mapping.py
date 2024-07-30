@@ -263,17 +263,6 @@ def induce_mol_subgraph(mol_a, core_a, bond_core_a):
     return sg_a
 
 
-def _to_networkx_graph(mol):
-    g = nx.Graph()
-    for atom in mol.GetAtoms():
-        g.add_node(atom.GetIdx())
-
-    for bond in mol.GetBonds():
-        src, dst = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        g.add_edge(src, dst)
-    return g
-
-
 def _compute_bond_cores(mol_a, mol_b, marcs):
     a_edges = get_edges(mol_a)
     b_edges = get_edges(mol_b)
