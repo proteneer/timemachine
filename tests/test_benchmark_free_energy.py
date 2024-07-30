@@ -79,7 +79,6 @@ def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpo
     single_topology = SingleTopology(mol_a, mol_b, core, forcefield)
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
-    # Use the bisection schedule to require the least amount of minimization during bisection
     lambda_grid = np.linspace(*lambda_endpoints, n_windows)
 
     initial_states = setup_initial_states(
