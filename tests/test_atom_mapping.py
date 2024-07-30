@@ -1,4 +1,5 @@
 import copy
+import re
 import time
 from functools import partial
 
@@ -10,7 +11,9 @@ from rdkit.Chem import AllChem
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
+from timemachine.fe.single_topology import ChiralConversionError, verify_chiral_consistency_of_core
 from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
+from timemachine.ff import Forcefield
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -1383,3 +1386,24 @@ def test_hybrid_core_generation(hif2a_ligands):
     # plt.legend()
 
     # plt.show()
+
+
+def test_disallow_chiral_conversion():
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("Cc1ccc(C)cc1"))  # phenyl linker
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("CC(C1)(C2)CC12C"))  # bicyclopentane linker
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2024)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2024)
+
+    AllChem.AlignMol(mol_b, mol_a, atomMap=[(0, 0), (1, 1), (5, 4), (6, 5)])
+
+    ff = Forcefield.load_default()
+
+    get_cores = partial(atom_mapping.get_cores, **{**DEFAULT_ATOM_MAPPING_KWARGS, "max_connected_components": 2})
+
+    core_bad = get_cores(mol_a, mol_b, disallow_chiral_conversion=False)[0]
+    with pytest.raises(ChiralConversionError, match=re.escape("len(nbs) == 4 (20, 2, 18, 19, 5)")):
+        verify_chiral_consistency_of_core(mol_a, mol_b, core_bad, ff)
+
+    core_good = get_cores(mol_a, mol_b, disallow_chiral_conversion=True)[0]
+    verify_chiral_consistency_of_core(mol_a, mol_b, core_good, ff)
