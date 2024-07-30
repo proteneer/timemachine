@@ -62,6 +62,7 @@ def get_cores_and_diagnostics(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
+    disallow_chiral_conversion: bool = False,  # TODO: default to True when tests are passing
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     """Same as :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
     assert max_cores > 0
@@ -79,6 +80,7 @@ def get_cores_and_diagnostics(
         enforce_chiral=enforce_chiral,
         disallow_planar_torsion_flips=disallow_planar_torsion_flips,
         min_threshold=min_threshold,
+        disallow_chiral_conversion=disallow_chiral_conversion,
     )
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
@@ -107,6 +109,7 @@ def get_cores(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
+    disallow_chiral_conversion: bool = False,  # TODO: default to True when tests are passing
 ) -> List[NDArray]:
     """
     Finds set of cores between two molecules that maximizes the number of common edges.
@@ -188,6 +191,7 @@ def get_cores(
         disallow_planar_torsion_flips,
         min_threshold,
         initial_mapping,
+        disallow_chiral_conversion,
     )
 
     return all_cores
@@ -338,6 +342,7 @@ def _get_cores_impl(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
+    disallow_chiral_conversion: bool,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     if initial_mapping is None:
         initial_mapping = np.zeros((0, 2))
@@ -424,6 +429,7 @@ def _get_cores_impl(
         min_connected_component_size,
         min_threshold,
         initial_mapping,
+        disallow_chiral_conversion,
         filter_fxn=filter_fxn,
     )
 

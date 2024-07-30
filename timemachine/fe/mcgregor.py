@@ -311,6 +311,7 @@ def mcs(
     min_connected_component_size: int,
     min_threshold,
     initial_mapping,
+    disallow_chiral_conversion: bool,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
@@ -362,6 +363,7 @@ def mcs(
             enforce_core_core,
             max_connected_components,
             min_connected_component_size,
+            disallow_chiral_conversion,
             filter_fxn,
         )
 
@@ -471,6 +473,7 @@ def recursion(
     enforce_core_core,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
+    disallow_chiral_conversion: bool,
     filter_fxn,
 ):
     if mcs_result.nodes_visited > max_visits:
@@ -513,27 +516,32 @@ def recursion(
     # leaf-node, every atom has been mapped
     if layer == n_a:
         if num_edges == threshold:
-            # # chiral assertion check on leaf nodes
-            g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
-            g1_unvisited_nodes = set(range(layer, g1.n_vertices))
-            g1_core_disabled_bonds = compute_disabled_bonds_in_core(g1.nxg, g2.nxg, g1_mapped_nodes, atom_map_1_to_2)
-            if enforce_core_core:
-                assert len(g1_core_disabled_bonds) == 0
+            if disallow_chiral_conversion:
+                # # chiral assertion check on leaf nodes
+                g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
+                g1_unvisited_nodes = set(range(layer, g1.n_vertices))
+                g1_core_disabled_bonds = compute_disabled_bonds_in_core(
+                    g1.nxg, g2.nxg, g1_mapped_nodes, atom_map_1_to_2
+                )
+                if enforce_core_core:
+                    assert len(g1_core_disabled_bonds) == 0
 
-            if _graph_fails_chiral_assertion(g1.nxg, g1_mapped_nodes, g1_unvisited_nodes, g1_core_disabled_bonds):
-                print("g1 failed chiral assertion on final layer", layer)
-                return
+                if _graph_fails_chiral_assertion(g1.nxg, g1_mapped_nodes, g1_unvisited_nodes, g1_core_disabled_bonds):
+                    print("g1 failed chiral assertion on final layer", layer)
+                    return
 
-            g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
-            g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
-            g2_core_disabled_bonds = compute_disabled_bonds_in_core(g2.nxg, g1.nxg, g2_mapped_nodes, atom_map_2_to_1)
+                g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
+                g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
+                g2_core_disabled_bonds = compute_disabled_bonds_in_core(
+                    g2.nxg, g1.nxg, g2_mapped_nodes, atom_map_2_to_1
+                )
 
-            if enforce_core_core:
-                assert len(g2_core_disabled_bonds) == 0
+                if enforce_core_core:
+                    assert len(g2_core_disabled_bonds) == 0
 
-            if _graph_fails_chiral_assertion(g2.nxg, g2_mapped_nodes, g2_unvisited_nodes, g2_core_disabled_bonds):
-                print("g2 failed chiral assertion on final layer", layer)
-                return
+                if _graph_fails_chiral_assertion(g2.nxg, g2_mapped_nodes, g2_unvisited_nodes, g2_core_disabled_bonds):
+                    print("g2 failed chiral assertion on final layer", layer)
+                    return
 
             mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
             mcs_result.all_marcs.append(copy.copy(marcs))
@@ -566,6 +574,7 @@ def recursion(
                     enforce_core_core,
                     max_connected_components,
                     min_connected_component_size,
+                    disallow_chiral_conversion,
                     filter_fxn,
                 )
             atom_map_pop(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
@@ -589,5 +598,6 @@ def recursion(
         enforce_core_core,
         max_connected_components,
         min_connected_component_size,
+        disallow_chiral_conversion,
         filter_fxn,
     )
