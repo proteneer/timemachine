@@ -420,14 +420,13 @@ def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
     map_2_to_1[jdx] = UNMAPPED
 
 
-def _graph_fails_chiral_assertion(g, mapped_nodes, unvisited_nodes, core_disabled_bonds):
+def _graph_fails_chiral_assertion(g: nx.Graph, core_nodes: Set[int], core_disabled_bonds: Set[Tuple[int, int]]) -> bool:
     """
     A graph fails the chiral assertion if every choice of dummy group assignments fails.
 
     A particular dummy group assignment fails if there exists a 4-connected atom with more than a single broken bond.
 
     """
-    core_nodes = mapped_nodes.union(unvisited_nodes)
     if len(core_nodes) == g.number_of_nodes():
         # HACK:
         # this logic isn't handled fully, there exists cases where only core bonds are broken, with no dummy atoms,
@@ -519,19 +518,16 @@ def recursion(
             if disallow_chiral_conversion:
                 # # chiral assertion check on leaf nodes
                 g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
-                g1_unvisited_nodes = set(range(layer, g1.n_vertices))
                 g1_core_disabled_bonds = compute_disabled_bonds_in_core(
                     g1.nxg, g2.nxg, g1_mapped_nodes, atom_map_1_to_2
                 )
                 if enforce_core_core:
                     assert len(g1_core_disabled_bonds) == 0
 
-                if _graph_fails_chiral_assertion(g1.nxg, g1_mapped_nodes, g1_unvisited_nodes, g1_core_disabled_bonds):
-                    print("g1 failed chiral assertion on final layer", layer)
+                if _graph_fails_chiral_assertion(g1.nxg, g1_mapped_nodes, g1_core_disabled_bonds):
                     return
 
                 g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
-                g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
                 g2_core_disabled_bonds = compute_disabled_bonds_in_core(
                     g2.nxg, g1.nxg, g2_mapped_nodes, atom_map_2_to_1
                 )
@@ -539,8 +535,7 @@ def recursion(
                 if enforce_core_core:
                     assert len(g2_core_disabled_bonds) == 0
 
-                if _graph_fails_chiral_assertion(g2.nxg, g2_mapped_nodes, g2_unvisited_nodes, g2_core_disabled_bonds):
-                    print("g2 failed chiral assertion on final layer", layer)
+                if _graph_fails_chiral_assertion(g2.nxg, g2_mapped_nodes, g2_core_disabled_bonds):
                     return
 
             mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
