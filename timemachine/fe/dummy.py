@@ -7,6 +7,7 @@ import networkx as nx
 import numpy as np
 
 from timemachine.fe.utils import get_romol_bonds
+from timemachine.graph_utils import convert_to_nx
 
 
 class MultipleAnchorWarning(UserWarning):
@@ -39,7 +40,7 @@ def generate_dummy_group_assignments(
     Example
     -------
     >>> mol = Chem.MolFromSmiles("OC1COO1")
-    >>> g = convert_bond_list_to_nx(get_romol_bonds(mol))
+    >>> g = convert_to_nx(mol)
     >>> core = [1, 2]
     >>> list(generate_dummy_group_assignments(g, core))
     [{1: frozenset({0}), 2: frozenset({3, 4})}, {1: frozenset({0, 3, 4})}]
@@ -129,8 +130,7 @@ def generate_anchored_dummy_group_assignments(
         each element is a mapping from bond anchor atom to the pair (angle anchor atom, dummy group)
     """
 
-    bonds_b = get_romol_bonds(mol_b)
-    bond_graph_b = convert_bond_list_to_nx(bonds_b)
+    bond_graph_b = convert_to_nx(mol_b)
     dummy_group_assignments = generate_dummy_group_assignments(bond_graph_b, core_atoms_b)
 
     core_bonds_c = get_core_bonds(mol_a, mol_b, core_atoms_a, core_atoms_b)
@@ -197,18 +197,6 @@ def canonicalize_bond(ixn: Tuple[int, ...]) -> Tuple[int, ...]:
         return tuple(ixn[::-1])
     else:
         return tuple(ixn)
-
-
-def convert_bond_list_to_nx(bond_list: Collection[Tuple[int, int]]) -> nx.Graph:
-    """
-    Convert an ROMol into a networkx graph.
-    """
-    g = nx.Graph()
-    for i, j in bond_list:
-        assert i != j  # do not allow self-edges
-        g.add_edge(i, j)
-
-    return g
 
 
 def get_core_bonds(
