@@ -14,10 +14,15 @@ from rdkit import Chem
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
 from timemachine.fe import chiral_utils, interpolate, model_utils, topology, utils
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
-from timemachine.fe.dummy import canonicalize_bond, generate_anchored_dummy_group_assignments
+from timemachine.fe.dummy import (
+    canonicalize_bond,
+    generate_anchored_dummy_group_assignments,
+    generate_dummy_group_assignments,
+)
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.fe.topology import get_ligand_ixn_pots_params
+from timemachine.graph_utils import convert_to_nx
 from timemachine.potentials import (
     BoundPotential,
     ChiralAtomRestraint,
@@ -410,7 +415,7 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
             all_proper_dummy_chiral_atom_idxs.append((c, i, j, k))
             all_proper_dummy_chiral_atom_params.append(p)
         else:
-            warnings.warn(f"Chiral Volume {c,i,j,k} has a disabled bond, turning off.")
+            warnings.warn(f"Chiral Volume {c, i, j, k} has a disabled bond, turning off.")
 
     mol_c_chiral_atom_idxs = list(mol_a_chiral_atom_idxs) + list(all_proper_dummy_chiral_atom_idxs)
     mol_c_chiral_atom_params = np.concatenate([mol_a_chiral_atom.params, all_proper_dummy_chiral_atom_params])
@@ -596,7 +601,16 @@ def find_dummy_groups_and_anchors(
     solution later on is to minimize the number of rotatable bonds?
     """
 
-    assignments = generate_anchored_dummy_group_assignments(mol_a, mol_b, core_atoms_a, core_atoms_b)
+    bond_graph_a = convert_to_nx(mol_a)
+    bond_graph_b = convert_to_nx(mol_b)
+
+    assignments = (
+        adgs
+        for dgs in generate_dummy_group_assignments(bond_graph_b, core_atoms_b)
+        for adgs in generate_anchored_dummy_group_assignments(
+            dgs, bond_graph_a, bond_graph_b, core_atoms_a, core_atoms_b
+        )
+    )
 
     # TODO: consider refining to use a heuristic rather than arbitrary selection
     # (e.g. maximize core-dummy bonds, maximize angle terms, minimize rotatable bonds, etc.)
