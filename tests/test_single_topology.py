@@ -1828,3 +1828,97 @@ $$$$""",
 
     with pytest.raises(ChiralConversionError, match="Invalid chiral conversion in core"):
         SingleTopology(mol_a, mol_b, core, ff)
+
+
+def test_chiral_bond_breaking_1_core_1_dummy():
+    mol_a = Chem.MolFromMolBlock(
+        """lhs
+                    3D
+ Structure written by MMmdl.
+ 15 16  0  0  1  0            999 V2000
+    2.1455    1.6402   -0.1409 O   0  0  0  0  0  0
+   -0.0529   -0.7121    0.3721 C   0  0  0  0  0  0
+   -1.4286   -0.4301   -0.2680 C   0  0  0  0  0  0
+   -0.9221    0.8962   -0.8723 C   0  0  0  0  0  0
+    1.7163    0.6542   -1.0827 C   0  0  0  0  0  0
+    0.4519    0.5990   -0.2512 C   0  0  0  0  0  0
+    1.0309    1.5756    0.6040 O   0  0  0  0  0  0
+   -0.0750   -0.6889    1.4650 H   0  0  0  0  0  0
+    0.4285   -1.6073   -0.0287 H   0  0  0  0  0  0
+   -2.2238   -0.2880    0.4685 H   0  0  0  0  0  0
+   -1.6971   -1.1659   -1.0311 H   0  0  0  0  0  0
+   -1.4047    1.7800   -0.4452 H   0  0  0  0  0  0
+   -0.9239    0.8937   -1.9651 H   0  0  0  0  0  0
+    1.5863    1.0639   -2.0863 H   0  0  0  0  0  0
+    2.3266   -0.2504   -1.0468 H   0  0  0  0  0  0
+  6  2  1  0  0  0
+  6  4  1  0  0  0
+  6  5  1  0  0  0
+  6  7  1  0  0  0
+  2  3  1  0  0  0
+  2  8  1  0  0  0
+  2  9  1  0  0  0
+  3  4  1  0  0  0
+  3 10  1  0  0  0
+  3 11  1  0  0  0
+  4 12  1  0  0  0
+  4 13  1  0  0  0
+  5  1  1  0  0  0
+  5 14  1  0  0  0
+  5 15  1  0  0  0
+  1  7  1  0  0  0
+M  END""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """rhs
+                    3D
+ Structure written by MMmdl.
+ 12 11  0  0  1  0            999 V2000
+    0.4102    0.4907   -0.1997 O   0  0  0  0  0  0
+   -0.0529   -0.7121    0.3721 C   0  0  0  0  0  0
+   -1.4286   -0.4301   -0.2680 C   0  0  0  0  0  0
+   -1.0708    0.5068   -0.6949 H   0  0  0  0  0  0
+    1.5875    0.5421   -0.9739 C   0  0  0  0  0  0
+    1.9148    1.2939   -0.2558 H   0  0  0  0  0  0
+   -0.0750   -0.6889    1.4650 H   0  0  0  0  0  0
+    0.4285   -1.6073   -0.0287 H   0  0  0  0  0  0
+   -2.2238   -0.2880    0.4685 H   0  0  0  0  0  0
+   -1.6971   -1.1659   -1.0311 H   0  0  0  0  0  0
+    1.4575    0.9518   -1.9775 H   0  0  0  0  0  0
+    2.1978   -0.3625   -0.9380 H   0  0  0  0  0  0
+  1  2  1  0  0  0
+  1  5  1  0  0  0
+  2  3  1  0  0  0
+  2  7  1  0  0  0
+  2  8  1  0  0  0
+  3  4  1  0  0  0
+  3  9  1  0  0  0
+  3 10  1  0  0  0
+  5  6  1  0  0  0
+  5 11  1  0  0  0
+  5 12  1  0  0  0
+M  END
+""",
+        removeHs=False,
+    )
+
+    # need to generate SC charges on this mol - am1 fails
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    core = np.array(
+        [[5, 0], [1, 1], [2, 2], [3, 3], [4, 4], [0, 5], [7, 6], [8, 7], [9, 8], [10, 9], [13, 10], [14, 11]]
+    )
+
+    # from timemachine.fe.utils import plot_atom_mapping_grid
+
+    # print("core", core)
+    # res = plot_atom_mapping_grid(mol_a, mol_b, core)
+    # fpath = f"atom_mapping.svg"
+    # print("core mapping written to", fpath)
+
+    # with open(fpath, "w") as fh:
+    #     fh.write(res)
+
+    # should not raise an assertion
+    SingleTopology(mol_a, mol_b, core, ff)
