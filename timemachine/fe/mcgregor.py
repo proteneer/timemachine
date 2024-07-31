@@ -366,7 +366,7 @@ def mcs(
 
         if len(mcs_result.all_maps) > 0:
             # If we timed out but got cores, throw a warning
-            if mcs_result.timed_out:
+            if mcs_result.timed_out and len(mcs_result.all_maps) < max_cores:
                 warnings.warn(
                     f"Inexhaustive search: reached max number of visits ({max_visits}) and found only "
                     f"{len(mcs_result.all_maps)} out of {max_cores} desired cores.",
