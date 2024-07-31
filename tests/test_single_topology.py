@@ -32,7 +32,6 @@ from timemachine.fe.single_topology import (
     ChargePertubationError,
     ChiralConversionError,
     CoreBondChangeWarning,
-    DummyGroupAssignmentError,
     SingleTopology,
     canonicalize_improper_idxs,
     cyclic_difference,
@@ -1827,5 +1826,5 @@ $$$$""",
     ff = Forcefield.load_default()
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5]])
 
-    with pytest.raises(DummyGroupAssignmentError):
+    with pytest.raises(ChiralConversionError, match="Invalid chiral conversion in core"):
         SingleTopology(mol_a, mol_b, core, ff)

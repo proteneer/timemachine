@@ -421,14 +421,16 @@ def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
     map_2_to_1[jdx] = UNMAPPED
 
 
-def is_chiral_conversion(bond_graph: nx.Graph, disabled_bonds: Set[Tuple[int, int]]) -> bool:
+def get_invalid_chiral_conversion(
+    bond_graph: nx.Graph, disabled_bonds: Set[Tuple[int, int]]
+) -> Optional[Tuple[int, List[int]]]:
     for node in bond_graph.nodes():
         nbs = list(nx.neighbors(bond_graph, node))
         if len(nbs) == 4:
             disabled_bonds_count = sum(1 for nb in nbs if canonicalize_bond((node, nb)) in disabled_bonds)
             if disabled_bonds_count > 1:
-                return True
-    return False
+                return node, nbs
+    return None
 
 
 def _graph_fails_chiral_assertion(
@@ -438,13 +440,15 @@ def _graph_fails_chiral_assertion(
 
     A particular dummy group assignment fails if there exists a 4-connected atom with more than a single broken bond.
     """
-    if len(core_nodes) == bond_graph.number_of_nodes():
-        return is_chiral_conversion(bond_graph, core_disabled_bonds)
+    if len(core_nodes) == bond_graph.number_of_nodes() and get_invalid_chiral_conversion(
+        bond_graph, core_disabled_bonds
+    ):
+        return True
 
     for dga in generate_dummy_group_assignments(bond_graph, core_nodes):
         dga_disabled_bonds = compute_disabled_bonds_in_dga(bond_graph, core_nodes, dga)
         disabled_bonds = dga_disabled_bonds.union(core_disabled_bonds)
-        if is_chiral_conversion(bond_graph, disabled_bonds):
+        if get_invalid_chiral_conversion(bond_graph, disabled_bonds):
             return True
 
     return False
