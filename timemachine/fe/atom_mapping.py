@@ -137,7 +137,7 @@ def get_cores(
         The distance cutoff that non-ring atoms must satisfy.
 
     max_visits: int
-        Maximum number of nodes we can visit for a given core size.
+        Maximum number of nodes we can visit for a given core size. Must be less than or equal to max_node_visits.
 
     max_node_visits: int
         Maximum number of nodes that can be visited overall to find a core.
