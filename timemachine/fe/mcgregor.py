@@ -426,6 +426,7 @@ def get_invalid_chiral_conversion(
 ) -> Optional[Tuple[int, List[int]]]:
     for node in bond_graph.nodes():
         nbs = list(nx.neighbors(bond_graph, node))
+        # TODO: handle X3 chiral centers
         if len(nbs) == 4:
             disabled_bonds_count = sum(1 for nb in nbs if canonicalize_bond((node, nb)) in disabled_bonds)
             if disabled_bonds_count > 1:
