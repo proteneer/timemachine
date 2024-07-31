@@ -587,6 +587,8 @@ def find_dummy_groups_and_anchors(
     documentation for :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
     information.
 
+    The returned indices refer to atoms in mol_b.
+
     Notes
     -----
     Consider the following situation:
@@ -614,15 +616,17 @@ def find_dummy_groups_and_anchors(
     atom_map_b_to_a = {b: a for a, b in zip(core_atoms_a, core_atoms_b)}
     core_disabled_bonds_b = compute_disabled_bonds_in_core(bond_graph_b, bond_graph_a, core_atoms_b, atom_map_b_to_a)
 
-    invalid_chiral_conversion = get_invalid_chiral_conversion(bond_graph_b, core_disabled_bonds_b)
-    if invalid_chiral_conversion:
-        center, neighbors = invalid_chiral_conversion
+    invalid_chiral_conversion_core = get_invalid_chiral_conversion(bond_graph_b, core_disabled_bonds_b)
+    if invalid_chiral_conversion_core:
+        center, neighbors = invalid_chiral_conversion_core
         raise ChiralConversionError(f"Invalid chiral conversion in core: center={center}; neighbors={neighbors}")
 
     def get_arbitrary_valid_dummy_group_assignment():
+        # NOTE: indices in dummy group assignments refer to atoms in mol_b
         for dgs in generate_dummy_group_assignments(bond_graph_b, core_atoms_b):
-            dga_disabled_bonds = compute_disabled_bonds_in_dga(bond_graph_b, core_atoms_b, dgs)
-            if not get_invalid_chiral_conversion(bond_graph_b, dga_disabled_bonds.union(core_disabled_bonds_b)):
+            dga_disabled_bonds_b = compute_disabled_bonds_in_dga(bond_graph_b, core_atoms_b, dgs)
+            disabled_bonds_b = dga_disabled_bonds_b.union(core_disabled_bonds_b)
+            if not get_invalid_chiral_conversion(bond_graph_b, disabled_bonds_b):
                 for adgs in generate_anchored_dummy_group_assignments(
                     dgs, bond_graph_a, bond_graph_b, core_atoms_a, core_atoms_b
                 ):
