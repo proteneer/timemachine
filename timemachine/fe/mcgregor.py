@@ -368,8 +368,8 @@ def mcs(
             # If we timed out but got cores, throw a warning
             if mcs_result.timed_out:
                 warnings.warn(
-                    f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited. "
-                    "Cores may be suboptimal.",
+                    f"Inexhaustive search: reached max number of visits ({max_visits}) and found only "
+                    f"{len(mcs_result.all_maps)} out of {max_cores} desired cores.",
                     MaxVisitsWarning,
                 )
             # don't remove this comment and the one below, useful for debugging!

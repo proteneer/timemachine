@@ -944,7 +944,7 @@ def test_max_cores_warning():
         max_visits=1e7,
         initial_mapping=None,
     )
-    with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 1 cores"):
+    with pytest.warns(MaxVisitsWarning, match="Inexhaustive search: reached max number of visits"):
         all_cores = get_cores(mol_a, mol_b, max_cores=1)
         assert len(all_cores) == 1
 
