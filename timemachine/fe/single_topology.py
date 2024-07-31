@@ -618,8 +618,8 @@ def find_dummy_groups_and_anchors(
 
     invalid_chiral_conversion_core = get_invalid_chiral_conversion(bond_graph_b, core_disabled_bonds_b)
     if invalid_chiral_conversion_core:
-        center, neighbors = invalid_chiral_conversion_core
-        raise ChiralConversionError(f"Invalid chiral conversion in core: center={center}; neighbors={neighbors}")
+        c, (i, j, k, l) = invalid_chiral_conversion_core
+        raise ChiralConversionError(f"Invalid chiral conversion in core: len(nbs) == 4 {c, i, j, k, l}")
 
     def get_arbitrary_valid_dummy_group_assignment():
         # NOTE: indices in dummy group assignments refer to atoms in mol_b
