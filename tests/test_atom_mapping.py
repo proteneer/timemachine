@@ -353,7 +353,6 @@ $$$$""",
         ring_cutoff=0.1,
         chain_cutoff=0.2,
         max_visits=1e7,
-        max_node_visits=1e10,
         max_connected_components=1,
         min_connected_component_size=1,
         max_cores=1e6,  # This pair has 350k cores
@@ -398,7 +397,6 @@ def test_all_pairs(filepath):
                 max_visits=1e7,  # 10 million max nodes to visit
                 max_connected_components=1,
                 min_connected_component_size=1,
-                max_node_visits=1e7,
                 max_cores=1000,
                 enforce_core_core=True,
                 ring_matches_ring_only=False,
@@ -537,7 +535,6 @@ $$$$""",
         max_visits=1e7,  # 10 million max nodes to visit
         max_connected_components=None,
         min_connected_component_size=1,
-        max_node_visits=1e7,
         max_cores=1000000,
         enforce_core_core=False,
         ring_matches_ring_only=False,
@@ -562,7 +559,6 @@ $$$$""",
         max_visits=1e7,  # 10 million max nodes to visit
         max_connected_components=1,
         min_connected_component_size=1,
-        max_node_visits=1e7,
         max_cores=1000000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
@@ -589,7 +585,6 @@ $$$$""",
         max_visits=1e7,  # 10 million max nodes to visit
         max_connected_components=None,
         min_connected_component_size=1,
-        max_node_visits=1e7,
         max_cores=1000000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
@@ -721,7 +716,6 @@ def test_hif2a_failure():
         ring_cutoff=0.12,
         chain_cutoff=0.2,
         max_visits=1e7,
-        max_node_visits=1e10,
         max_connected_components=1,
         min_connected_component_size=1,
         max_cores=1e6,
@@ -789,7 +783,6 @@ def test_cyclohexane_stereo():
         max_visits=1e6,
         max_connected_components=1,
         min_connected_component_size=1,
-        max_node_visits=1e7,
         max_cores=100000,
         enforce_core_core=True,
         ring_matches_ring_only=True,
@@ -849,7 +842,6 @@ def test_chiral_atom_map():
         ring_cutoff=np.inf,
         chain_cutoff=np.inf,
         max_visits=1e7,
-        max_node_visits=1e10,
         max_connected_components=1,
         min_connected_component_size=1,
         max_cores=1e6,
@@ -890,7 +882,6 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
         ring_cutoff=0.15,
         chain_cutoff=0.2,
         max_visits=1e7,
-        max_node_visits=1e10,
         max_connected_components=1,
         min_connected_component_size=1,
         max_cores=1e6,
@@ -914,7 +905,7 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
     assert all(len([() for idx_a in core[:, 0] if mol_a.GetAtomWithIdx(int(idx_a)).IsInRing()]) == 4 for core in cores)
 
 
-def test_max_visits_warning():
+def test_max_visits_error():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     get_cores = partial(
         atom_mapping.get_cores,
@@ -923,7 +914,6 @@ def test_max_visits_warning():
         max_connected_components=None,
         min_connected_component_size=1,
         max_cores=1000,
-        max_node_visits=1e7,
         enforce_core_core=True,
         ring_matches_ring_only=False,
         enforce_chiral=True,
@@ -934,25 +924,8 @@ def test_max_visits_warning():
     cores = get_cores(mol_a, mol_b, max_visits=10000)
     assert len(cores) > 0
 
-    with pytest.warns(
-        MaxVisitsWarning, match="Reached max number of visits/cores per threshold: 0 cores with 2 nodes visited"
-    ):
-        with pytest.raises(NoMappingError):
-            get_cores(mol_a, mol_b, max_visits=1)
-
-
-def test_max_node_visits():
-    mol_a, mol_b = get_cyclohexanes_different_confs()
-    get_cores_and_diagnostics = partial(atom_mapping.get_cores_and_diagnostics, **DEFAULT_ATOM_MAPPING_KWARGS)
-    cores, diagnostics = get_cores_and_diagnostics(mol_a, mol_b)
-    assert len(cores) > 0
-
-    with pytest.raises(AssertionError, match="max_visits must be less than or equal to max_total_visits"):
-        get_cores_and_diagnostics(mol_a, mol_b, max_visits=100, max_node_visits=10)
-
-    max_visits = diagnostics.total_nodes_visited - 1
-    with pytest.raises(NoMappingError, match="Exceeded the max number of nodes"):
-        get_cores_and_diagnostics(mol_a, mol_b, max_visits=max_visits, max_node_visits=max_visits)
+    with pytest.raises(NoMappingError, match="Exceeded max number of visits/cores"):
+        get_cores(mol_a, mol_b, max_visits=1)
 
 
 def test_max_cores_warning():
@@ -963,7 +936,6 @@ def test_max_cores_warning():
         chain_cutoff=0.2,
         max_connected_components=None,
         min_connected_component_size=1,
-        max_node_visits=1e7,
         enforce_core_core=True,
         ring_matches_ring_only=False,
         enforce_chiral=True,
@@ -972,7 +944,7 @@ def test_max_cores_warning():
         max_visits=1e7,
         initial_mapping=None,
     )
-    with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores per threshold: 1 cores"):
+    with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 1 cores"):
         all_cores = get_cores(mol_a, mol_b, max_cores=1)
         assert len(all_cores) == 1
 
@@ -985,7 +957,6 @@ def test_min_threshold():
         chain_cutoff=0.2,
         max_connected_components=None,
         min_connected_component_size=1,
-        max_node_visits=1e7,
         max_cores=1000,
         enforce_core_core=True,
         ring_matches_ring_only=False,
@@ -1148,7 +1119,6 @@ def test_initial_mapping(hif2a_ligands):
         "max_connected_components": 1,
         "min_connected_component_size": 1,
         "max_cores": 1e5,
-        "max_node_visits": 1e7,
         "enforce_core_core": True,
         "ring_matches_ring_only": True,
         "enforce_chiral": True,

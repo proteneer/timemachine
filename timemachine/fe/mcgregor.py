@@ -299,7 +299,6 @@ def mcs(
     max_visits,
     max_cores,
     enforce_core_core,
-    max_node_visits: int,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
     min_threshold,
@@ -308,7 +307,6 @@ def mcs(
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
     assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
-    assert max_visits <= max_node_visits, "max_visits must be less than or equal to max_total_visits"
 
     predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
     g_a = Graph(n_a, bonds_a)
@@ -335,7 +333,7 @@ def mcs(
     max_threshold = _arcs_left(base_marcs)
     total_nodes_visited = 0
     # Keep track of the number of nodes that can still be visited
-    visits_left = max_node_visits
+    visits_left = max_visits
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
@@ -353,8 +351,7 @@ def mcs(
             base_marcs,
             mcs_result,
             priority_idxs,
-            # Take the minimum of either the max visits per threshold or the visits left to ensure constant time
-            min(visits_left, max_visits),
+            visits_left,
             max_cores,
             cur_threshold,
             enforce_core_core,
@@ -367,25 +364,22 @@ def mcs(
 
         total_nodes_visited += mcs_result.nodes_visited
 
-        if total_nodes_visited >= max_node_visits:
-            raise NoMappingError(
-                f"Exceeded the max number of nodes ({max_node_visits}) visited, visited {total_nodes_visited}"
-            )
-
-        # If timed out, either due to max_visits or max_cores, raise exception.
-        if mcs_result.timed_out:
-            warnings.warn(
-                f"Reached max number of visits/cores per threshold: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited. "
-                "Cores may be suboptimal.",
-                MaxVisitsWarning,
-            )
-
         if len(mcs_result.all_maps) > 0:
+            # If we timed out but got cores, throw a warning
+            if mcs_result.timed_out:
+                warnings.warn(
+                    f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited. "
+                    "Cores may be suboptimal.",
+                    MaxVisitsWarning,
+                )
             # don't remove this comment and the one below, useful for debugging!
             # print(
             # f"==SUCCESS==[NODES VISITED {mcs_result.nodes_visited} | CORE_SIZE {len([x != UNMAPPED for x in mcs_result.all_maps[0]])} | NUM_CORES {len(mcs_result.all_maps)} | NUM_EDGES {mcs_result.num_edges} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
             # )
             break
+        elif mcs_result.timed_out:
+            # If timed out, either due to max_visits or max_cores, raise exception.
+            raise NoMappingError(f"Exceeded max number of visits/cores: {mcs_result.nodes_visited} nodes visited.")
         # else:
         # print(
         # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="

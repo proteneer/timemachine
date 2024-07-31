@@ -34,7 +34,6 @@ DEFAULT_ATOM_MAPPING_KWARGS: Dict[str, Any] = {
     "ring_cutoff": 0.12,
     "chain_cutoff": 0.2,
     "max_visits": 1e7,
-    "max_node_visits": 1e10,
     "max_connected_components": 1,
     "min_connected_component_size": 1,
     "max_cores": 1e5,
