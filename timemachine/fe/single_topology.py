@@ -13,6 +13,7 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
 from timemachine.fe import chiral_utils, interpolate, model_utils, topology, utils
+from timemachine.fe.atom_mapping import get_invalid_chiral_conversion
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import (
     canonicalize_bond,
@@ -22,7 +23,6 @@ from timemachine.fe.dummy import (
     generate_dummy_group_assignments,
 )
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
-from timemachine.fe.mcgregor import get_invalid_chiral_conversion
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.fe.topology import get_ligand_ixn_pots_params
 from timemachine.graph_utils import convert_to_nx

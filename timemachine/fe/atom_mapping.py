@@ -1,6 +1,6 @@
 from collections import defaultdict
 from functools import partial
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 import networkx as nx
 import numpy as np
@@ -9,6 +9,13 @@ from rdkit import Chem
 
 from timemachine.fe import mcgregor
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
+from timemachine.fe.dummy import (
+    canonicalize_bond,
+    compute_disabled_bonds_in_core,
+    compute_disabled_bonds_in_dga,
+    generate_dummy_group_assignments,
+)
+from timemachine.fe.mcgregor import UNMAPPED
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
@@ -316,6 +323,40 @@ def core_bonds_broken_count(mol_a, mol_b, core):
     return count
 
 
+def get_invalid_chiral_conversion(
+    bond_graph: nx.Graph, disabled_bonds: Set[Tuple[int, int]]
+) -> Optional[Tuple[int, List[int]]]:
+    for node in bond_graph.nodes():
+        nbs = list(nx.neighbors(bond_graph, node))
+        # TODO: handle X3 chiral centers
+        if len(nbs) == 4:
+            disabled_bonds_count = sum(1 for nb in nbs if canonicalize_bond((node, nb)) in disabled_bonds)
+            if disabled_bonds_count > 1:
+                return node, nbs
+    return None
+
+
+def _graph_fails_chiral_assertion(
+    bond_graph: nx.Graph, core_nodes: Set[int], core_disabled_bonds: Set[Tuple[int, int]]
+) -> bool:
+    """A graph fails the chiral assertion if every choice of dummy group assignments fails.
+
+    A particular dummy group assignment fails if there exists a 4-connected atom with more than a single broken bond.
+    """
+    if len(core_nodes) == bond_graph.number_of_nodes() and get_invalid_chiral_conversion(
+        bond_graph, core_disabled_bonds
+    ):
+        return True
+
+    for dga in generate_dummy_group_assignments(bond_graph, core_nodes):
+        dga_disabled_bonds = compute_disabled_bonds_in_dga(bond_graph, core_nodes, dga)
+        disabled_bonds = dga_disabled_bonds.union(core_disabled_bonds)
+        if get_invalid_chiral_conversion(bond_graph, disabled_bonds):
+            return True
+
+    return False
+
+
 def _get_cores_impl(
     mol_a,
     mol_b,
@@ -405,6 +446,28 @@ def _get_cores_impl(
     def filter_fxn(trial_core):
         return all(f(trial_core) for f in filter_fxns)
 
+    def leaf_filter_fxn(g1: nx.Graph, g2: nx.Graph, atom_map_1_to_2, atom_map_2_to_1) -> bool:
+        if disallow_chiral_conversion:
+            # # chiral assertion check on leaf nodes
+            g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2) if a2 != UNMAPPED}
+            g1_core_disabled_bonds = compute_disabled_bonds_in_core(g1, g2, g1_mapped_nodes, atom_map_1_to_2)
+            if enforce_core_core:
+                assert len(g1_core_disabled_bonds) == 0
+
+            if _graph_fails_chiral_assertion(g1, g1_mapped_nodes, g1_core_disabled_bonds):
+                return False
+
+            g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
+            g2_core_disabled_bonds = compute_disabled_bonds_in_core(g2, g1, g2_mapped_nodes, atom_map_2_to_1)
+
+            if enforce_core_core:
+                assert len(g2_core_disabled_bonds) == 0
+
+            if _graph_fails_chiral_assertion(g2, g2_mapped_nodes, g2_core_disabled_bonds):
+                return False
+
+        return True
+
     all_cores, all_marcs, mcs_diagnostics = mcgregor.mcs(
         n_a,
         n_b,
@@ -418,8 +481,8 @@ def _get_cores_impl(
         min_connected_component_size,
         min_threshold,
         initial_mapping,
-        disallow_chiral_conversion,
-        filter_fxn=filter_fxn,
+        filter_fxn,
+        leaf_filter_fxn,
     )
 
     all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
