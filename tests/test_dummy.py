@@ -1,7 +1,11 @@
 import pytest
 from rdkit import Chem
 
-from timemachine.fe.dummy import generate_dummy_group_assignments
+from timemachine.fe.dummy import (
+    compute_disabled_bonds_in_core,
+    compute_disabled_bonds_in_dga,
+    generate_dummy_group_assignments,
+)
 from timemachine.graph_utils import convert_to_nx
 
 # These tests check the various utilities used to turn off interactions
@@ -94,10 +98,7 @@ def test_generate_dummy_group_assignments_empty_core():
     assert list(generate_dummy_group_assignments(g, core)) == []
 
 
-from timemachine.fe.dummy import compute_disabled_bonds_in_core, compute_disabled_bonds_in_dga
-
-
-def test_generate_dummy_group_chiral_invariant():
+def test_compute_disabled_bonds_in_dga():
     r"""
     Check that we generate the correct set of bond masks given a set of dummy group
     assignments:
@@ -133,7 +134,7 @@ def test_generate_dummy_group_chiral_invariant():
     assert d3 == {(0, 1), (0, 3)}
 
 
-def test_compute_core_core_bond_masks():
+def test_compute_disabled_bonds_in_core():
     r"""
     Check that we can flag core-core bonds that are broken
 
