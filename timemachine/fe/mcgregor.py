@@ -9,6 +9,12 @@ import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
+from timemachine.fe.dummy import (
+    compute_disabled_bonds_in_core,
+    compute_disabled_bonds_in_dga,
+    generate_dummy_group_assignments,
+)
+
 
 def _arcs_left(marcs):
     num_row_edges = np.sum(np.any(marcs, 1))
@@ -410,13 +416,6 @@ def atom_map_add(map_1_to_2, map_2_to_1, idx, jdx):
 def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
     map_1_to_2[idx] = UNMAPPED
     map_2_to_1[jdx] = UNMAPPED
-
-
-from timemachine.fe.dummy import (
-    compute_disabled_bonds_in_core,
-    compute_disabled_bonds_in_dga,
-    generate_dummy_group_assignments,
-)
 
 
 def _graph_fails_chiral_assertion(g, mapped_nodes, unvisited_nodes, core_disabled_bonds):
