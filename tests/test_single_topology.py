@@ -32,6 +32,7 @@ from timemachine.fe.single_topology import (
     ChargePertubationError,
     ChiralConversionError,
     CoreBondChangeWarning,
+    DummyGroupAssignmentError,
     SingleTopology,
     canonicalize_improper_idxs,
     cyclic_difference,
@@ -1772,3 +1773,59 @@ $$$$""",
 
     assert np.sum(chiral_params_1 == 0) == 3
     assert np.sum(chiral_params_1 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4
+
+
+def test_chiral_core_bond_breaking_raises_error():
+    """Test that we raise assertions for molecules that cannot generate valid dummy-group anchor assignments. In
+    particular, we break two core-core bonds under an identity mapping (with no dummy atoms).
+    """
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 07312412093D
+
+  6  7  0  0  0  0            999 V2000
+    1.7504    0.2003    1.2663 N   0  0  2  0  0  0  0  0  0  0  0  0
+    0.8845   -0.7367    0.7929 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0656    0.1573    0.2634 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6778    2.1410    1.4645 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9965    1.1853    0.5313 C   0  0  1  0  0  0  0  0  0  0  0  0
+    2.3507    0.8788    0.2466 O   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  5  4  1  0  0  0  0
+  5  1  1  0  0  0  0
+  2  3  1  0  0  0  0
+  6  1  1  0  0  0  0
+  3  5  1  0  0  0  0
+  5  6  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 07312412083D
+
+  6  5  0  0  0  0            999 V2000
+    1.7504    0.2003    1.2663 N   0  0  2  0  0  0  0  0  0  0  0  0
+    0.8845   -0.7367    0.7929 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0656    0.1573    0.2634 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6778    2.1410    1.4645 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9965    1.1853    0.5313 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.3507    0.8788    0.2466 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  5  4  1  0  0  0  0
+  5  1  1  0  0  0  0
+  6  1  1  0  0  0  0
+  2  3  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    # need to generate SC charges on this mol - am1 fails
+    ff = Forcefield.load_default()
+    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5]])
+
+    with pytest.raises(DummyGroupAssignmentError):
+        SingleTopology(mol_a, mol_b, core, ff)
