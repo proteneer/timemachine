@@ -176,7 +176,7 @@ def compute_disabled_bonds_in_dga(bond_graph, core_atoms, dga):
         if src in core_atoms and dst in core_atoms:
             pass  # always allowed
         elif atom_membership[src] != atom_membership[dst]:
-            disabled_bonds.add(tuple(sorted((src, dst))))
+            disabled_bonds.add(canonicalize_bond((src, dst)))
 
     return disabled_bonds
 
@@ -188,7 +188,7 @@ def compute_disabled_bonds_in_core(bond_graph_a, bond_graph_b, core_atoms_a, ato
             src_b, dst_b = atom_map_a_to_b[src_a], atom_map_a_to_b[dst_a]
             if not bond_graph_b.has_edge(src_b, dst_b):
                 # print("missing bonds", src_a, dst_a)
-                disabled_bonds.add(tuple(sorted((src_a, dst_a))))
+                disabled_bonds.add(canonicalize_bond((src_a, dst_a)))
 
     return disabled_bonds
 

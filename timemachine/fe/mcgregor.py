@@ -10,6 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from timemachine.fe.dummy import (
+    canonicalize_bond,
     compute_disabled_bonds_in_core,
     compute_disabled_bonds_in_dga,
     generate_dummy_group_assignments,
@@ -424,7 +425,7 @@ def is_chiral_conversion(bond_graph: nx.Graph, disabled_bonds: Set[Tuple[int, in
     for node in bond_graph.nodes():
         nbs = list(nx.neighbors(bond_graph, node))
         if len(nbs) == 4:
-            disabled_bonds_count = sum(1 for nb in nbs if tuple(sorted((node, nb))) in disabled_bonds)
+            disabled_bonds_count = sum(1 for nb in nbs if canonicalize_bond((node, nb)) in disabled_bonds)
             if disabled_bonds_count > 1:
                 return True
     return False
