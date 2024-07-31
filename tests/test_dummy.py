@@ -25,6 +25,13 @@ from timemachine.graph_utils import convert_to_nx
 pytestmark = [pytest.mark.nocuda]
 
 
+def equivalent_assignment(left, right):
+    def to_comparable(dgas):
+        return frozenset(frozenset((k, frozenset(v)) for k, v in dgs.items()) for dgs in dgas)
+
+    return to_comparable(left) == to_comparable(right)
+
+
 def test_generate_dummy_group_assignments():
     r"""
     Test the heuristic for partitioning dummy atoms into dummy groups.
@@ -57,12 +64,6 @@ def test_generate_dummy_group_assignments():
       0-------1
 
     """
-
-    def equivalent_assignment(left, right):
-        def to_comparable(dgas):
-            return frozenset(frozenset((k, frozenset(v)) for k, v in dgs.items()) for dgs in dgas)
-
-        return to_comparable(left) == to_comparable(right)
 
     g = convert_to_nx(Chem.MolFromSmiles("FC1CC1(F)N"))
     core = [1, 2, 3]
@@ -120,17 +121,18 @@ def test_compute_disabled_bonds_in_dga():
     g = convert_to_nx(Chem.MolFromSmiles("C1OCO1"))
     core = [0, 2]
     dgas = list(generate_dummy_group_assignments(g, core))
+    assert equivalent_assignment(dgas, [{0: {1, 3}}, {0: {1}, 2: {3}}, {2: {1}, 0: {3}}, {2: {1, 3}}])
 
-    d0 = compute_disabled_bonds_in_dga(g, core, dgas[0])
+    d0 = compute_disabled_bonds_in_dga(g, core, {0: {1, 3}})
     assert d0 == {(1, 2), (2, 3)}
 
-    d1 = compute_disabled_bonds_in_dga(g, core, dgas[1])
+    d1 = compute_disabled_bonds_in_dga(g, core, {0: {1}, 2: {3}})
     assert d1 == {(1, 2), (0, 3)}
 
-    d2 = compute_disabled_bonds_in_dga(g, core, dgas[2])
+    d2 = compute_disabled_bonds_in_dga(g, core, {0: {3}, 2: {1}})
     assert d2 == {(0, 1), (2, 3)}
 
-    d3 = compute_disabled_bonds_in_dga(g, core, dgas[3])
+    d3 = compute_disabled_bonds_in_dga(g, core, {2: {1, 3}})
     assert d3 == {(0, 1), (0, 3)}
 
 
