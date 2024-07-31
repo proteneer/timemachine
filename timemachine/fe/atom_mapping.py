@@ -115,7 +115,8 @@ def get_cores(
 
     Additional notes
     ----------------
-    1) The returned cores are sorted in increasing order based on the rmsd of the alignment.
+    1) The returned cores are jointly sorted in increasing order based on the number of core-dummy bonds broken, the
+       number of valence values changed and the rmsd of the alignment.
     2) The number of cores atoms may vary slightly, but the number of mapped edges are the same.
     3) If a time-out has occurred due to max_visits, then an exception is thrown.
 
