@@ -1,5 +1,4 @@
 import copy
-import re
 import time
 from functools import partial
 
@@ -11,7 +10,7 @@ from rdkit.Chem import AllChem
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
-from timemachine.fe.single_topology import ChiralConversionError, verify_chiral_consistency_of_core
+from timemachine.fe.single_topology import DummyGroupAssignmentError, verify_chiral_consistency_of_core
 from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
 from timemachine.ff import Forcefield
 
@@ -1402,7 +1401,7 @@ def test_disallow_chiral_conversion():
     get_cores = partial(atom_mapping.get_cores, **{**DEFAULT_ATOM_MAPPING_KWARGS, "max_connected_components": 2})
 
     core_bad = get_cores(mol_a, mol_b, disallow_chiral_conversion=False)[0]
-    with pytest.raises(ChiralConversionError, match=re.escape("len(nbs) == 4 (20, 2, 18, 19, 5)")):
+    with pytest.raises(DummyGroupAssignmentError):
         verify_chiral_consistency_of_core(mol_a, mol_b, core_bad, ff)
 
     core_good = get_cores(mol_a, mol_b, disallow_chiral_conversion=True)[0]

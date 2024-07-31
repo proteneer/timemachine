@@ -16,10 +16,13 @@ from timemachine.fe import chiral_utils, interpolate, model_utils, topology, uti
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import (
     canonicalize_bond,
+    compute_disabled_bonds_in_core,
+    compute_disabled_bonds_in_dga,
     generate_anchored_dummy_group_assignments,
     generate_dummy_group_assignments,
 )
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
+from timemachine.fe.mcgregor import is_chiral_conversion
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.fe.topology import get_ligand_ixn_pots_params
 from timemachine.graph_utils import convert_to_nx
@@ -49,6 +52,10 @@ class ChargePertubationError(RuntimeError):
 
 
 class ChiralConversionError(RuntimeError):
+    pass
+
+
+class DummyGroupAssignmentError(RuntimeError):
     pass
 
 
@@ -604,23 +611,28 @@ def find_dummy_groups_and_anchors(
     bond_graph_a = convert_to_nx(mol_a)
     bond_graph_b = convert_to_nx(mol_b)
 
-    assignments = (
-        adgs
-        for dgs in generate_dummy_group_assignments(bond_graph_b, core_atoms_b)
-        for adgs in generate_anchored_dummy_group_assignments(
-            dgs, bond_graph_a, bond_graph_b, core_atoms_a, core_atoms_b
-        )
-    )
+    atom_map_a_to_b = {a: b for a, b in zip(core_atoms_a, core_atoms_b)}
+    core_disabled_bonds = compute_disabled_bonds_in_core(bond_graph_a, bond_graph_b, core_atoms_a, atom_map_a_to_b)
+
+    def get_arbitrary_valid_dummy_group_assignment():
+        for dgs in generate_dummy_group_assignments(bond_graph_b, core_atoms_b):
+            dga_disabled_bonds = compute_disabled_bonds_in_dga(bond_graph_b, core_atoms_b, dgs)
+            if not is_chiral_conversion(bond_graph_b, dga_disabled_bonds.union(core_disabled_bonds)):
+                for adgs in generate_anchored_dummy_group_assignments(
+                    dgs, bond_graph_a, bond_graph_b, core_atoms_a, core_atoms_b
+                ):
+                    return adgs
+        raise DummyGroupAssignmentError("Failed to find a valid dummy group assignment")
 
     # TODO: consider refining to use a heuristic rather than arbitrary selection
     # (e.g. maximize core-dummy bonds, maximize angle terms, minimize rotatable bonds, etc.)
-    arbitrary_assignment = next(assignments)
+    arbitrary_dummy_groups = get_arbitrary_valid_dummy_group_assignment()
 
-    for _, (angle_anchor, _) in arbitrary_assignment.items():
+    for _, (angle_anchor, _) in arbitrary_dummy_groups.items():
         if angle_anchor is None:
             warnings.warn("Unable to find stable angle term in mol_a", CoreBondChangeWarning)
 
-    return arbitrary_assignment
+    return arbitrary_dummy_groups
 
 
 def handle_ring_opening_closing(
