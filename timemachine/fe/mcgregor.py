@@ -308,7 +308,7 @@ def mcs(
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
     assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
-    assert max_visits <= max_node_visits, "Per threshold visits must be less than or equal to max total visits"
+    assert max_visits <= max_node_visits, "max_visits must be less than or equal to max_total_visits"
 
     predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
     g_a = Graph(n_a, bonds_a)
