@@ -308,6 +308,7 @@ def mcs(
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
     assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
+    assert max_visits <= max_node_visits, "Per threshold visits must be less than or equal to max total visits"
 
     predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
     g_a = Graph(n_a, bonds_a)
@@ -333,6 +334,8 @@ def mcs(
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(base_marcs)
     total_nodes_visited = 0
+    # Keep track of the number of nodes that can still be visited
+    visits_left = max_node_visits
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
@@ -350,7 +353,8 @@ def mcs(
             base_marcs,
             mcs_result,
             priority_idxs,
-            max_visits,
+            # Take the minimum of either the max visits per threshold or the visits left to ensure constant time
+            min(visits_left, max_visits),
             max_cores,
             cur_threshold,
             enforce_core_core,
@@ -358,6 +362,8 @@ def mcs(
             min_connected_component_size,
             filter_fxn,
         )
+
+        visits_left -= mcs_result.nodes_visited
 
         total_nodes_visited += mcs_result.nodes_visited
 

@@ -947,8 +947,9 @@ def test_max_node_visits():
     cores, diagnostics = get_cores_and_diagnostics(mol_a, mol_b)
     assert len(cores) > 0
 
+    max_visits = diagnostics.total_nodes_visited - 1
     with pytest.raises(NoMappingError, match="Exceeded the max number of nodes"):
-        get_cores_and_diagnostics(mol_a, mol_b, max_node_visits=diagnostics.total_nodes_visited - 1)
+        get_cores_and_diagnostics(mol_a, mol_b, max_visits=max_visits, max_node_visits=max_visits)
 
 
 def test_max_cores_warning():
