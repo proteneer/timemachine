@@ -515,7 +515,7 @@ def recursion(
         if num_edges == threshold:
             if disallow_chiral_conversion:
                 # # chiral assertion check on leaf nodes
-                g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
+                g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2) if a2 != UNMAPPED}
                 g1_core_disabled_bonds = compute_disabled_bonds_in_core(
                     g1.nxg, g2.nxg, g1_mapped_nodes, atom_map_1_to_2
                 )
