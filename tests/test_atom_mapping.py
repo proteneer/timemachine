@@ -1387,7 +1387,8 @@ def test_hybrid_core_generation(hif2a_ligands):
     # plt.show()
 
 
-def test_disallow_chiral_conversion():
+@pytest.mark.parametrize("seed", [2024, 2025])
+def test_disallow_chiral_conversion(seed):
     # # MolBlocks below generated with the following code:
 
     # mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))  # benzene
@@ -1464,6 +1465,10 @@ M  END""",
 M  END""",
         removeHs=False,
     )
+
+    rng = np.random.default_rng(seed)
+    mol_a = Chem.RenumberAtoms(mol_a, rng.permutation(mol_a.GetNumAtoms()).tolist())
+    mol_b = Chem.RenumberAtoms(mol_b, rng.permutation(mol_b.GetNumAtoms()).tolist())
 
     ff = Forcefield.load_default()
 

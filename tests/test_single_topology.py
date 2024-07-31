@@ -1774,7 +1774,29 @@ $$$$""",
     assert np.sum(chiral_params_1 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4
 
 
-def test_chiral_core_bond_breaking_raises_error():
+def permute_atom_indices(mol_a, mol_b, core, seed):
+    """Permute atom indices in both mols"""
+    rng = np.random.default_rng(seed)
+
+    perm_a = rng.permutation(mol_a.GetNumAtoms())
+    perm_b = rng.permutation(mol_b.GetNumAtoms())
+
+    # RenumberAtoms takes inverse permutations
+    # e.g. [3, 2, 0, 1] means atom 3 in the original mol will be atom 0 in the new one
+    inv_perm_a = np.argsort(perm_a)
+    inv_perm_b = np.argsort(perm_b)
+    mol_a = Chem.RenumberAtoms(mol_a, inv_perm_a.tolist())
+    mol_b = Chem.RenumberAtoms(mol_b, inv_perm_b.tolist())
+
+    core = np.array(core)
+    core[:, 0] = perm_a[core[:, 0]]
+    core[:, 1] = perm_b[core[:, 1]]
+
+    return mol_a, mol_b, core
+
+
+@pytest.mark.parametrize("seed", [2024, 2025])
+def test_chiral_core_bond_breaking_raises_error(seed):
     """Test that we raise assertions for molecules that cannot generate valid dummy-group anchor assignments. In
     particular, we break two core-core bonds under an identity mapping (with no dummy atoms).
     """
@@ -1826,11 +1848,14 @@ $$$$""",
     ff = Forcefield.load_default()
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5]])
 
+    mol_a, mol_b, core = permute_atom_indices(mol_a, mol_b, core, seed)
+
     with pytest.raises(ChiralConversionError, match="Invalid chiral conversion in core"):
-        SingleTopology(mol_a, mol_b, core, ff)
+        verify_chiral_consistency_of_core(mol_a, mol_b, core, ff)
 
 
-def test_chiral_bond_breaking_1_core_1_dummy():
+@pytest.mark.parametrize("seed", [2024, 2025])
+def test_chiral_bond_breaking_1_core_1_dummy(seed):
     mol_a = Chem.MolFromMolBlock(
         """lhs
                     3D
@@ -1910,6 +1935,8 @@ M  END
         [[5, 0], [1, 1], [2, 2], [3, 3], [4, 4], [0, 5], [7, 6], [8, 7], [9, 8], [10, 9], [13, 10], [14, 11]]
     )
 
+    mol_a, mol_b, core = permute_atom_indices(mol_a, mol_b, core, seed)
+
     # from timemachine.fe.utils import plot_atom_mapping_grid
 
     # print("core", core)
@@ -1921,4 +1948,4 @@ M  END
     #     fh.write(res)
 
     # should not raise an assertion
-    SingleTopology(mol_a, mol_b, core, ff)
+    verify_chiral_consistency_of_core(mol_a, mol_b, core, ff)
