@@ -379,7 +379,9 @@ def mcs(
             break
         elif mcs_result.timed_out:
             # If timed out, either due to max_visits or max_cores, raise exception.
-            raise NoMappingError(f"Exceeded max number of visits/cores: {mcs_result.nodes_visited} nodes visited.")
+            raise NoMappingError(
+                f"Exceeded max number of visits/cores - no valid cores could be found: {mcs_result.nodes_visited} nodes visited."
+            )
         # else:
         # print(
         # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
