@@ -441,7 +441,7 @@ def recursion(
     max_connected_components: Optional[int],
     min_connected_component_size: int,
     filter_fxn,
-    leaf_filter_fxn,
+    leaf_filter_fxn: LeafFilterFxn,
 ):
     if mcs_result.nodes_visited > max_visits:
         mcs_result.timed_out = True

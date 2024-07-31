@@ -448,7 +448,6 @@ def _get_cores_impl(
 
     def leaf_filter_fxn(g1: nx.Graph, g2: nx.Graph, atom_map_1_to_2, atom_map_2_to_1) -> bool:
         if disallow_chiral_conversion:
-            # # chiral assertion check on leaf nodes
             g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2) if a2 != UNMAPPED}
             g1_core_disabled_bonds = compute_disabled_bonds_in_core(g1, g2, g1_mapped_nodes, atom_map_1_to_2)
             if enforce_core_core:
