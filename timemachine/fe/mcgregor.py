@@ -420,41 +420,33 @@ def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
     map_2_to_1[jdx] = UNMAPPED
 
 
-def _graph_fails_chiral_assertion(g: nx.Graph, core_nodes: Set[int], core_disabled_bonds: Set[Tuple[int, int]]) -> bool:
-    """
-    A graph fails the chiral assertion if every choice of dummy group assignments fails.
+def is_chiral_conversion(bond_graph: nx.Graph, disabled_bonds: Set[Tuple[int, int]]) -> bool:
+    for node in bond_graph.nodes():
+        nbs = list(nx.neighbors(bond_graph, node))
+        if len(nbs) == 4:
+            disabled_bonds_count = sum(1 for nb in nbs if tuple(sorted((node, nb))) in disabled_bonds)
+            if disabled_bonds_count > 1:
+                return True
+    return False
+
+
+def _graph_fails_chiral_assertion(
+    bond_graph: nx.Graph, core_nodes: Set[int], core_disabled_bonds: Set[Tuple[int, int]]
+) -> bool:
+    """A graph fails the chiral assertion if every choice of dummy group assignments fails.
 
     A particular dummy group assignment fails if there exists a 4-connected atom with more than a single broken bond.
-
     """
-    if len(core_nodes) == g.number_of_nodes():
-        # HACK:
-        # this logic isn't handled fully, there exists cases where only core bonds are broken, with no dummy atoms,
-        # and this should fail, but if enforce_core_core = True we can ignore this for now.
-        assert len(core_disabled_bonds) == 0
-        return False
+    if len(core_nodes) == bond_graph.number_of_nodes():
+        return is_chiral_conversion(bond_graph, core_disabled_bonds)
 
-    for dga in generate_dummy_group_assignments(g, core_nodes):
-        dga_disabled_bonds = compute_disabled_bonds_in_dga(g, core_nodes, dga)
-        all_disabled_bonds = dga_disabled_bonds.union(core_disabled_bonds)
-        dga_failed = False
-        for node in g.nodes():
-            nbs = list(nx.neighbors(g, node))
-            if len(nbs) == 4:
-                disabled_bonds_count = 0
-                for nb in nbs:
-                    key = tuple(sorted((node, nb)))
-                    if key in all_disabled_bonds:
-                        disabled_bonds_count += 1
+    for dga in generate_dummy_group_assignments(bond_graph, core_nodes):
+        dga_disabled_bonds = compute_disabled_bonds_in_dga(bond_graph, core_nodes, dga)
+        disabled_bonds = dga_disabled_bonds.union(core_disabled_bonds)
+        if is_chiral_conversion(bond_graph, disabled_bonds):
+            return True
 
-                if disabled_bonds_count > 1:
-                    dga_failed = True
-                    break
-
-        if not dga_failed:
-            return False
-
-    return True
+    return False
 
 
 def recursion(
