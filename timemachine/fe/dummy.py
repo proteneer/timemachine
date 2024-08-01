@@ -98,8 +98,8 @@ def generate_anchored_dummy_group_assignments(
 ) -> Iterator[Dict[int, Tuple[Optional[int], FrozenSet[int]]]]:
     """Returns an iterator over candidate anchored dummy group assignments.
 
-    By convention, dummy atoms are added to A to transform it into a supergraph of B. The returned indices refer to
-    atoms in B.
+    By convention, dummy atoms are added to A to transform it into a supergraph of B. Indices in the dummy_groups
+    argument and in the return value refer to atoms in B.
 
     An anchored dummy group assignment is a set of triples (dummy group, j = bond anchor atom, k = angle anchor atom),
     where dummy atoms are connected to the core only through j, and k is a core neighbor of j where the bond (j, k)
@@ -123,7 +123,7 @@ def generate_anchored_dummy_group_assignments(
     Parameters
     ----------
     dummy_groups: Dict[int, FrozenSet[int]]
-        Mapping from anchor atom to atoms in the associated dummy group
+        Mapping from anchor atom to atoms in the associated dummy group. Indices refer to atoms in B.
 
     bond_graph_a, bond_graph_b: nx.Graph
         Bond graphs for source and target molecules of an alchemical transformation.
