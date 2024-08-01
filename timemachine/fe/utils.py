@@ -1,4 +1,5 @@
 import hashlib
+from collections.abc import Iterable
 from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
@@ -408,6 +409,22 @@ def set_romol_conf(mol, new_coords: NDArray):
     conf = mol.GetConformer(0)
     for i, pos in enumerate(angstrom_coords):
         conf.SetAtomPosition(i, pos)
+
+
+def recursive_map(items, mapping):
+    """recursively replace items in a list of tuple
+    mapping = np.arange(100)[::-1]
+    items = [[0,2,3], [5,1,[2,5,6]], 3]
+    result = recursive_map(items, mapping)
+    # ((99, 97, 96), (94, 98, (97, 94, 93)), 96)
+    """
+    if isinstance(items, Iterable):
+        res = []
+        for item in items:
+            res.append(recursive_map(item, mapping))
+        return tuple(res)
+    else:
+        return mapping[items]
 
 
 def get_mol_masses(mol) -> NDArray:

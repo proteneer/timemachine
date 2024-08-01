@@ -20,6 +20,7 @@ from timemachine.constants import (
     DEFAULT_CHIRAL_BOND_RESTRAINT_K,
 )
 from timemachine.fe import atom_mapping, single_topology
+from timemachine.fe.chiral_utils import ChiralConversionError, verify_chiral_consistency_of_core
 from timemachine.fe.dummy import MultipleAnchorWarning
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.interpolate import (
@@ -30,7 +31,6 @@ from timemachine.fe.interpolate import (
 )
 from timemachine.fe.single_topology import (
     ChargePertubationError,
-    ChiralConversionError,
     CoreBondChangeWarning,
     SingleTopology,
     canonicalize_improper_idxs,
@@ -40,7 +40,6 @@ from timemachine.fe.single_topology import (
     interpolate_harmonic_force_constant,
     interpolate_w_coord,
     setup_dummy_interactions_from_ff,
-    verify_chiral_consistency_of_core,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
