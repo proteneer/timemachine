@@ -3,7 +3,7 @@ import copy
 import time
 import warnings
 from dataclasses import dataclass
-from typing import Callable, List, Mapping, Optional, Sequence, Set, Tuple, TypeAlias
+from typing import Callable, List, Optional, Sequence, Set, Tuple
 
 import networkx as nx
 import numpy as np
@@ -292,17 +292,6 @@ def perm_to_core(perm: Sequence[int]) -> NDArray:
     return core_array
 
 
-LeafFilterFxn: TypeAlias = Callable[
-    [
-        nx.Graph,
-        nx.Graph,
-        Sequence[int] | Mapping[int, int],
-        Sequence[int] | Mapping[int, int],
-    ],
-    bool,
-]
-
-
 def mcs(
     n_a,
     n_b,
@@ -317,7 +306,7 @@ def mcs(
     min_threshold,
     initial_mapping,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
-    leaf_filter_fxn: LeafFilterFxn = lambda *_: True,
+    leaf_filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
     assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
@@ -440,8 +429,8 @@ def recursion(
     enforce_core_core,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
-    filter_fxn,
-    leaf_filter_fxn: LeafFilterFxn,
+    filter_fxn: Callable[[Sequence[int]], bool],
+    leaf_filter_fxn: Callable[[Sequence[int]], bool],
 ):
     if mcs_result.nodes_visited > max_visits:
         mcs_result.timed_out = True
@@ -483,7 +472,7 @@ def recursion(
     # leaf-node, every atom has been mapped
     if layer == n_a:
         if num_edges == threshold:
-            if not leaf_filter_fxn(g1.nxg, g2.nxg, atom_map_1_to_2, atom_map_2_to_1):
+            if not leaf_filter_fxn(atom_map_1_to_2):
                 return
 
             mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))

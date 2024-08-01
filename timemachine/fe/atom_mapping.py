@@ -447,26 +447,36 @@ def _get_cores_impl(
     def filter_fxn(trial_core):
         return all(f(trial_core) for f in filter_fxns)
 
-    def leaf_filter_fxn(g1: nx.Graph, g2: nx.Graph, atom_map_1_to_2, atom_map_2_to_1) -> bool:
-        if disallow_chiral_conversion:
-            g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2) if a2 != UNMAPPED}
-            g1_core_disabled_bonds = compute_disabled_bonds_in_core(g1, g2, g1_mapped_nodes, atom_map_1_to_2)
-            if enforce_core_core:
-                assert len(g1_core_disabled_bonds) == 0
+    def make_leaf_filter_fxn():
+        g_a = nx.Graph(bonds_a)
+        g_b = nx.Graph(bonds_b)
 
-            if _graph_fails_chiral_assertion(g1, g1_mapped_nodes, g1_core_disabled_bonds):
-                return False
+        def leaf_filter_fxn(trial_core) -> bool:
+            atom_map_a_to_b = trial_core
+            atom_map_b_to_a_dict = {b: a for a, b in enumerate(atom_map_a_to_b) if b != UNMAPPED}
+            atom_map_b_to_a = [atom_map_b_to_a_dict.get(a, UNMAPPED) for a in range(mol_b.GetNumAtoms())]
 
-            g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
-            g2_core_disabled_bonds = compute_disabled_bonds_in_core(g2, g1, g2_mapped_nodes, atom_map_2_to_1)
+            if disallow_chiral_conversion:
+                mapped_nodes_a = {a for a, b in enumerate(atom_map_a_to_b) if b != UNMAPPED}
+                core_disabled_bonds_a = compute_disabled_bonds_in_core(g_a, g_b, mapped_nodes_a, atom_map_a_to_b)
+                if enforce_core_core:
+                    assert len(core_disabled_bonds_a) == 0
 
-            if enforce_core_core:
-                assert len(g2_core_disabled_bonds) == 0
+                if _graph_fails_chiral_assertion(g_a, mapped_nodes_a, core_disabled_bonds_a):
+                    return False
 
-            if _graph_fails_chiral_assertion(g2, g2_mapped_nodes, g2_core_disabled_bonds):
-                return False
+                mapped_nodes_b = {b for b, a in enumerate(atom_map_b_to_a) if a != UNMAPPED}
+                core_disabled_bonds_b = compute_disabled_bonds_in_core(g_b, g_a, mapped_nodes_b, atom_map_b_to_a)
 
-        return True
+                if enforce_core_core:
+                    assert len(core_disabled_bonds_b) == 0
+
+                if _graph_fails_chiral_assertion(g_b, mapped_nodes_b, core_disabled_bonds_b):
+                    return False
+
+            return True
+
+        return leaf_filter_fxn
 
     all_cores, all_marcs, mcs_diagnostics = mcgregor.mcs(
         n_a,
@@ -482,7 +492,7 @@ def _get_cores_impl(
         min_threshold,
         initial_mapping,
         filter_fxn,
-        leaf_filter_fxn,
+        make_leaf_filter_fxn(),
     )
 
     all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
