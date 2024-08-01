@@ -364,6 +364,7 @@ $$$$""",
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
     assert len(all_cores) > 0
 
@@ -406,6 +407,7 @@ def test_all_pairs(filepath):
                 disallow_planar_torsion_flips=False,
                 min_threshold=0,
                 initial_mapping=None,
+                disallow_chiral_conversion=True,
             )
             end_time = time.time()
 
@@ -544,6 +546,7 @@ $$$$""",
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
 
     assert len(all_cores) == 1
@@ -568,6 +571,7 @@ $$$$""",
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
 
     # 2 possible matches, returned core ordering is fully determined
@@ -594,6 +598,7 @@ $$$$""",
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
 
     # 2 possible matches, if we do not require max_connected_components=1 but do
@@ -727,6 +732,7 @@ def test_hif2a_failure():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
 
     expected_core = np.array(
@@ -792,6 +798,7 @@ def test_cyclohexane_stereo():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
 
     for core_idx, core in enumerate(all_cores[:1]):
@@ -852,6 +859,7 @@ def test_chiral_atom_map():
         ring_matches_ring_only=True,
         min_threshold=0,
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
 
     chiral_aware_cores = get_cores(mol_a, mol_b, enforce_chiral=True)
@@ -892,6 +900,7 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
 
     cores = get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring_only)
@@ -922,6 +931,7 @@ def test_max_visits_warning():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
     cores = get_cores(mol_a, mol_b, max_visits=10000)
     assert len(cores) > 0
@@ -946,6 +956,7 @@ def test_max_cores_warning():
         min_threshold=0,
         max_visits=1e7,
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
     with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 1 cores"):
         all_cores = get_cores(mol_a, mol_b, max_cores=1)
@@ -967,6 +978,7 @@ def test_min_threshold():
         disallow_planar_torsion_flips=False,
         min_threshold=mol_a.GetNumAtoms(),
         initial_mapping=None,
+        disallow_chiral_conversion=True,
     )
 
     with pytest.raises(NoMappingError, match="Unable to find mapping with at least 18 edges"):
@@ -1113,26 +1125,26 @@ def test_initial_mapping(hif2a_ligands):
     # adjust for 1-indexing when reading off the atom-mapping
     initial_mapping = initial_mapping - 1
 
-    TEST_ATOM_MAPPING_KWARGS = {
-        # "ring_cutoff": 0.12,
-        # "chain_cutoff": 0.2,
-        "ring_cutoff": 0.4,  # bumped up to make the problem harder
-        "chain_cutoff": 0.4,  # bumped up to make the problem harder
-        "max_visits": 1e7,
-        "max_connected_components": 1,
-        "min_connected_component_size": 1,
-        "max_cores": 1e5,
-        "enforce_core_core": True,
-        "ring_matches_ring_only": True,
-        "enforce_chiral": True,
-        "disallow_planar_torsion_flips": True,
-        "min_threshold": 0,
-        "initial_mapping": initial_mapping,
-    }
+    get_cores_and_diagnostics = partial(
+        atom_mapping.get_cores_and_diagnostics,
+        # ring_cutoff=0.12,
+        # chain_cutoff=0.2,
+        ring_cutoff=0.4,  # bumped up to make the problem harder
+        chain_cutoff=0.4,  # bumped up to make the problem harder
+        max_visits=1e7,
+        max_connected_components=1,
+        min_connected_component_size=1,
+        max_cores=1e5,
+        enforce_core_core=True,
+        ring_matches_ring_only=True,
+        enforce_chiral=True,
+        disallow_planar_torsion_flips=True,
+        min_threshold=0,
+        disallow_chiral_conversion=True,
+    )
 
-    all_cores_test, diagnostics_test = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **TEST_ATOM_MAPPING_KWARGS)
-    TEST_ATOM_MAPPING_KWARGS["initial_mapping"] = None
-    all_cores_ref, diagnostics_ref = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **TEST_ATOM_MAPPING_KWARGS)
+    all_cores_test, diagnostics_test = get_cores_and_diagnostics(mol_a, mol_b, initial_mapping=initial_mapping)
+    all_cores_ref, diagnostics_ref = get_cores_and_diagnostics(mol_a, mol_b, initial_mapping=None)
 
     assert len(all_cores_test[0]) == len(all_cores_ref[0])
 
