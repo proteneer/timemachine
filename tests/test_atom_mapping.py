@@ -10,7 +10,7 @@ from rdkit.Chem import AllChem
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
-from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
+from timemachine.fe.utils import get_romol_conf, plot_atom_mapping_grid, read_sdf, set_romol_conf
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -926,6 +926,15 @@ def test_max_visits_error():
 
     with pytest.raises(NoMappingError, match="Exceeded max number of visits/cores"):
         get_cores(mol_a, mol_b, max_visits=1)
+
+
+def test_empty_predicate_map_error():
+    mol_a, mol_b = get_cyclohexanes_different_confs()
+    # Impossible to map the compounds if they are not aligned
+    set_romol_conf(mol_b, get_romol_conf(mol_b) + 1000.0)
+
+    with pytest.raises(NoMappingError, match="No possible mapping given the predicate matrix"):
+        atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
 
 
 def test_max_cores_warning():

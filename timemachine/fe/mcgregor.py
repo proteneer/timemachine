@@ -327,10 +327,11 @@ def mcs(
     # import time
     # start_time = time.time()  # noqa
 
-    mcs_result = None
-
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(base_marcs)
+    if max_threshold < 1:
+        raise NoMappingError("No possible mapping given the predicate matrix, verify molecules are aligned")
+
     total_nodes_visited = 0
     # Keep track of the number of nodes that can still be visited
     visits_left = max_visits
@@ -386,9 +387,6 @@ def mcs(
         # print(
         # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
         # )
-
-    if mcs_result is None:
-        raise NoMappingError("No thresholds evaluated when generating cores")
 
     if len(mcs_result.all_maps) == 0:
         raise NoMappingError("Unable to find mapping")
