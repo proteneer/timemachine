@@ -348,13 +348,14 @@ def _graph_fails_chiral_assertion(
     ):
         return True
 
+    # return False if there is _any_ chirally-valid dummy group assignment
     for dga in generate_dummy_group_assignments(bond_graph, core_nodes):
         dga_disabled_bonds = compute_disabled_bonds_in_dga(bond_graph, core_nodes, dga)
         disabled_bonds = dga_disabled_bonds.union(core_disabled_bonds)
-        if get_invalid_chiral_conversion(bond_graph, disabled_bonds):
-            return True
+        if not get_invalid_chiral_conversion(bond_graph, disabled_bonds):
+            return False
 
-    return False
+    return True
 
 
 def _get_cores_impl(
