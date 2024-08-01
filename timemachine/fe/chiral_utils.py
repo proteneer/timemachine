@@ -14,7 +14,12 @@ from rdkit.Chem.rdchem import BondType
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
 from timemachine.fe import topology
 from timemachine.fe.atom_map_mixin import AtomMapMixin
-from timemachine.fe.dummy import canonicalize_bond
+from timemachine.fe.dummy import (
+    canonicalize_bond,
+    convert_bond_list_to_nx,
+    generate_dummy_group_assignments,
+    get_romol_bonds,
+)
 from timemachine.fe.utils import get_romol_conf, recursive_map
 from timemachine.graph_utils import convert_to_nx, enumerate_simple_paths
 from timemachine.potentials import BoundPotential, ChiralAtomRestraint, ChiralBondRestraint, HarmonicBond
@@ -549,8 +554,6 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
     """
     all_dummy_bond_idxs, all_dummy_bond_params = [], []
     all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params = [], []
-
-    from timemachine.fe.dummy import convert_bond_list_to_nx, generate_dummy_group_assignments, get_romol_bonds
 
     bonds_b = get_romol_bonds(mol_b)
     bond_graph_b = convert_bond_list_to_nx(bonds_b)
