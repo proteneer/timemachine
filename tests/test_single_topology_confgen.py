@@ -5,8 +5,9 @@ import pytest
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, cif_writer, utils
+from timemachine.fe.atom_map_mixin import AtomMapMixin
 from timemachine.fe.rbfe import HostConfig, setup_initial_states, setup_optimized_host
-from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_mol_name, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.md import builders

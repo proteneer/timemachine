@@ -6,9 +6,9 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping, cif_writer
+from timemachine.fe.atom_map_mixin import AtomMapMixin
 from timemachine.fe.free_energy import HREXParams, MDParams, WaterSamplingParams
 from timemachine.fe.rbfe import run_complex, run_solvent
-from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology

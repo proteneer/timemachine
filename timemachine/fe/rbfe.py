@@ -12,6 +12,7 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, model_utils
+from timemachine.fe.atom_map_mixin import AtomMapFlags
 from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
@@ -33,7 +34,7 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
-from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield

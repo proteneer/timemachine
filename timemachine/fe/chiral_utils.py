@@ -30,6 +30,10 @@ class ChiralCheckMode(Enum):
     UNDEFINED = 2
 
 
+class ChiralConversionError(RuntimeError):
+    pass
+
+
 def setup_chiral_atom_restraints(mol, conf, a_idx):
     """
     Setup chiral atom restraints for the molecule at a_idx by inspecting the
@@ -430,7 +434,7 @@ def xs_ab_from_xs(xs: NDArray, atom_map):
     ----------
     xs: An array of coordinates
         Coordinates containing the alchemical molecule constructed for RBFE
-    atom_map: timemachine.fe.single_topology.AtomMapMixin
+    atom_map: timemachine.fe.atom_map_mixin.AtomMapMixin
         Contains the atom map between the two end state molecules
 
     Returns
@@ -461,7 +465,7 @@ def make_chiral_flip_heatmaps(simulation_result, atom_map):
     simulation_result: timemachine.fe.free_energy.SimulationResult
         Containing all of the frames that make up a simulation_result, may contain intermediate windows
 
-    atom_map: timemachine.fe.single_topology.AtomMapMixin
+    atom_map: timemachine.fe.atom_map_mixin.AtomMapMixin
         Contains the atom map between the two end state molecules
 
     Returns
@@ -505,6 +509,8 @@ def canonicalize_chiral_atom_idxs(idxs):
     return i, jj, kk, ll
 
 
+# (ytz): TODO: Refactor this so the HarmonicBond setup is done in single_topology.py in the future and
+# isolate functionality in this module to chirality-specific tasks.
 def setup_end_state_harmonic_bond_and_chiral_potentials(
     ff, mol_a, mol_b, core, a_to_c, b_to_c
 ) -> Tuple[BoundPotential[HarmonicBond], BoundPotential[ChiralAtomRestraint], BoundPotential[ChiralBondRestraint]]:
@@ -757,10 +763,6 @@ def get_neighbors(atom, bond_idxs) -> List[int]:
         elif j == atom:
             nbs.append(i)
     return nbs
-
-
-class ChiralConversionError(RuntimeError):
-    pass
 
 
 def check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):

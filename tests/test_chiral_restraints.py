@@ -8,10 +8,10 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
 from timemachine.fe import topology, utils
+from timemachine.fe.atom_map_mixin import AtomMapMixin
 from timemachine.fe.chiral_utils import make_chiral_flip_heatmaps
 from timemachine.fe.free_energy import HREXParams
 from timemachine.fe.rbfe import DEFAULT_HREX_PARAMS, run_solvent, run_vacuum
-from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.fe.system import simulate_system
 from timemachine.ff import Forcefield
 from timemachine.potentials import chiral_restraints

@@ -3,7 +3,7 @@ from openmm import app
 from openmm.app import PDBxFile
 from rdkit import Chem
 
-from timemachine.fe.single_topology import AtomMapMixin
+from timemachine.fe.atom_map_mixin import AtomMapMixin
 
 
 def convert_single_topology_mols(coords: np.ndarray, atom_map: AtomMapMixin) -> np.ndarray:
