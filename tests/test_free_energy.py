@@ -13,6 +13,7 @@ from scipy.optimize import check_grad, minimize
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import free_energy, topology, utils
+from timemachine.fe.atom_map_mixin import AtomMapFlags
 from timemachine.fe.bar import ukln_to_ukn
 from timemachine.fe.free_energy import (
     BarResult,
@@ -33,7 +34,7 @@ from timemachine.fe.free_energy import (
     trajectories_by_replica_to_by_state,
 )
 from timemachine.fe.rbfe import Host, setup_initial_state, setup_initial_states, setup_optimized_host
-from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
