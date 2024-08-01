@@ -97,6 +97,87 @@ def setup_dummy_interactions_from_ff(
     )
 
 
+def setup_dummy_bond_and_chiral_interactions_from_ff(
+    ff, mol, dummy_group, root_anchor_atom, core_atoms, chiral_atom_k, chiral_bond_k
+):
+    """
+    Setup interactions involving atoms in a given dummy group.
+    """
+    top = topology.BaseTopology(mol, ff)
+
+    bond_params, hb = top.parameterize_harmonic_bond(ff.hb_handle.params)
+    chiral_atom_potential, _ = top.setup_chiral_restraints(chiral_atom_k, chiral_bond_k)
+    chiral_atom_idxs = chiral_atom_potential.potential.idxs
+    chiral_atom_params = chiral_atom_potential.params
+
+    return setup_dummy_bond_and_chiral_interactions(
+        hb.idxs,
+        bond_params,
+        chiral_atom_idxs,
+        chiral_atom_params,
+        dummy_group,
+        root_anchor_atom,
+        core_atoms,
+    )
+
+
+def setup_dummy_bond_and_chiral_interactions(
+    bond_idxs,
+    bond_params,
+    chiral_atom_idxs,
+    chiral_atom_params,
+    dummy_group,
+    root_anchor_atom,
+    core_atoms,
+):
+    assert root_anchor_atom in core_atoms
+
+    dummy_bond_idxs = []
+    dummy_bond_params = []
+    dummy_chiral_atom_idxs = []
+    dummy_chiral_atom_params = []
+
+    # dummy_group may be a set in certain cases, so sanity check.
+
+    assert len(dummy_group) == len(list(dummy_group))
+    dummy_group = list(dummy_group)
+
+    # dummy group and anchor
+    dga = dummy_group + [root_anchor_atom]
+
+    # copy interactions that involve only root_anchor_atom
+    for idxs, params in zip(bond_idxs, bond_params):
+        if all([a in dga for a in idxs]):
+            dummy_bond_idxs.append(tuple([int(x) for x in idxs]))  # tuples are hashable etc.
+            dummy_bond_params.append(params)
+
+    # certain configuration of chiral states are symmetrizable
+    # . means a bond involving at least 1 dummy atom
+    # | means a bond involving only core atoms
+    #
+    #        all allowed geometries              |  disallowed geometry
+    #     center is core     center is not core  |
+    #    d      c      c      d      d      d    |    c      c
+    #    .      |      |      .      .      .    |    .      |
+    #    c      c      c      d      d      d    |    d      c
+    #   . .    . .    / .    . .    . .    . .   |   . .    / \
+    #  d   d  d   d  c   d  c   d  c   c  d   d  |  c   c  c   c (only core)
+    dgc = dummy_group + list(core_atoms)
+    for idxs, params in zip(chiral_atom_idxs, chiral_atom_params):
+        center, i, j, k = idxs
+        if all([a in dgc for a in idxs]):
+            # non center dummy atom count
+            ncda_count = sum([a in dummy_group for a in (i, j, k)])
+            if ncda_count == 1 or ncda_count == 2 or ncda_count == 3:
+                assert not all(a in core_atoms for a in idxs)
+                dummy_chiral_atom_idxs.append(tuple(int(x) for x in idxs))
+                dummy_chiral_atom_params.append(params)
+
+    bonded_idxs = (dummy_bond_idxs, dummy_chiral_atom_idxs)
+    bonded_params = (dummy_bond_params, dummy_chiral_atom_params)
+    return bonded_idxs, bonded_params
+
+
 def setup_dummy_interactions(
     bond_idxs,
     bond_params,
@@ -168,14 +249,23 @@ def setup_dummy_interactions(
     """
     assert root_anchor_atom in core_atoms
 
-    dummy_bond_idxs = []
-    dummy_bond_params = []
     dummy_angle_idxs = []
     dummy_angle_params = []
     dummy_improper_idxs = []
     dummy_improper_params = []
-    dummy_chiral_atom_idxs = []
-    dummy_chiral_atom_params = []
+
+    (dummy_bond_idxs, dummy_chiral_atom_idxs), (
+        dummy_bond_params,
+        dummy_chiral_atom_params,
+    ) = setup_dummy_bond_and_chiral_interactions(
+        bond_idxs,
+        bond_params,
+        chiral_atom_idxs,
+        chiral_atom_params,
+        dummy_group,
+        root_anchor_atom,
+        core_atoms,
+    )
 
     # dummy_group may be a set in certain cases, so sanity check.
 
@@ -185,11 +275,6 @@ def setup_dummy_interactions(
     # dummy group and anchor
     dga = dummy_group + [root_anchor_atom]
 
-    # copy interactions that involve only root_anchor_atom
-    for idxs, params in zip(bond_idxs, bond_params):
-        if all([a in dga for a in idxs]):
-            dummy_bond_idxs.append(tuple([int(x) for x in idxs]))  # tuples are hashable etc.
-            dummy_bond_params.append(params)
     for idxs, params in zip(angle_idxs, angle_params):
         if all([a in dga for a in idxs]):
             dummy_angle_idxs.append(tuple([int(x) for x in idxs]))
@@ -198,28 +283,6 @@ def setup_dummy_interactions(
         if all([a in dga for a in idxs]):
             dummy_improper_idxs.append(tuple([int(x) for x in idxs]))
             dummy_improper_params.append(params)
-
-    # certain configuration of chiral states are symmetrizable
-    # . means a bond involving at least 1 dummy atom
-    # | means a bond involving only core atoms
-    #
-    #        all allowed geometries              |  disallowed geometry
-    #     center is core     center is not core  |
-    #    d      c      c      d      d      d    |    c      c
-    #    .      |      |      .      .      .    |    .      |
-    #    c      c      c      d      d      d    |    d      c
-    #   . .    . .    / .    . .    . .    . .   |   . .    / \
-    #  d   d  d   d  c   d  c   d  c   c  d   d  |  c   c  c   c (only core)
-    dgc = dummy_group + list(core_atoms)
-    for idxs, params in zip(chiral_atom_idxs, chiral_atom_params):
-        center, i, j, k = idxs
-        if all([a in dgc for a in idxs]):
-            # non center dummy atom count
-            ncda_count = sum([a in dummy_group for a in (i, j, k)])
-            if ncda_count == 1 or ncda_count == 2 or ncda_count == 3:
-                assert not all(a in core_atoms for a in idxs)
-                dummy_chiral_atom_idxs.append(tuple(int(x) for x in idxs))
-                dummy_chiral_atom_params.append(params)
 
     # (ytz): copy interactions that involve nbr_anchor_atom, if not None
     # this may be set to None
@@ -349,19 +412,26 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
     all_dummy_bond_idxs, all_dummy_bond_params = [], []
     all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params = [], []
 
-    dummy_groups = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
-    # gotta add 'em all!
+    from timemachine.fe.dummy import convert_bond_list_to_nx, generate_dummy_group_assignments, get_romol_bonds
 
-    for anchor, (nbr, dg) in dummy_groups.items():
-        all_idxs, all_params = setup_dummy_interactions_from_ff(
-            ff, mol_b, dg, anchor, nbr, core[:, 1], DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
+    bonds_b = get_romol_bonds(mol_b)
+    bond_graph_b = convert_bond_list_to_nx(bonds_b)
+    dummy_group_assignments = generate_dummy_group_assignments(bond_graph_b, core[:, 1])
+
+    # pick an arbitrary one
+    # later on, iterate over multiple ones.
+    dga = next(dummy_group_assignments)
+
+    for anchor, dg in dga.items():
+        all_idxs, all_params = setup_dummy_bond_and_chiral_interactions_from_ff(
+            ff, mol_b, dg, anchor, core[:, 1], DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
         )
         # append idxs
         all_dummy_bond_idxs.extend(all_idxs[0])
-        all_dummy_chiral_atom_idxs.extend(all_idxs[3])
+        all_dummy_chiral_atom_idxs.extend(all_idxs[1])
         # append params
         all_dummy_bond_params.extend(all_params[0])
-        all_dummy_chiral_atom_params.extend(all_params[3])
+        all_dummy_chiral_atom_params.extend(all_params[1])
 
     # generate parameters for mol_a
     mol_a_top = topology.BaseTopology(mol_a, ff)
