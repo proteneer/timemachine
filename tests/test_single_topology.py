@@ -30,8 +30,8 @@ from timemachine.fe.interpolate import (
 )
 from timemachine.fe.single_topology import (
     ChargePertubationError,
-    ChiralConversionError,
     CoreBondChangeWarning,
+    DummyGroupAssignmentError,
     SingleTopology,
     canonicalize_improper_idxs,
     cyclic_difference,
@@ -1445,16 +1445,16 @@ $$$$""",
     ff = Forcefield.load_from_file("placeholder_ff.py")
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6]])
 
-    with pytest.raises(ChiralConversionError):
+    with pytest.raises(DummyGroupAssignmentError):
         verify_chiral_consistency_of_core(mol_a, mol_b, core, ff)
 
-    with pytest.raises(ChiralConversionError):
+    with pytest.raises(DummyGroupAssignmentError):
         SingleTopology(mol_a, mol_b, core, ff)
 
-    with pytest.raises(ChiralConversionError):
+    with pytest.raises(DummyGroupAssignmentError):
         verify_chiral_consistency_of_core(mol_b, mol_a, core, ff)
 
-    with pytest.raises(ChiralConversionError):
+    with pytest.raises(DummyGroupAssignmentError):
         SingleTopology(mol_b, mol_a, core, ff)
 
 
@@ -1850,7 +1850,7 @@ $$$$""",
 
     mol_a, mol_b, core = permute_atom_indices(mol_a, mol_b, core, seed)
 
-    with pytest.raises(ChiralConversionError, match="Invalid chiral conversion in core"):
+    with pytest.raises(DummyGroupAssignmentError):
         verify_chiral_consistency_of_core(mol_a, mol_b, core, ff)
 
 

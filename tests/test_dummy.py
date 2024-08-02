@@ -1,11 +1,7 @@
 import pytest
 from rdkit import Chem
 
-from timemachine.fe.dummy import (
-    compute_disabled_bonds_in_core,
-    compute_disabled_bonds_in_dga,
-    generate_dummy_group_assignments,
-)
+from timemachine.fe.dummy import generate_dummy_group_assignments
 from timemachine.graph_utils import convert_to_nx
 
 # These tests check the various utilities used to turn off interactions
@@ -97,61 +93,3 @@ def test_generate_dummy_group_assignments_empty_core():
     g = convert_to_nx(Chem.MolFromSmiles("OC1COO1"))
     core = []
     assert list(generate_dummy_group_assignments(g, core)) == []
-
-
-def test_compute_disabled_bonds_in_dga():
-    r"""
-    Check that we generate the correct set of bond masks given a set of dummy group
-    assignments:
-
-      O1
-     /  \
-    C0   C2
-     \  /
-      O3
-
-    The possible choices of dummy group assignments and bond masks are:
-
-    {0: {1, 3}} -> [1 1 0 0]
-    {0: {1}, 2: {3}} -> [1 0 0 1]
-    {2: {1}, 0: {3}} -> [0 1 1 0]
-    {2: {1, 3}} -> [0 0 1 1]
-
-    """
-    g = convert_to_nx(Chem.MolFromSmiles("C1OCO1"))
-    core = [0, 2]
-    dgas = list(generate_dummy_group_assignments(g, core))
-    assert equivalent_assignment(dgas, [{0: {1, 3}}, {0: {1}, 2: {3}}, {2: {1}, 0: {3}}, {2: {1, 3}}])
-
-    d0 = compute_disabled_bonds_in_dga(g, core, {0: {1, 3}})
-    assert d0 == {(1, 2), (2, 3)}
-
-    d1 = compute_disabled_bonds_in_dga(g, core, {0: {1}, 2: {3}})
-    assert d1 == {(1, 2), (0, 3)}
-
-    d2 = compute_disabled_bonds_in_dga(g, core, {0: {3}, 2: {1}})
-    assert d2 == {(0, 1), (2, 3)}
-
-    d3 = compute_disabled_bonds_in_dga(g, core, {2: {1, 3}})
-    assert d3 == {(0, 1), (0, 3)}
-
-
-def test_compute_disabled_bonds_in_core():
-    r"""
-    Check that we can flag core-core bonds that are broken
-
-      O1            O1
-     /  \          /  \
-    C0   C2  ->  C0   C2
-     \  /             /
-      O3            O3
-
-    This should end-up disabling the offending mask.
-
-    """
-    g1 = convert_to_nx(Chem.MolFromSmiles("C1OCO1"))
-    g2 = convert_to_nx(Chem.MolFromSmiles("COCO"))
-    core1 = [0, 1, 2, 3]
-    core2 = [0, 1, 2, 3]
-    d0 = compute_disabled_bonds_in_core(g1, g2, core1, core2)
-    assert d0 == {(0, 3)}

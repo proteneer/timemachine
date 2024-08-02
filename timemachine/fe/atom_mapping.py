@@ -1,6 +1,6 @@
 from collections import defaultdict
 from functools import partial
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
@@ -9,14 +9,10 @@ from rdkit import Chem
 
 from timemachine.fe import mcgregor
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
-from timemachine.fe.dummy import (
-    canonicalize_bond,
-    compute_disabled_bonds_in_core,
-    compute_disabled_bonds_in_dga,
-    generate_dummy_group_assignments,
-)
-from timemachine.fe.mcgregor import UNMAPPED
+from timemachine.fe.single_topology import find_chirally_consistent_dummy_groups_impl
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
+from timemachine.ff import Forcefield
+from timemachine.graph_utils import convert_to_nx
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
 # Unless you have to. And now we have to. If you want to understand what this code is doing, it
@@ -323,41 +319,6 @@ def core_bonds_broken_count(mol_a, mol_b, core):
     return count
 
 
-def get_invalid_chiral_conversion(
-    bond_graph: nx.Graph, disabled_bonds: Set[Tuple[int, int]]
-) -> Optional[Tuple[int, List[int]]]:
-    for node in bond_graph.nodes():
-        nbs = list(nx.neighbors(bond_graph, node))
-        # TODO: handle X3 chiral centers
-        if len(nbs) == 4:
-            disabled_bonds_count = sum(1 for nb in nbs if canonicalize_bond((node, nb)) in disabled_bonds)
-            if disabled_bonds_count > 1:
-                return node, nbs
-    return None
-
-
-def _graph_fails_chiral_assertion(
-    bond_graph: nx.Graph, core_nodes: Set[int], core_disabled_bonds: Set[Tuple[int, int]]
-) -> bool:
-    """A graph fails the chiral assertion if every choice of dummy group assignments fails.
-
-    A particular dummy group assignment fails if there exists a 4-connected atom with more than a single broken bond.
-    """
-    if len(core_nodes) == bond_graph.number_of_nodes() and get_invalid_chiral_conversion(
-        bond_graph, core_disabled_bonds
-    ):
-        return True
-
-    # return False if there is _any_ chirally-valid dummy group assignment
-    for dga in generate_dummy_group_assignments(bond_graph, core_nodes):
-        dga_disabled_bonds = compute_disabled_bonds_in_dga(bond_graph, core_nodes, dga)
-        disabled_bonds = dga_disabled_bonds.union(core_disabled_bonds)
-        if not get_invalid_chiral_conversion(bond_graph, disabled_bonds):
-            return False
-
-    return True
-
-
 def _get_cores_impl(
     mol_a,
     mol_b,
@@ -448,33 +409,19 @@ def _get_cores_impl(
         return all(f(trial_core) for f in filter_fxns)
 
     def make_leaf_filter_fxn():
-        g_a = nx.Graph(bonds_a)
-        g_b = nx.Graph(bonds_b)
+        bond_graph_a = convert_to_nx(mol_a)
+        bond_graph_b = convert_to_nx(mol_b)
+
+        ff = Forcefield.load_from_file("placeholder_ff.py")
 
         def leaf_filter_fxn(trial_core) -> bool:
-            atom_map_a_to_b = trial_core
-            atom_map_b_to_a_dict = {b: a for a, b in enumerate(atom_map_a_to_b) if b != UNMAPPED}
-            atom_map_b_to_a = [atom_map_b_to_a_dict.get(a, UNMAPPED) for a in range(mol_b.GetNumAtoms())]
-
-            if disallow_chiral_conversion:
-                mapped_nodes_a = {a for a, b in enumerate(atom_map_a_to_b) if b != UNMAPPED}
-                core_disabled_bonds_a = compute_disabled_bonds_in_core(g_a, g_b, mapped_nodes_a, atom_map_a_to_b)
-                if enforce_core_core:
-                    assert len(core_disabled_bonds_a) == 0
-
-                if _graph_fails_chiral_assertion(g_a, mapped_nodes_a, core_disabled_bonds_a):
-                    return False
-
-                mapped_nodes_b = {b for b, a in enumerate(atom_map_b_to_a) if a != UNMAPPED}
-                core_disabled_bonds_b = compute_disabled_bonds_in_core(g_b, g_a, mapped_nodes_b, atom_map_b_to_a)
-
-                if enforce_core_core:
-                    assert len(core_disabled_bonds_b) == 0
-
-                if _graph_fails_chiral_assertion(g_b, mapped_nodes_b, core_disabled_bonds_b):
-                    return False
-
-            return True
+            core = mcgregor.perm_to_core(trial_core)
+            return (
+                find_chirally_consistent_dummy_groups_impl(mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff)
+                is not None
+                if disallow_chiral_conversion
+                else True
+            )
 
         return leaf_filter_fxn
 

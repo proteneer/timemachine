@@ -4,7 +4,6 @@ from itertools import product
 from typing import Collection, DefaultDict, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple, TypeVar
 
 import networkx as nx
-import numpy as np
 
 
 class MultipleAnchorWarning(UserWarning):
@@ -163,37 +162,6 @@ def generate_anchored_dummy_group_assignments(
     )
 
     return anchored_dummy_group_assignments
-
-
-def compute_disabled_bonds_in_dga(bond_graph, core_atoms, dga):
-    disabled_bonds = set()
-    # bond_mask = np.ones(bond_graph.number_of_edges(), dtype=np.int32)
-    atom_membership = np.zeros(bond_graph.number_of_nodes(), dtype=np.int32) - 1
-    for jdx, (anchor, dg) in enumerate(dga.items()):
-        atom_membership[anchor] = jdx
-        for da in dg:
-            atom_membership[da] = jdx
-
-    for src, dst in bond_graph.edges():
-        # src and dst are both cores -> always on
-        if src in core_atoms and dst in core_atoms:
-            pass  # always allowed
-        elif atom_membership[src] != atom_membership[dst]:
-            disabled_bonds.add(canonicalize_bond((src, dst)))
-
-    return disabled_bonds
-
-
-def compute_disabled_bonds_in_core(bond_graph_a, bond_graph_b, core_atoms_a, atom_map_a_to_b):
-    disabled_bonds = set()
-    for src_a, dst_a in bond_graph_a.edges():
-        if src_a in core_atoms_a and dst_a in core_atoms_a:
-            src_b, dst_b = atom_map_a_to_b[src_a], atom_map_a_to_b[dst_a]
-            if not bond_graph_b.has_edge(src_b, dst_b):
-                # print("missing bonds", src_a, dst_a)
-                disabled_bonds.add(canonicalize_bond((src_a, dst_a)))
-
-    return disabled_bonds
 
 
 def canonicalize_bond(ixn: Tuple[int, ...]) -> Tuple[int, ...]:
