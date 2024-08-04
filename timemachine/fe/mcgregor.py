@@ -96,7 +96,6 @@ class Graph:
         self.n_vertices = n_vertices
         self.n_edges = len(edges)
         self.edges = edges
-        self.nxg = nx.Graph(edges)
 
         cmat = np.full((n_vertices, n_vertices), False, dtype=bool)
         for i, j in edges:
