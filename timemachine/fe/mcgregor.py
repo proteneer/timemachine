@@ -333,8 +333,6 @@ def mcs(
         raise NoMappingError("No possible mapping given the predicate matrix, verify molecules are aligned")
 
     total_nodes_visited = 0
-    # Keep track of the number of nodes that can still be visited
-    visits_left = max_visits
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
@@ -352,7 +350,8 @@ def mcs(
             base_marcs,
             mcs_result,
             priority_idxs,
-            visits_left,
+            # Decrement the max visits by the number already visited to ensure constant wall clock time
+            max_visits - total_nodes_visited,
             max_cores,
             cur_threshold,
             enforce_core_core,
@@ -360,8 +359,6 @@ def mcs(
             min_connected_component_size,
             filter_fxn,
         )
-
-        visits_left -= mcs_result.nodes_visited
 
         total_nodes_visited += mcs_result.nodes_visited
 
