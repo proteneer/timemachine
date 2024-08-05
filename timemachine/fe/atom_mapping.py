@@ -415,12 +415,14 @@ def _get_cores_impl(
         ff = Forcefield.load_from_file("placeholder_ff.py")
 
         def leaf_filter_fxn(trial_core) -> bool:
-            core = mcgregor.perm_to_core(trial_core)
-            return (
-                find_chirally_valid_dummy_groups_impl(mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff) is not None
-                if disallow_chiral_conversion
-                else True
-            )
+            if disallow_chiral_conversion:
+                core = mcgregor.perm_to_core(trial_core)
+                chirally_valid_dummy_groups = find_chirally_valid_dummy_groups_impl(
+                    mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff
+                )
+                return chirally_valid_dummy_groups is not None
+            else:
+                return True
 
         return leaf_filter_fxn
 
