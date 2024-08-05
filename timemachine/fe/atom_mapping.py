@@ -9,7 +9,7 @@ from rdkit import Chem
 
 from timemachine.fe import mcgregor
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
-from timemachine.fe.single_topology import find_chirally_consistent_dummy_groups_impl
+from timemachine.fe.single_topology import find_chirally_valid_dummy_groups_impl
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.graph_utils import convert_to_nx
@@ -417,8 +417,7 @@ def _get_cores_impl(
         def leaf_filter_fxn(trial_core) -> bool:
             core = mcgregor.perm_to_core(trial_core)
             return (
-                find_chirally_consistent_dummy_groups_impl(mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff)
-                is not None
+                find_chirally_valid_dummy_groups_impl(mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff) is not None
                 if disallow_chiral_conversion
                 else True
             )

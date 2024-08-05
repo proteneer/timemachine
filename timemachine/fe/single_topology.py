@@ -642,13 +642,13 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     )
 
 
-def find_chirally_consistent_dummy_groups(
+def find_chirally_valid_dummy_groups(
     mol_a, mol_b, core: NDArray
 ) -> Optional[Tuple[Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]]]:
     """Returns a pair of dummy group assignments for the A -> B and B -> A transformations such that the implied hybrid
-    mol is chirally consistent, or None if no such pair exists.
+    mol is chirally valid, or None if no such pair exists.
 
-    Refer to :py:func:`assert_chiral_consistency_and_validity` for definition of "chiral consistency".
+    Refer to :py:func:`check_chiral_validity` for definition of "chiral validity".
 
     Refer to :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
     information on dummy group assignment.
@@ -662,20 +662,20 @@ def find_chirally_consistent_dummy_groups(
 
     ff = Forcefield.load_from_file("placeholder_ff.py")
 
-    return find_chirally_consistent_dummy_groups_impl(mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff)
+    return find_chirally_valid_dummy_groups_impl(mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff)
 
 
-def find_chirally_consistent_dummy_groups_impl(
+def find_chirally_valid_dummy_groups_impl(
     mol_a, mol_b, bond_graph_a: nx.Graph, bond_graph_b: nx.Graph, core: NDArray, ff: Forcefield
 ) -> Optional[Tuple[Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]]]:
-    """Implementation of :py:func:`find_chirally_consistent_dummy_groups`, separated to allow precomputation of bond
+    """Implementation of :py:func:`find_chirally_valid_dummy_groups`, separated to allow precomputation of bond
     graphs and forcefield."""
 
     pairs = (
         (dummy_groups_ab, dummy_groups_ba)
         for dummy_groups_ab in generate_dummy_group_assignments(bond_graph_b, core[:, 1])
         for dummy_groups_ba in generate_dummy_group_assignments(bond_graph_a, core[:, 0])
-        if is_chirally_consistent(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, ff)
+        if is_chirally_valid(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, ff)
     )
 
     arbitrary_pair = next(pairs, None)
@@ -689,7 +689,7 @@ def find_dummy_groups_and_anchors(
     """Returns an arbitrary dummy group assignment for the A -> B transformation.
 
     To get a pair of dummy group assignments for A -> B and B -> A such that the implied hybrid mol is chirally
-    consistent, instead use :py:func:`find_chirally_consistent_dummy_groups`.
+    valid, instead use :py:func:`find_chirally_valid_dummy_groups`.
 
     Refer to :py:func:`assert_chiral_consistency_and_validity` for definition of "chiral consistency".
 
@@ -1150,7 +1150,7 @@ def assert_chiral_consistency(
     assert len(dst_chiral_restr_idx_set.allowed_set.intersection(src_chiral_restr_idx_set.disallowed_set)) == 0
 
 
-def check_chiral_validity(
+def check_chiral_validity_impl(
     atom_map: AtomMapMixin,
     src_chiral_restr_idx_set: ChiralRestrIdxSet,
     dst_chiral_restr_idx_set: ChiralRestrIdxSet,
@@ -1187,31 +1187,31 @@ def assert_chiral_consistency_and_validity(
     dst_chiral_restr_idx_set = ChiralRestrIdxSet(dst_chiral_idxs)
 
     assert_chiral_consistency(src_chiral_restr_idx_set, dst_chiral_restr_idx_set, src_bond_idxs, dst_bond_idxs)
-    check_chiral_validity(atom_map, src_chiral_restr_idx_set, dst_chiral_restr_idx_set, src_bond_idxs, dst_bond_idxs)
+    check_chiral_validity_impl(
+        atom_map, src_chiral_restr_idx_set, dst_chiral_restr_idx_set, src_bond_idxs, dst_bond_idxs
+    )
 
 
-def verify_chiral_consistency_of_core(mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, forcefield):
+def verify_chiral_validity_of_core(mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, forcefield):
     """Verify that a core and forcefield would allow for valid chiral endstates.
 
-    Refer to `assert_chiral_consistency_and_validity` for definitions of consistency and validity.
+    Refer to `check_chiral_validity` for definition of validity.
 
     Raises
     ------
-        AssertionError
-            If there are inversions at the end-states between chiral atoms and bonds are present
         ChiralConversionError
-            If chiral end states are incompatible for the given core and forcefield.
+            If chiral end states are incompatible for the given core and forcefield
         DummyGroupAssignmentError
-            If unable to find a chirally-consistent dummy group assignment
+            If unable to find a chirally-valid dummy group assignment with respect to a placeholder forcefield
     """
-    dummy_groups = find_chirally_consistent_dummy_groups(mol_a, mol_b, core)
+    dummy_groups = find_chirally_valid_dummy_groups(mol_a, mol_b, core)
     if dummy_groups is None:
-        raise DummyGroupAssignmentError("Unable to find chirally consistent dummy group assignment")
+        raise DummyGroupAssignmentError("Unable to find chirally-valid dummy group assignment")
     dummy_groups_ab, dummy_groups_ba = dummy_groups
-    verify_chiral_consistency(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, forcefield)
+    check_chiral_validity(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, forcefield)
 
 
-def verify_chiral_consistency(
+def check_chiral_validity(
     mol_a: Chem.Mol,
     mol_b: Chem.Mol,
     core: NDArray,
@@ -1221,12 +1221,10 @@ def verify_chiral_consistency(
 ):
     """Verify that a core and forcefield would allow for valid chiral endstates.
 
-    Refer to `assert_chiral_consistency_and_validity` for definitions of consistency and validity.
+    Refer to `check_chiral_validity` for definition of validity.
 
     Raises
     ------
-        AssertionError
-            If there are inversions at the end-states between chiral atoms and bonds are present
         ChiralConversionError
             If chiral end states are incompatible for the given core and forcefield.
     """
@@ -1234,19 +1232,23 @@ def verify_chiral_consistency(
     bond_pot_src, chiral_atom_pot_src, _ = setup_end_state_harmonic_bond_and_chiral_potentials(
         forcefield, mol_a, mol_b, core, atom_map.a_to_c, atom_map.b_to_c, dummy_groups_ab
     )
-    bond_pot_dest, chiral_atom_pot_dest, _ = setup_end_state_harmonic_bond_and_chiral_potentials(
+    bond_pot_dst, chiral_atom_pot_dst, _ = setup_end_state_harmonic_bond_and_chiral_potentials(
         forcefield, mol_b, mol_a, core[:, ::-1], atom_map.b_to_c, atom_map.a_to_c, dummy_groups_ba
     )
-    assert_chiral_consistency_and_validity(
+
+    src_chiral_restr_idx_set = ChiralRestrIdxSet(chiral_atom_pot_src.potential.idxs)
+    dst_chiral_restr_idx_set = ChiralRestrIdxSet(chiral_atom_pot_dst.potential.idxs)
+
+    check_chiral_validity_impl(
         atom_map,
-        chiral_atom_pot_src.potential.idxs,
-        chiral_atom_pot_dest.potential.idxs,
+        src_chiral_restr_idx_set,
+        dst_chiral_restr_idx_set,
         bond_pot_src.potential.idxs,
-        bond_pot_dest.potential.idxs,
+        bond_pot_dst.potential.idxs,
     )
 
 
-def is_chirally_consistent(
+def is_chirally_valid(
     mol_a,
     mol_b,
     core,
@@ -1255,11 +1257,9 @@ def is_chirally_consistent(
     ff: Forcefield,
 ) -> bool:
     try:
-        verify_chiral_consistency(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, ff)
+        check_chiral_validity(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, ff)
         return True
-    # TODO: understand why AssertionError is raised
-    # (i.e. some dummy group assignments induce chiral inversions)
-    except (AssertionError, ChiralConversionError):
+    except ChiralConversionError:
         return False
 
 
@@ -1295,9 +1295,9 @@ class SingleTopology(AtomMapMixin):
         if a_charge != b_charge:
             raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
-        dummy_groups = find_chirally_consistent_dummy_groups(mol_a, mol_b, core)
+        dummy_groups = find_chirally_valid_dummy_groups(mol_a, mol_b, core)
         if dummy_groups is None:
-            raise DummyGroupAssignmentError("Unable to find chirally consistent dummy group assignment")
+            raise DummyGroupAssignmentError("Unable to find chirally-valid dummy group assignment")
         dummy_groups_ab, dummy_groups_ba = dummy_groups
 
         self.dummy_groups_ab = dummy_groups_ab

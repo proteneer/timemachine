@@ -10,7 +10,7 @@ from rdkit.Chem import AllChem
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
-from timemachine.fe.single_topology import DummyGroupAssignmentError, verify_chiral_consistency_of_core
+from timemachine.fe.single_topology import DummyGroupAssignmentError, verify_chiral_validity_of_core
 from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
 from timemachine.ff import Forcefield
 
@@ -1489,8 +1489,8 @@ M  END""",
     cores = get_cores(mol_a, mol_b, disallow_chiral_conversion=False)
     for core in cores:
         with pytest.raises(DummyGroupAssignmentError):
-            verify_chiral_consistency_of_core(mol_a, mol_b, core, ff)
+            verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
 
     filtered_cores = get_cores(mol_a, mol_b, disallow_chiral_conversion=True)
     for core in filtered_cores:
-        verify_chiral_consistency_of_core(mol_a, mol_b, core, ff)
+        verify_chiral_validity_of_core(mol_a, mol_b, core, ff)

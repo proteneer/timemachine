@@ -40,7 +40,7 @@ from timemachine.fe.single_topology import (
     interpolate_harmonic_force_constant,
     interpolate_w_coord,
     setup_dummy_interactions_from_ff,
-    verify_chiral_consistency_of_core,
+    verify_chiral_validity_of_core,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
@@ -1446,13 +1446,13 @@ $$$$""",
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6]])
 
     with pytest.raises(DummyGroupAssignmentError):
-        verify_chiral_consistency_of_core(mol_a, mol_b, core, ff)
+        verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
 
     with pytest.raises(DummyGroupAssignmentError):
         SingleTopology(mol_a, mol_b, core, ff)
 
     with pytest.raises(DummyGroupAssignmentError):
-        verify_chiral_consistency_of_core(mol_b, mol_a, core, ff)
+        verify_chiral_validity_of_core(mol_b, mol_a, core, ff)
 
     with pytest.raises(DummyGroupAssignmentError):
         SingleTopology(mol_b, mol_a, core, ff)
@@ -1850,7 +1850,7 @@ $$$$""",
     mol_a, mol_b, core = permute_atom_indices(mol_a, mol_b, core, seed)
 
     with pytest.raises(DummyGroupAssignmentError):
-        verify_chiral_consistency_of_core(mol_a, mol_b, core, ff)
+        verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
 
 
 @pytest.mark.parametrize("seed", [2024, 2025])
@@ -1947,4 +1947,4 @@ M  END
     #     fh.write(res)
 
     # should not raise an assertion
-    verify_chiral_consistency_of_core(mol_a, mol_b, core, ff)
+    verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
