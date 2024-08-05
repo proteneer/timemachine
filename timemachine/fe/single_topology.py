@@ -391,7 +391,7 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
     to the alchemical molecule with dummy atoms. Note that the bond, chiral atom and chiral bond idxs are canonicalized.
 
     This code is identical to setup_end_state, but only handles chiral potentials to be used to quickly verify
-    core mappings in verify_chiral_consistency_of_core
+    core mappings in verify_chiral_validity_of_core
 
     Parameters
     ----------
