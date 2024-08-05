@@ -65,7 +65,7 @@ def get_cores_and_diagnostics(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
-    disallow_chiral_conversion: bool,
+    enforce_chirally_valid_dummy_groups: bool,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     """Same as :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
     assert max_cores > 0
@@ -83,7 +83,7 @@ def get_cores_and_diagnostics(
         enforce_chiral=enforce_chiral,
         disallow_planar_torsion_flips=disallow_planar_torsion_flips,
         min_threshold=min_threshold,
-        disallow_chiral_conversion=disallow_chiral_conversion,
+        enforce_chirally_valid_dummy_groups=enforce_chirally_valid_dummy_groups,
     )
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
@@ -112,7 +112,7 @@ def get_cores(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
-    disallow_chiral_conversion: bool,
+    enforce_chirally_valid_dummy_groups: bool,
 ) -> List[NDArray]:
     """
     Finds set of cores between two molecules that maximizes the number of common edges.
@@ -194,7 +194,7 @@ def get_cores(
         disallow_planar_torsion_flips,
         min_threshold,
         initial_mapping,
-        disallow_chiral_conversion,
+        enforce_chirally_valid_dummy_groups,
     )
 
     return all_cores
@@ -334,7 +334,7 @@ def _get_cores_impl(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
-    disallow_chiral_conversion: bool,
+    enforce_chirally_valid_dummy_groups: bool,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     if initial_mapping is None:
         initial_mapping = np.zeros((0, 2))
@@ -415,7 +415,7 @@ def _get_cores_impl(
         ff = Forcefield.load_from_file("placeholder_ff.py")
 
         def leaf_filter_fxn(trial_core) -> bool:
-            if disallow_chiral_conversion:
+            if enforce_chirally_valid_dummy_groups:
                 core = mcgregor.perm_to_core(trial_core)
                 chirally_valid_dummy_groups = find_chirally_valid_dummy_groups_impl(
                     mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff
