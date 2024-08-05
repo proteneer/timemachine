@@ -859,7 +859,7 @@ def test_chiral_atom_map():
         ring_matches_ring_only=True,
         min_threshold=0,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=False,  # TODO: understand why assertion fails when set to True
+        enforce_chirally_valid_dummy_groups=True,
     )
 
     chiral_aware_cores = get_cores(mol_a, mol_b, enforce_chiral=True)
