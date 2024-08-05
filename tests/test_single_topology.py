@@ -1844,7 +1844,6 @@ $$$$""",
         removeHs=False,
     )
 
-    # need to generate SC charges on this mol - am1 fails
     ff = Forcefield.load_default()
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5]])
 
