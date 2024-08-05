@@ -665,6 +665,7 @@ def find_chirally_valid_dummy_groups(
     bond_graph_a = convert_to_nx(mol_a)
     bond_graph_b = convert_to_nx(mol_b)
 
+    # Use placeholder forcefield with a minimal number of patterns for performance
     ff = Forcefield.load_from_file("placeholder_ff.py")
 
     return find_chirally_valid_dummy_groups_impl(mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff)
