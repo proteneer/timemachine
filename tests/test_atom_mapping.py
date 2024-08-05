@@ -542,11 +542,12 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=False,
         ring_matches_ring_only=False,
-        enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=False,  # TODO: understand why assertion fails when set to True
+        # NOTE: example missing explicit Hs, chiral detection will fail
+        enforce_chiral=False,
+        enforce_chirally_valid_dummy_groups=False,
     )
 
     assert len(all_cores) == 1
