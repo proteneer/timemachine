@@ -1102,7 +1102,7 @@ def get_neighbors(atom, bond_idxs) -> List[int]:
     return nbs
 
 
-def check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):
+def check_chiral_validity_src_dst(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):
     """Raise error unless, for every chiral center, at least 1 chiral volume is defined in both end-states."""
 
     for c in src_chiral_centers_in_mol_c:
@@ -1124,19 +1124,16 @@ def check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set,
                 raise ChiralConversionError(f"len(nbs) == 3 {c, i, j, k}")
 
 
-def assert_chiral_consistency_and_validity(
-    atom_map: AtomMapMixin,
-    src_chiral_idxs,
-    dst_chiral_idxs,
+def assert_chiral_consistency(
+    src_chiral_restr_idx_set: ChiralRestrIdxSet,
+    dst_chiral_restr_idx_set: ChiralRestrIdxSet,
     src_bond_idxs: NDArray,
     dst_bond_idxs: NDArray,
 ):
-    """
-    Assert that the given the two end states chiral and bond idxs it would be both consistent and valid.
+    """Assert that there are no inversions at the end-states between chiral atoms and bonds are present."""
 
-    consistency: if there are no inversions at the end-states between chiral atoms and bonds are present
-    validity: if we can directly turn on the chiral volumes (after bonds) without staggering angles
-    """
+    src_chiral_idxs = src_chiral_restr_idx_set.restr_idxs
+    dst_chiral_idxs = dst_chiral_restr_idx_set.restr_idxs
 
     for c, i, j, k in src_chiral_idxs:
         assert canonicalize_bond((c, i)) in src_bond_idxs
@@ -1148,12 +1145,19 @@ def assert_chiral_consistency_and_validity(
         assert canonicalize_bond((c, j)) in dst_bond_idxs
         assert canonicalize_bond((c, k)) in dst_bond_idxs
 
-    src_chiral_restr_idx_set = ChiralRestrIdxSet(src_chiral_idxs)
-    dst_chiral_restr_idx_set = ChiralRestrIdxSet(dst_chiral_idxs)
-
     # ensure that we don't have any chiral inversions between src and dst end states
     assert len(src_chiral_restr_idx_set.allowed_set.intersection(dst_chiral_restr_idx_set.disallowed_set)) == 0
     assert len(dst_chiral_restr_idx_set.allowed_set.intersection(src_chiral_restr_idx_set.disallowed_set)) == 0
+
+
+def check_chiral_validity(
+    atom_map: AtomMapMixin,
+    src_chiral_restr_idx_set: ChiralRestrIdxSet,
+    dst_chiral_restr_idx_set: ChiralRestrIdxSet,
+    src_bond_idxs: NDArray,
+    dst_bond_idxs: NDArray,
+):
+    """Assert that we can directly turn on the chiral volumes (after bonds) without staggering angles."""
 
     chiral_centers_in_mol_a = chiral_utils.find_chiral_atoms(atom_map.mol_a)
     chiral_centers_in_mol_b = chiral_utils.find_chiral_atoms(atom_map.mol_b)
@@ -1161,8 +1165,29 @@ def assert_chiral_consistency_and_validity(
     src_chiral_centers_in_mol_c = [atom_map.a_to_c[x] for x in chiral_centers_in_mol_a]
     dst_chiral_centers_in_mol_c = [atom_map.b_to_c[x] for x in chiral_centers_in_mol_b]
 
-    check_chiral_validity(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs)
-    check_chiral_validity(dst_chiral_centers_in_mol_c, src_chiral_restr_idx_set, dst_bond_idxs)
+    check_chiral_validity_src_dst(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs)
+    check_chiral_validity_src_dst(dst_chiral_centers_in_mol_c, src_chiral_restr_idx_set, dst_bond_idxs)
+
+
+def assert_chiral_consistency_and_validity(
+    atom_map: AtomMapMixin,
+    src_chiral_idxs: NDArray,
+    dst_chiral_idxs: NDArray,
+    src_bond_idxs: NDArray,
+    dst_bond_idxs: NDArray,
+):
+    """
+    Assert that the given the two end states chiral and bond idxs it would be both consistent and valid.
+
+    consistency: if there are no inversions at the end-states between chiral atoms and bonds are present
+    validity: if we can directly turn on the chiral volumes (after bonds) without staggering angles
+    """
+
+    src_chiral_restr_idx_set = ChiralRestrIdxSet(src_chiral_idxs)
+    dst_chiral_restr_idx_set = ChiralRestrIdxSet(dst_chiral_idxs)
+
+    assert_chiral_consistency(src_chiral_restr_idx_set, dst_chiral_restr_idx_set, src_bond_idxs, dst_bond_idxs)
+    check_chiral_validity(atom_map, src_chiral_restr_idx_set, dst_chiral_restr_idx_set, src_bond_idxs, dst_bond_idxs)
 
 
 def verify_chiral_consistency_of_core(mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, forcefield):
