@@ -1,7 +1,19 @@
 import warnings
 from collections import defaultdict
 from itertools import product
-from typing import Collection, DefaultDict, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple, TypeVar
+from typing import (
+    Collection,
+    DefaultDict,
+    Dict,
+    FrozenSet,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+)
 
 import networkx as nx
 
@@ -92,8 +104,8 @@ def generate_anchored_dummy_group_assignments(
     dummy_groups: Dict[int, FrozenSet[int]],
     bond_graph_a: nx.Graph,
     bond_graph_b: nx.Graph,
-    core_atoms_a: Collection[int],
-    core_atoms_b: Collection[int],
+    core_atoms_a: Sequence[int],
+    core_atoms_b: Sequence[int],
 ) -> Iterator[Dict[int, Tuple[Optional[int], FrozenSet[int]]]]:
     """Returns an iterator over candidate anchored dummy group assignments.
 
@@ -174,8 +186,8 @@ def canonicalize_bond(ixn: Tuple[int, ...]) -> Tuple[int, ...]:
 def get_core_bonds(
     bonds_a: Collection[Tuple[int, int]],
     bonds_b: Collection[Tuple[int, int]],
-    core_atoms_a: Collection[int],
-    core_atoms_b: Collection[int],
+    core_atoms_a: Sequence[int],
+    core_atoms_b: Sequence[int],
 ) -> FrozenSet[Tuple[int, ...]]:
     """Returns core-core bonds that are present in both mol_a and mol_b"""
     a_to_c = {a: c for c, a in enumerate(core_atoms_a)}

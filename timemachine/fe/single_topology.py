@@ -2,7 +2,7 @@ import warnings
 from collections.abc import Iterable
 from enum import IntEnum
 from functools import partial
-from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Tuple, TypeVar, Union, cast
+from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple, TypeVar, Union, cast
 
 import jax
 import jax.numpy as jnp
@@ -684,7 +684,7 @@ def find_chirally_valid_dummy_groups_impl(
 
 
 def find_dummy_groups_and_anchors(
-    mol_a, mol_b, core_atoms_a: Collection[int], core_atoms_b: Collection[int]
+    mol_a, mol_b, core_atoms_a: Sequence[int], core_atoms_b: Sequence[int]
 ) -> Dict[int, Tuple[Optional[int], FrozenSet[int]]]:
     """Returns an arbitrary dummy group assignment for the A -> B transformation.
 
