@@ -1001,9 +1001,14 @@ def test_get_cores_and_diagnostics():
 
         assert diagnostics.core_size >= len(all_cores[0])
         assert diagnostics.num_cores >= len(all_cores)
-        assert (
-            diagnostics.total_nodes_visited >= diagnostics.core_size
-        )  # must visit at least one node per atom pair in core
+
+        # must visit at least one node per atom pair in core
+        assert diagnostics.total_nodes_visited >= diagnostics.core_size
+
+        # must visit at least one leaf node per core
+        assert diagnostics.num_cores <= diagnostics.total_leaves_visited
+
+        assert diagnostics.total_leaves_visited <= diagnostics.total_nodes_visited
 
 
 def polyphenylene_smiles(n):
@@ -1485,13 +1490,21 @@ M  END""",
 
     ff = Forcefield.load_default()
 
-    get_cores = partial(atom_mapping.get_cores, **{**DEFAULT_ATOM_MAPPING_KWARGS, "max_connected_components": 2})
+    get_cores_and_diagnostics = partial(
+        atom_mapping.get_cores_and_diagnostics, **{**DEFAULT_ATOM_MAPPING_KWARGS, "max_connected_components": 2}
+    )
 
-    cores = get_cores(mol_a, mol_b, enforce_chirally_valid_dummy_groups=False)
-    for core in cores:
+    cores_0, diagnostics_0 = get_cores_and_diagnostics(mol_a, mol_b, enforce_chirally_valid_dummy_groups=False)
+
+    # enforce_chirally_valid_dummy_groups is currently the only leaf filter, so when disabled we should have
+    # num_cores == total_leaves_visited
+    assert diagnostics_0.num_cores == diagnostics_0.total_leaves_visited
+
+    for core in cores_0:
         with pytest.raises(DummyGroupAssignmentError):
             verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
 
-    filtered_cores = get_cores(mol_a, mol_b, enforce_chirally_valid_dummy_groups=True)
-    for core in filtered_cores:
+    cores_1, diagnostics_1 = get_cores_and_diagnostics(mol_a, mol_b, enforce_chirally_valid_dummy_groups=True)
+    assert diagnostics_1.num_cores < diagnostics_1.total_leaves_visited
+    for core in cores_1:
         verify_chiral_validity_of_core(mol_a, mol_b, core, ff)

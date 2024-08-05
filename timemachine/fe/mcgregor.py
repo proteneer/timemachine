@@ -89,6 +89,7 @@ class MCSResult:
         self.num_edges = 0
         self.timed_out = False
         self.nodes_visited = 0
+        self.leaves_visited = 0
 
 
 class Graph:
@@ -273,6 +274,7 @@ class NoMappingError(Exception):
 @dataclass
 class MCSDiagnostics:
     total_nodes_visited: int
+    total_leaves_visited: int
     core_size: int
     num_cores: int
 
@@ -333,6 +335,7 @@ def mcs(
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(base_marcs)
     total_nodes_visited = 0
+    total_leaves_visited = 0
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
@@ -361,6 +364,7 @@ def mcs(
         )
 
         total_nodes_visited += mcs_result.nodes_visited
+        total_leaves_visited += mcs_result.leaves_visited
 
         # If timed out, either due to max_visits or max_cores, raise exception.
         if mcs_result.timed_out:
@@ -397,6 +401,7 @@ def mcs(
         mcs_result.all_marcs,
         MCSDiagnostics(
             total_nodes_visited=total_nodes_visited,
+            total_leaves_visited=total_leaves_visited,
             core_size=len(all_cores[0]),
             num_cores=len(all_cores),
         ),
@@ -420,7 +425,7 @@ def recursion(
     atom_map_2_to_1,
     layer,
     marcs,
-    mcs_result,
+    mcs_result: MCSResult,
     priority_idxs,
     max_visits,
     max_cores,
@@ -471,6 +476,7 @@ def recursion(
     # leaf-node, every atom has been mapped
     if layer == n_a:
         if num_edges == threshold:
+            mcs_result.leaves_visited += 1
             if not leaf_filter_fxn(atom_map_1_to_2):
                 return
 
