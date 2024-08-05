@@ -1775,7 +1775,7 @@ $$$$""",
 
 
 def permute_atom_indices(mol_a, mol_b, core, seed):
-    """Permute atom indices in both mols"""
+    """Randomly permute atom indices in mol_a, mol_b independently, and update core"""
     rng = np.random.default_rng(seed)
 
     perm_a = rng.permutation(mol_a.GetNumAtoms())
