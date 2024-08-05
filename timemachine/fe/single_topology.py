@@ -15,6 +15,7 @@ from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRA
 from timemachine.fe import chiral_utils, interpolate, model_utils, topology, utils
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import (
+    MultipleAnchorWarning,
     canonicalize_bond,
     generate_anchored_dummy_group_assignments,
     generate_dummy_group_assignments,
@@ -35,6 +36,10 @@ from timemachine.potentials import (
     PeriodicTorsion,
     SummedPotential,
 )
+
+
+class ChiralVolumeDisabledWarning(UserWarning):
+    pass
 
 
 class CoreBondChangeWarning(UserWarning):
@@ -480,7 +485,7 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
             all_proper_dummy_chiral_atom_idxs.append((c, i, j, k))
             all_proper_dummy_chiral_atom_params.append(p)
         else:
-            warnings.warn(f"Chiral Volume {c, i, j, k} has a disabled bond, turning off.")
+            warnings.warn(f"Chiral Volume {c, i, j, k} has a disabled bond, turning off.", ChiralVolumeDisabledWarning)
 
     mol_c_chiral_atom_idxs = list(mol_a_chiral_atom_idxs) + list(all_proper_dummy_chiral_atom_idxs)
     mol_c_chiral_atom_params = np.concatenate([mol_a_chiral_atom.params, all_proper_dummy_chiral_atom_params])
@@ -671,14 +676,20 @@ def find_chirally_valid_dummy_groups_impl(
     """Implementation of :py:func:`find_chirally_valid_dummy_groups`, separated to allow precomputation of bond
     graphs and forcefield."""
 
-    pairs = (
-        (dummy_groups_ab, dummy_groups_ba)
-        for dummy_groups_ab in generate_dummy_group_assignments(bond_graph_b, core[:, 1])
-        for dummy_groups_ba in generate_dummy_group_assignments(bond_graph_a, core[:, 0])
-        if is_chirally_valid(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, ff)
-    )
+    with warnings.catch_warnings():
+        # Suppress warnings from end-state setup during the search; these are only relevant for the selected candidate,
+        # and will be raised again when we construct the final SingleTopology instance
+        warnings.simplefilter("ignore", ChiralVolumeDisabledWarning)
+        warnings.simplefilter("ignore", MultipleAnchorWarning)
 
-    arbitrary_pair = next(pairs, None)
+        pairs = (
+            (dummy_groups_ab, dummy_groups_ba)
+            for dummy_groups_ab in generate_dummy_group_assignments(bond_graph_b, core[:, 1])
+            for dummy_groups_ba in generate_dummy_group_assignments(bond_graph_a, core[:, 0])
+            if is_chirally_valid(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, ff)
+        )
+
+        arbitrary_pair = next(pairs, None)
 
     return arbitrary_pair
 
