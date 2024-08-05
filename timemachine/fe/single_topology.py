@@ -36,6 +36,7 @@ from timemachine.potentials import (
     PeriodicTorsion,
     SummedPotential,
 )
+from timemachine.utils import fair_product_2
 
 
 class ChiralVolumeDisabledWarning(UserWarning):
@@ -688,8 +689,12 @@ def find_chirally_valid_dummy_groups_impl(
 
         pairs = (
             (dummy_groups_ab, dummy_groups_ba)
-            for dummy_groups_ab in generate_dummy_group_assignments(bond_graph_b, core[:, 1])
-            for dummy_groups_ba in generate_dummy_group_assignments(bond_graph_a, core[:, 0])
+            # NOTE: We use fair_product_2 instead of itertools.product to avoid iterating over all possible candidates
+            # for A -> B before trying the second candidate for B -> A
+            for dummy_groups_ab, dummy_groups_ba in fair_product_2(
+                list(generate_dummy_group_assignments(bond_graph_b, core[:, 1])),
+                list(generate_dummy_group_assignments(bond_graph_a, core[:, 0])),
+            )
             if is_chirally_valid(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, ff)
         )
 
