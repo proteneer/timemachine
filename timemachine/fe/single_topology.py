@@ -676,6 +676,9 @@ def find_chirally_valid_dummy_groups_impl(
     """Implementation of :py:func:`find_chirally_valid_dummy_groups`, separated to allow precomputation of bond
     graphs and forcefield."""
 
+    # TODO: Consider refactoring to also return harmonic bond and chiral atom potentials for the selected dummy groups,
+    # to avoid reconstructing later
+
     with warnings.catch_warnings():
         # Suppress warnings from end-state setup during the search; these are only relevant for the selected candidate,
         # and will be raised again when we construct the final SingleTopology instance
