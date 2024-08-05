@@ -419,6 +419,9 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
     b_to_c: dict or array, supports []
         mapping from b into a common core idx
 
+    dummy_groups: Dict[int, FrozenSet[int]]
+        mapping from anchor atom to dummy group. Indices refer to atoms in mol_b.
+
     Returns
     -------
     Tuple of bound HarmonicBond, ChiralAtomRestraint and ChiralBondRestraint
@@ -541,6 +544,9 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
 
     b_to_c: dict or array, supports []
         mapping from b into a common core idx
+
+    dummy_groups: Dict[int, FrozenSet[int]]
+        mapping from anchor atom to dummy group. Indices refer to atoms in mol_b.
 
     Returns
     -------
