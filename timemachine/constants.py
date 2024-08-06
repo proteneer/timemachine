@@ -43,4 +43,5 @@ DEFAULT_ATOM_MAPPING_KWARGS: Dict[str, Any] = {
     "disallow_planar_torsion_flips": True,
     "min_threshold": 0,
     "initial_mapping": None,
+    "enforce_chirally_valid_dummy_groups": True,
 }

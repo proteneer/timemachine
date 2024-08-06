@@ -30,8 +30,8 @@ from timemachine.fe.interpolate import (
 )
 from timemachine.fe.single_topology import (
     ChargePertubationError,
-    ChiralConversionError,
     CoreBondChangeWarning,
+    DummyGroupAssignmentError,
     SingleTopology,
     canonicalize_improper_idxs,
     cyclic_difference,
@@ -40,7 +40,7 @@ from timemachine.fe.single_topology import (
     interpolate_harmonic_force_constant,
     interpolate_w_coord,
     setup_dummy_interactions_from_ff,
-    verify_chiral_consistency_of_core,
+    verify_chiral_validity_of_core,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
@@ -1445,16 +1445,16 @@ $$$$""",
     ff = Forcefield.load_from_file("placeholder_ff.py")
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6]])
 
-    with pytest.raises(ChiralConversionError):
-        verify_chiral_consistency_of_core(mol_a, mol_b, core, ff)
+    with pytest.raises(DummyGroupAssignmentError):
+        verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
 
-    with pytest.raises(ChiralConversionError):
+    with pytest.raises(DummyGroupAssignmentError):
         SingleTopology(mol_a, mol_b, core, ff)
 
-    with pytest.raises(ChiralConversionError):
-        verify_chiral_consistency_of_core(mol_b, mol_a, core, ff)
+    with pytest.raises(DummyGroupAssignmentError):
+        verify_chiral_validity_of_core(mol_b, mol_a, core, ff)
 
-    with pytest.raises(ChiralConversionError):
+    with pytest.raises(DummyGroupAssignmentError):
         SingleTopology(mol_b, mol_a, core, ff)
 
 
@@ -1772,3 +1772,179 @@ $$$$""",
 
     assert np.sum(chiral_params_1 == 0) == 3
     assert np.sum(chiral_params_1 == DEFAULT_CHIRAL_ATOM_RESTRAINT_K) == 4
+
+
+def permute_atom_indices(mol_a, mol_b, core, seed):
+    """Randomly permute atom indices in mol_a, mol_b independently, and update core"""
+    rng = np.random.default_rng(seed)
+
+    perm_a = rng.permutation(mol_a.GetNumAtoms())
+    perm_b = rng.permutation(mol_b.GetNumAtoms())
+
+    # RenumberAtoms takes inverse permutations
+    # e.g. [3, 2, 0, 1] means atom 3 in the original mol will be atom 0 in the new one
+    inv_perm_a = np.argsort(perm_a)
+    inv_perm_b = np.argsort(perm_b)
+    mol_a = Chem.RenumberAtoms(mol_a, inv_perm_a.tolist())
+    mol_b = Chem.RenumberAtoms(mol_b, inv_perm_b.tolist())
+
+    core = np.array(core)
+    core[:, 0] = perm_a[core[:, 0]]
+    core[:, 1] = perm_b[core[:, 1]]
+
+    return mol_a, mol_b, core
+
+
+@pytest.mark.parametrize("seed", [2024, 2025])
+def test_chiral_core_bond_breaking_raises_error(seed):
+    """Test that we raise assertions for molecules that cannot generate valid dummy-group anchor assignments. In
+    particular, we break two core-core bonds under an identity mapping (with no dummy atoms).
+    """
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 07312412093D
+
+  6  7  0  0  0  0            999 V2000
+    1.7504    0.2003    1.2663 N   0  0  2  0  0  0  0  0  0  0  0  0
+    0.8845   -0.7367    0.7929 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0656    0.1573    0.2634 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6778    2.1410    1.4645 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9965    1.1853    0.5313 C   0  0  1  0  0  0  0  0  0  0  0  0
+    2.3507    0.8788    0.2466 O   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  5  4  1  0  0  0  0
+  5  1  1  0  0  0  0
+  2  3  1  0  0  0  0
+  6  1  1  0  0  0  0
+  3  5  1  0  0  0  0
+  5  6  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+  Mrv2311 07312412083D
+
+  6  5  0  0  0  0            999 V2000
+    1.7504    0.2003    1.2663 N   0  0  2  0  0  0  0  0  0  0  0  0
+    0.8845   -0.7367    0.7929 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0656    0.1573    0.2634 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6778    2.1410    1.4645 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9965    1.1853    0.5313 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.3507    0.8788    0.2466 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  5  4  1  0  0  0  0
+  5  1  1  0  0  0  0
+  6  1  1  0  0  0  0
+  2  3  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    ff = Forcefield.load_default()
+    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5]])
+
+    mol_a, mol_b, core = permute_atom_indices(mol_a, mol_b, core, seed)
+
+    with pytest.raises(DummyGroupAssignmentError):
+        verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
+
+
+@pytest.mark.parametrize("seed", [2024, 2025])
+def test_chiral_bond_breaking_1_core_1_dummy(seed):
+    mol_a = Chem.MolFromMolBlock(
+        """lhs
+                    3D
+ Structure written by MMmdl.
+ 15 16  0  0  1  0            999 V2000
+    2.1455    1.6402   -0.1409 O   0  0  0  0  0  0
+   -0.0529   -0.7121    0.3721 C   0  0  0  0  0  0
+   -1.4286   -0.4301   -0.2680 C   0  0  0  0  0  0
+   -0.9221    0.8962   -0.8723 C   0  0  0  0  0  0
+    1.7163    0.6542   -1.0827 C   0  0  0  0  0  0
+    0.4519    0.5990   -0.2512 C   0  0  0  0  0  0
+    1.0309    1.5756    0.6040 O   0  0  0  0  0  0
+   -0.0750   -0.6889    1.4650 H   0  0  0  0  0  0
+    0.4285   -1.6073   -0.0287 H   0  0  0  0  0  0
+   -2.2238   -0.2880    0.4685 H   0  0  0  0  0  0
+   -1.6971   -1.1659   -1.0311 H   0  0  0  0  0  0
+   -1.4047    1.7800   -0.4452 H   0  0  0  0  0  0
+   -0.9239    0.8937   -1.9651 H   0  0  0  0  0  0
+    1.5863    1.0639   -2.0863 H   0  0  0  0  0  0
+    2.3266   -0.2504   -1.0468 H   0  0  0  0  0  0
+  6  2  1  0  0  0
+  6  4  1  0  0  0
+  6  5  1  0  0  0
+  6  7  1  0  0  0
+  2  3  1  0  0  0
+  2  8  1  0  0  0
+  2  9  1  0  0  0
+  3  4  1  0  0  0
+  3 10  1  0  0  0
+  3 11  1  0  0  0
+  4 12  1  0  0  0
+  4 13  1  0  0  0
+  5  1  1  0  0  0
+  5 14  1  0  0  0
+  5 15  1  0  0  0
+  1  7  1  0  0  0
+M  END""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """rhs
+                    3D
+ Structure written by MMmdl.
+ 12 11  0  0  1  0            999 V2000
+    0.4102    0.4907   -0.1997 O   0  0  0  0  0  0
+   -0.0529   -0.7121    0.3721 C   0  0  0  0  0  0
+   -1.4286   -0.4301   -0.2680 C   0  0  0  0  0  0
+   -1.0708    0.5068   -0.6949 H   0  0  0  0  0  0
+    1.5875    0.5421   -0.9739 C   0  0  0  0  0  0
+    1.9148    1.2939   -0.2558 H   0  0  0  0  0  0
+   -0.0750   -0.6889    1.4650 H   0  0  0  0  0  0
+    0.4285   -1.6073   -0.0287 H   0  0  0  0  0  0
+   -2.2238   -0.2880    0.4685 H   0  0  0  0  0  0
+   -1.6971   -1.1659   -1.0311 H   0  0  0  0  0  0
+    1.4575    0.9518   -1.9775 H   0  0  0  0  0  0
+    2.1978   -0.3625   -0.9380 H   0  0  0  0  0  0
+  1  2  1  0  0  0
+  1  5  1  0  0  0
+  2  3  1  0  0  0
+  2  7  1  0  0  0
+  2  8  1  0  0  0
+  3  4  1  0  0  0
+  3  9  1  0  0  0
+  3 10  1  0  0  0
+  5  6  1  0  0  0
+  5 11  1  0  0  0
+  5 12  1  0  0  0
+M  END
+""",
+        removeHs=False,
+    )
+
+    # need to generate SC charges on this mol - am1 fails
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    core = np.array(
+        [[5, 0], [1, 1], [2, 2], [3, 3], [4, 4], [0, 5], [7, 6], [8, 7], [9, 8], [10, 9], [13, 10], [14, 11]]
+    )
+
+    mol_a, mol_b, core = permute_atom_indices(mol_a, mol_b, core, seed)
+
+    # from timemachine.fe.utils import plot_atom_mapping_grid
+
+    # print("core", core)
+    # res = plot_atom_mapping_grid(mol_a, mol_b, core)
+    # fpath = f"atom_mapping.svg"
+    # print("core mapping written to", fpath)
+
+    # with open(fpath, "w") as fh:
+    #     fh.write(res)
+
+    # should not raise an assertion
+    verify_chiral_validity_of_core(mol_a, mol_b, core, ff)

@@ -1,11 +1,21 @@
 import warnings
 from collections import defaultdict
 from itertools import product
-from typing import Collection, DefaultDict, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple, TypeVar
+from typing import (
+    Collection,
+    DefaultDict,
+    Dict,
+    FrozenSet,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+)
 
 import networkx as nx
-
-from timemachine.fe.utils import get_romol_bonds
 
 
 class MultipleAnchorWarning(UserWarning):
@@ -37,10 +47,12 @@ def generate_dummy_group_assignments(
 
     Example
     -------
+    >>> from rdkit import Chem
+    >>> from timemachine.graph_utils import convert_to_nx
     >>> mol = Chem.MolFromSmiles("OC1COO1")
-    >>> g = convert_bond_list_to_nx(get_romol_bonds(mol))
+    >>> bond_graph = convert_to_nx(mol)
     >>> core = [1, 2]
-    >>> list(generate_dummy_group_assignments(g, core))
+    >>> list(generate_dummy_group_assignments(bond_graph, core))
     [{1: frozenset({0}), 2: frozenset({3, 4})}, {1: frozenset({0, 3, 4})}]
 
     Parameters
@@ -89,9 +101,16 @@ def generate_dummy_group_assignments(
 
 
 def generate_anchored_dummy_group_assignments(
-    mol_a, mol_b, core_atoms_a: Collection[int], core_atoms_b: Collection[int]
+    dummy_groups: Dict[int, FrozenSet[int]],
+    bond_graph_a: nx.Graph,
+    bond_graph_b: nx.Graph,
+    core_atoms_a: Sequence[int],
+    core_atoms_b: Sequence[int],
 ) -> Iterator[Dict[int, Tuple[Optional[int], FrozenSet[int]]]]:
     """Returns an iterator over candidate anchored dummy group assignments.
+
+    By convention, dummy atoms are added to A to transform it into a supergraph of B. Indices in the dummy_groups
+    argument and in the return value refer to atoms in B.
 
     An anchored dummy group assignment is a set of triples (dummy group, j = bond anchor atom, k = angle anchor atom),
     where dummy atoms are connected to the core only through j, and k is a core neighbor of j where the bond (j, k)
@@ -102,25 +121,27 @@ def generate_anchored_dummy_group_assignments(
 
     Example
     -------
-    >>> mol_a = Chem.MolFromSmiles("CC")
-    >>> mol_b = Chem.MolFromSmiles("c1(C)ccc1")
+    >>> from rdkit import Chem
+    >>> from timemachine.graph_utils import convert_to_nx
+    >>> bond_graph_a = convert_to_nx(Chem.MolFromSmiles("CC"))
+    >>> bond_graph_b = convert_to_nx(Chem.MolFromSmiles("c1(C)ccc1"))
     >>> core_atoms_a = [0, 1]
     >>> core_atoms_b = [2, 0]
-    >>> list(generate_anchored_dummy_group_assignments(mol_a, mol_b, core_atoms_a, core_atoms_b))
-    [{0: (2, frozenset({1})), 2: (0, frozenset({3, 4}))},
-    {0: (2, frozenset({1, 3, 4}))}]
+    >>> dgas = list(generate_dummy_group_assignments(bond_graph_b, core_atoms_b))
+    >>> [adgs for dgs in dgas for adgs in generate_anchored_dummy_group_assignments(dgs, bond_graph_a, bond_graph_b, core_atoms_a, core_atoms_b)]
+    [{0: (2, frozenset({1, 3, 4}))}, {0: (2, frozenset({1})), 2: (0, frozenset({3, 4}))}]
 
     Parameters
     ----------
-    mol_a, mol_b: Mol
-        Source and target molecules for alchemical transformation.
-        Dummy atoms are added to mol_a to transform it into a supergraph of mol_b.
+    dummy_groups: Dict[int, FrozenSet[int]]
+        Mapping from anchor atom to atoms in the associated dummy group. Indices refer to atoms in B.
 
-    core_atoms_a: collection of int
-        mol_a atoms in the core
+    bond_graph_a, bond_graph_b: nx.Graph
+        Bond graphs for source and target molecules of an alchemical transformation.
+        Dummy atoms are added to A to transform it into a supergraph of B.
 
-    core_atoms_b: collection of int
-        mol_b atoms in the core
+    core_atoms_a, core_atoms_b: sequence of int
+        atoms in the core
 
     Returns
     -------
@@ -128,11 +149,7 @@ def generate_anchored_dummy_group_assignments(
         each element is a mapping from bond anchor atom to the pair (angle anchor atom, dummy group)
     """
 
-    bonds_b = get_romol_bonds(mol_b)
-    bond_graph_b = convert_bond_list_to_nx(bonds_b)
-    dummy_group_assignments = generate_dummy_group_assignments(bond_graph_b, core_atoms_b)
-
-    core_bonds_c = get_core_bonds(mol_a, mol_b, core_atoms_a, core_atoms_b)
+    core_bonds_c = get_core_bonds(bond_graph_a.edges(), bond_graph_b.edges(), core_atoms_a, core_atoms_b)
     c_to_b = {c: b for c, b in enumerate(core_atoms_b)}
     core_bonds_b = frozenset(translate_bonds(core_bonds_c, c_to_b))
 
@@ -148,11 +165,10 @@ def generate_anchored_dummy_group_assignments(
     # to an independent choice of an angle anchor atom for each dummy group
     anchored_dummy_group_assignments = (
         dict(anchored_dummy_group)
-        for dummy_group_assignment in dummy_group_assignments
         for anchored_dummy_group in product(
             *[
                 [(bond_anchor, (angle_anchor, dummy_group)) for angle_anchor in get_angle_anchors(bond_anchor)]
-                for bond_anchor, dummy_group in dummy_group_assignment.items()
+                for bond_anchor, dummy_group in dummy_groups.items()
             ]
         )
     )
@@ -167,24 +183,13 @@ def canonicalize_bond(ixn: Tuple[int, ...]) -> Tuple[int, ...]:
         return tuple(ixn)
 
 
-def convert_bond_list_to_nx(bond_list: Collection[Tuple[int, int]]) -> nx.Graph:
-    """
-    Convert an ROMol into a networkx graph.
-    """
-    g = nx.Graph()
-    for i, j in bond_list:
-        assert i != j  # do not allow self-edges
-        g.add_edge(i, j)
-
-    return g
-
-
 def get_core_bonds(
-    mol_a, mol_b, core_atoms_a: Collection[int], core_atoms_b: Collection[int]
+    bonds_a: Collection[Tuple[int, int]],
+    bonds_b: Collection[Tuple[int, int]],
+    core_atoms_a: Sequence[int],
+    core_atoms_b: Sequence[int],
 ) -> FrozenSet[Tuple[int, ...]]:
     """Returns core-core bonds that are present in both mol_a and mol_b"""
-    bonds_a = get_romol_bonds(mol_a)
-    bonds_b = get_romol_bonds(mol_b)
     a_to_c = {a: c for c, a in enumerate(core_atoms_a)}
     b_to_c = {b: c for c, b in enumerate(core_atoms_b)}
     return frozenset(translate_bonds(bonds_a, a_to_c)).intersection(frozenset(translate_bonds(bonds_b, b_to_c)))

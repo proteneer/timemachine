@@ -1,8 +1,8 @@
 import pytest
 from rdkit import Chem
 
-from timemachine.fe.dummy import convert_bond_list_to_nx, generate_dummy_group_assignments
-from timemachine.fe.utils import get_romol_bonds
+from timemachine.fe.dummy import generate_dummy_group_assignments
+from timemachine.graph_utils import convert_to_nx
 
 # These tests check the various utilities used to turn off interactions
 # such that the end-states are separable. A useful glossary of terms is as follows.
@@ -19,6 +19,13 @@ from timemachine.fe.utils import get_romol_bonds
 # partition - only applies to dummy groups, as we require that dummy groups disjointly partition dummy atoms.
 
 pytestmark = [pytest.mark.nocuda]
+
+
+def equivalent_assignment(left, right):
+    def to_comparable(dgas):
+        return frozenset(frozenset((k, frozenset(v)) for k, v in dgs.items()) for dgs in dgas)
+
+    return to_comparable(left) == to_comparable(right)
 
 
 def test_generate_dummy_group_assignments():
@@ -54,34 +61,28 @@ def test_generate_dummy_group_assignments():
 
     """
 
-    def equivalent_assignment(left, right):
-        def to_comparable(dgas):
-            return frozenset(frozenset((k, frozenset(v)) for k, v in dgs.items()) for dgs in dgas)
-
-        return to_comparable(left) == to_comparable(right)
-
-    g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("FC1CC1(F)N")))
+    g = convert_to_nx(Chem.MolFromSmiles("FC1CC1(F)N"))
     core = [1, 2, 3]
     dgas = list(generate_dummy_group_assignments(g, core))
     assert equivalent_assignment(dgas, [{1: {0}, 3: {4, 5}}])
 
-    g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("FC1CC1(F)NN")))
+    g = convert_to_nx(Chem.MolFromSmiles("FC1CC1(F)NN"))
     core = [1, 2, 3]
     dgas = list(generate_dummy_group_assignments(g, core))
     assert equivalent_assignment(dgas, [{1: {0}, 3: {4, 5, 6}}])
 
-    g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("C1CC11OO1")))
+    g = convert_to_nx(Chem.MolFromSmiles("C1CC11OO1"))
     core = [0, 1, 2]
     dgas = list(generate_dummy_group_assignments(g, core))
     assert equivalent_assignment(dgas, [{2: {3, 4}}])
 
-    g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("C1CC2OOC12")))
+    g = convert_to_nx(Chem.MolFromSmiles("C1CC2OOC12"))
     core = [0, 1, 2, 5]
     dgas = list(generate_dummy_group_assignments(g, core))
     assert equivalent_assignment(dgas, [{2: {3, 4}}, {5: {3, 4}}])
 
     # example above, where O's are dummy atoms, and Cs are core
-    g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("OC1COO1")))
+    g = convert_to_nx(Chem.MolFromSmiles("OC1COO1"))
     core = [1, 2]
     dgas = list(generate_dummy_group_assignments(g, core))
     # one or two groups depending on choice of anchor atom for {3, 4}
@@ -89,6 +90,6 @@ def test_generate_dummy_group_assignments():
 
 
 def test_generate_dummy_group_assignments_empty_core():
-    g = convert_bond_list_to_nx(get_romol_bonds(Chem.MolFromSmiles("OC1COO1")))
+    g = convert_to_nx(Chem.MolFromSmiles("OC1COO1"))
     core = []
     assert list(generate_dummy_group_assignments(g, core)) == []

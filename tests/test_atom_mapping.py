@@ -10,7 +10,9 @@ from rdkit.Chem import AllChem
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
+from timemachine.fe.single_topology import DummyGroupAssignmentError, verify_chiral_validity_of_core
 from timemachine.fe.utils import get_romol_conf, plot_atom_mapping_grid, read_sdf, set_romol_conf
+from timemachine.ff import Forcefield
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -362,6 +364,7 @@ $$$$""",
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        enforce_chirally_valid_dummy_groups=True,
     )
     assert len(all_cores) > 0
 
@@ -404,6 +407,7 @@ def test_all_pairs(filepath):
                 disallow_planar_torsion_flips=False,
                 min_threshold=0,
                 initial_mapping=None,
+                enforce_chirally_valid_dummy_groups=True,
             )
             end_time = time.time()
 
@@ -538,10 +542,12 @@ $$$$""",
         max_cores=1000000,
         enforce_core_core=False,
         ring_matches_ring_only=False,
-        enforce_chiral=True,
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        # NOTE: example missing explicit Hs, chiral detection will fail
+        enforce_chiral=False,
+        enforce_chirally_valid_dummy_groups=False,
     )
 
     assert len(all_cores) == 1
@@ -566,6 +572,7 @@ $$$$""",
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        enforce_chirally_valid_dummy_groups=False,
     )
 
     # 2 possible matches, returned core ordering is fully determined
@@ -592,6 +599,7 @@ $$$$""",
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        enforce_chirally_valid_dummy_groups=False,
     )
 
     # 2 possible matches, if we do not require max_connected_components=1 but do
@@ -725,6 +733,7 @@ def test_hif2a_failure():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        enforce_chirally_valid_dummy_groups=True,
     )
 
     expected_core = np.array(
@@ -790,6 +799,7 @@ def test_cyclohexane_stereo():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        enforce_chirally_valid_dummy_groups=True,
     )
 
     for core_idx, core in enumerate(all_cores[:1]):
@@ -850,6 +860,7 @@ def test_chiral_atom_map():
         ring_matches_ring_only=True,
         min_threshold=0,
         initial_mapping=None,
+        enforce_chirally_valid_dummy_groups=True,
     )
 
     chiral_aware_cores = get_cores(mol_a, mol_b, enforce_chiral=True)
@@ -890,6 +901,7 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        enforce_chirally_valid_dummy_groups=True,
     )
 
     cores = get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring_only)
@@ -920,6 +932,7 @@ def test_max_visits_error():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
+        enforce_chirally_valid_dummy_groups=True,
     )
     cores = get_cores(mol_a, mol_b, max_visits=10000)
     assert len(cores) > 0
@@ -952,10 +965,11 @@ def test_max_cores_warning():
         min_threshold=0,
         max_visits=1e7,
         initial_mapping=None,
+        enforce_chirally_valid_dummy_groups=True,
     )
     # Warning is triggered by reaching the max visits, but not the max_cores
     with pytest.warns(MaxVisitsWarning, match="Inexhaustive search: reached max number of visits"):
-        all_cores = get_cores(mol_a, mol_b, max_cores=100, max_visits=20)
+        all_cores = get_cores(mol_a, mol_b, max_cores=100, max_visits=24)
         assert len(all_cores) == 1
 
 
@@ -974,6 +988,7 @@ def test_min_threshold():
         disallow_planar_torsion_flips=False,
         min_threshold=mol_a.GetNumAtoms(),
         initial_mapping=None,
+        enforce_chirally_valid_dummy_groups=True,
     )
 
     with pytest.raises(NoMappingError, match="Unable to find mapping with at least 18 edges"):
@@ -995,9 +1010,14 @@ def test_get_cores_and_diagnostics():
 
         assert diagnostics.core_size >= len(all_cores[0])
         assert diagnostics.num_cores >= len(all_cores)
-        assert (
-            diagnostics.total_nodes_visited >= diagnostics.core_size
-        )  # must visit at least one node per atom pair in core
+
+        # must visit at least one node per atom pair in core
+        assert diagnostics.total_nodes_visited >= diagnostics.core_size
+
+        # must visit at least one leaf node per core
+        assert diagnostics.num_cores <= diagnostics.total_leaves_visited
+
+        assert diagnostics.total_leaves_visited <= diagnostics.total_nodes_visited
 
 
 def polyphenylene_smiles(n):
@@ -1120,26 +1140,26 @@ def test_initial_mapping(hif2a_ligands):
     # adjust for 1-indexing when reading off the atom-mapping
     initial_mapping = initial_mapping - 1
 
-    TEST_ATOM_MAPPING_KWARGS = {
-        # "ring_cutoff": 0.12,
-        # "chain_cutoff": 0.2,
-        "ring_cutoff": 0.4,  # bumped up to make the problem harder
-        "chain_cutoff": 0.4,  # bumped up to make the problem harder
-        "max_visits": 1e7,
-        "max_connected_components": 1,
-        "min_connected_component_size": 1,
-        "max_cores": 1e5,
-        "enforce_core_core": True,
-        "ring_matches_ring_only": True,
-        "enforce_chiral": True,
-        "disallow_planar_torsion_flips": True,
-        "min_threshold": 0,
-        "initial_mapping": initial_mapping,
-    }
+    get_cores_and_diagnostics = partial(
+        atom_mapping.get_cores_and_diagnostics,
+        # ring_cutoff=0.12,
+        # chain_cutoff=0.2,
+        ring_cutoff=0.4,  # bumped up to make the problem harder
+        chain_cutoff=0.4,  # bumped up to make the problem harder
+        max_visits=1e7,
+        max_connected_components=1,
+        min_connected_component_size=1,
+        max_cores=1e5,
+        enforce_core_core=True,
+        ring_matches_ring_only=True,
+        enforce_chiral=True,
+        disallow_planar_torsion_flips=True,
+        min_threshold=0,
+        enforce_chirally_valid_dummy_groups=True,
+    )
 
-    all_cores_test, diagnostics_test = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **TEST_ATOM_MAPPING_KWARGS)
-    TEST_ATOM_MAPPING_KWARGS["initial_mapping"] = None
-    all_cores_ref, diagnostics_ref = atom_mapping.get_cores_and_diagnostics(mol_a, mol_b, **TEST_ATOM_MAPPING_KWARGS)
+    all_cores_test, diagnostics_test = get_cores_and_diagnostics(mol_a, mol_b, initial_mapping=initial_mapping)
+    all_cores_ref, diagnostics_ref = get_cores_and_diagnostics(mol_a, mol_b, initial_mapping=None)
 
     assert len(all_cores_test[0]) == len(all_cores_ref[0])
 
@@ -1392,3 +1412,108 @@ def test_hybrid_core_generation(hif2a_ligands):
     # plt.legend()
 
     # plt.show()
+
+
+@pytest.mark.parametrize("seed", [2024, 2025])
+def test_enforce_chirally_valid_dummy_groups(seed):
+    # # MolBlocks below generated with the following code:
+
+    # mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))  # benzene
+    # mol_b = Chem.AddHs(Chem.MolFromSmiles("C(C1)(C2)CC12"))  # bicyclopentane
+    # AllChem.EmbedMolecule(mol_a, randomSeed=2024)
+    # AllChem.EmbedMolecule(mol_b, randomSeed=2024)
+    # AllChem.AlignMol(mol_b, mol_a, atomMap=[(0, 0), (4, 3)])
+
+    mol_a = Chem.MolFromMolBlock(
+        """
+     RDKit          3D
+
+ 12 12  0  0  0  0  0  0  0  0999 V2000
+    0.9820    1.0014    0.0105 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3692    1.3257   -0.0095 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.3213    0.3320   -0.0196 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.9782   -0.9962   -0.0105 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.3622   -1.3280    0.0094 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3301   -0.3374    0.0197 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.7618    1.7512    0.0190 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.6369    2.3883   -0.0167 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -2.3674    0.6147   -0.0351 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.7688   -1.7441   -0.0191 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6281   -2.3740    0.0165 H   0  0  0  0  0  0  0  0  0  0  0  0
+    2.3775   -0.6335    0.0353 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0
+  2  3  1  0
+  3  4  2  0
+  4  5  1  0
+  5  6  2  0
+  6  1  1  0
+  1  7  1  0
+  2  8  1  0
+  3  9  1  0
+  4 10  1  0
+  5 11  1  0
+  6 12  1  0
+M  END""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+     RDKit          3D
+
+ 13 14  0  0  0  0  0  0  0  0999 V2000
+    0.6509    0.6640    0.0070 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0474   -0.0518    1.1787 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.7335    0.7273   -0.5626 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7357   -0.7070   -0.6174 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.6472   -0.6589   -0.0069 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3555    1.3705    0.0097 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5448    0.5192    1.8798 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7823   -0.7798    1.5901 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.7595    0.6979   -1.6679 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.4509    1.3947   -0.0683 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7983   -0.7612   -1.6975 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3850   -1.3532   -0.0133 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.3319   -1.3827   -0.0161 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0
+  1  3  1  0
+  1  4  1  0
+  4  5  1  0
+  5  2  1  0
+  5  3  1  0
+  1  6  1  0
+  2  7  1  0
+  2  8  1  0
+  3  9  1  0
+  3 10  1  0
+  4 11  1  0
+  4 12  1  0
+  5 13  1  0
+M  END""",
+        removeHs=False,
+    )
+
+    rng = np.random.default_rng(seed)
+    mol_a = Chem.RenumberAtoms(mol_a, rng.permutation(mol_a.GetNumAtoms()).tolist())
+    mol_b = Chem.RenumberAtoms(mol_b, rng.permutation(mol_b.GetNumAtoms()).tolist())
+
+    ff = Forcefield.load_default()
+
+    get_cores_and_diagnostics = partial(
+        atom_mapping.get_cores_and_diagnostics, **{**DEFAULT_ATOM_MAPPING_KWARGS, "max_connected_components": 2}
+    )
+
+    cores_0, diagnostics_0 = get_cores_and_diagnostics(mol_a, mol_b, enforce_chirally_valid_dummy_groups=False)
+
+    # enforce_chirally_valid_dummy_groups is currently the only leaf filter, so when disabled we should have
+    # num_cores == total_leaves_visited
+    assert diagnostics_0.num_cores == diagnostics_0.total_leaves_visited
+
+    for core in cores_0:
+        with pytest.raises(DummyGroupAssignmentError):
+            verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
+
+    cores_1, diagnostics_1 = get_cores_and_diagnostics(mol_a, mol_b, enforce_chirally_valid_dummy_groups=True)
+    assert diagnostics_1.num_cores < diagnostics_1.total_leaves_visited
+    for core in cores_1:
+        verify_chiral_validity_of_core(mol_a, mol_b, core, ff)

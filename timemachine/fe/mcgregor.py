@@ -88,6 +88,7 @@ class MCSResult:
         self.num_edges = 0
         self.timed_out = False
         self.nodes_visited = 0
+        self.leaves_visited = 0
 
 
 class Graph:
@@ -272,6 +273,7 @@ class NoMappingError(Exception):
 @dataclass
 class MCSDiagnostics:
     total_nodes_visited: int
+    total_leaves_visited: int
     core_size: int
     num_cores: int
 
@@ -304,6 +306,7 @@ def mcs(
     min_threshold,
     initial_mapping,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
+    leaf_filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
     assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
@@ -333,6 +336,7 @@ def mcs(
         raise NoMappingError("No possible mapping given the predicate matrix, verify molecules are aligned")
 
     total_nodes_visited = 0
+    total_leaves_visited = 0
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
@@ -358,9 +362,11 @@ def mcs(
             max_connected_components,
             min_connected_component_size,
             filter_fxn,
+            leaf_filter_fxn,
         )
 
         total_nodes_visited += mcs_result.nodes_visited
+        total_leaves_visited += mcs_result.leaves_visited
 
         if len(mcs_result.all_maps) > 0:
             # If we timed out but got cores, throw a warning
@@ -399,6 +405,7 @@ def mcs(
         mcs_result.all_marcs,
         MCSDiagnostics(
             total_nodes_visited=total_nodes_visited,
+            total_leaves_visited=total_leaves_visited,
             core_size=len(all_cores[0]),
             num_cores=len(all_cores),
         ),
@@ -422,7 +429,7 @@ def recursion(
     atom_map_2_to_1,
     layer,
     marcs,
-    mcs_result,
+    mcs_result: MCSResult,
     priority_idxs,
     max_visits,
     max_cores,
@@ -430,7 +437,8 @@ def recursion(
     enforce_core_core,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
-    filter_fxn,
+    filter_fxn: Callable[[Sequence[int]], bool],
+    leaf_filter_fxn: Callable[[Sequence[int]], bool],
 ):
     if mcs_result.nodes_visited > max_visits:
         mcs_result.timed_out = True
@@ -472,6 +480,10 @@ def recursion(
     # leaf-node, every atom has been mapped
     if layer == n_a:
         if num_edges == threshold:
+            mcs_result.leaves_visited += 1
+            if not leaf_filter_fxn(atom_map_1_to_2):
+                return
+
             mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
             mcs_result.all_marcs.append(copy.copy(marcs))
             mcs_result.num_edges = num_edges
@@ -504,6 +516,7 @@ def recursion(
                     max_connected_components,
                     min_connected_component_size,
                     filter_fxn,
+                    leaf_filter_fxn,
                 )
             atom_map_pop(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
 
@@ -527,4 +540,5 @@ def recursion(
         max_connected_components,
         min_connected_component_size,
         filter_fxn,
+        leaf_filter_fxn,
     )

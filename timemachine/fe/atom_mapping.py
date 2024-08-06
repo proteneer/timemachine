@@ -9,7 +9,10 @@ from rdkit import Chem
 
 from timemachine.fe import mcgregor
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
+from timemachine.fe.single_topology import find_chirally_valid_dummy_groups_impl
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
+from timemachine.ff import Forcefield
+from timemachine.graph_utils import convert_to_nx
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
 # Unless you have to. And now we have to. If you want to understand what this code is doing, it
@@ -62,6 +65,7 @@ def get_cores_and_diagnostics(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
+    enforce_chirally_valid_dummy_groups: bool,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     """Same as :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
     assert max_cores > 0
@@ -79,6 +83,7 @@ def get_cores_and_diagnostics(
         enforce_chiral=enforce_chiral,
         disallow_planar_torsion_flips=disallow_planar_torsion_flips,
         min_threshold=min_threshold,
+        enforce_chirally_valid_dummy_groups=enforce_chirally_valid_dummy_groups,
     )
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
@@ -107,6 +112,7 @@ def get_cores(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
+    enforce_chirally_valid_dummy_groups: bool,
 ) -> List[NDArray]:
     """
     Finds set of cores between two molecules that maximizes the number of common edges.
@@ -189,6 +195,7 @@ def get_cores(
         disallow_planar_torsion_flips,
         min_threshold,
         initial_mapping,
+        enforce_chirally_valid_dummy_groups,
     )
 
     return all_cores
@@ -260,17 +267,6 @@ def induce_mol_subgraph(mol_a, core_a, bond_core_a):
     return sg_a
 
 
-def _to_networkx_graph(mol):
-    g = nx.Graph()
-    for atom in mol.GetAtoms():
-        g.add_node(atom.GetIdx())
-
-    for bond in mol.GetBonds():
-        src, dst = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        g.add_edge(src, dst)
-    return g
-
-
 def _compute_bond_cores(mol_a, mol_b, marcs):
     a_edges = get_edges(mol_a)
     b_edges = get_edges(mol_b)
@@ -339,6 +335,7 @@ def _get_cores_impl(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
+    enforce_chirally_valid_dummy_groups: bool,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     if initial_mapping is None:
         initial_mapping = np.zeros((0, 2))
@@ -412,6 +409,25 @@ def _get_cores_impl(
     def filter_fxn(trial_core):
         return all(f(trial_core) for f in filter_fxns)
 
+    def make_leaf_filter_fxn():
+        bond_graph_a = convert_to_nx(mol_a)
+        bond_graph_b = convert_to_nx(mol_b)
+
+        # Use placeholder forcefield with a minimal number of patterns for performance
+        ff = Forcefield.load_from_file("placeholder_ff.py")
+
+        def leaf_filter_fxn(trial_core) -> bool:
+            if enforce_chirally_valid_dummy_groups:
+                core = mcgregor.perm_to_core(trial_core)
+                chirally_valid_dummy_groups = find_chirally_valid_dummy_groups_impl(
+                    mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff
+                )
+                return chirally_valid_dummy_groups is not None
+            else:
+                return True
+
+        return leaf_filter_fxn
+
     all_cores, all_marcs, mcs_diagnostics = mcgregor.mcs(
         n_a,
         n_b,
@@ -425,7 +441,8 @@ def _get_cores_impl(
         min_connected_component_size,
         min_threshold,
         initial_mapping,
-        filter_fxn=filter_fxn,
+        filter_fxn,
+        make_leaf_filter_fxn(),
     )
 
     all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
