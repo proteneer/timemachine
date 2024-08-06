@@ -115,7 +115,8 @@ def get_cores(
 
     Additional notes
     ----------------
-    1) The returned cores are sorted in increasing order based on the rmsd of the alignment.
+    1) The returned cores are jointly sorted in increasing order based on the number of core-dummy bonds broken,
+       the sum of valence values changed, and the rmsd of the alignment.
     2) The number of cores atoms may vary slightly, but the number of mapped edges are the same.
     3) If a time-out has occurred due to max_visits, then an exception is thrown.
 
@@ -134,7 +135,7 @@ def get_cores(
         The distance cutoff that non-ring atoms must satisfy.
 
     max_visits: int
-        Maximum number of nodes we can visit for a given threshold.
+        Maximum number of nodes we can visit to generate at least one core.
 
     max_connected_components: int or None
         Set to k to only keep mappings where the number of connected components is <= k.

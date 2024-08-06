@@ -10,7 +10,7 @@ from rdkit.Chem import AllChem
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
-from timemachine.fe.utils import plot_atom_mapping_grid, read_sdf
+from timemachine.fe.utils import get_romol_conf, plot_atom_mapping_grid, read_sdf, set_romol_conf
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -905,7 +905,7 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
     assert all(len([() for idx_a in core[:, 0] if mol_a.GetAtomWithIdx(int(idx_a)).IsInRing()]) == 4 for core in cores)
 
 
-def test_max_visits_warning():
+def test_max_visits_error():
     mol_a, mol_b = get_cyclohexanes_different_confs()
     get_cores = partial(
         atom_mapping.get_cores,
@@ -924,9 +924,17 @@ def test_max_visits_warning():
     cores = get_cores(mol_a, mol_b, max_visits=10000)
     assert len(cores) > 0
 
-    with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 0 cores with 2 nodes visited"):
-        with pytest.raises(NoMappingError):
-            get_cores(mol_a, mol_b, max_visits=1)
+    with pytest.raises(NoMappingError, match="Exceeded max number of visits/cores"):
+        get_cores(mol_a, mol_b, max_visits=1)
+
+
+def test_empty_predicate_map_error():
+    mol_a, mol_b = get_cyclohexanes_different_confs()
+    # Impossible to map the compounds if they are not aligned
+    set_romol_conf(mol_b, get_romol_conf(mol_b) + 1000.0)
+
+    with pytest.raises(NoMappingError, match="No possible mapping given the predicate matrix"):
+        atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
 
 
 def test_max_cores_warning():
@@ -945,8 +953,9 @@ def test_max_cores_warning():
         max_visits=1e7,
         initial_mapping=None,
     )
-    with pytest.warns(MaxVisitsWarning, match="Reached max number of visits/cores: 1 cores"):
-        all_cores = get_cores(mol_a, mol_b, max_cores=1)
+    # Warning is triggered by reaching the max visits, but not the max_cores
+    with pytest.warns(MaxVisitsWarning, match="Inexhaustive search: reached max number of visits"):
+        all_cores = get_cores(mol_a, mol_b, max_cores=100, max_visits=20)
         assert len(all_cores) == 1
 
 
