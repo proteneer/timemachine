@@ -140,7 +140,7 @@ def generate_anchored_dummy_group_assignments(
         Bond graphs for source and target molecules of an alchemical transformation.
         Dummy atoms are added to A to transform it into a supergraph of B.
 
-    core_atoms_a, core_atoms_b: collection of int
+    core_atoms_a, core_atoms_b: sequence of int
         atoms in the core
 
     Returns
