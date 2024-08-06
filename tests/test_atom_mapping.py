@@ -937,7 +937,9 @@ def test_max_visits_error():
     cores = get_cores(mol_a, mol_b, max_visits=10000)
     assert len(cores) > 0
 
-    with pytest.raises(NoMappingError, match="Exceeded max number of visits/cores"):
+    with pytest.raises(
+        NoMappingError, match="Exceeded max number of visits/cores - no valid cores could be found: 1 nodes visited."
+    ):
         get_cores(mol_a, mol_b, max_visits=1)
 
 

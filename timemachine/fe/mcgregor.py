@@ -384,7 +384,7 @@ def mcs(
         elif mcs_result.timed_out:
             # If timed out, either due to max_visits or max_cores, raise exception.
             raise NoMappingError(
-                f"Exceeded max number of visits/cores - no valid cores could be found: {mcs_result.nodes_visited} nodes visited."
+                f"Exceeded max number of visits/cores - no valid cores could be found: {total_nodes_visited} nodes visited."
             )
         # else:
         # print(
@@ -440,7 +440,7 @@ def recursion(
     filter_fxn: Callable[[Sequence[int]], bool],
     leaf_filter_fxn: Callable[[Sequence[int]], bool],
 ):
-    if mcs_result.nodes_visited > max_visits:
+    if mcs_result.nodes_visited >= max_visits:
         mcs_result.timed_out = True
         return
 
