@@ -1,6 +1,5 @@
 # maximum common subgraph routines based off of the mcgregor paper
 import copy
-import time
 import warnings
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Sequence, Set, Tuple
@@ -328,12 +327,14 @@ def mcs(
     base_layer = len(initial_mapping)
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
     # Keep start time for debugging purposes below
-    start_time = time.time()  # noqa
-
-    mcs_result = None
+    # import time
+    # start_time = time.time()  # noqa
 
     # run in reverse by guessing max # of edges to avoid getting stuck in minima.
     max_threshold = _arcs_left(base_marcs)
+    if max_threshold < 1:
+        raise NoMappingError("No possible mapping given the predicate matrix, verify molecules are aligned")
+
     total_nodes_visited = 0
     total_leaves_visited = 0
     for idx in range(max_threshold):
@@ -353,7 +354,8 @@ def mcs(
             base_marcs,
             mcs_result,
             priority_idxs,
-            max_visits,
+            # Decrement the max visits by the number already visited to ensure constant wall clock time
+            max_visits - total_nodes_visited,
             max_cores,
             cur_threshold,
             enforce_core_core,
@@ -366,26 +368,28 @@ def mcs(
         total_nodes_visited += mcs_result.nodes_visited
         total_leaves_visited += mcs_result.leaves_visited
 
-        # If timed out, either due to max_visits or max_cores, raise exception.
-        if mcs_result.timed_out:
-            warnings.warn(
-                f"Reached max number of visits/cores: {len(mcs_result.all_maps)} cores with {mcs_result.nodes_visited} nodes visited. "
-                "Cores may be suboptimal.",
-                MaxVisitsWarning,
-            )
-
         if len(mcs_result.all_maps) > 0:
+            # If we timed out but got cores, throw a warning
+            if mcs_result.timed_out and len(mcs_result.all_maps) < max_cores:
+                warnings.warn(
+                    f"Inexhaustive search: reached max number of visits ({max_visits}) and found only "
+                    f"{len(mcs_result.all_maps)} out of {max_cores} desired cores.",
+                    MaxVisitsWarning,
+                )
             # don't remove this comment and the one below, useful for debugging!
             # print(
             # f"==SUCCESS==[NODES VISITED {mcs_result.nodes_visited} | CORE_SIZE {len([x != UNMAPPED for x in mcs_result.all_maps[0]])} | NUM_CORES {len(mcs_result.all_maps)} | NUM_EDGES {mcs_result.num_edges} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
             # )
             break
+        elif mcs_result.timed_out:
+            # If timed out, either due to max_visits or max_cores, raise exception.
+            raise NoMappingError(
+                f"Exceeded max number of visits/cores - no valid cores could be found: {mcs_result.nodes_visited} nodes visited."
+            )
         # else:
         # print(
         # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
         # )
-
-    assert mcs_result is not None
 
     if len(mcs_result.all_maps) == 0:
         raise NoMappingError("Unable to find mapping")
