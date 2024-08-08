@@ -24,6 +24,7 @@ def get_mol_name(mol) -> str:
 AM1_CHARGE_CACHE = "AM1Cache"
 AM1ELF10_CHARGE_CACHE = "AM1ELF10Cache"
 BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
+BOND_SMIRK_MATCH_CACHE_ALL = "BondSmirkMatchCacheAll"
 
 AM1 = "AM1"
 AM1ELF10 = "AM1ELF10"
@@ -246,7 +247,8 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list, first_match_wins=True)
     * Order within each smirks pattern matters
         For example, "[#6:1]~[#1:2]" and "[#1:1]~[#6:2]" will match atom pairs in the opposite order
     """
-    if not mol.HasProp(BOND_SMIRK_MATCH_CACHE):
+    chache_prop_name = BOND_SMIRK_MATCH_CACHE if first_match_wins else BOND_SMIRK_MATCH_CACHE_ALL
+    if not mol.HasProp(chache_prop_name):
         oemol = convert_to_oe(mol)
         AromaticityModel.assign(oemol)
 
@@ -265,9 +267,9 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list, first_match_wins=True)
                 if not already_assigned or not first_match_wins:
                     bond_idxs.append(forward_matched_bond)
                     type_idxs.append(type_idx)
-        mol.SetProp(BOND_SMIRK_MATCH_CACHE, base64.b64encode(pickle.dumps((bond_idxs, type_idxs))))
+        mol.SetProp(chache_prop_name, base64.b64encode(pickle.dumps((bond_idxs, type_idxs))))
     else:
-        bond_idxs, type_idxs = pickle.loads(base64.b64decode(mol.GetProp(BOND_SMIRK_MATCH_CACHE)))
+        bond_idxs, type_idxs = pickle.loads(base64.b64decode(mol.GetProp(chache_prop_name)))
     return np.array(bond_idxs), np.array(type_idxs)
 
 
