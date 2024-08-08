@@ -262,7 +262,7 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list, first_match_wins=True)
 
                 already_assigned = forward_matched_bond in bond_idxs
 
-                if not already_assigned:
+                if not already_assigned or not first_match_wins:
                     bond_idxs.append(forward_matched_bond)
                     type_idxs.append(type_idx)
         mol.SetProp(BOND_SMIRK_MATCH_CACHE, base64.b64encode(pickle.dumps((bond_idxs, type_idxs))))
