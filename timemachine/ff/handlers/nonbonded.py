@@ -798,11 +798,9 @@ class AM1CCCHandlerRelaxed(SerializableMixIn):
         # (ytz): leave this comment here, useful for quickly disable AM1 calculations for large mols
         # return np.zeros(mol.GetNumAtoms())
         am1_charges = compute_or_load_am1_charges(mol)
-        print("am1_charges", get_mol_name(mol), am1_charges)
 
         # First match wins (normal CCC method)
         first_match_wins_arr = np.array(props)
-        print("props", props, first_match_wins_arr.shape)
         smirks_first_match_wins = [
             smirk for first_match_wins, smirk in zip(first_match_wins_arr, smirks) if first_match_wins
         ]
@@ -819,7 +817,6 @@ class AM1CCCHandlerRelaxed(SerializableMixIn):
         )
 
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
-        print("intermediate", get_mol_name(mol), q_params)
 
         # Any match
         smirks_any_match = [smirk for first_match_wins, smirk in zip(first_match_wins_arr, smirks) if first_match_wins]
@@ -834,7 +831,6 @@ class AM1CCCHandlerRelaxed(SerializableMixIn):
             deltas,
             runtime_validate=False,  # required for jit
         )
-        print("final", get_mol_name(mol), q_params)
 
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 
