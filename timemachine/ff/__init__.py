@@ -57,6 +57,7 @@ class Forcefield:
             nonbonded.SimpleChargeHandler,
             nonbonded.AM1BCCHandler,
             nonbonded.AM1CCCHandler,
+            nonbonded.AM1CCCHandlerRelaxed,
             nonbonded.PrecomputedChargeHandler,
         ]
     ]
@@ -65,6 +66,7 @@ class Forcefield:
             nonbonded.SimpleChargeIntraHandler,
             nonbonded.AM1BCCIntraHandler,
             nonbonded.AM1CCCIntraHandler,
+            nonbonded.AM1CCCIntraHandlerRelaxed,
             nonbonded.PrecomputedChargeHandler,
         ]
     ]
@@ -73,6 +75,7 @@ class Forcefield:
             nonbonded.SimpleChargeSolventHandler,
             nonbonded.AM1BCCSolventHandler,
             nonbonded.AM1CCCSolventHandler,
+            nonbonded.AM1CCCSolventHandlerRelaxed,
             nonbonded.PrecomputedChargeHandler,
         ]
     ]
@@ -190,7 +193,13 @@ class Forcefield:
                 assert lj_handle is None
                 lj_handle = handle
             elif isinstance(
-                handle, (nonbonded.AM1CCCIntraHandler, nonbonded.AM1BCCIntraHandler, nonbonded.SimpleChargeIntraHandler)
+                handle,
+                (
+                    nonbonded.AM1CCCIntraHandler,
+                    nonbonded.AM1CCCIntraHandlerRelaxed,
+                    nonbonded.AM1BCCIntraHandler,
+                    nonbonded.SimpleChargeIntraHandler,
+                ),
             ):
                 # Need to be checked first since they are also subclasses
                 # of the non-intra handlers
@@ -198,11 +207,24 @@ class Forcefield:
                 q_handle_intra = handle
             elif isinstance(
                 handle,
-                (nonbonded.AM1CCCSolventHandler, nonbonded.AM1BCCSolventHandler, nonbonded.SimpleChargeSolventHandler),
+                (
+                    nonbonded.AM1CCCSolventHandler,
+                    nonbonded.AM1CCCSolventHandlerRelaxed,
+                    nonbonded.AM1BCCSolventHandler,
+                    nonbonded.SimpleChargeSolventHandler,
+                ),
             ):
                 assert q_handle_solv is None
                 q_handle_solv = handle
-            elif isinstance(handle, (nonbonded.AM1CCCHandler, nonbonded.AM1BCCHandler, nonbonded.SimpleChargeHandler)):
+            elif isinstance(
+                handle,
+                (
+                    nonbonded.AM1CCCHandler,
+                    nonbonded.AM1CCCHandlerRelaxed,
+                    nonbonded.AM1BCCHandler,
+                    nonbonded.SimpleChargeHandler,
+                ),
+            ):
                 assert q_handle is None
                 q_handle = handle
 
@@ -221,7 +243,9 @@ class Forcefield:
         if q_handle_intra is None:
             # Copy the forcefield parameters to the intramolecular term if not
             # already handled.
-            if isinstance(q_handle, nonbonded.AM1CCCHandler):
+            if isinstance(q_handle, nonbonded.AM1CCCHandlerRelaxed):
+                q_handle_intra = nonbonded.AM1CCCIntraHandlerRelaxed(q_handle.smirks, q_handle.params, q_handle.props)
+            elif isinstance(q_handle, nonbonded.AM1CCCHandler):
                 q_handle_intra = nonbonded.AM1CCCIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
             elif isinstance(q_handle, nonbonded.AM1BCCHandler):
                 q_handle_intra = nonbonded.AM1BCCIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
@@ -233,7 +257,9 @@ class Forcefield:
         if q_handle_solv is None:
             # Copy the forcefield parameters to the solvent term if not
             # already handled.
-            if isinstance(q_handle, nonbonded.AM1CCCHandler):
+            if isinstance(q_handle, nonbonded.AM1CCCHandlerRelaxed):
+                q_handle_solv = nonbonded.AM1CCCSolventHandlerRelaxed(q_handle.smirks, q_handle.params, q_handle.props)
+            elif isinstance(q_handle, nonbonded.AM1CCCHandler):
                 q_handle_solv = nonbonded.AM1CCCSolventHandler(q_handle.smirks, q_handle.params, q_handle.props)
             elif isinstance(q_handle, nonbonded.AM1BCCHandler):
                 q_handle_solv = nonbonded.AM1BCCSolventHandler(q_handle.smirks, q_handle.params, q_handle.props)

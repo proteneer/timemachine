@@ -329,7 +329,8 @@ def test_am1_bcc():
     # assert vjp_fn(charges_adjoints) == None
 
 
-def test_am1_ccc():
+@pytest.mark.parametrize("handler", [nonbonded.AM1CCCHandler, nonbonded.AM1CCCHandlerRelaxed])
+def test_am1_ccc(handler):
     patterns = [
         ["[#6X4:1]-[#1:2]", 0.46323257920556493],
         ["[#6X3$(*=[#8,#16]):1]-[#6a:2]", 0.24281402370571598],
@@ -396,7 +397,7 @@ def test_am1_ccc():
 M  END
 $$$$
     """
-    am1h = nonbonded.AM1CCCHandler(smirks, params, props)
+    am1h = handler(smirks, params, props)
     mol = Chem.MolFromMolBlock(mol_sdf, removeHs=False)
     es_params = am1h.parameterize(mol)
 
@@ -412,7 +413,7 @@ $$$$
 
     np.testing.assert_almost_equal(es_params, ligand_params, decimal=5)
 
-    new_es_params, es_vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, mol=mol), params)
+    new_es_params, es_vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, mol=mol), am1h.params)
 
     np.testing.assert_array_equal(es_params, new_es_params)
 
@@ -420,7 +421,7 @@ $$$$
 
     adjoints = es_vjp_fn(es_params_adjoints)[0]
 
-    # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
+    # if a parameter is > 90 then its adjoint should be zero (converse isn't necessarily true)
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0)
 

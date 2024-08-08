@@ -16,6 +16,11 @@ from timemachine.ff.handlers.utils import canonicalize_bond
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.graph_utils import convert_to_nx
 
+
+def get_mol_name(mol) -> str:
+    return mol.GetProp("_Name")
+
+
 AM1_CHARGE_CACHE = "AM1Cache"
 AM1ELF10_CHARGE_CACHE = "AM1ELF10Cache"
 BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
@@ -223,14 +228,20 @@ def compute_or_load_am1_charges(mol):
     return np.array(am1_charges)
 
 
-def compute_or_load_bond_smirks_matches(mol, smirks_list):
+def compute_or_load_bond_smirks_matches(mol, smirks_list, first_match_wins=True):
     """Unless already cached in mol's "BondSmirkMatchCache" property, uses OpenEye to compute arrays of ordered bonds and their assigned types.
+
+    Parameters
+    ----------
+    first_match_wins: bool
+        Set to True (default) to return the first smirks match for each bond.
+        Otherwise return all matching patterns.
 
     Notes
     -----
     * Uses OpenEye for substructure searches
     * Order within smirks_list matters
-        "First match wins."
+        "First match wins." if `first_match_wins` is True. Otherwise all matches are returned.
         For example, if bond (a,b) can be matched by smirks_list[2], smirks_list[5], ..., assign type 2
     * Order within each smirks pattern matters
         For example, "[#6:1]~[#1:2]" and "[#1:1]~[#6:2]" will match atom pairs in the opposite order
@@ -705,4 +716,134 @@ class AM1CCCIntraHandler(AM1CCCHandler):
 
 
 class AM1CCCSolventHandler(AM1CCCHandler):
+    pass
+
+
+class AM1CCCHandlerRelaxed(SerializableMixIn):
+    """The AM1CCCHandler stands for AM1 Correctable Charge Correction (CCC) which uses OpenEye's AM1 charges[1]
+    along with corrections provided by the Forcefield definition in the form of SMIRKS and charge deltas. The SMIRKS
+    are currently parsed using the OpenEye Toolkits standard[2].
+
+    This handler supports jax.grad with respect to the forcefield parameters, which is what the "Correctable" refers
+    to in CCC.
+
+    Charges are conformer and platform dependent as of OpenEye Toolkits 2020.2.0 [3].
+
+    References
+    ----------
+    [1] AM1 Theory
+        https://docs.eyesopen.com/toolkits/python/quacpactk/molchargetheory.html#am1-charges
+    [2] OpenEye SMARTS standard
+        https://docs.eyesopen.com/toolkits/cpp/oechemtk/SMARTS.html
+    [3] Charging Inconsistencies
+        https://github.com/openforcefield/openff-toolkit/issues/1170
+    """
+
+    def __init__(self, smirks, params, props):
+        """
+        Parameters
+        ----------
+        smirks: list of str (P,)
+            SMIRKS patterns
+
+        params: np.array, (P,)
+            normalized charge for each
+
+        props: any
+        """
+        assert len(smirks) == len(params)
+
+        if props is None:
+            # first initialization
+            # assume same patterns
+            # params set to 0 for first_match_wins = False
+            # props is first_match_wins bool value
+            props = [True] * len(smirks) + [False] * len(smirks)
+            smirks = list(smirks) + list(smirks)
+            params = list(params) + list(np.zeros_like(params))
+
+        self.smirks = smirks
+        self.params = np.array(params, dtype=np.float64)
+        self.props = props
+        self.supported_elements = {1, 6, 7, 8, 9, 14, 16, 17, 35, 53}  # note: omits phosphorus (15) for now
+
+    def validate_input(self, mol):
+        # TODO: read off supported elements from self.smirks, rather than hard-coding list of supported elements?
+        elements = set([a.GetAtomicNum() for a in mol.GetAtoms()])
+        if not elements.issubset(self.supported_elements):
+            raise RuntimeError("mol contains unsupported elements: ", elements - self.supported_elements)
+
+    def partial_parameterize(self, params, mol):
+        self.validate_input(mol)
+        return self.static_parameterize(params, self.smirks, self.props, mol)
+
+    def parameterize(self, mol):
+        return self.partial_parameterize(self.params, mol)
+
+    @staticmethod
+    def static_parameterize(params, smirks, props, mol):
+        """
+        Parameters
+        ----------
+        params: np.array, (P,)
+            normalized charge increment for each matched bond
+        smirks: list of str (P,)
+            SMIRKS patterns matching bonds, to be parsed using OpenEye Toolkits
+        props: list of bool (P, )
+            True for first match wins params, False for any match wins.
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        """
+        # (ytz): leave this comment here, useful for quickly disable AM1 calculations for large mols
+        # return np.zeros(mol.GetNumAtoms())
+        am1_charges = compute_or_load_am1_charges(mol)
+        print("am1_charges", get_mol_name(mol), am1_charges)
+
+        # First match wins (normal CCC method)
+        first_match_wins_arr = np.array(props)
+        print("props", props, first_match_wins_arr.shape)
+        smirks_first_match_wins = [
+            smirk for first_match_wins, smirk in zip(first_match_wins_arr, smirks) if first_match_wins
+        ]
+        params_first_match_wins = params[first_match_wins_arr]
+
+        bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks_first_match_wins, first_match_wins=True)
+
+        deltas = params_first_match_wins[type_idxs]
+        q_params = apply_bond_charge_corrections(
+            am1_charges,
+            bond_idxs,
+            deltas,
+            runtime_validate=False,  # required for jit
+        )
+
+        assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
+        print("intermediate", get_mol_name(mol), q_params)
+
+        # Any match
+        smirks_any_match = [smirk for first_match_wins, smirk in zip(first_match_wins_arr, smirks) if first_match_wins]
+        params_any_match = params[np.logical_not(first_match_wins_arr)]
+
+        bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks_any_match, first_match_wins=False)
+
+        deltas = params_any_match[type_idxs]
+        q_params = apply_bond_charge_corrections(
+            q_params,
+            bond_idxs,
+            deltas,
+            runtime_validate=False,  # required for jit
+        )
+        print("final", get_mol_name(mol), q_params)
+
+        assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
+
+        return q_params
+
+
+class AM1CCCIntraHandlerRelaxed(AM1CCCHandlerRelaxed):
+    pass
+
+
+class AM1CCCSolventHandlerRelaxed(AM1CCCHandlerRelaxed):
     pass
