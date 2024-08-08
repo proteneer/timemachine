@@ -510,10 +510,6 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
         chiral_atom_potential = ChiralAtomRestraint(chiral_atom_idxs).bind(mol_c_chiral_atom_params)
         chiral_bond_potential = ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(mol_a_chiral_bond.params)
 
-        num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
-        assert (
-            get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1
-        ), "hybrid molecule has multiple connected components"
         return bond_potential, chiral_atom_potential, chiral_bond_potential
 
     return setup_end_state_harmonic_bond_and_chiral_potentials
@@ -646,6 +642,11 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     bond_potential, chiral_atom_potential, chiral_bond_potential = setup_end_state_harmonic_bond_and_chiral_potentials(
         core, a_to_c, b_to_c, dummy_groups
     )
+
+    num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
+    assert (
+        get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1
+    ), "hybrid molecule has multiple connected components"
 
     return VacuumSystem(
         bond_potential,
