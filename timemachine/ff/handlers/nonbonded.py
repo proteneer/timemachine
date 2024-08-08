@@ -769,13 +769,6 @@ class AM1CCCHandlerRelaxed(SerializableMixIn):
         self.props = props
         self.supported_elements = {1, 6, 7, 8, 9, 14, 16, 17, 35, 53}  # note: omits phosphorus (15) for now
 
-        self.smirks_first_match_wins = [
-            smirk for first_match_wins, smirk in zip(self.props, self.smirks) if first_match_wins
-        ]
-        self.smirks_any_match = [
-            smirk for first_match_wins, smirk in zip(self.props, self.smirks) if not first_match_wins
-        ]
-
     def validate_input(self, mol):
         # TODO: read off supported elements from self.smirks, rather than hard-coding list of supported elements?
         elements = set([a.GetAtomicNum() for a in mol.GetAtoms()])
