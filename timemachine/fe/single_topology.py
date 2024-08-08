@@ -2,7 +2,7 @@ import warnings
 from collections.abc import Iterable
 from enum import IntEnum
 from functools import partial
-from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple, TypeVar, Union, cast
+from typing import Callable, Collection, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple, TypeVar, Union, cast
 
 import jax
 import jax.numpy as jnp
@@ -77,30 +77,6 @@ def recursive_map(items, mapping):
         return tuple(res)
     else:
         return mapping[items]
-
-
-def setup_dummy_bond_and_chiral_interactions_from_ff(
-    ff, mol, dummy_group, root_anchor_atom, core_atoms, chiral_atom_k, chiral_bond_k
-):
-    """
-    Setup interactions involving atoms in a given dummy group.
-    """
-    top = topology.BaseTopology(mol, ff)
-
-    bond_params, hb = top.parameterize_harmonic_bond(ff.hb_handle.params)
-    chiral_atom_potential, _ = top.setup_chiral_restraints(chiral_atom_k, chiral_bond_k)
-    chiral_atom_idxs = chiral_atom_potential.potential.idxs
-    chiral_atom_params = chiral_atom_potential.params
-
-    return setup_dummy_bond_and_chiral_interactions(
-        hb.idxs,
-        bond_params,
-        chiral_atom_idxs,
-        chiral_atom_params,
-        dummy_group,
-        root_anchor_atom,
-        core_atoms,
-    )
 
 
 def setup_dummy_bond_and_chiral_interactions(
@@ -389,134 +365,158 @@ def canonicalize_chiral_atom_idxs(idxs):
     return i, jj, kk, ll
 
 
-def setup_end_state_harmonic_bond_and_chiral_potentials(
-    ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[int, FrozenSet[int]]
-) -> Tuple[BoundPotential[HarmonicBond], BoundPotential[ChiralAtomRestraint], BoundPotential[ChiralBondRestraint]]:
-    """
-    Setup end-state potentials to verify chiral correctness for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
-    to the alchemical molecule with dummy atoms. Note that the bond, chiral atom and chiral bond idxs are canonicalized.
+def make_setup_end_state_harmonic_bond_and_chiral_potentials(
+    mol_a, mol_b, ff: Forcefield
+) -> Callable[
+    [
+        NDArray,
+        Sequence[int] | Mapping[int, int] | NDArray,
+        Sequence[int] | Mapping[int, int] | NDArray,
+        Dict[int, FrozenSet[int]],
+    ],
+    Tuple[BoundPotential[HarmonicBond], BoundPotential[ChiralAtomRestraint], BoundPotential[ChiralBondRestraint]],
+]:
+    assert ff.hb_handle
 
-    This code is identical to setup_end_state, but only handles chiral potentials to be used to quickly verify
-    core mappings in verify_chiral_validity_of_core
-
-    Parameters
-    ----------
-    ff: forcefield.Forcefield
-        Forcefield used to parameterize the molecule
-
-    mol_a: Chem.Mol
-        Fully interacting molecule
-
-    mol_b: Chem.Mol
-        Molecule providing the dummy atoms.
-
-    core: list of 2-tuples
-        Each pair is an atom mapping from mol_a into mol_b
-
-    a_to_c: dict or array, supports []
-        mapping from a into a common core idx
-
-    b_to_c: dict or array, supports []
-        mapping from b into a common core idx
-
-    dummy_groups: Dict[int, FrozenSet[int]]
-        mapping from anchor atom to dummy group. Indices refer to atoms in mol_b.
-
-    Returns
-    -------
-    Tuple of bound HarmonicBond, ChiralAtomRestraint and ChiralBondRestraint
-        The potentials involved in checking the correctness and validity of chirality at endstates.
-
-    """
-    all_dummy_bond_idxs, all_dummy_bond_params = [], []
-    all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params = [], []
-
-    for anchor, dg in dummy_groups.items():
-        all_idxs, all_params = setup_dummy_bond_and_chiral_interactions_from_ff(
-            ff, mol_b, dg, anchor, core[:, 1], DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
-        )
-        # append idxs
-        all_dummy_bond_idxs.extend(all_idxs[0])
-        all_dummy_chiral_atom_idxs.extend(all_idxs[1])
-        # append params
-        all_dummy_bond_params.extend(all_params[0])
-        all_dummy_chiral_atom_params.extend(all_params[1])
-
-    # generate parameters for mol_a
     mol_a_top = topology.BaseTopology(mol_a, ff)
     mol_a_bond_params, mol_a_hb = mol_a_top.parameterize_harmonic_bond(ff.hb_handle.params)
     mol_a_chiral_atom, mol_a_chiral_bond = mol_a_top.setup_chiral_restraints(
         DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
     )
 
-    mol_a_bond_params = mol_a_bond_params.tolist()
+    mol_b_top = topology.BaseTopology(mol_b, ff)
+    mol_b_bond_params, mol_b_hb = mol_b_top.parameterize_harmonic_bond(ff.hb_handle.params)
+    mol_b_chiral_atom, _ = mol_b_top.setup_chiral_restraints(
+        DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
+    )
 
-    mol_a_bond_idxs = recursive_map(mol_a_hb.idxs, a_to_c)
-    mol_a_chiral_atom_idxs = recursive_map(mol_a_chiral_atom.potential.idxs, a_to_c)
-    mol_a_chiral_bond_idxs = recursive_map(mol_a_chiral_bond.potential.idxs, a_to_c)
+    def setup_end_state_harmonic_bond_and_chiral_potentials(core, a_to_c, b_to_c, dummy_groups):
+        """
+        Setup end-state potentials to verify chiral correctness for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
+        to the alchemical molecule with dummy atoms. Note that the bond, chiral atom and chiral bond idxs are canonicalized.
 
-    all_dummy_bond_idxs = recursive_map(all_dummy_bond_idxs, b_to_c)
-    all_dummy_chiral_atom_idxs = recursive_map(all_dummy_chiral_atom_idxs, b_to_c)
+        This code is identical to setup_end_state, but only handles chiral potentials to be used to quickly verify
+        core mappings in verify_chiral_validity_of_core
 
-    # parameterize the combined molecule
-    mol_c_bond_idxs = mol_a_bond_idxs + all_dummy_bond_idxs
-    mol_c_bond_params = mol_a_bond_params + all_dummy_bond_params
+        Parameters
+        ----------
+        ff: forcefield.Forcefield
+            Forcefield used to parameterize the molecule
 
-    # process chiral volumes, turning off ones at the end-state that have a missing bond.
-    canon_mol_a_bond_idxs_set = set([canonicalize_bond(x) for x in mol_a_bond_idxs])
-    # assert presence of bonds
-    for c, i, j, k in mol_a_chiral_atom_idxs:
-        ci = canonicalize_bond((c, i))
-        cj = canonicalize_bond((c, j))
-        ck = canonicalize_bond((c, k))
-        assert ci in canon_mol_a_bond_idxs_set
-        assert cj in canon_mol_a_bond_idxs_set
-        assert ck in canon_mol_a_bond_idxs_set
+        mol_a: Chem.Mol
+            Fully interacting molecule
 
-    canon_mol_c_bond_idxs_set = set([canonicalize_bond(x) for x in mol_c_bond_idxs])
+        mol_b: Chem.Mol
+            Molecule providing the dummy atoms.
 
-    # Chiral atom restraint c,i,j,k requires that all bonds ci, cj, ck be present at the
-    # end-state in order to be numerically stable under small perturbations due to normalization
-    # along the bond lengths. However, the angle terms defining icj, ick, and jck can be
-    # either 0 or 180, since the normalized chiral volume is still smooth wrt perturbations
-    all_proper_dummy_chiral_atom_idxs = []
-    all_proper_dummy_chiral_atom_params = []
-    for (c, i, j, k), p in zip(all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params):
-        ci = canonicalize_bond((c, i))
-        cj = canonicalize_bond((c, j))
-        ck = canonicalize_bond((c, k))
-        if ci in canon_mol_c_bond_idxs_set and cj in canon_mol_c_bond_idxs_set and ck in canon_mol_c_bond_idxs_set:
-            all_proper_dummy_chiral_atom_idxs.append((c, i, j, k))
-            all_proper_dummy_chiral_atom_params.append(p)
-        else:
-            warnings.warn(f"Chiral Volume {c, i, j, k} has a disabled bond, turning off.", ChiralVolumeDisabledWarning)
+        core: list of 2-tuples
+            Each pair is an atom mapping from mol_a into mol_b
 
-    mol_c_chiral_atom_idxs = list(mol_a_chiral_atom_idxs) + list(all_proper_dummy_chiral_atom_idxs)
-    mol_c_chiral_atom_params = np.concatenate([mol_a_chiral_atom.params, all_proper_dummy_chiral_atom_params])
+        a_to_c: dict or array, supports []
+            mapping from a into a common core idx
 
-    # canonicalize bonds
-    mol_c_bond_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_bond_idxs])
-    bond_potential = HarmonicBond(mol_c_bond_idxs_canon).bind(np.array(mol_c_bond_params))
+        b_to_c: dict or array, supports []
+            mapping from b into a common core idx
 
-    # chiral atoms need special code for canonicalization, since triple product is invariant
-    # under rotational symmetry (but not something like swap symmetry)
-    canon_chiral_atom_idxs = []
-    for idxs in mol_c_chiral_atom_idxs:
-        canon_chiral_atom_idxs.append(canonicalize_chiral_atom_idxs(idxs))
+        dummy_groups: Dict[int, FrozenSet[int]]
+            mapping from anchor atom to dummy group. Indices refer to atoms in mol_b.
 
-    chiral_atom_idxs = np.array(canon_chiral_atom_idxs, dtype=np.int32).reshape((-1, 4))
-    mol_c_chiral_bond_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_a_chiral_bond_idxs]
-    chiral_bond_idxs = np.array(mol_c_chiral_bond_idxs_canon, dtype=np.int32).reshape((-1, 4))
-    chiral_bond_signs = np.array(mol_a_chiral_bond.potential.signs)
+        Returns
+        -------
+        Tuple of bound HarmonicBond, ChiralAtomRestraint and ChiralBondRestraint
+            The potentials involved in checking the correctness and validity of chirality at endstates.
 
-    chiral_atom_potential = ChiralAtomRestraint(chiral_atom_idxs).bind(mol_c_chiral_atom_params)
-    chiral_bond_potential = ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(mol_a_chiral_bond.params)
+        """
+        all_dummy_bond_idxs, all_dummy_bond_params = [], []
+        all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params = [], []
 
-    num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
-    assert (
-        get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1
-    ), "hybrid molecule has multiple connected components"
-    return bond_potential, chiral_atom_potential, chiral_bond_potential
+        for anchor, dg in dummy_groups.items():
+            all_idxs, all_params = setup_dummy_bond_and_chiral_interactions(
+                mol_b_hb.idxs,
+                mol_b_bond_params,
+                mol_b_chiral_atom.potential.idxs,
+                mol_b_chiral_atom.params,
+                dg,
+                anchor,
+                core[:, 1],
+            )
+            # append idxs
+            all_dummy_bond_idxs.extend(all_idxs[0])
+            all_dummy_chiral_atom_idxs.extend(all_idxs[1])
+            # append params
+            all_dummy_bond_params.extend(all_params[0])
+            all_dummy_chiral_atom_params.extend(all_params[1])
+
+        mol_a_bond_idxs = recursive_map(mol_a_hb.idxs, a_to_c)
+        mol_a_chiral_atom_idxs = recursive_map(mol_a_chiral_atom.potential.idxs, a_to_c)
+        mol_a_chiral_bond_idxs = recursive_map(mol_a_chiral_bond.potential.idxs, a_to_c)
+
+        all_dummy_bond_idxs = recursive_map(all_dummy_bond_idxs, b_to_c)
+        all_dummy_chiral_atom_idxs = recursive_map(all_dummy_chiral_atom_idxs, b_to_c)
+
+        # parameterize the combined molecule
+        mol_c_bond_idxs = mol_a_bond_idxs + all_dummy_bond_idxs
+        mol_c_bond_params = mol_a_bond_params.tolist() + all_dummy_bond_params
+
+        # process chiral volumes, turning off ones at the end-state that have a missing bond.
+        canon_mol_a_bond_idxs_set = set([canonicalize_bond(x) for x in mol_a_bond_idxs])
+        # assert presence of bonds
+        for c, i, j, k in mol_a_chiral_atom_idxs:
+            ci = canonicalize_bond((c, i))
+            cj = canonicalize_bond((c, j))
+            ck = canonicalize_bond((c, k))
+            assert ci in canon_mol_a_bond_idxs_set
+            assert cj in canon_mol_a_bond_idxs_set
+            assert ck in canon_mol_a_bond_idxs_set
+
+        canon_mol_c_bond_idxs_set = set([canonicalize_bond(x) for x in mol_c_bond_idxs])
+
+        # Chiral atom restraint c,i,j,k requires that all bonds ci, cj, ck be present at the
+        # end-state in order to be numerically stable under small perturbations due to normalization
+        # along the bond lengths. However, the angle terms defining icj, ick, and jck can be
+        # either 0 or 180, since the normalized chiral volume is still smooth wrt perturbations
+        all_proper_dummy_chiral_atom_idxs = []
+        all_proper_dummy_chiral_atom_params = []
+        for (c, i, j, k), p in zip(all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params):
+            ci = canonicalize_bond((c, i))
+            cj = canonicalize_bond((c, j))
+            ck = canonicalize_bond((c, k))
+            if ci in canon_mol_c_bond_idxs_set and cj in canon_mol_c_bond_idxs_set and ck in canon_mol_c_bond_idxs_set:
+                all_proper_dummy_chiral_atom_idxs.append((c, i, j, k))
+                all_proper_dummy_chiral_atom_params.append(p)
+            else:
+                warnings.warn(
+                    f"Chiral Volume {c, i, j, k} has a disabled bond, turning off.", ChiralVolumeDisabledWarning
+                )
+
+        mol_c_chiral_atom_idxs = list(mol_a_chiral_atom_idxs) + list(all_proper_dummy_chiral_atom_idxs)
+        mol_c_chiral_atom_params = np.concatenate([mol_a_chiral_atom.params, all_proper_dummy_chiral_atom_params])
+
+        # canonicalize bonds
+        mol_c_bond_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_bond_idxs])
+        bond_potential = HarmonicBond(mol_c_bond_idxs_canon).bind(np.array(mol_c_bond_params))
+
+        # chiral atoms need special code for canonicalization, since triple product is invariant
+        # under rotational symmetry (but not something like swap symmetry)
+        canon_chiral_atom_idxs = []
+        for idxs in mol_c_chiral_atom_idxs:
+            canon_chiral_atom_idxs.append(canonicalize_chiral_atom_idxs(idxs))
+
+        chiral_atom_idxs = np.array(canon_chiral_atom_idxs, dtype=np.int32).reshape((-1, 4))
+        mol_c_chiral_bond_idxs_canon = [canonicalize_bond(idxs) for idxs in mol_a_chiral_bond_idxs]
+        chiral_bond_idxs = np.array(mol_c_chiral_bond_idxs_canon, dtype=np.int32).reshape((-1, 4))
+        chiral_bond_signs = np.array(mol_a_chiral_bond.potential.signs)
+
+        chiral_atom_potential = ChiralAtomRestraint(chiral_atom_idxs).bind(mol_c_chiral_atom_params)
+        chiral_bond_potential = ChiralBondRestraint(chiral_bond_idxs, chiral_bond_signs).bind(mol_a_chiral_bond.params)
+
+        num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
+        assert (
+            get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1
+        ), "hybrid molecule has multiple connected components"
+        return bond_potential, chiral_atom_potential, chiral_bond_potential
+
+    return setup_end_state_harmonic_bond_and_chiral_potentials
 
 
 def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[int, FrozenSet[int]]):
@@ -640,8 +640,11 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     mol_a_nbpl.idxs = mol_c_nbpl_idxs_canon
     nonbonded_potential = mol_a_nbpl.bind(np.array(mol_a_nbpl_params))
 
+    setup_end_state_harmonic_bond_and_chiral_potentials = make_setup_end_state_harmonic_bond_and_chiral_potentials(
+        mol_a, mol_b, ff
+    )
     bond_potential, chiral_atom_potential, chiral_bond_potential = setup_end_state_harmonic_bond_and_chiral_potentials(
-        ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups
+        core, a_to_c, b_to_c, dummy_groups
     )
 
     return VacuumSystem(
@@ -654,59 +657,59 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     )
 
 
-def find_chirally_valid_dummy_groups(
-    mol_a, mol_b, core: NDArray
-) -> Optional[Tuple[Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]]]:
-    """Returns a pair of dummy group assignments for the A -> B and B -> A transformations such that the implied hybrid
-    mol is chirally valid, or None if no such pair exists.
-
-    Refer to :py:func:`check_chiral_validity` for definition of "chiral validity".
-
-    Refer to :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
-    information on dummy group assignment.
-
-    For the A -> B transformation, dummy group indices refer to atoms in mol_b.
-    For the B -> A transformation, dummy group indices refer to atoms in mol_a.
-    """
-
+def make_find_chirally_valid_dummy_groups(
+    mol_a, mol_b
+) -> Callable[[NDArray], Optional[Tuple[Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]]]]:
     bond_graph_a = convert_to_nx(mol_a)
     bond_graph_b = convert_to_nx(mol_b)
 
     # Use placeholder forcefield with a minimal number of patterns for performance
     ff = Forcefield.load_from_file("placeholder_ff.py")
 
-    return find_chirally_valid_dummy_groups_impl(mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff)
+    check_chiral_validity = make_check_chiral_validity(mol_a, mol_b, ff)
 
+    def find_chirally_valid_dummy_groups(core):
+        """Returns a pair of dummy group assignments for the A -> B and B -> A transformations such that the implied hybrid
+        mol is chirally valid, or None if no such pair exists.
 
-def find_chirally_valid_dummy_groups_impl(
-    mol_a, mol_b, bond_graph_a: nx.Graph, bond_graph_b: nx.Graph, core: NDArray, ff: Forcefield
-) -> Optional[Tuple[Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]]]:
-    """Implementation of :py:func:`find_chirally_valid_dummy_groups`, separated to allow precomputation of bond
-    graphs and forcefield."""
+        Refer to :py:func:`check_chiral_validity` for definition of "chiral validity".
 
-    # TODO: Consider refactoring to also return harmonic bond and chiral atom potentials for the selected dummy groups,
-    # to avoid reconstructing later
+        Refer to :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
+        information on dummy group assignment.
 
-    with warnings.catch_warnings():
-        # Suppress warnings from end-state setup during the search; these are only relevant for the selected candidate,
-        # and will be raised again when we construct the final SingleTopology instance
-        warnings.simplefilter("ignore", ChiralVolumeDisabledWarning)
-        warnings.simplefilter("ignore", MultipleAnchorWarning)
+        For the A -> B transformation, dummy group indices refer to atoms in mol_b.
+        For the B -> A transformation, dummy group indices refer to atoms in mol_a.
+        """
 
-        pairs = (
-            (dummy_groups_ab, dummy_groups_ba)
-            # NOTE: We use fair_product_2 instead of itertools.product to avoid iterating over all possible candidates
-            # for A -> B before trying the second candidate for B -> A
-            for dummy_groups_ab, dummy_groups_ba in fair_product_2(
-                list(generate_dummy_group_assignments(bond_graph_b, core[:, 1])),
-                list(generate_dummy_group_assignments(bond_graph_a, core[:, 0])),
+        def is_chirally_valid(dummy_groups_ab, dummy_groups_ba):
+            try:
+                check_chiral_validity(core, dummy_groups_ab, dummy_groups_ba)
+                return True
+            except ChiralConversionError:
+                return False
+
+        with warnings.catch_warnings():
+            # Suppress warnings from end-state setup during the search; these are only relevant for the selected candidate,
+            # and will be raised again when we construct the final SingleTopology instance
+            warnings.simplefilter("ignore", ChiralVolumeDisabledWarning)
+            warnings.simplefilter("ignore", MultipleAnchorWarning)
+
+            pairs = (
+                (dummy_groups_ab, dummy_groups_ba)
+                # NOTE: We use fair_product_2 instead of itertools.product to avoid iterating over all possible candidates
+                # for A -> B before trying the second candidate for B -> A
+                for dummy_groups_ab, dummy_groups_ba in fair_product_2(
+                    list(generate_dummy_group_assignments(bond_graph_b, core[:, 1])),
+                    list(generate_dummy_group_assignments(bond_graph_a, core[:, 0])),
+                )
+                if is_chirally_valid(dummy_groups_ab, dummy_groups_ba)
             )
-            if is_chirally_valid(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, ff)
-        )
 
-        arbitrary_pair = next(pairs, None)
+            arbitrary_pair = next(pairs, None)
 
-    return arbitrary_pair
+        return arbitrary_pair
+
+    return find_chirally_valid_dummy_groups
 
 
 def find_dummy_groups_and_anchors(
@@ -1230,63 +1233,59 @@ def verify_chiral_validity_of_core(mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArr
         DummyGroupAssignmentError
             If unable to find a chirally-valid dummy group assignment with respect to a placeholder forcefield
     """
-    dummy_groups = find_chirally_valid_dummy_groups(mol_a, mol_b, core)
+    find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
+    dummy_groups = find_chirally_valid_dummy_groups(core)
     if dummy_groups is None:
         raise DummyGroupAssignmentError("Unable to find chirally-valid dummy group assignment")
     dummy_groups_ab, dummy_groups_ba = dummy_groups
-    check_chiral_validity(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, forcefield)
+    check_chiral_validity = make_check_chiral_validity(mol_a, mol_b, forcefield)
+    check_chiral_validity(core, dummy_groups_ab, dummy_groups_ba)
 
 
-def check_chiral_validity(
-    mol_a: Chem.Mol,
-    mol_b: Chem.Mol,
-    core: NDArray,
-    dummy_groups_ab: Dict[int, FrozenSet[int]],
-    dummy_groups_ba: Dict[int, FrozenSet[int]],
-    forcefield: Forcefield,
-):
-    """Verify that a core and forcefield would allow for valid chiral endstates.
-
-    Refer to `check_chiral_validity` for definition of validity.
-
-    Raises
-    ------
-        ChiralConversionError
-            If chiral end states are incompatible for the given core and forcefield.
-    """
-    atom_map = AtomMapMixin(mol_a, mol_b, core)
-    bond_pot_src, chiral_atom_pot_src, _ = setup_end_state_harmonic_bond_and_chiral_potentials(
-        forcefield, mol_a, mol_b, core, atom_map.a_to_c, atom_map.b_to_c, dummy_groups_ab
+def make_check_chiral_validity(
+    mol_a: Chem.Mol, mol_b: Chem.Mol, forcefield: Forcefield
+) -> Callable[[NDArray, Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]], None]:
+    setup_end_state_harmonic_bond_and_chiral_potentials_ab = make_setup_end_state_harmonic_bond_and_chiral_potentials(
+        mol_a, mol_b, forcefield
     )
-    bond_pot_dst, chiral_atom_pot_dst, _ = setup_end_state_harmonic_bond_and_chiral_potentials(
-        forcefield, mol_b, mol_a, core[:, ::-1], atom_map.b_to_c, atom_map.a_to_c, dummy_groups_ba
+    setup_end_state_harmonic_bond_and_chiral_potentials_ba = make_setup_end_state_harmonic_bond_and_chiral_potentials(
+        mol_b, mol_a, forcefield
     )
 
-    src_chiral_restr_idx_set = ChiralRestrIdxSet(chiral_atom_pot_src.potential.idxs)
-    dst_chiral_restr_idx_set = ChiralRestrIdxSet(chiral_atom_pot_dst.potential.idxs)
+    def check_chiral_validity(
+        core: NDArray,
+        dummy_groups_ab: Dict[int, FrozenSet[int]],
+        dummy_groups_ba: Dict[int, FrozenSet[int]],
+    ):
+        """Verify that a core and forcefield would allow for valid chiral endstates.
 
-    check_chiral_validity_impl(
-        atom_map,
-        src_chiral_restr_idx_set,
-        dst_chiral_restr_idx_set,
-        bond_pot_src.potential.idxs,
-        bond_pot_dst.potential.idxs,
-    )
+        Refer to `check_chiral_validity` for definition of validity.
 
+        Raises
+        ------
+            ChiralConversionError
+                If chiral end states are incompatible for the given core and forcefield.
+        """
+        atom_map = AtomMapMixin(mol_a, mol_b, core)
+        bond_pot_src, chiral_atom_pot_src, _ = setup_end_state_harmonic_bond_and_chiral_potentials_ab(
+            core, atom_map.a_to_c, atom_map.b_to_c, dummy_groups_ab
+        )
+        bond_pot_dst, chiral_atom_pot_dst, _ = setup_end_state_harmonic_bond_and_chiral_potentials_ba(
+            core[:, ::-1], atom_map.b_to_c, atom_map.a_to_c, dummy_groups_ba
+        )
 
-def is_chirally_valid(
-    mol_a,
-    mol_b,
-    core,
-    dummy_groups_ab: Dict[int, FrozenSet[int]],
-    dummy_groups_ba: Dict[int, FrozenSet[int]],
-    ff: Forcefield,
-) -> bool:
-    try:
-        check_chiral_validity(mol_a, mol_b, core, dummy_groups_ab, dummy_groups_ba, ff)
-        return True
-    except ChiralConversionError:
-        return False
+        src_chiral_restr_idx_set = ChiralRestrIdxSet(chiral_atom_pot_src.potential.idxs)
+        dst_chiral_restr_idx_set = ChiralRestrIdxSet(chiral_atom_pot_dst.potential.idxs)
+
+        check_chiral_validity_impl(
+            atom_map,
+            src_chiral_restr_idx_set,
+            dst_chiral_restr_idx_set,
+            bond_pot_src.potential.idxs,
+            bond_pot_dst.potential.idxs,
+        )
+
+    return check_chiral_validity
 
 
 class SingleTopology(AtomMapMixin):
@@ -1321,7 +1320,8 @@ class SingleTopology(AtomMapMixin):
         if a_charge != b_charge:
             raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
-        dummy_groups = find_chirally_valid_dummy_groups(mol_a, mol_b, core)
+        find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
+        dummy_groups = find_chirally_valid_dummy_groups(core)
         if dummy_groups is None:
             raise DummyGroupAssignmentError("Unable to find chirally-valid dummy group assignment")
         dummy_groups_ab, dummy_groups_ba = dummy_groups
