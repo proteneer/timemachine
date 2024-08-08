@@ -105,7 +105,7 @@ def setup_dummy_bond_and_chiral_interactions(
 
     # copy interactions that involve only root_anchor_atom
     for idxs, params in zip(bond_idxs, bond_params):
-        if all([a in dga for a in idxs]):
+        if all(a in dga for a in idxs):
             dummy_bond_idxs.append(tuple([int(x) for x in idxs]))  # tuples are hashable etc.
             dummy_bond_params.append(params)
 
@@ -123,9 +123,9 @@ def setup_dummy_bond_and_chiral_interactions(
     dgc = dummy_group + list(core_atoms)
     for idxs, params in zip(chiral_atom_idxs, chiral_atom_params):
         center, i, j, k = idxs
-        if all([a in dgc for a in idxs]):
+        if all(a in dgc for a in idxs):
             # non center dummy atom count
-            ncda_count = sum([a in dummy_group for a in (i, j, k)])
+            ncda_count = sum(a in dummy_group for a in (i, j, k))
             if ncda_count == 1 or ncda_count == 2 or ncda_count == 3:
                 assert not all(a in core_atoms for a in idxs)
                 dummy_chiral_atom_idxs.append(tuple(int(x) for x in idxs))
