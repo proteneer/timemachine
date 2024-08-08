@@ -273,7 +273,7 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list, first_match_wins=True,
     return np.array(bond_idxs), np.array(type_idxs)
 
 
-def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas, runtime_validate=True):
+def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas, runtime_validate=True, check_duplicates=True):
     """For an arbitrary collection of ordered bonds and associated increments `(a, b, delta)`,
     update `charges` by `charges[a] += delta`, `charges[b] -= delta`.
 
@@ -308,9 +308,10 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas, runtime_va
     # print some safety warnings
     directed_bonds = Counter([tuple(b) for b in bond_idxs])
 
-    if max(directed_bonds.values()) > 1:
-        duplicates = [bond for (bond, count) in directed_bonds.items() if count > 1]
-        print(UserWarning(f"Duplicate directed bonds! {duplicates}"))
+    if check_duplicates:
+        if max(directed_bonds.values()) > 1:
+            duplicates = [bond for (bond, count) in directed_bonds.items() if count > 1]
+            print(UserWarning(f"Duplicate directed bonds! {duplicates}"))
 
     return final_charges
 
@@ -832,6 +833,7 @@ class AM1CCCHandlerRelaxed(SerializableMixIn):
             bond_idxs,
             deltas,
             runtime_validate=False,  # required for jit
+            check_duplicates=False,  # expect duplicates
         )
 
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
