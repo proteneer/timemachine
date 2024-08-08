@@ -22,6 +22,7 @@ class ForcefieldParams(Generic[_T]):
     q_params: _T
     q_params_intra: _T
     q_params_solv: _T
+    q_params_relaxed: _T
     lj_params: _T
     lj_params_intra: _T
     lj_params_solv: _T
@@ -36,6 +37,7 @@ def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> Forcefie
         (a.q_params, b.q_params),
         (a.q_params_intra, b.q_params_intra),
         (a.q_params_solv, b.q_params_solv),
+        (a.q_params_relaxed, b.q_params_relaxed),
         (a.lj_params, b.lj_params),
         (a.lj_params_intra, b.lj_params_intra),
         (a.lj_params_solv, b.lj_params_solv),
@@ -73,6 +75,14 @@ class Forcefield:
             nonbonded.SimpleChargeSolventHandler,
             nonbonded.AM1BCCSolventHandler,
             nonbonded.AM1CCCSolventHandler,
+            nonbonded.PrecomputedChargeHandler,
+        ]
+    ]
+    q_handle_relaxed: Optional[
+        Union[
+            nonbonded.SimpleChargeRelaxedHandler,
+            nonbonded.AM1BCCRelaxedHandler,
+            nonbonded.AM1CCCRelaxedHandler,
             nonbonded.PrecomputedChargeHandler,
         ]
     ]
@@ -134,14 +144,16 @@ class Forcefield:
         q_handle = PrecomputedChargeHandler()
         q_handle_intra = PrecomputedChargeHandler()
         q_handle_solv = PrecomputedChargeHandler()
+        q_handle_relaxed = PrecomputedChargeHandler()
         return Forcefield(
             ff.hb_handle,
             ff.ha_handle,
             ff.pt_handle,
             ff.it_handle,
             q_handle=q_handle,
-            q_handle_solv=q_handle_solv,
             q_handle_intra=q_handle_intra,
+            q_handle_solv=q_handle_solv,
+            q_handle_relaxed=q_handle_relaxed,
             lj_handle=ff.lj_handle,
             lj_handle_solv=ff.lj_handle_solv,
             lj_handle_intra=ff.lj_handle_intra,
@@ -166,6 +178,7 @@ class Forcefield:
         q_handle = None
         q_handle_intra = None
         q_handle_solv = None
+        q_handle_relaxed = None
 
         for handle in ff_handlers:
             if isinstance(handle, bonded.HarmonicBondHandler):
@@ -202,6 +215,12 @@ class Forcefield:
             ):
                 assert q_handle_solv is None
                 q_handle_solv = handle
+            elif isinstance(
+                handle,
+                (nonbonded.AM1CCCRelaxedHandler, nonbonded.AM1BCCRelaxedHandler, nonbonded.SimpleChargeRelaxedHandler),
+            ):
+                assert q_handle_relaxed is None
+                q_handle_relaxed = handle
             elif isinstance(handle, (nonbonded.AM1CCCHandler, nonbonded.AM1BCCHandler, nonbonded.SimpleChargeHandler)):
                 assert q_handle is None
                 q_handle = handle
@@ -242,6 +261,23 @@ class Forcefield:
             else:
                 raise ValueError(f"Unsupported charge handler {q_handle}")
 
+        if q_handle_relaxed is None:
+            # Initialize a new relaxed handler with 0 params
+            if isinstance(q_handle, nonbonded.AM1CCCHandler):
+                q_handle_relaxed = nonbonded.AM1CCCRelaxedHandler(
+                    q_handle.smirks, 0.0 * q_handle.params, q_handle.props
+                )
+            elif isinstance(q_handle, nonbonded.AM1BCCHandler):
+                q_handle_relaxed = nonbonded.AM1BCCRelaxedHandler(
+                    q_handle.smirks, 0.0 * q_handle.params, q_handle.props
+                )
+            elif isinstance(q_handle, nonbonded.SimpleChargeHandler):
+                q_handle_relaxed = nonbonded.SimpleChargeRelaxedHandler(
+                    q_handle.smirks, 0.0 * q_handle.params, q_handle.props
+                )
+            else:
+                raise ValueError(f"Unsupported charge handler {q_handle}")
+
         return cls(
             hb_handle,
             ha_handle,
@@ -250,6 +286,7 @@ class Forcefield:
             q_handle,
             q_handle_intra,
             q_handle_solv,
+            q_handle_relaxed,
             lj_handle,
             lj_handle_intra,
             lj_handle_solv,
@@ -267,6 +304,7 @@ class Forcefield:
             self.q_handle,
             self.q_handle_intra,
             self.q_handle_solv,
+            self.q_handle_relaxed,
             self.lj_handle,
             self.lj_handle_intra,
             self.lj_handle_solv,
@@ -284,6 +322,7 @@ class Forcefield:
             params(self.q_handle),
             params(self.q_handle_intra),
             params(self.q_handle_solv),
+            params(self.q_handle_relaxed),
             params(self.lj_handle),
             params(self.lj_handle_intra),
             params(self.lj_handle_solv),

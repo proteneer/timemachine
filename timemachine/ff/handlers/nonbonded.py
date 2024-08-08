@@ -19,6 +19,7 @@ from timemachine.graph_utils import convert_to_nx
 AM1_CHARGE_CACHE = "AM1Cache"
 AM1ELF10_CHARGE_CACHE = "AM1ELF10Cache"
 BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
+BOND_SMIRK_MATCH_CACHE_RELAXED = "BondSmirkMatchCacheRelaxed"
 
 AM1 = "AM1"
 AM1ELF10 = "AM1ELF10"
@@ -223,7 +224,7 @@ def compute_or_load_am1_charges(mol):
     return np.array(am1_charges)
 
 
-def compute_or_load_bond_smirks_matches(mol, smirks_list):
+def compute_or_load_bond_smirks_matches(mol, smirks_list, first_match_wins=True):
     """Unless already cached in mol's "BondSmirkMatchCache" property, uses OpenEye to compute arrays of ordered bonds and their assigned types.
 
     Notes
@@ -235,7 +236,8 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list):
     * Order within each smirks pattern matters
         For example, "[#6:1]~[#1:2]" and "[#1:1]~[#6:2]" will match atom pairs in the opposite order
     """
-    if not mol.HasProp(BOND_SMIRK_MATCH_CACHE):
+    cache_prop_name = BOND_SMIRK_MATCH_CACHE if first_match_wins else BOND_SMIRK_MATCH_CACHE_RELAXED
+    if not mol.HasProp(cache_prop_name):
         oemol = convert_to_oe(mol)
         AromaticityModel.assign(oemol)
 
@@ -251,12 +253,12 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list):
 
                 already_assigned = forward_matched_bond in bond_idxs
 
-                if not already_assigned:
+                if not already_assigned or not first_match_wins:
                     bond_idxs.append(forward_matched_bond)
                     type_idxs.append(type_idx)
-        mol.SetProp(BOND_SMIRK_MATCH_CACHE, base64.b64encode(pickle.dumps((bond_idxs, type_idxs))))
+        mol.SetProp(cache_prop_name, base64.b64encode(pickle.dumps((bond_idxs, type_idxs))))
     else:
-        bond_idxs, type_idxs = pickle.loads(base64.b64decode(mol.GetProp(BOND_SMIRK_MATCH_CACHE)))
+        bond_idxs, type_idxs = pickle.loads(base64.b64decode(mol.GetProp(cache_prop_name)))
     return np.array(bond_idxs), np.array(type_idxs)
 
 
@@ -375,6 +377,10 @@ class SimpleChargeIntraHandler(SimpleChargeHandler):
 
 
 class SimpleChargeSolventHandler(SimpleChargeHandler):
+    pass
+
+
+class SimpleChargeRelaxedHandler(SimpleChargeHandler):
     pass
 
 
@@ -504,6 +510,10 @@ class AM1BCCIntraHandler(AM1BCCHandler):
 
 
 class AM1BCCSolventHandler(AM1BCCHandler):
+    pass
+
+
+class AM1BCCRelaxedHandler(AM1BCCHandler):
     pass
 
 
@@ -706,3 +716,35 @@ class AM1CCCIntraHandler(AM1CCCHandler):
 
 class AM1CCCSolventHandler(AM1CCCHandler):
     pass
+
+
+class AM1CCCRelaxedHandler(AM1CCCHandler):
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
+        """
+        Parameters
+        ----------
+        params: np.array, (P,)
+            normalized charge increment for each matched bond
+        smirks: list of str (P,)
+            SMIRKS patterns matching bonds, to be parsed using OpenEye Toolkits
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        """
+        # (ytz): leave this comment here, useful for quickly disable AM1 calculations for large mols
+        # return np.zeros(mol.GetNumAtoms())
+        am1_charges = compute_or_load_am1_charges(mol)
+        bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks, first_match_wins=False)
+
+        deltas = params[type_idxs]
+        q_params = apply_bond_charge_corrections(
+            am1_charges,
+            bond_idxs,
+            deltas,
+            runtime_validate=False,  # required for jit
+        )
+
+        assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
+
+        return q_params
