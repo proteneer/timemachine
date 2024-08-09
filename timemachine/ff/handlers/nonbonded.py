@@ -1,5 +1,6 @@
 import ast
 import base64
+import hashlib
 import pickle
 from collections import Counter
 
@@ -9,6 +10,7 @@ import numpy as np
 from rdkit import Chem
 
 from timemachine import constants
+from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
@@ -18,6 +20,7 @@ from timemachine.graph_utils import convert_to_nx
 
 AM1_CHARGE_CACHE = "AM1Cache"
 AM1ELF10_CHARGE_CACHE = "AM1ELF10Cache"
+AM1BCCELF10_CHARGE_CACHE = "AM1BCCELF10Cache"
 BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
 
 AM1 = "AM1"
@@ -25,6 +28,9 @@ AM1ELF10 = "AM1ELF10"
 AM1BCC = "AM1BCC"
 AM1BCCELF10 = "AM1BCCELF10"
 ELF10_MODELS = (AM1ELF10, AM1BCCELF10)
+
+DEFAULT_AM1CCC_PATTERNS = tuple(pattern for (pattern, parameter) in AM1CCC_CHARGES["patterns"])
+DEFAULT_AM1CCC_PARAMS = np.array([parameter for (pattern, parameter) in AM1CCC_CHARGES["patterns"]])
 
 
 def convert_to_oe(mol):
@@ -203,28 +209,51 @@ def generate_nonbonded_idxs(mol, smirks):
     return param_idxs
 
 
-def compute_or_load_am1_charges(mol):
-    """Unless already cached in mol's "AM1ELF10_CHARGE_CACHE" property, use OpenEye to compute AM1ELF10 partial charges."""
+def compute_or_load_charges(mol, charge_method):
+    """Unless already cached as a mol property, use OpenEye to compute partial charges."""
+
+    cache_prop_names = {AM1ELF10: AM1ELF10_CHARGE_CACHE, AM1BCCELF10: AM1BCCELF10_CHARGE_CACHE}
+    if charge_method not in cache_prop_names.keys():
+        raise NotImplementedError
+
+    cache_prop_name = cache_prop_names[charge_method]
 
     # check for cache
-    if not mol.HasProp(AM1ELF10_CHARGE_CACHE):
+    if not mol.HasProp(cache_prop_name):
         # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
         # to be an issue that the atom ordering modifies the return values as well. A follow up
         # with OpenEye is in order
         # https://github.com/openforcefield/openff-toolkit/issues/983
-        am1_charges = list(oe_assign_charges(mol, AM1ELF10))
+        charges = list(oe_assign_charges(mol, charge_method))
 
-        mol.SetProp(AM1ELF10_CHARGE_CACHE, base64.b64encode(pickle.dumps(am1_charges)))
+        mol.SetProp(cache_prop_name, base64.b64encode(pickle.dumps(charges)))
 
     else:
-        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(AM1ELF10_CHARGE_CACHE)))
-        assert len(am1_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
+        charges = pickle.loads(base64.b64decode(mol.GetProp(cache_prop_name)))
+        assert len(charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
 
-    return np.array(am1_charges)
+    return np.array(charges)
+
+
+def compute_or_load_am1_charges(mol):
+    """Unless already cached in mol's AM1ELF10_CHARGE_CACHE property, use OpenEye to compute AM1ELF10 partial charges."""
+    return compute_or_load_charges(mol, AM1ELF10)
+
+
+def compute_or_load_am1bcc_charges(mol):
+    """Unless already cached in mol's AM1BCCELF10_CHARGE_CACHE property, use OpenEye to compute AM1BCCELF10 partial charges."""
+    return compute_or_load_charges(mol, AM1BCCELF10)
+
+
+def hash_smirks(smirks_list):
+    for s in smirks_list:
+        assert isinstance(s, str)  # don't pickle/hash arbitrary inputs
+    return hashlib.sha256(base64.b64encode(pickle.dumps(tuple(smirks_list)))).hexdigest()[:8]
 
 
 def compute_or_load_bond_smirks_matches(mol, smirks_list):
-    """Unless already cached in mol's "BondSmirkMatchCache" property, uses OpenEye to compute arrays of ordered bonds and their assigned types.
+    """Unless already cached in mol's "BondSmirkMatchCache_<hash(smirks_list)>" property, use OpenEye to compute
+    arrays of ordered bonds and their assigned types.
 
     Notes
     -----
@@ -235,7 +264,9 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list):
     * Order within each smirks pattern matters
         For example, "[#6:1]~[#1:2]" and "[#1:1]~[#6:2]" will match atom pairs in the opposite order
     """
-    if not mol.HasProp(BOND_SMIRK_MATCH_CACHE):
+
+    cache_key = "_".join((BOND_SMIRK_MATCH_CACHE, hash_smirks(smirks_list)))
+    if not mol.HasProp(cache_key):
         oemol = convert_to_oe(mol)
         AromaticityModel.assign(oemol)
 
@@ -256,7 +287,7 @@ def compute_or_load_bond_smirks_matches(mol, smirks_list):
                     type_idxs.append(type_idx)
         mol.SetProp(BOND_SMIRK_MATCH_CACHE, base64.b64encode(pickle.dumps((bond_idxs, type_idxs))))
     else:
-        bond_idxs, type_idxs = pickle.loads(base64.b64decode(mol.GetProp(BOND_SMIRK_MATCH_CACHE)))
+        bond_idxs, type_idxs = pickle.loads(base64.b64decode(mol.GetProp(cache_key)))
     return np.array(bond_idxs), np.array(type_idxs)
 
 
@@ -496,7 +527,7 @@ class AM1BCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        return oe_assign_charges(mol, "AM1BCCELF10")
+        return compute_or_load_am1bcc_charges(mol)
 
 
 class AM1BCCIntraHandler(AM1BCCHandler):
@@ -616,7 +647,77 @@ class EnvironmentBCCHandler(SerializableMixIn):
         return final_charges
 
 
-class AM1CCCHandler(SerializableMixIn):
+class PerturbedAM1BCCHandler(SerializableMixIn):
+    """Apply additional (adjustable) bond charge corrections on top of AM1BCC
+
+    Property: Exactly matches OE implementation of AM1BCC when params == zeros,
+    for any choice of smirks.
+    """
+
+    def __init__(self, smirks, params, props):
+        """
+        Parameters
+        ----------
+        smirks: list of str (P,)
+            SMIRKS patterns
+
+        params: np.array, (P,)
+            normalized charge increment for each matched bond
+
+        props: any
+        """
+
+        assert len(smirks) == len(params)
+
+        self.smirks = smirks
+        self.params = np.array(params, dtype=np.float64)
+        self.props = props
+        self.supported_elements = {1, 6, 7, 8, 9, 14, 15, 16, 17, 35, 53}
+
+    def validate_input(self, mol):
+        elements = set([a.GetAtomicNum() for a in mol.GetAtoms()])
+        if not elements.issubset(self.supported_elements):
+            raise RuntimeError("mol contains unsupported elements: ", elements - self.supported_elements)
+
+    def partial_parameterize(self, params, mol):
+        self.validate_input(mol)
+        return self.static_parameterize(params, self.smirks, mol)
+
+    def parameterize(self, mol):
+        return self.partial_parameterize(self.params, mol)
+
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
+        """
+        Parameters
+        ----------
+        params: np.array, (P,)
+            normalized charge increment for each matched bond
+        smirks: list of str (P,)
+            SMIRKS patterns matching bonds, to be parsed using OpenEye Toolkits
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        """
+        # (ytz): leave this comment here, useful for quickly disable AM1 calculations for large mols
+        # return np.zeros(mol.GetNumAtoms())
+        am1bcc_charges = compute_or_load_am1bcc_charges(mol)
+        bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
+
+        deltas = params[type_idxs]
+        q_params = apply_bond_charge_corrections(
+            am1bcc_charges,
+            bond_idxs,
+            deltas,
+            runtime_validate=False,  # required for jit
+        )
+
+        assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
+
+        return q_params
+
+
+class AM1CCCHandler(PerturbedAM1BCCHandler):
     """The AM1CCCHandler stands for AM1 Correctable Charge Correction (CCC) which uses OpenEye's AM1 charges[1]
     along with corrections provided by the Forcefield definition in the form of SMIRKS and charge deltas. The SMIRKS
     are currently parsed using the OpenEye Toolkits standard[2].
@@ -626,6 +727,11 @@ class AM1CCCHandler(SerializableMixIn):
 
     Charges are conformer and platform dependent as of OpenEye Toolkits 2020.2.0 [3].
 
+    Property: Will match OE implementation of AM1BCC only when (params, smirks)
+    are a faithful clone of the BCC logic used in OE implementation. Known gaps include:
+    * the element phosphorus
+    * sulfone groups
+
     References
     ----------
     [1] AM1 Theory
@@ -634,6 +740,32 @@ class AM1CCCHandler(SerializableMixIn):
         https://docs.eyesopen.com/toolkits/cpp/oechemtk/SMARTS.html
     [3] Charging Inconsistencies
         https://github.com/openforcefield/openff-toolkit/issues/1170
+    """
+
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
+        """
+        Parameters
+        ----------
+        params: np.array, (P,)
+            normalized charge increment for each matched bond
+        smirks: list of str (P,)
+            SMIRKS patterns matching bonds, to be parsed using OpenEye Toolkits
+        mol: Chem.ROMol
+            molecule to be parameterized.
+        """
+        assert tuple(smirks) == DEFAULT_AM1CCC_PATTERNS
+
+        offset_params = params - DEFAULT_AM1CCC_PARAMS
+
+        return PerturbedAM1BCCHandler.static_parameterize(offset_params, smirks, mol)
+
+
+class _AM1CCCHandler_legacy_impl(NonbondedHandler):
+    """AM1CCCHandler as implemented originally in the clone of OFF recharge
+    (AM1 followed by adjustable BCCs)
+    rather than
+    (AM1BCC followed by adjustable BCCs)
     """
 
     def __init__(self, smirks, params, props):

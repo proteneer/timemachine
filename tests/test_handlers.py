@@ -552,17 +552,52 @@ def test_gbsa_handler():
     assert np.all(adjoints[mask] == 0.0)
 
 
-def test_am1ccc_throws_error_on_phosphorus():
-    """Temporary, until phosphorus patterns are added to AM1CCC port"""
-    ff = Forcefield.load_default()
+def test_perturbed_am1bcc_handler():
+    """check that PerturbedAM1BCCHandler:
+    * matches am1bcc when params are zeros, even when smirks aren't a near-complete clone of AM1BCC's BCCs
+    * is differentiable wrt params,
+    * has different output when params are adjusted in gradient direction
+    """
+    from timemachine.datasets import fetch_freesolv
 
-    # contains phosphorus
-    smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
-    mol = Chem.AddHs(Chem.MolFromSmiles(smi))
+    mol_name = "mobley_3323117"
+    mol = {mol.GetProp("_Name"): mol for mol in fetch_freesolv()}[mol_name]
 
-    with pytest.raises(RuntimeError) as e:
-        _ = ff.q_handle.parameterize(mol)
-    assert "unsupported element" in str(e)
+    # invoke cache-mutating functions
+    am1_charges = nonbonded.compute_or_load_am1_charges(mol)  # noqa
+    am1bcc_charges = nonbonded.compute_or_load_am1bcc_charges(mol)
+
+    # clear cache
+    mol = {mol.GetProp("_Name"): mol for mol in fetch_freesolv()}[mol_name]
+
+    # initialize with params = zeros
+    arbitrary_smirks = nonbonded.DEFAULT_AM1CCC_PATTERNS[:50]
+    zeros = np.zeros(len(arbitrary_smirks))
+    handler = nonbonded.PerturbedAM1BCCHandler(arbitrary_smirks, zeros, None)
+    test_charges = handler.parameterize(mol)
+
+    np.testing.assert_allclose(test_charges, am1bcc_charges)
+
+    # clear cache again
+    mol = {mol.GetProp("_Name"): mol for mol in fetch_freesolv()}[mol_name]
+    am1bcc_charges_2 = nonbonded.compute_or_load_am1bcc_charges(mol)
+    np.testing.assert_allclose(am1bcc_charges_2, am1bcc_charges)
+
+    default_smirks = nonbonded.DEFAULT_AM1CCC_PATTERNS
+    zeros = np.zeros(len(default_smirks))
+    handler = nonbonded.PerturbedAM1BCCHandler(default_smirks, zeros, None)
+    np.testing.assert_allclose(handler.partial_parameterize(zeros, mol), am1bcc_charges)
+
+    # check that a gradient step changes output
+    def f(params):
+        return jnp.sum(handler.partial_parameterize(params, mol) ** 2)
+
+    g = jax.grad(f)(zeros)
+    assert np.linalg.norm(g) > 100
+
+    updated_params = zeros + g
+    updated_charges = handler.partial_parameterize(updated_params, mol)
+    assert np.linalg.norm(updated_charges - am1bcc_charges) > 100
 
 
 def test_am1_differences():
