@@ -151,8 +151,8 @@ $$$$"""
     )
     chiral_atom_idxs = idxs[-1]
     chiral_atom_params = params[-1]
-    np.testing.assert_array_equal(chiral_atom_idxs, [])
-    np.testing.assert_array_equal(chiral_atom_params, [])
+    assert len(chiral_atom_idxs) == 0
+    assert len(chiral_atom_params) == 0
 
     dg_7 = []
     core_7 = [0, 1, 2, 3]
@@ -161,8 +161,15 @@ $$$$"""
     )
     chiral_atom_idxs = idxs[-1]
     chiral_atom_params = params[-1]
-    np.testing.assert_array_equal(chiral_atom_idxs, [])
-    np.testing.assert_array_equal(chiral_atom_params, [])
+    assert len(chiral_atom_idxs) == 0
+    assert len(chiral_atom_params) == 0
+
+
+def assert_bond_sets_equal(bonds_a, bonds_b):
+    def f(bonds):
+        return {tuple(idxs) for idxs in bonds}
+
+    return f(bonds_a) == f(bonds_b)
 
 
 @pytest.mark.nocuda
@@ -187,10 +194,10 @@ def test_phenol():
     )
     bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
-    assert set(bond_idxs) == set([(5, 6), (6, 12)])
-    assert set(angle_idxs) == set([(5, 6, 12)])
-    assert set(improper_idxs) == set()
-    assert set(chiral_atom_idxs) == set()
+    assert_bond_sets_equal(bond_idxs, [(5, 6), (6, 12)])
+    assert_bond_sets_equal(angle_idxs, [(5, 6, 12)])
+    assert len(improper_idxs) == 0
+    assert len(chiral_atom_idxs) == 0
 
     # set [O,H] as the dummy group but allow an extra angle
     all_idxs, _ = setup_chiral_dummy_interactions_from_ff(
@@ -198,10 +205,10 @@ def test_phenol():
     )
     bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
-    assert set(bond_idxs) == set([(5, 6), (6, 12)])
-    assert set(angle_idxs) == set([(5, 6, 12), (0, 5, 6)])
-    assert set(improper_idxs) == set()
-    assert set(chiral_atom_idxs) == set()
+    assert_bond_sets_equal(bond_idxs, [(5, 6), (6, 12)])
+    assert_bond_sets_equal(angle_idxs, [(5, 6, 12), (0, 5, 6)])
+    assert len(improper_idxs) == 0
+    assert len(chiral_atom_idxs) == 0
 
     dg_1 = [12]
     core_1 = list(all_atoms_set.difference(dg_1))
@@ -212,10 +219,10 @@ def test_phenol():
     )
     bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
-    assert set(bond_idxs) == set([(6, 12)])
-    assert set(angle_idxs) == set()
-    assert set(improper_idxs) == set()
-    assert set(chiral_atom_idxs) == set()
+    assert_bond_sets_equal(bond_idxs, [(6, 12)])
+    assert len(angle_idxs) == 0
+    assert len(improper_idxs) == 0
+    assert len(chiral_atom_idxs) == 0
 
     # set [H] as the dummy group, with neighbor anchor atom
     all_idxs, _ = setup_chiral_dummy_interactions_from_ff(
@@ -223,10 +230,10 @@ def test_phenol():
     )
     bond_idxs, angle_idxs, improper_idxs, chiral_atom_idxs = all_idxs
 
-    assert set(bond_idxs) == set([(6, 12)])
-    assert set(angle_idxs) == set([(5, 6, 12)])
-    assert set(improper_idxs) == set()
-    assert set(chiral_atom_idxs) == set()
+    assert_bond_sets_equal(bond_idxs, [(6, 12)])
+    assert_bond_sets_equal(angle_idxs, [(5, 6, 12)])
+    assert len(improper_idxs) == 0
+    assert len(chiral_atom_idxs) == 0
 
     with pytest.raises(single_topology.MissingAngleError):
         all_idxs, _ = setup_chiral_dummy_interactions_from_ff(
@@ -254,16 +261,16 @@ def test_methyl_chiral_atom_idxs():
     )
     _, _, _, chiral_atom_idxs = all_idxs
 
-    expected_set = set(
+    expected_chiral_atom_idxs = [
         [
             (0, 1, 3, 4),
             (0, 3, 2, 4),
             (0, 2, 1, 4),
             (0, 1, 2, 3),
         ]
-    )
+    ]
 
-    assert set(chiral_atom_idxs) == expected_set
+    assert_bond_sets_equal(chiral_atom_idxs, expected_chiral_atom_idxs)
 
 
 @pytest.mark.nocuda
