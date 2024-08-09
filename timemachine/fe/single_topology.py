@@ -1,6 +1,5 @@
 import warnings
 from collections import defaultdict
-from collections.abc import Iterable
 from enum import IntEnum
 from functools import partial
 from typing import Callable, Collection, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple, TypeVar, Union, cast
@@ -64,20 +63,17 @@ class DummyGroupAssignmentError(RuntimeError):
     pass
 
 
-def recursive_map(items, mapping):
-    """recursively replace items in a list of tuple
-    mapping = np.arange(100)[::-1]
-    items = [[0,2,3], [5,1,[2,5,6]], 3]
-    result = recursive_map(items, mapping)
-    # ((99, 97, 96), (94, 98, (97, 94, 93)), 96)
+def translate_lol(items: Collection[Sequence[int]], mapping: Sequence[int] | Dict[int, int] | NDArray):
+    """Replace indices in a list of lists according to the given mapping.
+
+    Examples
+    --------
+    >>> mapping = np.arange(100)[::-1]
+    >>> items = [[0,2,3], [5,1,2,5,6]]
+    >>> translate_lol(items, mapping)
+    [[99, 97, 96], [94, 98, 97, 94, 93]]
     """
-    if isinstance(items, Iterable):
-        res = []
-        for item in items:
-            res.append(recursive_map(item, mapping))
-        return tuple(res)
-    else:
-        return mapping[items]
+    return [[mapping[idx] for idx in bond] for bond in items]
 
 
 def setup_dummy_bond_and_chiral_interactions(
@@ -452,12 +448,12 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
             all_dummy_bond_params.extend(all_params[0])
             all_dummy_chiral_atom_params.extend(all_params[1])
 
-        mol_a_bond_idxs = recursive_map(mol_a_hb.idxs, a_to_c)
-        mol_a_chiral_atom_idxs = recursive_map(mol_a_chiral_atom.potential.idxs, a_to_c)
-        mol_a_chiral_bond_idxs = recursive_map(mol_a_chiral_bond.potential.idxs, a_to_c)
+        mol_a_bond_idxs = translate_lol(mol_a_hb.idxs, a_to_c)
+        mol_a_chiral_atom_idxs = translate_lol(mol_a_chiral_atom.potential.idxs, a_to_c)
+        mol_a_chiral_bond_idxs = translate_lol(mol_a_chiral_bond.potential.idxs, a_to_c)
 
-        all_dummy_bond_idxs = recursive_map(all_dummy_bond_idxs, b_to_c)
-        all_dummy_chiral_atom_idxs = recursive_map(all_dummy_chiral_atom_idxs, b_to_c)
+        all_dummy_bond_idxs = translate_lol(all_dummy_bond_idxs, b_to_c)
+        all_dummy_chiral_atom_idxs = translate_lol(all_dummy_chiral_atom_idxs, b_to_c)
 
         # parameterize the combined molecule
         mol_c_bond_idxs = mol_a_bond_idxs + all_dummy_bond_idxs
@@ -595,13 +591,13 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     mol_a_improper_params = mol_a_improper_params.tolist()
     mol_a_nbpl_params = mol_a_nbpl_params.tolist()
 
-    mol_a_angle_idxs = recursive_map(mol_a_ha.idxs, a_to_c)
-    mol_a_proper_idxs = recursive_map(mol_a_pt.idxs, a_to_c)
-    mol_a_improper_idxs = recursive_map(mol_a_it.idxs, a_to_c)
-    mol_a_nbpl_idxs = recursive_map(mol_a_nbpl.idxs, a_to_c)
+    mol_a_angle_idxs = translate_lol(mol_a_ha.idxs, a_to_c)
+    mol_a_proper_idxs = translate_lol(mol_a_pt.idxs, a_to_c)
+    mol_a_improper_idxs = translate_lol(mol_a_it.idxs, a_to_c)
+    mol_a_nbpl_idxs = translate_lol(mol_a_nbpl.idxs, a_to_c)
 
-    all_dummy_angle_idxs = recursive_map(all_dummy_angle_idxs, b_to_c)
-    all_dummy_improper_idxs = recursive_map(all_dummy_improper_idxs, b_to_c)
+    all_dummy_angle_idxs = translate_lol(all_dummy_angle_idxs, b_to_c)
+    all_dummy_improper_idxs = translate_lol(all_dummy_improper_idxs, b_to_c)
 
     mol_c_angle_idxs = mol_a_angle_idxs + all_dummy_angle_idxs
     mol_c_angle_params = mol_a_angle_params + all_dummy_angle_params
@@ -613,7 +609,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     mol_c_improper_params = mol_a_improper_params + all_dummy_improper_params
 
     # canonicalize improper with cw/ccw check
-    mol_c_improper_idxs = tuple([canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs])
+    mol_c_improper_idxs = [canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs]
 
     # check that the improper idxs are canonical
     def assert_improper_idxs_are_canonical(all_idxs):
