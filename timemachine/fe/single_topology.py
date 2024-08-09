@@ -367,7 +367,10 @@ def canonicalize_chiral_atom_idxs(idxs):
 
 
 def make_setup_end_state_harmonic_bond_and_chiral_potentials(
-    mol_a, mol_b, ff: Forcefield
+    mol_a,
+    mol_b,
+    ff: Forcefield,
+    verify: bool = True,  # if True, perform additional consistency checks (disable for speed)
 ) -> Callable[
     [
         NDArray,
@@ -460,15 +463,17 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
         mol_c_bond_params = mol_a_bond_params.tolist() + all_dummy_bond_params
 
         # process chiral volumes, turning off ones at the end-state that have a missing bond.
-        canon_mol_a_bond_idxs_set = set([canonicalize_bond(x) for x in mol_a_bond_idxs])
+
         # assert presence of bonds
-        for c, i, j, k in mol_a_chiral_atom_idxs:
-            ci = canonicalize_bond((c, i))
-            cj = canonicalize_bond((c, j))
-            ck = canonicalize_bond((c, k))
-            assert ci in canon_mol_a_bond_idxs_set
-            assert cj in canon_mol_a_bond_idxs_set
-            assert ck in canon_mol_a_bond_idxs_set
+        if verify:
+            canon_mol_a_bond_idxs_set = set([canonicalize_bond(x) for x in mol_a_bond_idxs])
+            for c, i, j, k in mol_a_chiral_atom_idxs:
+                ci = canonicalize_bond((c, i))
+                cj = canonicalize_bond((c, j))
+                ck = canonicalize_bond((c, k))
+                assert ci in canon_mol_a_bond_idxs_set
+                assert cj in canon_mol_a_bond_idxs_set
+                assert ck in canon_mol_a_bond_idxs_set
 
         canon_mol_c_bond_idxs_set = set([canonicalize_bond(x) for x in mol_c_bond_idxs])
 
@@ -485,7 +490,7 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
             if ci in canon_mol_c_bond_idxs_set and cj in canon_mol_c_bond_idxs_set and ck in canon_mol_c_bond_idxs_set:
                 all_proper_dummy_chiral_atom_idxs.append((c, i, j, k))
                 all_proper_dummy_chiral_atom_params.append(p)
-            else:
+            elif verify:
                 warnings.warn(
                     f"Chiral Volume {c, i, j, k} has a disabled bond, turning off.", ChiralVolumeDisabledWarning
                 )
@@ -1246,10 +1251,10 @@ def make_check_chiral_validity(
     mol_a: Chem.Mol, mol_b: Chem.Mol, forcefield: Forcefield
 ) -> Callable[[NDArray, Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]], None]:
     setup_end_state_harmonic_bond_and_chiral_potentials_ab = make_setup_end_state_harmonic_bond_and_chiral_potentials(
-        mol_a, mol_b, forcefield
+        mol_a, mol_b, forcefield, verify=False
     )
     setup_end_state_harmonic_bond_and_chiral_potentials_ba = make_setup_end_state_harmonic_bond_and_chiral_potentials(
-        mol_b, mol_a, forcefield
+        mol_b, mol_a, forcefield, verify=False
     )
 
     def check_chiral_validity(
