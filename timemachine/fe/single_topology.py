@@ -1,4 +1,5 @@
 import warnings
+from collections import defaultdict
 from collections.abc import Iterable
 from enum import IntEnum
 from functools import partial
@@ -1126,21 +1127,19 @@ class AtomMapMixin:
 _Bonded = TypeVar("_Bonded", bound=Union[ChiralAtomRestraint, HarmonicAngleStable, HarmonicBond, PeriodicTorsion])
 
 
-def get_neighbors(atom, bond_idxs) -> List[int]:
-    nbs = []
+def get_neighbors(bond_idxs: Collection[Tuple[int, int]]) -> Dict[int, List[int]]:
+    neighbors = defaultdict(list)
     for i, j in bond_idxs:
-        if i == atom:
-            nbs.append(j)
-        elif j == atom:
-            nbs.append(i)
-    return nbs
+        neighbors[i].append(j)
+        neighbors[j].append(i)
+    return neighbors
 
 
 def check_chiral_validity_src_dst(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):
     """Raise error unless, for every chiral center, at least 1 chiral volume is defined in both end-states."""
-
+    neighbors = get_neighbors(src_bond_idxs)
     for c in src_chiral_centers_in_mol_c:
-        nbs = get_neighbors(c, src_bond_idxs)
+        nbs = neighbors[c]
         if len(nbs) == 4:
             i, j, k, l = nbs
             # (ytz): the ordering of i,j,k,l is random if we're reading directly from the mol graph,
