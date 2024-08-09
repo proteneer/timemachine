@@ -80,34 +80,30 @@ def recursive_map(items, mapping):
 
 
 def setup_dummy_bond_and_chiral_interactions(
-    bond_idxs,
-    bond_params,
-    chiral_atom_idxs,
-    chiral_atom_params,
-    dummy_group,
-    root_anchor_atom,
-    core_atoms,
+    bond_idxs: NDArray,
+    bond_params: NDArray,
+    chiral_atom_idxs: NDArray,
+    chiral_atom_params: NDArray,
+    dummy_group: FrozenSet[int],
+    root_anchor_atom: int,
+    core_atoms: Sequence[int],
 ):
     assert root_anchor_atom in core_atoms
 
-    dummy_bond_idxs = []
-    dummy_bond_params = []
-    dummy_chiral_atom_idxs = []
-    dummy_chiral_atom_params = []
+    dummy_group_ = list(dummy_group)
 
-    # dummy_group may be a set in certain cases, so sanity check.
+    if len(bond_idxs) > 0:
+        # dummy group and anchor
+        dga = dummy_group_ + [root_anchor_atom]
+        dga_arr = np.array(list(dga))
 
-    assert len(dummy_group) == len(list(dummy_group))
-    dummy_group = list(dummy_group)
-
-    # dummy group and anchor
-    dga = dummy_group + [root_anchor_atom]
-
-    # copy interactions that involve only root_anchor_atom
-    for idxs, params in zip(bond_idxs, bond_params):
-        if all(a in dga for a in idxs):
-            dummy_bond_idxs.append(tuple([int(x) for x in idxs]))  # tuples are hashable etc.
-            dummy_bond_params.append(params)
+        # keep interactions that involve only root_anchor_atom
+        b1 = (bond_idxs[..., None] == dga_arr[None, None, :]).any(-1).all(-1)
+        dummy_bond_idxs = bond_idxs[b1]
+        dummy_bond_params = bond_params[b1]
+    else:
+        dummy_bond_idxs = np.array([])
+        dummy_bond_params = np.array([])
 
     # certain configuration of chiral states are symmetrizable
     # . means a bond involving at least 1 dummy atom
@@ -120,16 +116,24 @@ def setup_dummy_bond_and_chiral_interactions(
     #    c      c      c      d      d      d    |    d      c
     #   . .    . .    / .    . .    . .    . .   |   . .    / \
     #  d   d  d   d  c   d  c   d  c   c  d   d  |  c   c  c   c (only core)
-    dgc = dummy_group + list(core_atoms)
-    for idxs, params in zip(chiral_atom_idxs, chiral_atom_params):
-        center, i, j, k = idxs
-        if all(a in dgc for a in idxs):
-            # non center dummy atom count
-            ncda_count = sum(a in dummy_group for a in (i, j, k))
-            if ncda_count == 1 or ncda_count == 2 or ncda_count == 3:
-                assert not all(a in core_atoms for a in idxs)
-                dummy_chiral_atom_idxs.append(tuple(int(x) for x in idxs))
-                dummy_chiral_atom_params.append(params)
+
+    if len(chiral_atom_idxs) > 0:
+        dgc = dummy_group_ + list(core_atoms)
+        dgc_arr = np.array(dgc)
+
+        b2 = (chiral_atom_idxs[..., None] == dgc_arr[None, None, :]).any(-1).all(-1)
+
+        # non center dummy atom count
+        dummy_group_arr = np.array(dummy_group_)
+        ncda_count = (chiral_atom_idxs[:, 1:, None] == dummy_group_arr[None, None, :]).any(-1).sum(-1)
+
+        b3 = b2 & (ncda_count > 0)
+
+        dummy_chiral_atom_idxs = chiral_atom_idxs[b3]
+        dummy_chiral_atom_params = chiral_atom_params[b3]
+    else:
+        dummy_chiral_atom_idxs = np.array([])
+        dummy_chiral_atom_params = np.array([])
 
     bonded_idxs = (dummy_bond_idxs, dummy_chiral_atom_idxs)
     bonded_params = (dummy_bond_params, dummy_chiral_atom_params)
