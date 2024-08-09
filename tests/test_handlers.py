@@ -552,19 +552,6 @@ def test_gbsa_handler():
     assert np.all(adjoints[mask] == 0.0)
 
 
-def test_am1ccc_throws_error_on_phosphorus():
-    """Temporary, until phosphorus patterns are added to AM1CCC port"""
-    ff = Forcefield.load_default()
-
-    # contains phosphorus
-    smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
-    mol = Chem.AddHs(Chem.MolFromSmiles(smi))
-
-    with pytest.raises(RuntimeError) as e:
-        _ = ff.q_handle.parameterize(mol)
-    assert "unsupported element" in str(e)
-
-
 def test_perturbed_am1bcc_handler():
     """check that PerturbedAM1BCCHandler:
     * matches am1bcc when params are zeros, even when smirks aren't a near-complete clone of AM1BCC's BCCs
