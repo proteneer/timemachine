@@ -63,6 +63,23 @@ class DummyGroupAssignmentError(RuntimeError):
     pass
 
 
+def bond_isin(bonds: NDArray[np.int32], idxs: NDArray[np.int32]) -> NDArray[np.bool_]:
+    """Returns a boolean mask indicating whether both indices of a bond are contained in idxs.
+
+    Parameters
+    ----------
+    bonds: NDArray
+        (n_bonds, 2) array of bonds
+
+    idxs: NDArray
+        1-d array of atom indices
+    """
+    b0 = bonds[:, :, None] == idxs[None, None, :]  # (bonds, 2 | 3 | 4, idxs)
+    b1 = b0.any(-1)  # (bonds, 2 | 3 | 4)
+    b2 = b1.all(-1)  # (bonds,)
+    return b2
+
+
 def setup_dummy_bond_and_chiral_interactions(
     bond_idxs: NDArray,
     bond_params: NDArray,
@@ -73,21 +90,15 @@ def setup_dummy_bond_and_chiral_interactions(
     core_atoms: NDArray,
 ):
     assert root_anchor_atom in core_atoms
+    dummy_group_arr = np.array(list(dummy_group))
 
-    dummy_group_ = list(dummy_group)
+    # dummy group and anchor
+    dga = np.append(dummy_group_arr, root_anchor_atom)
 
-    if len(bond_idxs) > 0:
-        # dummy group and anchor
-        dga = dummy_group_ + [root_anchor_atom]
-        dga_arr = np.array(list(dga))
-
-        # keep interactions that involve only root_anchor_atom
-        b1 = (bond_idxs[..., None] == dga_arr[None, None, :]).any(-1).all(-1)
-        dummy_bond_idxs = bond_idxs[b1]
-        dummy_bond_params = bond_params[b1]
-    else:
-        dummy_bond_idxs = np.array([])
-        dummy_bond_params = np.array([])
+    # keep interactions that involve only root_anchor_atom
+    bond_mask = bond_isin(bond_idxs, dga)
+    dummy_bond_idxs = bond_idxs[bond_mask]
+    dummy_bond_params = bond_params[bond_mask]
 
     # certain configuration of chiral states are symmetrizable
     # . means a bond involving at least 1 dummy atom
@@ -101,26 +112,18 @@ def setup_dummy_bond_and_chiral_interactions(
     #   . .    . .    / .    . .    . .    . .   |   . .    / \
     #  d   d  d   d  c   d  c   d  c   c  d   d  |  c   c  c   c (only core)
 
-    if len(chiral_atom_idxs) > 0:
-        dgc = dummy_group_ + list(core_atoms)
-        dgc_arr = np.array(dgc)
+    dgc = np.concatenate([dummy_group_arr, core_atoms])
 
-        b2 = (chiral_atom_idxs[..., None] == dgc_arr[None, None, :]).any(-1).all(-1)
+    # mask indicating whether a chiral atom ixn has a non-center dummy atom
+    has_ncda = (chiral_atom_idxs[:, 1:, None] == dummy_group_arr[None, None, :]).any(-1).any(-1)
 
-        # non center dummy atom count
-        dummy_group_arr = np.array(dummy_group_)
-        ncda_count = (chiral_atom_idxs[:, 1:, None] == dummy_group_arr[None, None, :]).any(-1).sum(-1)
-
-        b3 = b2 & (ncda_count > 0)
-
-        dummy_chiral_atom_idxs = chiral_atom_idxs[b3]
-        dummy_chiral_atom_params = chiral_atom_params[b3]
-    else:
-        dummy_chiral_atom_idxs = np.array([])
-        dummy_chiral_atom_params = np.array([])
+    chiral_atom_ixn_mask = bond_isin(chiral_atom_idxs, dgc) & has_ncda
+    dummy_chiral_atom_idxs = chiral_atom_idxs[chiral_atom_ixn_mask]
+    dummy_chiral_atom_params = chiral_atom_params[chiral_atom_ixn_mask]
 
     bonded_idxs = (dummy_bond_idxs, dummy_chiral_atom_idxs)
     bonded_params = (dummy_bond_params, dummy_chiral_atom_params)
+
     return bonded_idxs, bonded_params
 
 
