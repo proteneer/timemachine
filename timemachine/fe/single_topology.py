@@ -88,8 +88,11 @@ def setup_dummy_bond_and_chiral_interactions(
     dummy_group: FrozenSet[int],
     root_anchor_atom: int,
     core_atoms: NDArray,
+    verify: bool = True,
 ):
-    assert root_anchor_atom in core_atoms
+    if verify:
+        assert root_anchor_atom in core_atoms
+
     dummy_group_arr = np.array(list(dummy_group))
 
     # dummy group and anchor
@@ -442,6 +445,7 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
                 dg,
                 anchor,
                 core[:, 1],
+                verify,
             )
             # append idxs
             all_dummy_bond_idxs_.extend(all_idxs[0])
