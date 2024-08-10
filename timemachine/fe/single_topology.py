@@ -359,7 +359,9 @@ def get_num_connected_components(num_atoms: int, bonds: Collection[Tuple[int, in
     return len(list(nx.connected_components(g)))
 
 
-def canonicalize_chiral_atom_idxs(idxs):
+def canonicalize_chiral_atom_idxs(idxs: NDArray[np.int32]) -> NDArray[np.int32]:
+    assert idxs.ndim == 2
+    assert idxs.shape[1] == 4
     c = idxs[:, 0:1]
     ijk = idxs[:, 1:]
     ijk_argmin = np.argmin(ijk, axis=1)
