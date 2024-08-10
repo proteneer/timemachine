@@ -468,7 +468,7 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
 
         # assert presence of bonds
         if verify:
-            canon_mol_a_bond_idxs_set = set([canonicalize_bond(x) for x in mol_a_bond_idxs])
+            canon_mol_a_bond_idxs_set = {tuple(x) for x in canonicalize_bonds(mol_a_bond_idxs)}
             for c, i, j, k in mol_a_chiral_atom_idxs:
                 ci = canonicalize_bond((c, i))
                 cj = canonicalize_bond((c, j))
