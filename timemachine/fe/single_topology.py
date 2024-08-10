@@ -372,11 +372,52 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
     mol_a,
     mol_b,
     ff: Forcefield,
-    verify: bool = True,  # if True, perform additional consistency checks (disable for speed)
+    verify: bool = True,
 ) -> Callable[
     [NDArray, NDArray, NDArray, Dict[int, FrozenSet[int]]],
     Tuple[BoundPotential[HarmonicBond], BoundPotential[ChiralAtomRestraint], BoundPotential[ChiralBondRestraint]],
 ]:
+    """Returns a function that, given an atom mapping and dummy group assignment, sets up end-state bond and chiral
+    restraint potentials. The mapped indices will correspond to the alchemical molecule with dummy atoms. Note that the
+    bond, chiral atom and chiral bond idxs are canonicalized.
+
+    Note: this is separated from setup_end_state to support fast chiral validity checks, which only require chiral atom
+    restraint indices.
+
+    Parameters
+    ----------
+    mol_a: Chem.Mol
+        Fully interacting molecule
+
+    mol_b: Chem.Mol
+        Molecule providing the dummy atoms.
+
+    ff: forcefield.Forcefield
+        Forcefield used to parameterize the molecule
+
+    verify: bool, optional
+        If True, perform additional consistency checks. Set to False when maximum performance is desired.
+
+    Returns
+    -------
+    Callable
+        (core, a_to_c, b_to_c, dummy_groups) -> (HarmonicBond, ChiralAtomRestraint, ChiralBondRestraint)
+
+        where
+
+        core: list of 2-tuples
+            Each pair is an atom mapping from mol_a into mol_b
+
+        a_to_c: dict or array, supports []
+            mapping from a into a common core idx
+
+        b_to_c: dict or array, supports []
+            mapping from b into a common core idx
+
+        dummy_groups: Dict[int, FrozenSet[int]]
+            mapping from anchor atom to dummy group. Indices refer to atoms in mol_b.
+    """
+
     assert ff.hb_handle
 
     mol_a_top = topology.BaseTopology(mol_a, ff)
@@ -397,42 +438,6 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
         b_to_c: NDArray,
         dummy_groups: Dict[int, FrozenSet[int]],
     ):
-        """
-        Setup end-state potentials to verify chiral correctness for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
-        to the alchemical molecule with dummy atoms. Note that the bond, chiral atom and chiral bond idxs are canonicalized.
-
-        This code is identical to setup_end_state, but only handles chiral potentials to be used to quickly verify
-        core mappings in verify_chiral_validity_of_core
-
-        Parameters
-        ----------
-        ff: forcefield.Forcefield
-            Forcefield used to parameterize the molecule
-
-        mol_a: Chem.Mol
-            Fully interacting molecule
-
-        mol_b: Chem.Mol
-            Molecule providing the dummy atoms.
-
-        core: list of 2-tuples
-            Each pair is an atom mapping from mol_a into mol_b
-
-        a_to_c: dict or array, supports []
-            mapping from a into a common core idx
-
-        b_to_c: dict or array, supports []
-            mapping from b into a common core idx
-
-        dummy_groups: Dict[int, FrozenSet[int]]
-            mapping from anchor atom to dummy group. Indices refer to atoms in mol_b.
-
-        Returns
-        -------
-        Tuple of bound HarmonicBond, ChiralAtomRestraint and ChiralBondRestraint
-            The potentials involved in checking the correctness and validity of chirality at endstates.
-
-        """
         all_dummy_bond_idxs_, all_dummy_bond_params_ = [], []
         all_dummy_chiral_atom_idxs_, all_dummy_chiral_atom_params_ = [], []
 
@@ -676,6 +681,18 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
 def make_find_chirally_valid_dummy_groups(
     mol_a, mol_b
 ) -> Callable[[NDArray], Optional[Tuple[Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]]]]:
+    """Returns a function that, given a core, returns a pair of dummy group assignments for the A -> B and B -> A
+    transformations such that the implied hybrid mol is chirally valid, or None if no such pair exists.
+
+    Refer to :py:func:`check_chiral_validity` for definition of "chiral validity".
+
+    Refer to :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
+    information on dummy group assignment.
+
+    For the A -> B transformation, dummy group indices refer to atoms in mol_b.
+    For the B -> A transformation, dummy group indices refer to atoms in mol_a.
+    """
+
     bond_graph_a = convert_to_nx(mol_a)
     bond_graph_b = convert_to_nx(mol_b)
 
@@ -685,18 +702,6 @@ def make_find_chirally_valid_dummy_groups(
     check_chiral_validity = make_check_chiral_validity(mol_a, mol_b, ff)
 
     def find_chirally_valid_dummy_groups(core):
-        """Returns a pair of dummy group assignments for the A -> B and B -> A transformations such that the implied hybrid
-        mol is chirally valid, or None if no such pair exists.
-
-        Refer to :py:func:`check_chiral_validity` for definition of "chiral validity".
-
-        Refer to :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
-        information on dummy group assignment.
-
-        For the A -> B transformation, dummy group indices refer to atoms in mol_b.
-        For the B -> A transformation, dummy group indices refer to atoms in mol_a.
-        """
-
         def is_chirally_valid(dummy_groups_ab, dummy_groups_ba):
             try:
                 check_chiral_validity(core, dummy_groups_ab, dummy_groups_ba)
