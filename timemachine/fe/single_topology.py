@@ -354,10 +354,12 @@ def get_num_connected_components(num_atoms: int, bonds: Collection[Tuple[int, in
 
 
 def canonicalize_chiral_atom_idxs(idxs):
-    i, j, k, l = idxs
-    rotations = [(j, k, l), (l, j, k), (k, l, j)]
-    jj, kk, ll = min(rotations)
-    return i, jj, kk, ll
+    c = idxs[:, 0:1]
+    ijk = idxs[:, 1:]
+    ijk_argmin = np.argmin(ijk, axis=1)
+    ijks = ijk[:, [[0, 1, 2], [1, 2, 0], [2, 0, 1]]]
+    ijk_canon = np.take_along_axis(ijks, ijk_argmin[:, None, None], axis=1)[:, 0]
+    return np.concatenate([c, ijk_canon], axis=1)
 
 
 def make_setup_end_state_harmonic_bond_and_chiral_potentials(
@@ -504,8 +506,7 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
 
         # chiral atoms need special code for canonicalization, since triple product is invariant
         # under rotational symmetry (but not something like swap symmetry)
-        mol_c_chiral_atom_idxs_canon = [canonicalize_chiral_atom_idxs(idxs) for idxs in mol_c_chiral_atom_idxs]
-        mol_c_chiral_atom_idxs = np.array(mol_c_chiral_atom_idxs_canon, dtype=np.int32).reshape((-1, 4))
+        mol_c_chiral_atom_idxs = canonicalize_chiral_atom_idxs(mol_c_chiral_atom_idxs)
 
         mol_c_chiral_bond_idxs = canonicalize_bonds(mol_a_chiral_bond_idxs)
         mol_c_chiral_bond_signs = mol_a_chiral_bond.potential.signs
