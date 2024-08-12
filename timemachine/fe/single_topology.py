@@ -69,13 +69,13 @@ def bond_isin(bonds: NDArray[np.int32], idxs: NDArray[np.int32]) -> NDArray[np.b
     Parameters
     ----------
     bonds: NDArray
-        (n_bonds, 2) array of bonds
+        (n_bonds, n_bond_idxs) array of bonds (n_bond_idxs=2 for bonds, 3 for angles, 4 for torsions, etc.)
 
     idxs: NDArray
         1-d array of atom indices
     """
-    b0 = bonds[:, :, None] == idxs[None, None, :]  # (bonds, 2 | 3 | 4, idxs)
-    b1 = b0.any(-1)  # (bonds, 2 | 3 | 4)
+    b0 = bonds[:, :, None] == idxs[None, None, :]  # (bonds, bond_idxs, idxs)
+    b1 = b0.any(-1)  # (bonds, bond_idxs)
     b2 = b1.all(-1)  # (bonds,)
     return b2
 
