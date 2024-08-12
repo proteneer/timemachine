@@ -74,9 +74,9 @@ def bond_isin(bonds: NDArray[np.int32], idxs: NDArray[np.int32]) -> NDArray[np.b
     idxs: NDArray
         1-d array of atom indices
     """
-    b0 = bonds[:, :, None] == idxs[None, None, :]  # (bonds, bond_idxs, idxs)
-    b1 = b0.any(-1)  # (bonds, bond_idxs)
-    b2 = b1.all(-1)  # (bonds,)
+    b0 = bonds[:, :, None] == idxs[None, None, :]  # shape: (n_bonds, n_bond_idxs, n_idxs)
+    b1 = b0.any(-1)  # shape: (n_bonds, n_bond_idxs)
+    b2 = b1.all(-1)  # shape: (n_bonds,)
     return b2
 
 
