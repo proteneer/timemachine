@@ -1281,7 +1281,7 @@ def make_check_chiral_validity(
         dummy_groups_ab: Dict[int, FrozenSet[int]],
         dummy_groups_ba: Dict[int, FrozenSet[int]],
     ):
-        """Verify that a core and forcefield would allow for valid chiral endstates.
+        """Verify that a core and dummy groups would allow for valid chiral endstates.
 
         Refer to `check_chiral_validity` for definition of validity.
 
