@@ -455,17 +455,20 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
                 verify,
             )
             # append idxs
-            all_dummy_bond_idxs_.extend(all_idxs[0])
-            all_dummy_chiral_atom_idxs_.extend(all_idxs[1])
+            all_dummy_bond_idxs_.append(all_idxs[0])
+            all_dummy_chiral_atom_idxs_.append(all_idxs[1])
             # append params
-            all_dummy_bond_params_.extend(all_params[0])
-            all_dummy_chiral_atom_params_.extend(all_params[1])
+            all_dummy_bond_params_.append(all_params[0])
+            all_dummy_chiral_atom_params_.append(all_params[1])
 
-        all_dummy_bond_idxs = np.array(all_dummy_bond_idxs_, np.int32).reshape(-1, 2)
-        all_dummy_bond_params = np.array(all_dummy_bond_params_, np.float64).reshape(-1, 2)
+        def concatenate(arrays, empty_shape, empty_dtype):
+            return np.concatenate(arrays) if len(arrays) > 0 else np.empty(empty_shape, empty_dtype)
 
-        all_dummy_chiral_atom_idxs = np.array(all_dummy_chiral_atom_idxs_, np.int32).reshape(-1, 4)
-        all_dummy_chiral_atom_params = np.array(all_dummy_chiral_atom_params_, np.int32)
+        all_dummy_bond_idxs = concatenate(all_dummy_bond_idxs_, (0, 2), np.int32)
+        all_dummy_bond_params = concatenate(all_dummy_bond_params_, (0, 2), np.float64)
+
+        all_dummy_chiral_atom_idxs = concatenate(all_dummy_chiral_atom_idxs_, (0, 4), np.int32)
+        all_dummy_chiral_atom_params = concatenate(all_dummy_chiral_atom_params_, (0,), np.float64)
 
         mol_a_bond_idxs = a_to_c[mol_a_hb.idxs]
         mol_a_chiral_atom_idxs = a_to_c[mol_a_chiral_atom.potential.idxs]
