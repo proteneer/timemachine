@@ -407,13 +407,13 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
 
         where
 
-        core: list of 2-tuples
+        core: array of shape (core_size, 2)
             Each pair is an atom mapping from mol_a into mol_b
 
-        a_to_c: dict or array, supports []
+        a_to_c: array
             mapping from a into a common core idx
 
-        b_to_c: dict or array, supports []
+        b_to_c: array
             mapping from b into a common core idx
 
         dummy_groups: Dict[int, FrozenSet[int]]
@@ -552,13 +552,13 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     mol_b: Chem.Mol
         Molecule providing the dummy atoms.
 
-    core: list of 2-tuples
+    core: array of shape (core_size, 2)
         Each pair is an atom mapping from mol_a into mol_b
 
-    a_to_c: dict or array, supports []
+    a_to_c: array
         mapping from a into a common core idx
 
-    b_to_c: dict or array, supports []
+    b_to_c: array
         mapping from b into a common core idx
 
     dummy_groups: Dict[int, FrozenSet[int]]
