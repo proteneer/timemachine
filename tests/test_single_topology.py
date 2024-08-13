@@ -9,7 +9,7 @@ import networkx as nx
 import numpy as np
 import pytest
 from common import check_split_ixns, load_split_forcefields
-from hypothesis import assume, given, seed
+from hypothesis import assume, event, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -33,6 +33,8 @@ from timemachine.fe.single_topology import (
     CoreBondChangeWarning,
     DummyGroupAssignmentError,
     SingleTopology,
+    canonicalize_bonds,
+    canonicalize_chiral_atom_idxs,
     canonicalize_improper_idxs,
     cyclic_difference,
     handle_ring_opening_closing,
@@ -408,15 +410,12 @@ def test_charge_perturbation_is_invalid():
     assert str(e.value) == "mol a and mol b don't have the same charge: a: 0 b: 1"
 
 
-def assert_bond_idxs_are_canonical(all_idxs):
-    for idxs in all_idxs:
-        assert idxs[0] < idxs[-1]
+def bond_idxs_are_canonical(all_idxs):
+    return np.all(all_idxs[:, 0] < all_idxs[:, -1])
 
 
-def assert_chiral_atom_idxs_are_canonical(all_idxs):
-    for _, j, k, l in all_idxs:
-        assert (j, k, l) < (l, j, k)
-        assert (j, k, l) < (k, l, j)
+def chiral_atom_idxs_are_canonical(all_idxs):
+    return np.all((all_idxs[:, 1] < all_idxs[:, 2]) & (all_idxs[:, 1] < all_idxs[:, 3]))
 
 
 @pytest.mark.nogpu
@@ -457,12 +456,12 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
 
         for system in systems:
             # assert that the idxs are canonicalized.
-            assert_bond_idxs_are_canonical(system.bond.potential.idxs)
-            assert_bond_idxs_are_canonical(system.angle.potential.idxs)
-            assert_bond_idxs_are_canonical(system.torsion.potential.idxs)
-            assert_bond_idxs_are_canonical(system.nonbonded.potential.idxs)
-            assert_bond_idxs_are_canonical(system.chiral_bond.potential.idxs)
-            assert_chiral_atom_idxs_are_canonical(system.chiral_atom.potential.idxs)
+            assert bond_idxs_are_canonical(system.bond.potential.idxs)
+            assert bond_idxs_are_canonical(system.angle.potential.idxs)
+            assert bond_idxs_are_canonical(system.torsion.potential.idxs)
+            assert bond_idxs_are_canonical(system.nonbonded.potential.idxs)
+            assert bond_idxs_are_canonical(system.chiral_bond.potential.idxs)
+            assert chiral_atom_idxs_are_canonical(system.chiral_atom.potential.idxs)
             U_fn = jax.jit(system.get_U_fn())
             assert np.isfinite(U_fn(x0))
             x_min = minimize_scipy(U_fn, x0, seed=seed)
@@ -478,6 +477,46 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
                 assert np.all(np.isfinite(nrgs))
                 assert np.all(np.isfinite(frames))
                 assert np.all(batch_distance_check(frames) < distance_cutoff)
+
+
+atom_idxs = st.integers(0, 100)
+
+
+@st.composite
+def bond_or_angle_idx_arrays(draw):
+    n_idxs = draw(st.one_of(st.just(2), st.just(3)))
+    idxs = st.lists(atom_idxs, min_size=n_idxs, max_size=n_idxs, unique=True).map(tuple)
+    idx_arrays = st.lists(idxs, min_size=0, max_size=100, unique=True).map(
+        lambda ixns: np.array(ixns).reshape(-1, n_idxs)
+    )
+    return draw(idx_arrays)
+
+
+@given(bond_or_angle_idx_arrays())
+@seed(2024)
+def test_canonicalize_bonds(bonds):
+    canonicalized_bonds = canonicalize_bonds(bonds)
+    event("canonical" if bond_idxs_are_canonical(bonds) else "not canonical")
+    assert all(set(canon_idxs) == set(idxs) for canon_idxs, idxs in zip(canonicalized_bonds, bonds))
+    assert bond_idxs_are_canonical(canonicalized_bonds)
+
+
+chiral_atom_idxs = st.lists(atom_idxs, min_size=4, max_size=4, unique=True).map(lambda x: tuple(x))
+chiral_atom_idx_arrays = st.lists(chiral_atom_idxs, min_size=0, max_size=100, unique=True).map(
+    lambda idxs: np.array(idxs).reshape(-1, 4)
+)
+
+
+@given(chiral_atom_idx_arrays)
+@seed(2024)
+def test_canonicalize_chiral_atom_idxs(chiral_atom_idxs):
+    canonicalized_idxs = canonicalize_chiral_atom_idxs(chiral_atom_idxs)
+    event("canonical" if chiral_atom_idxs_are_canonical(chiral_atom_idxs) else "not canonical")
+    assert all(
+        tuple(canon_idxs) in {tuple(idxs[p]) for p in [[0, 1, 2, 3], [0, 2, 3, 1], [0, 3, 1, 2]]}
+        for canon_idxs, idxs in zip(canonicalized_idxs, chiral_atom_idxs)
+    )
+    assert chiral_atom_idxs_are_canonical(canonicalized_idxs)
 
 
 @pytest.mark.nocuda
