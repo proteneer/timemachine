@@ -174,7 +174,7 @@ class ChiralRestrIdxSet:
     """Support fast checks of whether a trial 4-tuple is consistent with a set of chiral atom idxs"""
 
     def __init__(self, restr_idxs: List[FourTuple] | NDArray):
-        self.restr_idxs = [(int(c), int(i), int(j), int(k)) for (c, i, j, k) in restr_idxs]
+        self.restr_idxs = restr_idxs
         self.allowed_set, self.disallowed_set = self.expand_symmetries()
 
     @classmethod

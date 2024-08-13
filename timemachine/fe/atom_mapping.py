@@ -9,10 +9,8 @@ from rdkit import Chem
 
 from timemachine.fe import mcgregor
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
-from timemachine.fe.single_topology import find_chirally_valid_dummy_groups_impl
+from timemachine.fe.single_topology import make_find_chirally_valid_dummy_groups
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
-from timemachine.ff import Forcefield
-from timemachine.graph_utils import convert_to_nx
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
 # Unless you have to. And now we have to. If you want to understand what this code is doing, it
@@ -410,18 +408,12 @@ def _get_cores_impl(
         return all(f(trial_core) for f in filter_fxns)
 
     def make_leaf_filter_fxn():
-        bond_graph_a = convert_to_nx(mol_a)
-        bond_graph_b = convert_to_nx(mol_b)
-
-        # Use placeholder forcefield with a minimal number of patterns for performance
-        ff = Forcefield.load_from_file("placeholder_ff.py")
+        find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
 
         def leaf_filter_fxn(trial_core) -> bool:
             if enforce_chirally_valid_dummy_groups:
                 core = mcgregor.perm_to_core(trial_core)
-                chirally_valid_dummy_groups = find_chirally_valid_dummy_groups_impl(
-                    mol_a, mol_b, bond_graph_a, bond_graph_b, core, ff
-                )
+                chirally_valid_dummy_groups = find_chirally_valid_dummy_groups(core)
                 return chirally_valid_dummy_groups is not None
             else:
                 return True
