@@ -1,6 +1,7 @@
 import ast
 import base64
 import pickle
+import warnings
 from collections import Counter
 
 import jax.numpy as jnp
@@ -55,28 +56,43 @@ def oe_generate_conformations(oemol, sample_hydrogens=True):
     ----------
     oemol: oechem.OEMol
 
+    sample_hydrogens: bool
+        Whether or not to sample hydrogens
+
     References
     ----------
     [1] https://docs.eyesopen.com/toolkits/cookbook/python/modeling/am1-bcc.html
     """
     from openeye import oeomega
 
+    def omega_from_options(opts):
+        # Always disable usage of the GPU
+        opts.GetTorDriveOptions().SetUseGPU(False)
+
+        omega = oeomega.OEOmega(opts)
+        omega.SetStrictStereo(True)
+        # exclude the initial input conformer
+        omega.SetIncludeInput(False)
+        # needed to preserve the atom ordering
+        omega.SetCanonOrder(False)
+        omega.SetSampleHydrogens(sample_hydrogens)
+        omega.SetEnergyWindow(15.0)
+        omega.SetMaxConfs(800)
+        omega.SetRMSThreshold(1.0)
+        return omega
+
     # generate conformations using omega
     omegaOpts = oeomega.OEOmegaOptions()
-    omegaOpts.GetTorDriveOptions().SetUseGPU(False)
-    omega = oeomega.OEOmega(omegaOpts)
-    # exclude the initial input conformer
-    omega.SetIncludeInput(False)
-    # needed to preserve the atom ordering
-    omega.SetCanonOrder(False)
-    omega.SetSampleHydrogens(sample_hydrogens)
-    omega.SetEnergyWindow(15.0)
-    omega.SetMaxConfs(800)
-    omega.SetRMSThreshold(1.0)
-
+    omega = omega_from_options(omegaOpts)
     has_confs = omega(oemol)
     if not has_confs:
-        raise Exception(f"Unable to generate conformations for charge assignment for '{oemol.GetTitle()}'")
+        warnings.warn(
+            f"Unable to generate conformations using default parameters for '{oemol.GetTitle()}', falling back to Omega Dense Mode"
+        )
+        omegaOpts = oeomega.OEOmegaOptions(oeomega.OEOmegaSampling_Dense)
+        omega = omega_from_options(omegaOpts)
+        if not omega(oemol):
+            raise Exception(f"Unable to generate conformations for charge assignment for '{oemol.GetTitle()}'")
 
 
 def oe_assign_charges(mol, charge_model=AM1BCCELF10):

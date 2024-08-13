@@ -643,6 +643,60 @@ def test_trans_carboxlic_acid():
     assert np.sum(delta_charges) == pytest.approx(0.0)
 
 
+def test_omega_dense_fallback_with_invalid_molecule():
+    """Test that when given an invalid molecule to parameterize that we fall back to the Dense mode of
+    Omega, but that if the stereochemistry is invalid that it will still fail.
+    """
+    mol_block = """unparameterizable
+     RDKit          3D
+
+ 18 18  0  0  0  0  0  0  0  0999 V2000
+    1.3845    0.2645    0.1873 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7574    1.0833   -0.9414 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.0545   -0.0754    0.3443 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.3052   -0.7817    0.5698 C   0  0  2  0  0  0  0  0  0  0  0  0
+   -0.6925    0.8561   -0.7463 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.5036   -1.4604    1.8643 N   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.6675    1.4613   -1.5847 O   0  0  0  0  0  0  0  0  0  0  0  0
+    2.3300   -0.1834   -0.1282 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6115    0.9109    1.0366 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1085    2.1087   -0.9858 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9664    0.6255   -1.9225 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.7776   -0.7597   -0.1151 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.5061    0.3338    1.2402 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.3340   -1.6044   -0.1507 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5488   -0.0758   -1.3327 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -2.5447    1.1941   -1.3007 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4248   -1.5286    2.2562 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9155   -2.3694    1.7088 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0
+  1  4  1  0
+  1  8  1  0
+  1  9  1  0
+  2  5  1  0
+  2 10  1  0
+  2 11  1  0
+  3  4  1  0
+  3  5  1  0
+  3 12  1  0
+  3 13  1  0
+  4  6  1  0
+  4 14  1  6
+  5  7  1  0
+  5 15  1  0
+  6 17  1  0
+  6 18  1  0
+  7 16  1  0
+M  END
+$$$$
+    """
+    mol = Chem.MolFromMolBlock(mol_block)
+    with pytest.warns(UserWarning, match="falling back to Omega Dense Mode") as w:
+        with pytest.raises(Exception, match="Unable to generate conformations for charge assignment for"):
+            nonbonded.oe_assign_charges(mol)
+    assert len(w) == 1
+
+
 def test_freesolv_failures():
     # Test failures for 3 cases in freesolv in openeye toolkits 2022.2.2
     with resources.path("timemachine.testsystems.data", "freesolv_omega_failures.sdf") as path_to_ligand:
