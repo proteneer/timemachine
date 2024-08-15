@@ -2,7 +2,6 @@ from collections import defaultdict
 from functools import partial
 from typing import List, Optional, Tuple
 
-import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
@@ -199,25 +198,6 @@ def get_cores(
     return all_cores
 
 
-def bfs(g, atom):
-    depth = 0
-    cur_layer = [atom]
-    levels = {}
-    while len(levels) != g.GetNumAtoms():
-        next_layer = []
-        for layer_atom in cur_layer:
-            levels[layer_atom.GetIdx()] = depth
-            for nb_atom in layer_atom.GetNeighbors():
-                if nb_atom.GetIdx() not in levels:
-                    next_layer.append(nb_atom)
-        cur_layer = next_layer
-        depth += 1
-    levels_array = [-1] * g.GetNumAtoms()
-    for i, l in levels.items():
-        levels_array[i] = l
-    return levels_array
-
-
 def reorder_atoms_by_degree_and_initial_mapping(mol, initial_mapping):
     degrees = [len(a.GetNeighbors()) for a in mol.GetAtoms()]
     for a in mol.GetAtoms():
@@ -236,33 +216,6 @@ def reorder_atoms_by_degree_and_initial_mapping(mol, initial_mapping):
     new_mapping = np.array(new_mapping)
 
     return new_mol, perm, new_mapping
-
-
-def find_cycles(g: nx.Graph):
-    # return the indices of nxg that are in a cycle
-    # 1) find and remove bridges
-    # 2) if atom has > 1 neighbor then it is in a cycle.
-    edges = nx.bridges(g)
-    for e in edges:
-        g.remove_edge(*e)
-    cycle_dict = {}
-    for node in g.nodes:
-        # print(list(g[node]))
-        cycle_dict[node] = len(list(g.neighbors(node))) > 0
-    return cycle_dict
-
-
-def get_edges(mol):
-    return [(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()) for bond in mol.GetBonds()]
-
-
-def induce_mol_subgraph(mol_a, core_a, bond_core_a):
-    sg_a = nx.Graph()
-    for a in core_a:
-        sg_a.add_node(a)
-    for e1 in bond_core_a:
-        sg_a.add_edge(*e1)
-    return sg_a
 
 
 def _uniquify_core(core):
@@ -469,17 +422,3 @@ def remove_cores_smaller_than_largest(cores):
     # Return the largest core(s)
     max_core_size = max(cores_by_size.keys())
     return cores_by_size[max_core_size]
-
-
-def update_bond_core(core, bond_core):
-    """
-    bond_core: dictionary mapping atoms (i,j) of mol a
-    to (k, l) of mol b.
-    """
-    new_bond_core = {}
-    core_a = list(core[:, 0])
-    core_b = list(core[:, 1])
-    for bond_a, bond_b in bond_core.items():
-        if bond_a[0] in core_a and bond_a[1] in core_a and bond_b[0] in core_b and bond_b[1] in core_b:
-            new_bond_core[bond_a] = bond_b
-    return new_bond_core
