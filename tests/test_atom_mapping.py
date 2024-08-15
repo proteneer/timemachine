@@ -1520,3 +1520,44 @@ M  END""",
     assert diagnostics_1.num_cores < diagnostics_1.total_leaves_visited
     for core in cores_1:
         verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
+
+
+def test_ring_forming_breaking_count(hif2a_ligands):
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("C1=CC=CC=C1"))  # benzene
+    set_mol_name(mol_a, "benzene")
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("CC1=CC=CC=C1"))  # benzene with a methyl
+    set_mol_name(mol_b, "methyalated")
+    AllChem.EmbedMolecule(mol_a, randomSeed=2024)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2024)
+    AllChem.AlignMol(mol_b, mol_a, atomMap=[(0, 0), (4, 3)])
+
+    # Construct core over an incomplete ring, resulting in a ring forming in both endstates
+    core = np.array(
+        [
+            [3, 3],
+            [4, 4],
+            [5, 5],
+        ]
+    )
+    assert atom_mapping.ring_forming_breaking_count(mol_a, mol_b, core) == 2
+    assert atom_mapping.ring_forming_breaking_count(mol_b, mol_a, core[:, [1, 0]]) == 2
+
+    mols_by_name = {get_mol_name(m): m for m in hif2a_ligands}
+    # This transformation will always form a ring
+    mol_a = mols_by_name["15"]
+    mol_b = mols_by_name["30"]
+    cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
+    core = cores[0]
+
+    assert atom_mapping.ring_forming_breaking_count(mol_a, mol_b, core) == 1
+    assert atom_mapping.ring_forming_breaking_count(mol_b, mol_a, core[:, [1, 0]]) == 1
+
+    # Will construct two pair of 3 ring systems of which only a single ring can be mapped
+    # with one atom in the second ring mapped. This means that the second ring is formed/broken (in both endstates)
+    # while the third ring is simply an insertion, which this function doesn't consider.
+    mol_a = make_polyphenylene(3, 0.0)
+    mol_b = make_polyphenylene(3, 90.0)
+
+    cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
+    core = cores[0]
+    assert atom_mapping.ring_forming_breaking_count(mol_a, mol_b, core) == 2
