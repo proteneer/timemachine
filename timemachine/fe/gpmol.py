@@ -138,7 +138,6 @@ class GPMol:
             if len(list(self.nxg.neighbors(nb))) == 1:
                 new_atom_states[nb] = 0
             else:
-                print("calling turn_atom_into_dummy on atom", self.mol.GetAtomWithIdx(nb).GetSymbol())
                 new_atom_primitives[nb] = downgrade_atom_primitive(self.atom_primitives[nb])
 
         return GPMol(self.mol, self.core, new_atom_primitives, new_atom_states, new_bond_states)
@@ -147,9 +146,7 @@ class GPMol:
         new_atom_primitives = copy.copy(self.atom_primitives)
         new_atom_states = copy.copy(self.atom_states)
         new_bond_states = copy.copy(self.bond_states)
-
         new_bond_states[self.mol.GetBondBetweenAtoms(src_idx, dst_idx).GetIdx()] = BondState.DELETED
-        print("calling delete_bond")
         new_atom_primitives[src_idx] = downgrade_atom_primitive(self.atom_primitives[src_idx])
         new_atom_primitives[dst_idx] = downgrade_atom_primitive(self.atom_primitives[dst_idx])
 
