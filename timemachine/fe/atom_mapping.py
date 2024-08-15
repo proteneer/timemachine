@@ -2,7 +2,6 @@ from collections import defaultdict
 from functools import partial
 from typing import List, Optional, Tuple
 
-import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
@@ -199,25 +198,6 @@ def get_cores(
     return all_cores
 
 
-def bfs(g, atom):
-    depth = 0
-    cur_layer = [atom]
-    levels = {}
-    while len(levels) != g.GetNumAtoms():
-        next_layer = []
-        for layer_atom in cur_layer:
-            levels[layer_atom.GetIdx()] = depth
-            for nb_atom in layer_atom.GetNeighbors():
-                if nb_atom.GetIdx() not in levels:
-                    next_layer.append(nb_atom)
-        cur_layer = next_layer
-        depth += 1
-    levels_array = [-1] * g.GetNumAtoms()
-    for i, l in levels.items():
-        levels_array[i] = l
-    return levels_array
-
-
 def reorder_atoms_by_degree_and_initial_mapping(mol, initial_mapping):
     degrees = [len(a.GetNeighbors()) for a in mol.GetAtoms()]
     for a in mol.GetAtoms():
@@ -238,48 +218,6 @@ def reorder_atoms_by_degree_and_initial_mapping(mol, initial_mapping):
     return new_mol, perm, new_mapping
 
 
-def find_cycles(g: nx.Graph):
-    # return the indices of nxg that are in a cycle
-    # 1) find and remove bridges
-    # 2) if atom has > 1 neighbor then it is in a cycle.
-    edges = nx.bridges(g)
-    for e in edges:
-        g.remove_edge(*e)
-    cycle_dict = {}
-    for node in g.nodes:
-        # print(list(g[node]))
-        cycle_dict[node] = len(list(g.neighbors(node))) > 0
-    return cycle_dict
-
-
-def get_edges(mol):
-    return [(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()) for bond in mol.GetBonds()]
-
-
-def induce_mol_subgraph(mol_a, core_a, bond_core_a):
-    sg_a = nx.Graph()
-    for a in core_a:
-        sg_a.add_node(a)
-    for e1 in bond_core_a:
-        sg_a.add_edge(*e1)
-    return sg_a
-
-
-def _compute_bond_cores(mol_a, mol_b, marcs):
-    a_edges = get_edges(mol_a)
-    b_edges = get_edges(mol_b)
-    bond_core = {}
-    for e_a in range(len(a_edges)):
-        src_a, dst_a = a_edges[e_a]
-        for e_b in range(len(b_edges)):
-            src_b, dst_b = b_edges[e_b]
-            if marcs[e_a][e_b]:
-                assert (src_a, dst_a) not in bond_core
-                assert (dst_a, src_a) not in bond_core
-                bond_core[(src_a, dst_a)] = (src_b, dst_b)
-    return bond_core
-
-
 def _uniquify_core(core):
     core_list = []
     for a, b in core:
@@ -287,20 +225,15 @@ def _uniquify_core(core):
     return frozenset(core_list)
 
 
-def _deduplicate_all_cores_and_bonds(all_cores, all_bonds):
+def _deduplicate_all_cores(all_cores):
     unique_cores = {}
-    for core, bond in zip(all_cores, all_bonds):
+    for core in all_cores:
         # Be careful with the unique core here, list -> set -> list is not consistent
         # across versions of python, use the frozen as the key, but return the untouched
         # cores
-        unique_cores[_uniquify_core(core)] = (core, bond)
+        unique_cores[_uniquify_core(core)] = core
 
-    cores = []
-    bonds = []
-    for core, bond_core in unique_cores.values():
-        cores.append(np.array(core))
-        bonds.append(bond_core)
-    return cores, bonds
+    return list(unique_cores.values())
 
 
 def core_bonds_broken_count(mol_a, mol_b, core):
@@ -420,7 +353,7 @@ def _get_cores_impl(
 
         return leaf_filter_fxn
 
-    all_cores, all_marcs, mcs_diagnostics = mcgregor.mcs(
+    all_cores, _, mcs_diagnostics = mcgregor.mcs(
         n_a,
         n_b,
         priority_idxs,
@@ -437,11 +370,10 @@ def _get_cores_impl(
         make_leaf_filter_fxn(),
     )
 
-    all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
     all_cores = remove_cores_smaller_than_largest(all_cores)
-    all_cores, _ = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
+    all_cores = _deduplicate_all_cores(all_cores)
 
-    dists = []
+    mean_sq_distances = []
     valence_mismatches = []
     cb_counts = []
 
@@ -451,8 +383,9 @@ def _get_cores_impl(
 
         # distance score
         r2_ij = np.sum(np.power(r_i - r_j, 2))
-        rmsd = np.sqrt(r2_ij / len(core))
-        dists.append(rmsd)
+        # No need to perform square root here, only care about ordering
+        mean_sq_dist = r2_ij / len(core)
+        mean_sq_distances.append(mean_sq_dist)
 
         v_count = 0
         for idx, jdx in core:
@@ -466,20 +399,16 @@ def _get_cores_impl(
         )
 
     sort_vals = np.array(
-        list(zip(cb_counts, valence_mismatches, dists)), dtype=[("cb", "i"), ("valence", "i"), ("rmsd", "f")]
+        list(zip(cb_counts, valence_mismatches, mean_sq_distances)), dtype=[("cb", "i"), ("valence", "i"), ("msd", "f")]
     )
     sorted_cores = []
 
-    sort_order = np.argsort(sort_vals, order=["cb", "valence", "rmsd"])
+    sort_order = np.argsort(sort_vals, order=["cb", "valence", "msd"])
     for p in sort_order:
-        sorted_cores.append(all_cores[p])
-
-    # undo the sort
-    for core in sorted_cores:
-        inv_core = []
-        for atom in core[:, 0]:
-            inv_core.append(perm[atom])
-        core[:, 0] = inv_core
+        core = all_cores[p]
+        # undo the sort
+        core[:, 0] = perm[core[:, 0]]
+        sorted_cores.append(core)
 
     return sorted_cores, mcs_diagnostics
 
@@ -493,17 +422,3 @@ def remove_cores_smaller_than_largest(cores):
     # Return the largest core(s)
     max_core_size = max(cores_by_size.keys())
     return cores_by_size[max_core_size]
-
-
-def update_bond_core(core, bond_core):
-    """
-    bond_core: dictionary mapping atoms (i,j) of mol a
-    to (k, l) of mol b.
-    """
-    new_bond_core = {}
-    core_a = list(core[:, 0])
-    core_b = list(core[:, 1])
-    for bond_a, bond_b in bond_core.items():
-        if bond_a[0] in core_a and bond_a[1] in core_a and bond_b[0] in core_b and bond_b[1] in core_b:
-            new_bond_core[bond_a] = bond_b
-    return new_bond_core

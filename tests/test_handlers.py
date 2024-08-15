@@ -574,7 +574,7 @@ def test_am1_differences():
     smi = "Clc1c(Cl)c(Cl)c(-c2c(Cl)c(Cl)c(Cl)c(Cl)c2Cl)c(Cl)c1Cl"
     mol = Chem.MolFromSmiles(smi)
     mol = Chem.AddHs(mol)
-    mol.SetProp("_Name", "Debug")
+    utils.set_mol_name(mol, "Debug")
     assert AllChem.EmbedMolecule(mol) == 0
 
     suppl = [mol]

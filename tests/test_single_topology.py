@@ -45,7 +45,7 @@ from timemachine.fe.single_topology import (
     verify_chiral_validity_of_core,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
-from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
+from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, set_mol_name
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import minimizer
@@ -1056,7 +1056,7 @@ def test_combine_with_host_split(precision, rtol, atol):
 def ligand_from_smiles(smiles):
     mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
     AllChem.Compute2DCoords(mol)
-    mol.SetProp("_Name", smiles)
+    set_mol_name(mol, smiles)
     return mol
 
 
