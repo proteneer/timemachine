@@ -249,9 +249,8 @@ def plot_atom_mapping_grid(
         hbcs.append(bond_colors_a)
         hbcs.append(bond_colors_b)
 
-    num_mols = len(extra_mols) + 2
-
     all_mols = [mol_a_3d, mol_b_3d, *extra_mols]
+    num_mols = len(all_mols)
 
     legends: List[str] = []
     while len(legends) < num_mols:

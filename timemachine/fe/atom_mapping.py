@@ -265,21 +265,6 @@ def induce_mol_subgraph(mol_a, core_a, bond_core_a):
     return sg_a
 
 
-def _compute_bond_cores(mol_a, mol_b, marcs):
-    a_edges = get_edges(mol_a)
-    b_edges = get_edges(mol_b)
-    bond_core = {}
-    for e_a in range(len(a_edges)):
-        src_a, dst_a = a_edges[e_a]
-        for e_b in range(len(b_edges)):
-            src_b, dst_b = b_edges[e_b]
-            if marcs[e_a][e_b]:
-                assert (src_a, dst_a) not in bond_core
-                assert (dst_a, src_a) not in bond_core
-                bond_core[(src_a, dst_a)] = (src_b, dst_b)
-    return bond_core
-
-
 def _uniquify_core(core):
     core_list = []
     for a, b in core:
@@ -287,20 +272,15 @@ def _uniquify_core(core):
     return frozenset(core_list)
 
 
-def _deduplicate_all_cores_and_bonds(all_cores, all_bonds):
+def _deduplicate_all_cores(all_cores):
     unique_cores = {}
-    for core, bond in zip(all_cores, all_bonds):
+    for core in all_cores:
         # Be careful with the unique core here, list -> set -> list is not consistent
         # across versions of python, use the frozen as the key, but return the untouched
         # cores
-        unique_cores[_uniquify_core(core)] = (core, bond)
+        unique_cores[_uniquify_core(core)] = core
 
-    cores = []
-    bonds = []
-    for core, bond_core in unique_cores.values():
-        cores.append(np.array(core))
-        bonds.append(bond_core)
-    return cores, bonds
+    return list(unique_cores.values())
 
 
 def core_bonds_broken_count(mol_a, mol_b, core):
@@ -420,7 +400,7 @@ def _get_cores_impl(
 
         return leaf_filter_fxn
 
-    all_cores, all_marcs, mcs_diagnostics = mcgregor.mcs(
+    all_cores, _, mcs_diagnostics = mcgregor.mcs(
         n_a,
         n_b,
         priority_idxs,
@@ -437,9 +417,8 @@ def _get_cores_impl(
         make_leaf_filter_fxn(),
     )
 
-    all_bond_cores = [_compute_bond_cores(mol_a, mol_b, marcs) for marcs in all_marcs]
     all_cores = remove_cores_smaller_than_largest(all_cores)
-    all_cores, _ = _deduplicate_all_cores_and_bonds(all_cores, all_bond_cores)
+    all_cores = _deduplicate_all_cores(all_cores)
 
     dists = []
     valence_mismatches = []
@@ -451,8 +430,9 @@ def _get_cores_impl(
 
         # distance score
         r2_ij = np.sum(np.power(r_i - r_j, 2))
-        rmsd = np.sqrt(r2_ij / len(core))
-        dists.append(rmsd)
+        # No need to perform square root here, only care about ordering
+        mean_sq_dist = r2_ij / len(core)
+        dists.append(mean_sq_dist)
 
         v_count = 0
         for idx, jdx in core:
@@ -466,20 +446,16 @@ def _get_cores_impl(
         )
 
     sort_vals = np.array(
-        list(zip(cb_counts, valence_mismatches, dists)), dtype=[("cb", "i"), ("valence", "i"), ("rmsd", "f")]
+        list(zip(cb_counts, valence_mismatches, dists)), dtype=[("cb", "i"), ("valence", "i"), ("msd", "f")]
     )
     sorted_cores = []
 
-    sort_order = np.argsort(sort_vals, order=["cb", "valence", "rmsd"])
+    sort_order = np.argsort(sort_vals, order=["cb", "valence", "msd"])
     for p in sort_order:
-        sorted_cores.append(all_cores[p])
-
-    # undo the sort
-    for core in sorted_cores:
-        inv_core = []
-        for atom in core[:, 0]:
-            inv_core.append(perm[atom])
-        core[:, 0] = inv_core
+        core = all_cores[p]
+        # undo the sort
+        core[:, 0] = perm[core[:, 0]]
+        sorted_cores.append(core)
 
     return sorted_cores, mcs_diagnostics
 

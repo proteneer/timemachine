@@ -11,7 +11,7 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
 from timemachine.fe.single_topology import DummyGroupAssignmentError, verify_chiral_validity_of_core
-from timemachine.fe.utils import get_romol_conf, plot_atom_mapping_grid, read_sdf, set_romol_conf
+from timemachine.fe.utils import get_mol_name, get_romol_conf, plot_atom_mapping_grid, read_sdf, set_romol_conf
 from timemachine.ff import Forcefield
 
 pytestmark = [pytest.mark.nocuda]
@@ -30,13 +30,12 @@ def hif2a_ligands():
     return read_sdf(hif2a_set)
 
 
-@pytest.mark.nightly(reason="Slow")
 def test_connected_core_with_large_numbers_of_cores():
     """The following tests that for two mols that have a large number of matching
     cores found prior to filtering out the molecules with disconnected cores and incomplete rings.
 
     Previously this pair could take about 45 minutes to generate a mapping, largely due to removing
-    imcomplete ring cores."""
+    incomplete ring cores."""
 
     mol_a = Chem.MolFromMolBlock(
         """CHEMBL3645089
@@ -357,7 +356,7 @@ $$$$""",
         max_visits=1e7,
         max_connected_components=1,
         min_connected_component_size=1,
-        max_cores=1e6,  # This pair has 350k cores
+        max_cores=1e6,
         enforce_core_core=True,
         ring_matches_ring_only=False,
         enforce_chiral=True,
@@ -368,24 +367,18 @@ $$$$""",
     )
     assert len(all_cores) > 0
 
-    # If this takes more then 30 minutes, something is off.
-    assert time.time() - start < 1800.0
-
-
-def get_mol_name(mol) -> str:
-    """Return the title for the given mol"""
-    return mol.GetProp("_Name")
+    # If this takes more then a minute, something is off.
+    assert time.time() - start < 60.0
 
 
 # hif2a is easy
 # eg5 is challenging
 # notable outliers for eg5:
-# CHEMBL1077227 -> CHEMBL1086410 has 20736 cores of size 56
-# CHEMBL1077227 -> CHEMBL1083836 has 14976 cores of size 48
-# CHEMBL1086410 -> CHEMBL1083836 has 10752 cores of size 52
-# CHEMBL1086410 -> CHEMBL1084935 has 6912 cores of size 60
+# CHEMBL1077227 -> CHEMBL1086410 has 81 cores of size 56
+# CHEMBL1077227 -> CHEMBL1083836 has 18 cores of size 48
+# CHEMBL1086410 -> CHEMBL1083836 has 15 cores of size 52
+# CHEMBL1086410 -> CHEMBL1084935 has 27 cores of size 60
 @pytest.mark.parametrize("filepath", datasets)
-@pytest.mark.nightly(reason="Slow")
 def test_all_pairs(filepath):
     mols = read_sdf(filepath)
     for idx, mol_a in enumerate(mols):
@@ -1032,6 +1025,7 @@ def polyphenylene_smiles(n):
 def make_polyphenylene(n, dihedral_deg):
     """Make a chain of n benzene rings with each ring rotated `dihedral_deg` degrees with respect to the previous ring"""
     mol = Chem.MolFromSmiles(polyphenylene_smiles(n))
+    mol.SetProp("_Name", f"{n}_{dihedral_deg}")
     mol = AllChem.AddHs(mol)
     AllChem.EmbedMolecule(mol, randomSeed=2024)
     for k in range(n - 1):  # n - 1 inter-ring bonds to rotate
