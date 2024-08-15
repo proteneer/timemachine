@@ -419,6 +419,11 @@ def get_mol_name(mol) -> str:
     return mol.GetProp("_Name")
 
 
+def set_mol_name(mol, name: str):
+    """Set an RDKit mol's name"""
+    mol.SetProp("_Name", name)
+
+
 def sanitize_energies(full_us, lamb_idx, cutoff=10000):
     """
     Given a matrix with F rows and K columns,

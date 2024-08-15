@@ -11,7 +11,14 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
 from timemachine.fe.single_topology import DummyGroupAssignmentError, verify_chiral_validity_of_core
-from timemachine.fe.utils import get_mol_name, get_romol_conf, plot_atom_mapping_grid, read_sdf, set_romol_conf
+from timemachine.fe.utils import (
+    get_mol_name,
+    get_romol_conf,
+    plot_atom_mapping_grid,
+    read_sdf,
+    set_mol_name,
+    set_romol_conf,
+)
 from timemachine.ff import Forcefield
 
 pytestmark = [pytest.mark.nocuda]
@@ -1025,7 +1032,7 @@ def polyphenylene_smiles(n):
 def make_polyphenylene(n, dihedral_deg):
     """Make a chain of n benzene rings with each ring rotated `dihedral_deg` degrees with respect to the previous ring"""
     mol = Chem.MolFromSmiles(polyphenylene_smiles(n))
-    mol.SetProp("_Name", f"{n}_{dihedral_deg}")
+    set_mol_name(mol, f"{n}_{dihedral_deg}")
     mol = AllChem.AddHs(mol)
     AllChem.EmbedMolecule(mol, randomSeed=2024)
     for k in range(n - 1):  # n - 1 inter-ring bonds to rotate
