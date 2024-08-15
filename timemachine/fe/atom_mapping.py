@@ -373,7 +373,7 @@ def _get_cores_impl(
     all_cores = remove_cores_smaller_than_largest(all_cores)
     all_cores = _deduplicate_all_cores(all_cores)
 
-    dists = []
+    mean_sq_distances = []
     valence_mismatches = []
     cb_counts = []
 
@@ -385,7 +385,7 @@ def _get_cores_impl(
         r2_ij = np.sum(np.power(r_i - r_j, 2))
         # No need to perform square root here, only care about ordering
         mean_sq_dist = r2_ij / len(core)
-        dists.append(mean_sq_dist)
+        mean_sq_distances.append(mean_sq_dist)
 
         v_count = 0
         for idx, jdx in core:
@@ -399,7 +399,7 @@ def _get_cores_impl(
         )
 
     sort_vals = np.array(
-        list(zip(cb_counts, valence_mismatches, dists)), dtype=[("cb", "i"), ("valence", "i"), ("msd", "f")]
+        list(zip(cb_counts, valence_mismatches, mean_sq_distances)), dtype=[("cb", "i"), ("valence", "i"), ("msd", "f")]
     )
     sorted_cores = []
 
