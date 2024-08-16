@@ -252,19 +252,19 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
     mol b atoms.
     """
     g = nx.Graph()
-    core_a_to_b = {a: b for a, b in core}
-    core_b_to_a = {b: a for a, b in core}
+    core_atoms_a = set(core[:, 0])
+    core_atoms_b = set(core[:, 1])
     for atom in mol_a.GetAtoms():
         idx = atom.GetIdx()
         if atom.IsInRing():
-            if idx in core_a_to_b:
+            if idx in core_atoms_a:
                 g.add_node(idx, atom_type=AtomMapFlags.CORE)
             else:
                 g.add_node(idx, atom_type=AtomMapFlags.MOL_A)
     for atom in mol_b.GetAtoms():
         idx = atom.GetIdx()
         if atom.IsInRing():
-            if idx in core_b_to_a:
+            if idx in core_atoms_b:
                 g.add_node(idx + mol_a.GetNumAtoms(), atom_type=AtomMapFlags.CORE)
             else:
                 g.add_node(idx + mol_a.GetNumAtoms(), atom_type=AtomMapFlags.MOL_B)
