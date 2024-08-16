@@ -243,13 +243,16 @@ def _deduplicate_all_cores(all_cores):
     return list(unique_cores.values())
 
 
-def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
-    """Counts the number of rings broken and formed given a core. Does not count ring insertion/deletions. Considers
-    the number number of rings broken/formed in both endstates, reversing the mol order and the core order produces
-    the same value.
+def ring_breaking_count(mol_a, mol_b, core: NDArray) -> Tuple[int, int]:
+    """Counts the number of rings broken going forward and reverse given a core. Does not count ring insertion/deletions.
 
     The algorithm is to add all ring atoms/bonds to a graph, and count the cycles that contain both core and mol a or
     mol b atoms.
+
+    Returns
+    -------
+    2-tuple
+        The rings broken going from mol_a to mol_b and from mol_b to mol_a
     """
     g = nx.Graph()
     map_mixin = AtomMapMixin(mol_a, mol_b, core)
@@ -269,7 +272,7 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
 
     # if there are no ring atoms, return 0
     if len(g.nodes) == 0:
-        return 0
+        return (0, 0)
 
     for bond in mol_a.GetBonds():
         if bond.IsInRing():
@@ -287,9 +290,9 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
 
     # Need at least three edges to make a cycle
     if len(g.edges) < 3:
-        return 0
+        return (0, 0)
 
-    forming_breaking_count = 0
+    breaking_count = [0, 0]
     for i, comp in enumerate(nx.connected_components(g)):
         subgraph = g.subgraph(comp)
         if all([data["atom_type"] == AtomMapFlags.CORE for _, data in subgraph.nodes(data=True)]):
@@ -310,9 +313,9 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
         except nx.exception.NetworkXNoCycle:
             pass
 
-        for atom_type in [AtomMapFlags.MOL_A, AtomMapFlags.MOL_B]:
+        for endstate_idx, atom_type in enumerate((AtomMapFlags.MOL_A, AtomMapFlags.MOL_B)):
             ring_atoms = subgraph.subgraph(
-                [n for n, data in subgraph.nodes(data=True) if data["atom_type"] != atom_type]
+                [n for n, data in subgraph.nodes(data=True) if data["atom_type"] in (AtomMapFlags.CORE, atom_type)]
             )
             ring_atom_is_core = [data["atom_type"] == AtomMapFlags.CORE for _, data in ring_atoms.nodes(data=True)]
             # If no atoms are core atoms, it is not a ring forming/breaking transformation and just an insertion
@@ -324,14 +327,14 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
             try:
                 while len(ring_atoms.edges) >= 3:
                     edges = nx.find_cycle(ring_atoms)
-                    forming_breaking_count += 1
+                    breaking_count[endstate_idx] += 1
                     # Make a copy of the ring_atoms graph so that it can be modified
                     ring_atoms = nx.Graph(ring_atoms)
                     # Arbitrarily delete one of the core edges, should break any rings
                     ring_atoms.remove_edge(*edges[0])
             except nx.exception.NetworkXNoCycle:
                 pass
-    return forming_breaking_count
+    return tuple(breaking_count)
 
 
 def core_bonds_broken_count(mol_a, mol_b, core):

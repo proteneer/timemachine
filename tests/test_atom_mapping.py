@@ -1522,7 +1522,7 @@ M  END""",
         verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
 
 
-def test_ring_forming_breaking_count(hif2a_ligands):
+def test_ring_breaking_count(hif2a_ligands):
     mol_a = Chem.AddHs(Chem.MolFromSmiles("C1=CC=CC=C1"))  # benzene
     set_mol_name(mol_a, "benzene")
     mol_b = Chem.AddHs(Chem.MolFromSmiles("CC1=CC=CC=C1"))  # benzene with a methyl
@@ -1539,8 +1539,8 @@ def test_ring_forming_breaking_count(hif2a_ligands):
             [5, 5],
         ]
     )
-    assert atom_mapping.ring_forming_breaking_count(mol_a, mol_b, core) == 2
-    assert atom_mapping.ring_forming_breaking_count(mol_b, mol_a, core[:, [1, 0]]) == 2
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (1, 1)
+    assert atom_mapping.ring_breaking_count(mol_b, mol_a, core[:, [1, 0]]) == (1, 1)
 
     mols_by_name = {get_mol_name(m): m for m in hif2a_ligands}
     # This transformation will always form a ring
@@ -1549,8 +1549,8 @@ def test_ring_forming_breaking_count(hif2a_ligands):
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
 
-    assert atom_mapping.ring_forming_breaking_count(mol_a, mol_b, core) == 1
-    assert atom_mapping.ring_forming_breaking_count(mol_b, mol_a, core[:, [1, 0]]) == 1
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (1, 0)
+    assert atom_mapping.ring_breaking_count(mol_b, mol_a, core[:, [1, 0]]) == (0, 1)
 
     # Will construct two pair of 3 ring systems of which only a single ring can be mapped
     # with one atom in the second ring mapped. This means that the second ring is formed/broken (in both endstates)
@@ -1560,7 +1560,7 @@ def test_ring_forming_breaking_count(hif2a_ligands):
 
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
-    assert atom_mapping.ring_forming_breaking_count(mol_a, mol_b, core) == 2
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (1, 1)
 
     mol_a = Chem.MolFromMolBlock(
         """bridgehead system
@@ -1596,4 +1596,4 @@ M  END
         ]
     )
 
-    assert atom_mapping.ring_forming_breaking_count(mol_a, mol_b, core) == 2
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (2, 0)
