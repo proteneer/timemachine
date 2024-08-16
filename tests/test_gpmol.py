@@ -18,8 +18,8 @@ def process(mol_a, core_atoms):
 
     atom_primitives_a = gpmol.initialize_atom_primitives(mol_a)
 
-    atom_states_a = np.array([AtomState.REAL for _ in range(mol_a.GetNumAtoms())])
-    bond_states_a = np.array([BondState.REAL for _ in range(mol_a.GetNumBonds())])
+    atom_states_a = np.array([AtomState.INTERACTING for _ in range(mol_a.GetNumAtoms())])
+    bond_states_a = np.array([BondState.INTERACTING for _ in range(mol_a.GetNumBonds())])
     gp_a = GPMol(mol_a, core_atoms, atom_primitives_a, atom_states_a, bond_states_a)
     cur_gp = gp_a
     path_gps = []

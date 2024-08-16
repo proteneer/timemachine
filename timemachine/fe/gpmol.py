@@ -9,14 +9,13 @@ from rdkit.Chem.Draw import rdMolDraw2D
 
 
 class AtomState(IntEnum):
-    DUMMY = 0
-    REAL = 1
+    NON_INTERACTING = 0
+    INTERACTING = 1
 
 
 class BondState(IntEnum):
-    DELETED = 0
-    DUMMY = 1
-    REAL = 2
+    NON_INTERACTING = 0
+    INTERACTING = 1
 
 
 class AtomPrimitive(IntEnum):
@@ -86,14 +85,18 @@ class GPMol:
             atom_idx = atom.GetIdx()
             if atom_idx not in core_atoms:
                 self.dummy_atoms.append(atom_idx)
-            if atom_states[atom_idx] == AtomState.REAL:
+            if atom_states[atom_idx] == AtomState.INTERACTING:
                 self.nxg.add_node(atom_idx, primitive=atom_primitives[atom_idx])
 
         for bond in mol.GetBonds():
-            if bond_states[bond.GetIdx()] == BondState.REAL:
-                src = bond.GetBeginAtomIdx()
-                dst = bond.GetEndAtomIdx()
-                self.nxg.add_edge(src, dst)
+            if bond_states[bond.GetIdx()] == BondState.INTERACTING:
+                src_idx = bond.GetBeginAtomIdx()
+                dst_idx = bond.GetEndAtomIdx()
+                if (
+                    self.atom_states[src_idx] == AtomState.INTERACTING
+                    and self.atom_states[dst_idx] == AtomState.INTERACTING
+                ):
+                    self.nxg.add_edge(src_idx, dst_idx)
 
         non_terminal_atoms = []
         for n in self.nxg.nodes():
@@ -136,7 +139,7 @@ class GPMol:
                 if (src_idx, dst_idx) not in bridges and (dst_idx, src_idx) not in bridges:
                     bonds.append((src_idx, dst_idx))
 
-        # prefer dummy-dummy nonbridges over core-dummy bridges
+        # prefer dummy-dummy non-bridges over core-dummy non-bridges
         return bonds
 
     def turn_atom_into_dummy(self, idx):
@@ -144,12 +147,13 @@ class GPMol:
         new_atom_states = copy.copy(self.atom_states)
         new_bond_states = copy.copy(self.bond_states)
 
-        new_atom_states[idx] = 0
+        new_atom_states[idx] = AtomState.NON_INTERACTING
 
         for nb in self.nxg.neighbors(idx):
-            new_bond_states[self.mol.GetBondBetweenAtoms(idx, nb).GetIdx()] = BondState.DUMMY
+            # implied
+            # new_bond_states[self.mol.GetBondBetweenAtoms(idx, nb).GetIdx()] = BondState.
             if len(list(self.nxg.neighbors(nb))) == 1:
-                new_atom_states[nb] = 0
+                new_atom_states[nb] = AtomState.NON_INTERACTING
             else:
                 new_atom_primitives[nb] = downgrade_atom_primitive(self.atom_primitives[nb])
 
@@ -159,7 +163,7 @@ class GPMol:
         new_atom_primitives = copy.copy(self.atom_primitives)
         new_atom_states = copy.copy(self.atom_states)
         new_bond_states = copy.copy(self.bond_states)
-        new_bond_states[self.mol.GetBondBetweenAtoms(src_idx, dst_idx).GetIdx()] = BondState.DELETED
+        new_bond_states[self.mol.GetBondBetweenAtoms(src_idx, dst_idx).GetIdx()] = BondState.NON_INTERACTING
         new_atom_primitives[src_idx] = downgrade_atom_primitive(self.atom_primitives[src_idx])
         new_atom_primitives[dst_idx] = downgrade_atom_primitive(self.atom_primitives[dst_idx])
 
@@ -169,18 +173,25 @@ class GPMol:
         mol_copy = Chem.RWMol(self.mol)
         Chem.Kekulize(mol_copy, clearAromaticFlags=True)
         for atom in mol_copy.GetAtoms():
-            if self.atom_states[atom.GetIdx()] == AtomState.DUMMY:
+            if self.atom_states[atom.GetIdx()] == AtomState.NON_INTERACTING:
                 atom.SetAtomicNum(0)
             atom.SetChiralTag(Chem.ChiralType.CHI_UNSPECIFIED)
 
         mol_copy.BeginBatchEdit()
         for bond_idx, bond_state in enumerate(self.bond_states):
             bond = mol_copy.GetBondWithIdx(bond_idx)
-            if bond_state == BondState.DUMMY:
-                bond.SetBondType(BT.ZERO)
-            elif bond_state == BondState.DELETED:
+            # if bond_state == BondState.DUMMY:
+            # bond.SetBondType(BT.ZERO)
+            if bond_state == BondState.NON_INTERACTING:
                 # bond.SetBondType(BT.ZERO)
                 mol_copy.RemoveBond(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())
+            else:
+                src_idx = bond.GetBeginAtomIdx()
+                dst_idx = bond.GetEndAtomIdx()
+                src_is_dummy = self.atom_states[src_idx] == AtomState.NON_INTERACTING
+                dst_is_dummy = self.atom_states[dst_idx] == AtomState.NON_INTERACTING
+                if src_is_dummy or dst_is_dummy:
+                    bond.SetBondType(BT.ZERO)
 
         mol_copy.CommitBatchEdit()
         return mol_copy
