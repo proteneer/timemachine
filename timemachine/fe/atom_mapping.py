@@ -264,7 +264,7 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
                 g.add_node(map_mixin.a_to_c[idx], atom_type=AtomMapFlags.MOL_A)
     for atom in mol_b.GetAtoms():
         idx = atom.GetIdx()
-        if atom.IsInRing() and idx not in core_atoms_b_to_a:
+        if atom.IsInRing() and idx not in core_atoms_b:
             g.add_node(map_mixin.b_to_c[idx], atom_type=AtomMapFlags.MOL_B)
 
     # if there are no ring atoms, return 0
@@ -295,6 +295,21 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
         if all([data["atom_type"] == AtomMapFlags.CORE for _, data in subgraph.nodes(data=True)]):
             continue
 
+        # If we have cycles made up of core atoms, break them to ensure any left over cycles
+        # are created by dummy atoms. Important to handle the cases like cubane or other bridgehead groups
+        try:
+            while len(subgraph.edges) >= 3:
+                core_atoms = subgraph.subgraph(
+                    [n for n, data in subgraph.nodes(data=True) if data["atom_type"] == AtomMapFlags.CORE]
+                )
+                edges = nx.find_cycle(core_atoms)
+                # Make a copy of the subgraph so that it can be modified
+                subgraph = nx.Graph(subgraph)
+                # Arbitrarily delete one of the core edges, should break any rings
+                subgraph.remove_edge(*edges[0])
+        except nx.exception.NetworkXNoCycle:
+            pass
+
         for atom_type in [AtomMapFlags.MOL_A, AtomMapFlags.MOL_B]:
             ring_atoms = subgraph.subgraph(
                 [n for n, data in subgraph.nodes(data=True) if data["atom_type"] != atom_type]
@@ -307,8 +322,13 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
             if all(ring_atom_is_core):
                 continue
             try:
-                nx.find_cycle(ring_atoms)
-                forming_breaking_count += 1
+                while len(ring_atoms.edges) >= 3:
+                    edges = nx.find_cycle(ring_atoms)
+                    forming_breaking_count += 1
+                    # Make a copy of the ring_atoms graph so that it can be modified
+                    ring_atoms = nx.Graph(ring_atoms)
+                    # Arbitrarily delete one of the core edges, should break any rings
+                    ring_atoms.remove_edge(*edges[0])
             except nx.exception.NetworkXNoCycle:
                 pass
     return forming_breaking_count

@@ -1561,3 +1561,39 @@ def test_ring_forming_breaking_count(hif2a_ligands):
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
     assert atom_mapping.ring_forming_breaking_count(mol_a, mol_b, core) == 2
+
+    mol_a = Chem.MolFromMolBlock(
+        """bridgehead system
+  MJ240300
+
+  5  6  0  0  0  0  0  0  0  0999 V2000
+    1.2868    0.3797   -0.0018 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5802   -0.3964   -0.0438 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7505   -0.3790    0.0024 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7069    0.2170   -0.5741 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7711    0.1787    0.6173 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  4  1  1  0  0  0  0
+  3  5  1  0  0  0  0
+  5  1  1  0  0  0  0
+M  END
+"""
+    )
+    mol_a = Chem.AddHs(mol_a)
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("CCC"))
+    set_mol_name(mol_b, "chain")
+    AllChem.EmbedMolecule(mol_a, randomSeed=2024)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2024)
+    AllChem.AlignMol(mol_b, mol_a, atomMap=[(0, 0), (1, 1), (2, 2)])
+
+    core = np.array(
+        [
+            [0, 0],
+            [1, 1],
+            [2, 2],
+        ]
+    )
+
+    assert atom_mapping.ring_forming_breaking_count(mol_a, mol_b, core) == 2
