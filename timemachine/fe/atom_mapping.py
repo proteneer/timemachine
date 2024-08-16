@@ -269,6 +269,7 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
             else:
                 g.add_node(idx + mol_a.GetNumAtoms(), atom_type=AtomMapFlags.MOL_B)
 
+    # if there are no ring atoms, return 0
     if len(g.nodes) == 0:
         return 0
 
