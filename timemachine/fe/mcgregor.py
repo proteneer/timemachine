@@ -1,7 +1,7 @@
 # maximum common subgraph routines based off of the mcgregor paper
 import copy
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Callable, List, Optional, Sequence, Set, Tuple
 
 import networkx as nx
@@ -77,14 +77,14 @@ def refine_marcs(g1, g2, new_v1, new_v2, marcs):
     return new_marcs
 
 
+@dataclass(frozen=True)
 class MCSResult:
-    def __init__(self):
-        self.all_maps = []
-        self.all_marcs = []
-        self.num_edges = 0
-        self.timed_out = False
-        self.nodes_visited = 0
-        self.leaves_visited = 0
+    all_maps: Tuple[Tuple[int, ...], ...] = field(default_factory=tuple)
+    all_marcs: Tuple[NDArray, ...] = field(default_factory=tuple)
+    num_edges: int = 0
+    timed_out: bool = False
+    nodes_visited: int = 0
+    leaves_visited: int = 0
 
 
 class Graph:
@@ -338,18 +338,14 @@ def mcs(
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
             raise NoMappingError(f"Unable to find mapping with at least {min_threshold} edges")
-        # Construct copies of the base map
-        map_a_to_b = list(base_map_a_to_b)
-        map_b_to_a = list(base_map_b_to_a)
-        mcs_result = MCSResult()
-        recursion(
+        mcs_result = recursion(
             g_a,
             g_b,
-            map_a_to_b,
-            map_b_to_a,
+            tuple(base_map_a_to_b),
+            tuple(base_map_b_to_a),
             base_layer,
             base_marcs,
-            mcs_result,
+            MCSResult(),
             priority_idxs,
             # Decrement the max visits by the number already visited to ensure constant wall clock time
             max_visits - total_nodes_visited,
@@ -399,7 +395,7 @@ def mcs(
 
     return (
         all_cores,
-        mcs_result.all_marcs,
+        list(mcs_result.all_marcs),
         MCSDiagnostics(
             total_nodes_visited=total_nodes_visited,
             total_leaves_visited=total_leaves_visited,
@@ -409,21 +405,21 @@ def mcs(
     )
 
 
-def atom_map_add(map_1_to_2, map_2_to_1, idx, jdx):
-    map_1_to_2[idx] = jdx
-    map_2_to_1[jdx] = idx
+def set_at(xs: Tuple[int, ...], idx: int, val: int) -> Tuple[int, ...]:
+    return xs[:idx] + (val,) + xs[idx + 1 :]
 
 
-def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
-    map_1_to_2[idx] = UNMAPPED
-    map_2_to_1[jdx] = UNMAPPED
+def atom_map_add(
+    map_1_to_2: Tuple[int, ...], map_2_to_1: Tuple[int, ...], idx: int, jdx: int
+) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
+    return (set_at(map_1_to_2, idx, jdx), set_at(map_2_to_1, jdx, idx))
 
 
 def recursion(
     g1: Graph,
     g2: Graph,
-    atom_map_1_to_2,
-    atom_map_2_to_1,
+    atom_map_1_to_2: Tuple[int, ...],
+    atom_map_2_to_1: Tuple[int, ...],
     layer,
     marcs,
     mcs_result: MCSResult,
@@ -436,18 +432,16 @@ def recursion(
     min_connected_component_size: int,
     filter_fxn: Callable[[Sequence[int]], bool],
     leaf_filter_fxn: Callable[[Sequence[int]], bool],
-):
+) -> MCSResult:
     if mcs_result.nodes_visited >= max_visits:
-        mcs_result.timed_out = True
-        return
+        return replace(mcs_result, timed_out=True)
 
     if len(mcs_result.all_maps) >= max_cores:
-        mcs_result.timed_out = True
-        return
+        return replace(mcs_result, timed_out=True)
 
     num_edges = _arcs_left(marcs)
     if num_edges < threshold:
-        return
+        return mcs_result
 
     if max_connected_components is not None or min_connected_component_size > 1:
         g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
@@ -458,7 +452,7 @@ def recursion(
             if g1.mapping_incompatible_with_cc_constraints(
                 g1_mapped_nodes, g1_unvisited_nodes, max_connected_components, min_connected_component_size
             ):
-                return
+                return mcs_result
 
         g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
 
@@ -469,39 +463,42 @@ def recursion(
             if g2.mapping_incompatible_with_cc_constraints(
                 g2_mapped_nodes, g2_unvisited_nodes, max_connected_components, min_connected_component_size
             ):
-                return
+                return mcs_result
 
-    mcs_result.nodes_visited += 1
+    mcs_result = replace(mcs_result, nodes_visited=mcs_result.nodes_visited + 1)
     n_a = g1.n_vertices
 
     # leaf-node, every atom has been mapped
     if layer == n_a:
         if num_edges == threshold:
-            mcs_result.leaves_visited += 1
+            mcs_result = replace(mcs_result, leaves_visited=mcs_result.leaves_visited + 1)
             if not leaf_filter_fxn(atom_map_1_to_2):
-                return
+                return mcs_result
 
-            mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
-            mcs_result.all_marcs.append(copy.copy(marcs))
-            mcs_result.num_edges = num_edges
-        return
+            mcs_result = replace(
+                mcs_result,
+                all_maps=mcs_result.all_maps + (atom_map_1_to_2,),
+                all_marcs=mcs_result.all_marcs + (np.array(marcs),),
+                num_edges=num_edges,
+            )
+        return mcs_result
 
     for jdx in priority_idxs[layer]:
         if atom_map_2_to_1[jdx] == UNMAPPED:
-            atom_map_add(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
+            new_atom_map_1_to_2, new_atom_map_2_to_1 = atom_map_add(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
             if enforce_core_core and not _verify_core_is_connected(
-                g1, g2, layer, jdx, atom_map_1_to_2, atom_map_2_to_1
+                g1, g2, layer, jdx, new_atom_map_1_to_2, new_atom_map_2_to_1
             ):
                 pass
-            elif not filter_fxn(atom_map_1_to_2):
+            elif not filter_fxn(new_atom_map_1_to_2):
                 pass
             else:
                 new_marcs = refine_marcs(g1, g2, layer, jdx, marcs)
-                recursion(
+                mcs_result = recursion(
                     g1,
                     g2,
-                    atom_map_1_to_2,
-                    atom_map_2_to_1,
+                    new_atom_map_1_to_2,
+                    new_atom_map_2_to_1,
                     layer + 1,
                     new_marcs,
                     mcs_result,
@@ -515,13 +512,12 @@ def recursion(
                     filter_fxn,
                     leaf_filter_fxn,
                 )
-            atom_map_pop(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
 
     # always allow for explicitly not mapping layer atom
     # nit: don't need to check for connected core if mapping to None
     new_marcs = refine_marcs(g1, g2, layer, UNMAPPED, marcs)
 
-    recursion(
+    return recursion(
         g1,
         g2,
         atom_map_1_to_2,
