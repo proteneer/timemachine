@@ -74,30 +74,26 @@ def initialize_atom_primitives(mol):
 
 
 class GPMol:
-    def __init__(self, mol, core, atom_primitives, atom_states, bond_states):
+    def __init__(self, mol, core_atoms, atom_primitives, atom_states, bond_states):
         self.mol = mol
-        self.core = core
+        self.core_atoms = core_atoms
         self.dummy_atoms = []
         self.atom_primitives = atom_primitives
         self.atom_states = atom_states
         self.bond_states = bond_states
-        for atom in mol.GetAtoms():
-            if atom.GetIdx() not in core:
-                self.dummy_atoms.append(atom.GetIdx())
-
-        # convert to atom-primitive nx_graph, with only real bonds
         self.nxg = nx.Graph()
         for atom in mol.GetAtoms():
-            if atom_states[atom.GetIdx()] != AtomState.REAL:
-                continue
-            self.nxg.add_node(atom_primitives[atom.GetIdx()])
+            atom_idx = atom.GetIdx()
+            if atom_idx not in core_atoms:
+                self.dummy_atoms.append(atom_idx)
+            if atom_states[atom_idx] == AtomState.REAL:
+                self.nxg.add_node(atom_idx, primitive=atom_primitives[atom_idx])
 
         for bond in mol.GetBonds():
-            if bond_states[bond.GetIdx()] != BondState.REAL:
-                continue
-            src = bond.GetBeginAtomIdx()
-            dst = bond.GetEndAtomIdx()
-            self.nxg.add_edge(src, dst)
+            if bond_states[bond.GetIdx()] == BondState.REAL:
+                src = bond.GetBeginAtomIdx()
+                dst = bond.GetEndAtomIdx()
+                self.nxg.add_edge(src, dst)
 
         non_terminal_atoms = []
         for n in self.nxg.nodes():
@@ -109,21 +105,38 @@ class GPMol:
         self.reduced_nxg = self.nxg.subgraph(non_terminal_atoms)
 
     def find_allowed_atom_edits(self):
-        # non-terminal atom deletions
+        # prioritize non-terminal atom deletions
         atoms = []
         for n in self.reduced_nxg.nodes():
             if (n in self.dummy_atoms) and (self.reduced_nxg.degree(n) == 1):
                 atoms.append(n)
+
+        # stub dummy atoms next
+        for n in self.nxg.nodes():
+            if (n in self.dummy_atoms) and (self.nxg.degree(n) == 1) and (n not in atoms):
+                atoms.append(n)
+
         return atoms
 
     def find_allowed_bond_edits(self):
         bonds = []
         bridges = nx.bridges(self.reduced_nxg)
+
+        # add dummy-dummy non-bridges first
         for src_idx, dst_idx in self.reduced_nxg.edges():
             if src_idx in self.dummy_atoms and dst_idx in self.dummy_atoms:
                 if (src_idx, dst_idx) not in bridges and (dst_idx, src_idx) not in bridges:
                     bonds.append((src_idx, dst_idx))
 
+        # add dummy-core non-bridges second
+        for src_idx, dst_idx in self.reduced_nxg.edges():
+            if (src_idx in self.dummy_atoms and dst_idx in self.core_atoms) or (
+                src_idx in self.core_atoms and dst_idx in self.dummy_atoms
+            ):
+                if (src_idx, dst_idx) not in bridges and (dst_idx, src_idx) not in bridges:
+                    bonds.append((src_idx, dst_idx))
+
+        # prefer dummy-dummy nonbridges over core-dummy bridges
         return bonds
 
     def turn_atom_into_dummy(self, idx):
@@ -140,7 +153,7 @@ class GPMol:
             else:
                 new_atom_primitives[nb] = downgrade_atom_primitive(self.atom_primitives[nb])
 
-        return GPMol(self.mol, self.core, new_atom_primitives, new_atom_states, new_bond_states)
+        return GPMol(self.mol, self.core_atoms, new_atom_primitives, new_atom_states, new_bond_states)
 
     def delete_bond(self, src_idx, dst_idx):
         new_atom_primitives = copy.copy(self.atom_primitives)
@@ -150,7 +163,7 @@ class GPMol:
         new_atom_primitives[src_idx] = downgrade_atom_primitive(self.atom_primitives[src_idx])
         new_atom_primitives[dst_idx] = downgrade_atom_primitive(self.atom_primitives[dst_idx])
 
-        return GPMol(self.mol, self.core, new_atom_primitives, new_atom_states, new_bond_states)
+        return GPMol(self.mol, self.core_atoms, new_atom_primitives, new_atom_states, new_bond_states)
 
     def induced_mol(self):
         mol_copy = Chem.RWMol(self.mol)
@@ -178,5 +191,24 @@ class GPMol:
         drawer.FinishDrawing()
         return drawer.GetDrawingText()
 
-    def mutate_atom(self, atom_idx, target_geometry):
-        assert 0
+    def find_allowed_core_mutations(self, gp_b):
+        atoms = []
+        for c_a, c_b in zip(self.core_atoms, gp_b.core_atoms):
+            print(self.atom_primitives[c_a], "vs", gp_b.atom_primitives[c_b])
+            if self.atom_primitives[c_a] != gp_b.atom_primitives[c_b]:
+                atoms.append(c_a)
+        return atoms
+
+    def mutate_atom(self, atom_idx_in_a, gp_b):
+        a_to_b_core_map = dict()
+        for c_a, c_b in zip(self.core_atoms, gp_b.core_atoms):
+            a_to_b_core_map[c_a] = c_b
+        atom_idx_in_b = a_to_b_core_map[atom_idx_in_a]
+
+        new_gp_a = copy.deepcopy(self)
+        new_gp_a.atom_primitives[atom_idx_in_a] = gp_b.atom_primitives[atom_idx_in_b]
+
+        # update coordinates
+        # new_pos = gp_b.mol.GetConformer(0).GetAtomPosition(int(atom_idx_in_b))
+        # new_gp_a.mol.GetConformer(0).SetAtomPosition(int(atom_idx_in_a), new_pos)
+        return new_gp_a
