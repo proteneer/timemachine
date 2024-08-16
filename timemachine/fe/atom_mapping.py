@@ -9,7 +9,7 @@ from rdkit import Chem
 
 from timemachine.fe import mcgregor
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
-from timemachine.fe.single_topology import AtomMapFlags, make_find_chirally_valid_dummy_groups
+from timemachine.fe.single_topology import AtomMapFlags, AtomMapMixin, make_find_chirally_valid_dummy_groups
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
@@ -252,22 +252,20 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
     mol b atoms.
     """
     g = nx.Graph()
+    map_mixin = AtomMapMixin(mol_a, mol_b, core)
     core_atoms_a = set(core[:, 0])
     core_atoms_b = set(core[:, 1])
     for atom in mol_a.GetAtoms():
         idx = atom.GetIdx()
         if atom.IsInRing():
             if idx in core_atoms_a:
-                g.add_node(idx, atom_type=AtomMapFlags.CORE)
+                g.add_node(map_mixin.a_to_c[idx], atom_type=AtomMapFlags.CORE)
             else:
-                g.add_node(idx, atom_type=AtomMapFlags.MOL_A)
+                g.add_node(map_mixin.a_to_c[idx], atom_type=AtomMapFlags.MOL_A)
     for atom in mol_b.GetAtoms():
         idx = atom.GetIdx()
-        if atom.IsInRing():
-            if idx in core_atoms_b:
-                g.add_node(idx + mol_a.GetNumAtoms(), atom_type=AtomMapFlags.CORE)
-            else:
-                g.add_node(idx + mol_a.GetNumAtoms(), atom_type=AtomMapFlags.MOL_B)
+        if atom.IsInRing() and idx not in core_atoms_b_to_a:
+            g.add_node(map_mixin.b_to_c[idx], atom_type=AtomMapFlags.MOL_B)
 
     # if there are no ring atoms, return 0
     if len(g.nodes) == 0:
@@ -282,8 +280,8 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
     for bond in mol_b.GetBonds():
         if bond.IsInRing():
             src, dst = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-            src += mol_a.GetNumAtoms()
-            dst += mol_a.GetNumAtoms()
+            src = map_mixin.b_to_c[src]
+            dst = map_mixin.b_to_c[dst]
             if src in g.nodes and dst in g.nodes:
                 g.add_edge(src, dst)
 
@@ -291,7 +289,7 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
     if len(g.edges) < 3:
         return 0
 
-    core_breaks = 0
+    forming_breaking_count = 0
     for i, comp in enumerate(nx.connected_components(g)):
         subgraph = g.subgraph(comp)
         if all([data["atom_type"] == AtomMapFlags.CORE for _, data in subgraph.nodes(data=True)]):
@@ -310,10 +308,10 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
                 continue
             try:
                 nx.find_cycle(ring_atoms)
-                core_breaks += 1
+                forming_breaking_count += 1
             except nx.exception.NetworkXNoCycle:
                 pass
-    return core_breaks
+    return forming_breaking_count
 
 
 def core_bonds_broken_count(mol_a, mol_b, core):
