@@ -334,7 +334,7 @@ def ring_breaking_count(mol_a, mol_b, core: NDArray) -> Tuple[int, int]:
                     ring_atoms.remove_edge(*edges[0])
             except nx.exception.NetworkXNoCycle:
                 pass
-    return tuple(breaking_count)
+    return breaking_count[0], breaking_count[1]
 
 
 def core_bonds_broken_count(mol_a, mol_b, core):
