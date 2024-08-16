@@ -491,7 +491,7 @@ def recursion(
         return
 
     for jdx in priority_idxs[layer]:
-        if atom_map_2_to_1[jdx] == UNMAPPED:  # optimize later
+        if atom_map_2_to_1[jdx] == UNMAPPED:
             atom_map_add(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
             if enforce_core_core and not _verify_core_is_connected(
                 g1, g2, layer, jdx, atom_map_1_to_2, atom_map_2_to_1
