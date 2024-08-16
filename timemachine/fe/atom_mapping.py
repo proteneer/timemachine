@@ -301,12 +301,12 @@ def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
             ring_atoms = subgraph.subgraph(
                 [n for n, data in subgraph.nodes(data=True) if data["atom_type"] != atom_type]
             )
-            core_atoms = [data["atom_type"] == AtomMapFlags.CORE for _, data in ring_atoms.nodes(data=True)]
+            ring_atom_is_core = [data["atom_type"] == AtomMapFlags.CORE for _, data in ring_atoms.nodes(data=True)]
             # If no atoms are core atoms, it is not a ring forming/breaking transformation and just an insertion
-            if not any(core_atoms):
+            if not any(ring_atom_is_core):
                 continue
             # If the ring atoms are all core atoms, no ring break has occurred
-            if all(core_atoms):
+            if all(ring_atom_is_core):
                 continue
             try:
                 nx.find_cycle(ring_atoms)
