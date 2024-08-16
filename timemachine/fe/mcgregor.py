@@ -305,8 +305,8 @@ def mcs(
     min_connected_component_size: int,
     min_threshold,
     initial_mapping,
-    filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
-    leaf_filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
+    filter_fxn: Callable[[Sequence[int]], bool] = lambda _: True,
+    leaf_filter_fxn: Callable[[Sequence[int]], bool] = lambda _: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
     assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
@@ -337,6 +337,7 @@ def mcs(
 
     total_nodes_visited = 0
     total_leaves_visited = 0
+    mcs_result = MCSResult()
     for idx in range(max_threshold):
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
@@ -373,7 +374,7 @@ def mcs(
             if mcs_result.timed_out and len(mcs_result.all_maps) < max_cores:
                 warnings.warn(
                     f"Inexhaustive search: reached max number of visits ({max_visits}) and found only "
-                    f"{len(mcs_result.all_maps)} out of {max_cores} desired cores.",
+                    + f"{len(mcs_result.all_maps)} out of {max_cores} desired cores.",
                     MaxVisitsWarning,
                 )
             # don't remove this comment and the one below, useful for debugging!
