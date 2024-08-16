@@ -243,7 +243,14 @@ def _deduplicate_all_cores(all_cores):
     return list(unique_cores.values())
 
 
-def ring_forming_breaking_count(mol_a, mol_b, core):
+def ring_forming_breaking_count(mol_a, mol_b, core: NDArray) -> int:
+    """Counts the number of rings broken and formed given a core. Does not count ring insertion/deletions. Considers
+    the number number of rings broken/formed in both endstates, reversing the mol order and the core order produces
+    the same value.
+
+    The algorithm is to add all ring atoms/bonds to a graph, and count the cycles that contain both core and mol a or
+    mol b atoms.
+    """
     g = nx.Graph()
     core_a_to_b = {a: b for a, b in core}
     core_b_to_a = {b: a for a, b in core}
