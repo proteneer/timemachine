@@ -311,11 +311,12 @@ def ring_breaking_count(mol_a, mol_b, core: NDArray) -> Tuple[int, int]:
                 [n for n, data in subgraph.nodes(data=True) if data["atom_type"] in (AtomMapFlags.CORE, atom_type)]
             )
             ring_atom_is_core = [data["atom_type"] == AtomMapFlags.CORE for _, data in ring_atoms.nodes(data=True)]
-            # If no atoms are core atoms, it is not a ring forming/breaking transformation and just an insertion
-            if not any(ring_atom_is_core):
+            ring_atom_count = np.sum(ring_atom_is_core, dtype=np.int32)
+            # If is only one or fewer core atoms, it is not a ring forming/breaking transformation and just an insertion
+            if ring_atom_count <= 1:
                 continue
-            # If the ring atoms are all core atoms, no ring break has occurred
-            if all(ring_atom_is_core):
+            elif ring_atom_count == len(ring_atoms):
+                # If the ring atoms are all core atoms, no ring break has occurred
                 continue
             try:
                 while len(ring_atoms.edges) >= 3:

@@ -1,7 +1,9 @@
 import copy
 import time
 from functools import partial
+from typing import Tuple
 
+import networkx as nx
 import numpy as np
 import pytest
 from rdkit import Chem
@@ -10,7 +12,7 @@ from rdkit.Chem import AllChem
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
-from timemachine.fe.single_topology import DummyGroupAssignmentError, verify_chiral_validity_of_core
+from timemachine.fe.single_topology import DummyGroupAssignmentError, SingleTopology, verify_chiral_validity_of_core
 from timemachine.fe.utils import (
     get_mol_name,
     get_romol_conf,
@@ -20,6 +22,7 @@ from timemachine.fe.utils import (
     set_romol_conf,
 )
 from timemachine.ff import Forcefield
+from timemachine.graph_utils import convert_to_nx
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -1522,6 +1525,24 @@ M  END""",
         verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
 
 
+def ref_ring_breaking_count(mol_a, mol_b, core) -> Tuple[int, int]:
+    """Reference implementation of the ring_breaking_count function that uses the full intermediate
+    molecules.
+    """
+
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    def get_cycle_basis(mol):
+        g = convert_to_nx(mol)
+        return {frozenset(cycle) for cycle in nx.minimum_cycle_basis(g)}
+
+    cycles_0 = get_cycle_basis(st.mol(0.0))
+    cycles_1 = get_cycle_basis(st.mol(1.0))
+
+    return len(cycles_0 - cycles_1), len(cycles_1 - cycles_0)
+
+
 def test_ring_breaking_count(hif2a_ligands):
     mol_a = Chem.AddHs(Chem.MolFromSmiles("C1=CC=CC=C1"))  # benzene
     set_mol_name(mol_a, "benzene")
@@ -1541,6 +1562,7 @@ def test_ring_breaking_count(hif2a_ligands):
     )
     assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (1, 1)
     assert atom_mapping.ring_breaking_count(mol_b, mol_a, core[:, [1, 0]]) == (1, 1)
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == ref_ring_breaking_count(mol_a, mol_b, core)
 
     mols_by_name = {get_mol_name(m): m for m in hif2a_ligands}
     # This transformation will always form a ring
@@ -1550,7 +1572,11 @@ def test_ring_breaking_count(hif2a_ligands):
     core = cores[0]
 
     assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (1, 0)
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == ref_ring_breaking_count(mol_a, mol_b, core)
     assert atom_mapping.ring_breaking_count(mol_b, mol_a, core[:, [1, 0]]) == (0, 1)
+    assert atom_mapping.ring_breaking_count(mol_b, mol_a, core[:, [1, 0]]) == ref_ring_breaking_count(
+        mol_b, mol_a, core[:, [1, 0]]
+    )
 
     # Will construct two pair of 3 ring systems of which only a single ring can be mapped
     # with one atom in the second ring mapped. This means that the second ring is formed/broken (in both endstates)
@@ -1560,7 +1586,8 @@ def test_ring_breaking_count(hif2a_ligands):
 
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
-    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (1, 1)
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (0, 0)
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == ref_ring_breaking_count(mol_a, mol_b, core)
 
     mol_a = Chem.MolFromMolBlock(
         """bridgehead system
@@ -1617,3 +1644,4 @@ M  END
     AllChem.AlignMol(mol_a, mol_b, atomMap=[(6, 0), (7, 5)])
 
     assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (1, 1)
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == ref_ring_breaking_count(mol_a, mol_b, core)
