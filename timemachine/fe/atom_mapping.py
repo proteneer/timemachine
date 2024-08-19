@@ -292,26 +292,19 @@ def ring_breaking_count(mol_a, mol_b, core: NDArray) -> Tuple[int, int]:
     if len(g.edges) < 3:
         return (0, 0)
 
+    def core_dummy_bond(graph: nx.Graph, e: Tuple[int, int]):
+        """Determine if a bond is between two nodes of the same type. If not it is a core-dummy bond. Expects that one
+        of the atom types is AtomMapFlags.CORE and the other is AtomMapFlags.MOL_A or AtomMapFlags.MOL_B
+        """
+        a, b = e
+        return graph.nodes[a]["atom_type"] != graph.nodes[b]["atom_type"]
+
     breaking_count = [0, 0]
     for i, comp in enumerate(nx.connected_components(g)):
         subgraph = g.subgraph(comp)
+        # If the nodes are all core atoms, not a ring breaking transformation.
         if all([data["atom_type"] == AtomMapFlags.CORE for _, data in subgraph.nodes(data=True)]):
             continue
-
-        # If we have cycles made up of core atoms, break them to ensure any left over cycles
-        # are created by dummy atoms. Important to handle the cases like cubane or other bridgehead groups
-        try:
-            while len(subgraph.edges) >= 3:
-                core_atoms = subgraph.subgraph(
-                    [n for n, data in subgraph.nodes(data=True) if data["atom_type"] == AtomMapFlags.CORE]
-                )
-                edges = nx.find_cycle(core_atoms)
-                # Make a copy of the subgraph so that it can be modified
-                subgraph = nx.Graph(subgraph)
-                # Arbitrarily delete one of the core edges, should break any rings
-                subgraph.remove_edge(*edges[0])
-        except nx.exception.NetworkXNoCycle:
-            pass
 
         for endstate_idx, atom_type in enumerate((AtomMapFlags.MOL_A, AtomMapFlags.MOL_B)):
             ring_atoms = subgraph.subgraph(
@@ -327,11 +320,18 @@ def ring_breaking_count(mol_a, mol_b, core: NDArray) -> Tuple[int, int]:
             try:
                 while len(ring_atoms.edges) >= 3:
                     edges = nx.find_cycle(ring_atoms)
-                    breaking_count[endstate_idx] += 1
+                    core_dummy_bond_mask = [core_dummy_bond(ring_atoms, e) for e in edges]
+                    # Only interested in cycles constructed with a core-dummy bond
+                    if any(core_dummy_bond_mask):
+                        breaking_count[endstate_idx] += 1
+                        edge_to_remove = core_dummy_bond_mask.index(True)
+                    else:
+                        # Pick an arbitrary edge to delete to break the cycle
+                        edge_to_remove = 0
                     # Make a copy of the ring_atoms graph so that it can be modified
                     ring_atoms = nx.Graph(ring_atoms)
-                    # Arbitrarily delete one of the core edges, should break any rings
-                    ring_atoms.remove_edge(*edges[0])
+                    # Delete an edge to break the existing cycle
+                    ring_atoms.remove_edge(*edges[edge_to_remove])
             except nx.exception.NetworkXNoCycle:
                 pass
     return breaking_count[0], breaking_count[1]

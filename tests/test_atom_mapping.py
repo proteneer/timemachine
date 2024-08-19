@@ -1597,3 +1597,23 @@ M  END
     )
 
     assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (2, 0)
+
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("C1CC2=C(C1)C=CC=C2"))
+    set_mol_name(mol_a, "bicycle_a")
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("C1=CC2=C(C=C1)C=CC=C2"))
+    set_mol_name(mol_b, "bicycle_b")
+
+    AllChem.EmbedMolecule(mol_a, randomSeed=2024)
+    AllChem.EmbedMolecule(mol_b, randomSeed=2024)
+
+    core = np.array(
+        [
+            [5, 1],
+            [6, 0],
+            [7, 5],
+            [8, 4],
+        ]
+    )
+    AllChem.AlignMol(mol_a, mol_b, atomMap=[(6, 0), (7, 5)])
+
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (1, 1)
