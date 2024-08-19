@@ -77,6 +77,23 @@ def refine_marcs(g1, g2, new_v1, new_v2, marcs):
     return new_marcs
 
 
+def set_at(xs: Tuple[int, ...], idx: int, val: int) -> Tuple[int, ...]:
+    return xs[:idx] + (val,) + xs[idx + 1 :]
+
+
+@dataclass(frozen=True)
+class AtomMap:
+    a_to_b: Tuple[int, ...]
+    b_to_a: Tuple[int, ...]
+
+    @classmethod
+    def empty(cls, n_a: int, n_b: int) -> "AtomMap":
+        return cls(a_to_b=(UNMAPPED,) * n_a, b_to_a=(UNMAPPED,) * n_b)
+
+    def add(self, idx: int, jdx: int) -> "AtomMap":
+        return AtomMap(set_at(self.a_to_b, idx, jdx), set_at(self.b_to_a, jdx, idx))
+
+
 @dataclass(frozen=True)
 class MCSResult:
     all_maps: Tuple[Tuple[int, ...], ...] = field(default_factory=tuple)
@@ -312,12 +329,10 @@ def mcs(
     g_b = Graph(n_b, bonds_b)
     base_marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
 
-    base_map_a_to_b = [UNMAPPED] * n_a
-    base_map_b_to_a = [UNMAPPED] * n_b
+    base_atom_map = AtomMap.empty(n_a, n_b)
     if initial_mapping is not None:
         for a, b in initial_mapping:
-            base_map_a_to_b[a] = b
-            base_map_b_to_a[b] = a
+            base_atom_map = base_atom_map.add(a, b)
             base_marcs = refine_marcs(g_a, g_b, a, b, base_marcs)
 
     base_layer = len(initial_mapping)
@@ -341,8 +356,7 @@ def mcs(
         mcs_result = recursion(
             g_a,
             g_b,
-            tuple(base_map_a_to_b),
-            tuple(base_map_b_to_a),
+            base_atom_map,
             base_layer,
             base_marcs,
             MCSResult(),
@@ -389,8 +403,8 @@ def mcs(
 
     all_cores = []
 
-    for atom_map_1_to_2 in mcs_result.all_maps:
-        core_array = perm_to_core(atom_map_1_to_2)
+    for a_to_b in mcs_result.all_maps:
+        core_array = perm_to_core(a_to_b)
         all_cores.append(core_array)
 
     return (
@@ -405,21 +419,10 @@ def mcs(
     )
 
 
-def set_at(xs: Tuple[int, ...], idx: int, val: int) -> Tuple[int, ...]:
-    return xs[:idx] + (val,) + xs[idx + 1 :]
-
-
-def atom_map_add(
-    map_1_to_2: Tuple[int, ...], map_2_to_1: Tuple[int, ...], idx: int, jdx: int
-) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
-    return (set_at(map_1_to_2, idx, jdx), set_at(map_2_to_1, jdx, idx))
-
-
 def recursion(
     g1: Graph,
     g2: Graph,
-    atom_map_1_to_2: Tuple[int, ...],
-    atom_map_2_to_1: Tuple[int, ...],
+    atom_map: AtomMap,
     layer,
     marcs,
     mcs_result: MCSResult,
@@ -444,7 +447,7 @@ def recursion(
         return mcs_result
 
     if max_connected_components is not None or min_connected_component_size > 1:
-        g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
+        g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map.a_to_b[:layer]) if a2 != UNMAPPED}
 
         if g1_mapped_nodes:
             # Nodes in g1 are visited in order, so nodes left to visit are [layer, layer + 1, ..., n - 1]
@@ -454,7 +457,7 @@ def recursion(
             ):
                 return mcs_result
 
-        g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
+        g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map.b_to_a) if a1 != UNMAPPED}
 
         if g2_mapped_nodes:
             # Nodes in g2 are visited in the order determined by priority_idxs. Nodes may be repeated in priority_idxs,
@@ -472,33 +475,32 @@ def recursion(
     if layer == n_a:
         if num_edges == threshold:
             mcs_result = replace(mcs_result, leaves_visited=mcs_result.leaves_visited + 1)
-            if not leaf_filter_fxn(atom_map_1_to_2):
+            if not leaf_filter_fxn(atom_map.a_to_b):
                 return mcs_result
 
             mcs_result = replace(
                 mcs_result,
-                all_maps=mcs_result.all_maps + (atom_map_1_to_2,),
+                all_maps=mcs_result.all_maps + (atom_map.a_to_b,),
                 all_marcs=mcs_result.all_marcs + (np.array(marcs),),
                 num_edges=num_edges,
             )
         return mcs_result
 
     for jdx in priority_idxs[layer]:
-        if atom_map_2_to_1[jdx] == UNMAPPED:
-            new_atom_map_1_to_2, new_atom_map_2_to_1 = atom_map_add(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
+        if atom_map.b_to_a[jdx] == UNMAPPED:
+            new_atom_map = atom_map.add(layer, jdx)
             if enforce_core_core and not _verify_core_is_connected(
-                g1, g2, layer, jdx, new_atom_map_1_to_2, new_atom_map_2_to_1
+                g1, g2, layer, jdx, new_atom_map.a_to_b, new_atom_map.b_to_a
             ):
                 pass
-            elif not filter_fxn(new_atom_map_1_to_2):
+            elif not filter_fxn(new_atom_map.a_to_b):
                 pass
             else:
                 new_marcs = refine_marcs(g1, g2, layer, jdx, marcs)
                 mcs_result = recursion(
                     g1,
                     g2,
-                    new_atom_map_1_to_2,
-                    new_atom_map_2_to_1,
+                    new_atom_map,
                     layer + 1,
                     new_marcs,
                     mcs_result,
@@ -520,8 +522,7 @@ def recursion(
     return recursion(
         g1,
         g2,
-        atom_map_1_to_2,
-        atom_map_2_to_1,
+        atom_map,
         layer + 1,
         new_marcs,
         mcs_result,
