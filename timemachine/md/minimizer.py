@@ -493,7 +493,7 @@ def local_minimize(
         x_prime[local_idxs] = x_local
         u_full, grad_full = val_and_grad_fn(x_prime)
         # The GPU Potentials can return NaN if value would have overflowed in uint64
-        if not np.isfinite(u_full):
+        if np.isnan(u_full):
             u_full = np.inf
             grad_full = np.nan * grad_full
         return u_full, grad_full[local_idxs]
