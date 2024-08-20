@@ -45,7 +45,7 @@ def convert_to_oe(mol):
     return oemol
 
 
-def oe_generate_conformations(oemol, sample_hydrogens=True):
+def oe_generate_conformations(oemol, sample_hydrogens: bool = True):
     """Generate conformations for the input molecule.
     The molecule is modified in place.
 
@@ -59,11 +59,15 @@ def oe_generate_conformations(oemol, sample_hydrogens=True):
     sample_hydrogens: bool
         Whether or not to sample hydrogens
 
+    Returns
+    -------
+    OEMol with conformers
+
     References
     ----------
     [1] https://docs.eyesopen.com/toolkits/cookbook/python/modeling/am1-bcc.html
     """
-    from openeye import oeomega
+    from openeye import oechem, oeomega
 
     def omega_from_options(opts):
         # Always disable usage of the GPU
@@ -81,18 +85,24 @@ def oe_generate_conformations(oemol, sample_hydrogens=True):
         omega.SetRMSThreshold(1.0)
         return omega
 
+    mol_copy = oechem.OEMol(oemol)
     # generate conformations using omega
-    omegaOpts = oeomega.OEOmegaOptions()
-    omega = omega_from_options(omegaOpts)
-    has_confs = omega(oemol)
+    omega_options = oeomega.OEOmegaOptions()
+    omega = omega_from_options(omega_options)
+    has_confs = omega(mol_copy)
     if not has_confs:
+        # In some cases Omega will blow away the structure if it fails, create a new copy
+        mol_copy = oechem.OEMol(oemol)
         warnings.warn(
             f"Unable to generate conformations using default parameters for '{oemol.GetTitle()}', falling back to Omega Dense Mode"
         )
-        omegaOpts = oeomega.OEOmegaOptions(oeomega.OEOmegaSampling_Dense)
-        omega = omega_from_options(omegaOpts)
-        if not omega(oemol):
-            raise Exception(f"Unable to generate conformations for charge assignment for '{oemol.GetTitle()}'")
+        omega_options = oeomega.OEOmegaOptions(oeomega.OEOmegaSampling_Dense)
+        omega = omega_from_options(omega_options)
+        if not omega(mol_copy):
+            raise Exception(
+                f"Unable to generate conformations for charge assignment for '{oemol.GetTitle()}'"
+            )
+    return mol_copy
 
 
 def oe_assign_charges(mol, charge_model=AM1BCCELF10):
@@ -112,16 +122,18 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
 
     oemol = convert_to_oe(mol)
     if charge_model in ELF10_MODELS:
-        oe_generate_conformations(oemol)
+        oemol = oe_generate_conformations(oemol)
 
     result = oequacpac.OEAssignCharges(oemol, charge_engine)
     if result is False:
         # Turn off hydrogen sampling if charge generation fails
         # https://github.com/openforcefield/openff-toolkit/issues/346#issuecomment-505202862
         if charge_model in ELF10_MODELS:
-            print(f"WARNING: Turning off hydrogen sampling for charge generation on molecule '{oemol.GetTitle()}'")
+            print(
+                f"WARNING: Turning off hydrogen sampling for charge generation on molecule '{oemol.GetTitle()}'"
+            )
             oemol = convert_to_oe(mol)
-            oe_generate_conformations(oemol, sample_hydrogens=False)
+            oemol = oe_generate_conformations(oemol, sample_hydrogens=False)
             result = oequacpac.OEAssignCharges(oemol, charge_engine)
         if result is False:
             raise Exception(f"Unable to assign charges for '{oemol.GetTitle()}'")
