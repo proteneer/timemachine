@@ -310,18 +310,21 @@ def ring_breaking_count(mol_a, mol_b, core: NDArray) -> Tuple[int, int]:
             ring_atoms = subgraph.subgraph(
                 [n for n, data in subgraph.nodes(data=True) if data["atom_type"] in (AtomMapFlags.CORE, atom_type)]
             )
-            ring_atom_is_core = [data["atom_type"] == AtomMapFlags.CORE for _, data in ring_atoms.nodes(data=True)]
-            ring_atom_count = np.sum(ring_atom_is_core, dtype=np.int32)
+            core_ring_atom_count = np.sum(
+                [data["atom_type"] == AtomMapFlags.CORE for _, data in ring_atoms.nodes(data=True)], dtype=np.int32
+            )
             # If is only one or fewer core atoms, it is not a ring forming/breaking transformation and just an insertion
-            if ring_atom_count <= 1:
+            if core_ring_atom_count <= 1:
                 continue
-            elif ring_atom_count == len(ring_atoms):
-                # If the ring atoms are all core atoms, no ring break has occurred
+            # If the ring atoms are all core atoms, no ring break has occurred
+            elif core_ring_atom_count == len(ring_atoms):
                 continue
             try:
+                # Make a copy of the ring_atoms graph so that it can be modified
+                ring_atoms = nx.Graph(ring_atoms)
                 while len(ring_atoms.edges) >= 3:
-                    edges = nx.find_cycle(ring_atoms)
-                    core_dummy_bond_mask = [core_dummy_bond(ring_atoms, e) for e in edges]
+                    cycle_edges = nx.find_cycle(ring_atoms)
+                    core_dummy_bond_mask = [core_dummy_bond(ring_atoms, e) for e in cycle_edges]
                     # Only interested in cycles constructed with a core-dummy bond
                     if any(core_dummy_bond_mask):
                         breaking_count[endstate_idx] += 1
@@ -329,10 +332,8 @@ def ring_breaking_count(mol_a, mol_b, core: NDArray) -> Tuple[int, int]:
                     else:
                         # Pick an arbitrary edge to delete to break the cycle
                         edge_to_remove = 0
-                    # Make a copy of the ring_atoms graph so that it can be modified
-                    ring_atoms = nx.Graph(ring_atoms)
                     # Delete an edge to break the existing cycle
-                    ring_atoms.remove_edge(*edges[edge_to_remove])
+                    ring_atoms.remove_edge(*cycle_edges[edge_to_remove])
             except nx.exception.NetworkXNoCycle:
                 pass
     return breaking_count[0], breaking_count[1]
