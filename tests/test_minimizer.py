@@ -7,7 +7,8 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.utils import get_mol_name, read_sdf
+from timemachine.fe.model_utils import get_vacuum_val_and_grad_fn
+from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders, minimizer
@@ -193,6 +194,84 @@ def test_local_minimize_water_box():
 
     np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
     assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.01
+
+    # Verify that the value and grad return the exact same result even after
+    # being used for minimization
+    u_init_test, g_init_test = val_and_grad_fn(x0)
+    assert u_init == u_init_test
+    np.testing.assert_array_equal(g_init, g_init_test)
+
+
+def test_local_minimize_strained_ligand():
+    """
+    Test that we can minimize a ligand in vacuum using local_minimize when the ligand is strained.
+    """
+    ff = Forcefield.load_default()
+
+    mol = Chem.MolFromMolBlock(
+        """minimization_failure
+     RDKit          3D
+
+ 21 20  0  0  1  0            999 V2000
+   -0.1708   -0.4217   -0.0397 C   0  0  0  0  0  0
+    1.1755   -0.4328   -0.5490 C   0  0  0  0  0  0
+    2.1284    0.7717   -0.6365 C   0  0  0  0  0  0
+   -0.7315    0.8032    0.6201 C   0  0  0  0  0  0
+   -0.3466    0.7426    2.1084 C   0  0  0  0  0  0
+   -2.2581    0.7702    0.4329 C   0  0  0  0  0  0
+   -0.1070    2.0269   -0.0722 C   0  0  0  0  0  0
+    2.9723    0.5294    0.0097 H   0  0  0  0  0  0
+    1.6881    1.6858   -0.2200 H   0  0  0  0  0  0
+    0.7363    0.7175    2.2360 H   0  0  0  0  0  0
+   -0.7241    1.6083    2.6542 H   0  0  0  0  0  0
+   -0.7506   -0.1512    2.5852 H   0  0  0  0  0  0
+   -2.5268    0.7646   -0.6241 H   0  0  0  0  0  0
+   -2.6925   -0.1231    0.8832 H   0  0  0  0  0  0
+   -2.7356    1.6373    0.8912 H   0  0  0  0  0  0
+   -0.3416    2.0412   -1.1372 H   0  0  0  0  0  0
+   -0.4720    2.9597    0.3596 H   0  0  0  0  0  0
+    0.9797    2.0221    0.0209 H   0  0  0  0  0  0
+    2.4585    0.9322   -1.6628 H   0  0  0  0  0  0
+   -0.7897   -1.3021   -0.1304 H   0  0  0  0  0  0
+    1.6057   -1.3521   -0.9180 H   0  0  0  0  0  0
+  1  2  2  0  0  0
+  1  4  1  0  0  0
+  1 20  1  0  0  0
+  2  3  1  0  0  0
+  2 21  1  0  0  0
+  3  8  1  0  0  0
+  3  9  1  0  0  0
+  3 19  1  0  0  0
+  4  5  1  0  0  0
+  4  6  1  0  0  0
+  4  7  1  0  0  0
+  5 10  1  0  0  0
+  5 11  1  0  0  0
+  5 12  1  0  0  0
+  6 13  1  0  0  0
+  6 14  1  0  0  0
+  6 15  1  0  0  0
+  7 16  1  0  0  0
+  7 17  1  0  0  0
+  7 18  1  0  0  0
+M  END
+$$$$
+""",
+        removeHs=False,
+    )
+
+    val_and_grad_fn = get_vacuum_val_and_grad_fn(mol, ff)
+
+    x0 = get_romol_conf(mol)
+
+    # All atoms will be free
+    free_idxs = np.arange(mol.GetNumAtoms())
+
+    u_init, g_init = val_and_grad_fn(x0)
+
+    x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs)
+
+    assert np.linalg.norm(x0 - x_opt) > 0.01
 
     # Verify that the value and grad return the exact same result even after
     # being used for minimization

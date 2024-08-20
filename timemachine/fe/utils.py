@@ -249,9 +249,8 @@ def plot_atom_mapping_grid(
         hbcs.append(bond_colors_a)
         hbcs.append(bond_colors_b)
 
-    num_mols = len(extra_mols) + 2
-
     all_mols = [mol_a_3d, mol_b_3d, *extra_mols]
+    num_mols = len(all_mols)
 
     legends: List[str] = []
     while len(legends) < num_mols:
@@ -418,6 +417,11 @@ def get_mol_masses(mol) -> NDArray:
 def get_mol_name(mol) -> str:
     """Return the title for the given mol"""
     return mol.GetProp("_Name")
+
+
+def set_mol_name(mol, name: str):
+    """Set an RDKit mol's name"""
+    mol.SetProp("_Name", name)
 
 
 def sanitize_energies(full_us, lamb_idx, cutoff=10000):

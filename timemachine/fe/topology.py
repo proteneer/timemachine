@@ -411,7 +411,8 @@ class BaseTopology:
         conf = get_romol_conf(mol)
 
         # chiral atoms
-        chiral_atom_restr_idxs = np.array(chiral_utils.setup_all_chiral_atom_restr_idxs(mol, conf))
+        chiral_atom_restr_idxs = np.array(chiral_utils.setup_all_chiral_atom_restr_idxs(mol, conf), np.int32)
+        chiral_atom_restr_idxs = chiral_atom_restr_idxs.reshape(-1, 4)
 
         chiral_atom_params = chiral_atom_restraint_k * np.ones(len(chiral_atom_restr_idxs))
         assert len(chiral_atom_params) == len(chiral_atom_restr_idxs)  # TODO: can this be checked in Potential::bind ?
@@ -430,7 +431,7 @@ class BaseTopology:
             chiral_bond_restr_signs.extend(signs)
             chiral_bond_params.extend(chiral_bond_restraint_k for _ in idxs)  # TODO: double-check this
 
-        chiral_bond_restr_idxs = np.array(chiral_bond_restr_idxs)
+        chiral_bond_restr_idxs = np.array(chiral_bond_restr_idxs, dtype=np.int32).reshape(-1, 4)
         chiral_bond_restr_signs = np.array(chiral_bond_restr_signs)
         chiral_bond_params = np.array(chiral_bond_params)
         chiral_bond_potential = potentials.ChiralBondRestraint(chiral_bond_restr_idxs, chiral_bond_restr_signs).bind(

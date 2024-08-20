@@ -165,12 +165,12 @@ def test_image_molecules():
         np.testing.assert_array_almost_equal(imaged_mol, mol_coords)
 
 
-def test_get_mol_name():
+def test_get_and_set_mol_name():
     mol = Chem.MolFromSmiles("c1ccccc1")
     with pytest.raises(KeyError):
         utils.get_mol_name(mol)
 
-    mol.SetProp("_Name", "test_name")
+    utils.set_mol_name(mol, "test_name")
     assert utils.get_mol_name(mol) == "test_name"
 
 
