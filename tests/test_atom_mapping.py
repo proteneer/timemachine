@@ -1589,6 +1589,11 @@ def test_ring_breaking_count(hif2a_ligands):
     assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (0, 0)
     assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == ref_ring_breaking_count(mol_a, mol_b, core)
 
+    cores = atom_mapping.get_cores(mol_a, mol_b, **{**DEFAULT_ATOM_MAPPING_KWARGS, "max_connected_components": 2})
+    core = cores[0]
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == (1, 1)
+    assert atom_mapping.ring_breaking_count(mol_a, mol_b, core) == ref_ring_breaking_count(mol_a, mol_b, core)
+
     mol_a = Chem.MolFromMolBlock(
         """bridgehead system
   MJ240300

@@ -292,7 +292,7 @@ def ring_breaking_count(mol_a, mol_b, core: NDArray) -> Tuple[int, int]:
     if len(g.edges) < 3:
         return (0, 0)
 
-    def core_dummy_bond(graph: nx.Graph, e: Tuple[int, int]):
+    def core_dummy_bond(graph: nx.Graph, e: Tuple[int, int]) -> bool:
         """Determine if a bond is between two nodes of the same type. If not it is a core-dummy bond. Expects that one
         of the atom types is AtomMapFlags.CORE and the other is AtomMapFlags.MOL_A or AtomMapFlags.MOL_B
         """
