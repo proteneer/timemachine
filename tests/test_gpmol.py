@@ -12,36 +12,49 @@ from timemachine.fe.utils import get_romol_conf, read_sdf, recenter_mol, rotate_
 
 
 def process(mol_a, core_atoms):
-    # fpath = f"atom_mapping_{mol_a.GetProp('_Name')}_{mol_b.GetProp('_Name')}.svg"
-    # with open(fpath, "w") as fh:
-    #     fh.write(plot_atom_mapping_grid(mol_a, mol_b, core))
-
     atom_primitives_a = gpmol.initialize_atom_primitives(mol_a)
 
     atom_states_a = np.array([AtomState.INTERACTING for _ in range(mol_a.GetNumAtoms())])
     bond_states_a = np.array([BondState.INTERACTING for _ in range(mol_a.GetNumBonds())])
     gp_a = GPMol(mol_a, core_atoms, atom_primitives_a, atom_states_a, bond_states_a)
+
+    dgas, dsg = gp_a.find_dummy_groups()
+
+    print(dgas)
+    # print(dgas, dgas)
+
+    # for k, v in dgas.items():
+    #     if len(v) > 1:
+    #         print(gp_a.split_multiple_anchor_dummy_groups(k, v))
+
+    # assert 0
+    # assert 0
+    print("!", gp_a.find_allowed_bond_deletions())
+
+    return [gp_a]
+
     cur_gp = gp_a
     path_gps = []
 
     counter = 0
     while True:
-        # svg = cur_gp.draw_mol()
-        # fpath = f"mol_{counter}.svg"
-        # with open(fpath, "w") as fh:
-        #     fh.write(svg)
+        svg = cur_gp.draw_mol()
+        fpath = f"mol_{counter}.svg"
+        with open(fpath, "w") as fh:
+            fh.write(svg)
 
         counter += 1
         path_gps.append(cur_gp)
 
         new_gp = None
-        for atom_edit in cur_gp.find_allowed_atom_edits():
-            new_gp = cur_gp.turn_atom_into_dummy(atom_edit)
+        for atom_group in cur_gp.find_allowed_atom_deletions():
+            print("deleting atom_group", atom_group)
+            new_gp = cur_gp.turn_atoms_into_dummy(atom_group)
             break
 
         # no atom edits were found
         if new_gp is None:
-            for src, dst in cur_gp.find_allowed_bond_edits():
+            for src, dst in cur_gp.find_allowed_bond_deletions():
                 new_gp = cur_gp.delete_bond(src, dst)
                 break
 
@@ -128,19 +141,97 @@ def generate_good_rotations(
     return np.array(rotations)[perm][:num_rotations]
 
 
+from rdkit import Chem
+
+
 def test_gmol():
     all_mols = read_sdf("/home/yzhao/Code/timemachine/timemachine/testsystems/data/ligands_40.sdf")
-    mol_a = all_mols[1]
-    mol_b = all_mols[8]
+    mol_a = all_mols[8]
+    mol_b = all_mols[1]
 
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
 
-    pm_fwd = process(mol_a, core[:, 0])
-    pm_rev = process(mol_b, core[:, 1])
-    pm_core = process_core(pm_fwd[-1], pm_rev[-1])
+    #     mol_a = Chem.MolFromMolBlock("""
+    #   Mrv2311 08182400222D
 
-    pm_all = pm_fwd + pm_core + pm_rev[::-1]
+    #  12 12  0  0  0  0            999 V2000
+    #    -7.2657    2.1197    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -7.9801    1.7072    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -7.9801    0.8821    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -7.2657    0.4696    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -6.5512    0.8821    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -6.5512    1.7072    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -7.2657    2.9447    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -8.6945    2.1197    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -8.6945    0.4696    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -7.2657   -0.3554    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -5.8367    0.4696    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -5.8367    2.1197    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #   1  2  2  0  0  0  0
+    #   2  3  1  0  0  0  0
+    #   3  4  2  0  0  0  0
+    #   4  5  1  0  0  0  0
+    #   5  6  2  0  0  0  0
+    #   6  1  1  0  0  0  0
+    #   1  7  1  0  0  0  0
+    #   2  8  1  0  0  0  0
+    #   3  9  1  0  0  0  0
+    #   4 10  1  0  0  0  0
+    #   5 11  1  0  0  0  0
+    #   6 12  1  0  0  0  0
+    # M  END
+    # $$$$""", removeHs=False)
+
+    #     mol_b = Chem.MolFromMolBlock("""
+    #   Mrv2311 08182400222D
+
+    #  12 12  0  0  0  0            999 V2000
+    #    -7.2657    2.1197    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -7.9801    1.7072    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -7.9801    0.8821    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -7.2657    0.4696    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -6.5512    0.8821    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -6.5512    1.7072    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -7.2657    2.9447    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -8.6945    2.1197    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -8.6945    0.4696    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -7.2657   -0.3554    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -5.8367    0.4696    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #    -5.8367    2.1197    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    #   1  2  2  0  0  0  0
+    #   2  3  1  0  0  0  0
+    #   3  4  2  0  0  0  0
+    #   4  5  1  0  0  0  0
+    #   5  6  2  0  0  0  0
+    #   6  1  1  0  0  0  0
+    #   1  7  1  0  0  0  0
+    #   2  8  1  0  0  0  0
+    #   3  9  1  0  0  0  0
+    #   4 10  1  0  0  0  0
+    #   5 11  1  0  0  0  0
+    #   6 12  1  0  0  0  0
+    # M  END
+    # $$$$""", removeHs=False)
+
+    #     # core = np.array([[x, x] for x in range(mol_a.GetNumAtoms())])
+    #     core = np.array( [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [9, 9], [10, 10]])
+    #     # print(core.tolist())
+    fpath = f"atom_mapping_{mol_a.GetProp('_Name')}_{mol_b.GetProp('_Name')}.svg"
+    with open(fpath, "w") as fh:
+        from timemachine.fe.utils import plot_atom_mapping_grid
+
+        fh.write(plot_atom_mapping_grid(mol_a, mol_b, core))
+
+    print("fwd")
+    pm_fwd = process(mol_a, core[:, 0])
+    print("bwd")
+    pm_rev = process(mol_b, core[:, 1])
+    # pm_core = process_core(pm_fwd[-1], pm_rev[-1])
+
+    # pm_all = pm_fwd + pm_core + pm_rev[::-1]
+    pm_all = pm_fwd + pm_rev[::-1]
+    # pm_all = pm_fwd
     pm_all = [recenter_mol(pm.induced_mol()) for pm in pm_all]
 
     # writer = Chem.SDWriter("out.sdf")
