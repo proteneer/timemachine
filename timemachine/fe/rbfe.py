@@ -202,7 +202,7 @@ def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
     Host
         Minimized host state
     """
-    system, masses = convert_omm_system(config.omm_system)
+    system, masses = convert_omm_system(config.omm_system, config.omm_topology, st.ff)
     conf, box = minimizer.pre_equilibrate_host([st.mol_a, st.mol_b], config, st.ff)
     return Host(system, masses, conf, box, config.num_water_atoms)
 
@@ -894,7 +894,7 @@ def run_solvent(
         box_width, forcefield.water_ff, mols=[mol_a, mol_b]
     )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
     # min_cutoff defaults to None since the original poses tend to come from posing in a complex and
     # in solvent the molecules may adopt significantly different poses
     solvent_res = estimate_relative_free_energy_bisection_or_hrex(
@@ -927,7 +927,7 @@ def run_complex(
         protein, forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa)
+    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa, complex_top)
     complex_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
