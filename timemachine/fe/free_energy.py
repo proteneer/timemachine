@@ -45,11 +45,12 @@ WATER_SAMPLER_MOVERS = (
 
 
 class HostConfig:
-    def __init__(self, omm_system, conf, box, num_water_atoms):
+    def __init__(self, omm_system, conf, box, num_water_atoms, omm_topology):
         self.omm_system = omm_system
         self.conf = conf
         self.box = box
         self.num_water_atoms = num_water_atoms
+        self.omm_topology = omm_topology
 
 
 @dataclass(frozen=True)
