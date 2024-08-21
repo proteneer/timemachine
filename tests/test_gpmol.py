@@ -143,15 +143,9 @@ def generate_good_rotations(
     return np.array(rotations)[perm][:num_rotations]
 
 
-from rdkit import Chem
-
-
 def test_gmol():
     all_mols = read_sdf("/home/yzhao/Code/timemachine/timemachine/testsystems/data/ligands_40.sdf")
-    # mol_a = all_mols[1]
-    # mol_b = all_mols[8]
-
-    mol_a = all_mols[9]
+    mol_a = all_mols[1]
     mol_b = all_mols[8]
 
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)

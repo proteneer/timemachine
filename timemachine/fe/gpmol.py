@@ -7,8 +7,7 @@ from rdkit.Chem import BondType as BT
 from rdkit.Chem import HybridizationType as HT
 from rdkit.Chem.Draw import rdMolDraw2D
 
-# from rdkit.Chem.Draw import rdMolDraw2D1
-from timemachine.graph_utils import convert_to_nx
+# from rdkit.Chem.Draw import rdMolDraw2D
 
 
 class AtomState(IntEnum):
@@ -132,41 +131,32 @@ class GPMol:
         #     \\  //           \\  //
         #      C--C             D--D
         #
-
-        # self.nxg 
-
         atom_groups = []
-
         # find bridges in the reduced graph
+        # recall that reduced graph truncates the dummy subgraph, but *fully* preserves
+        # the core graph.
         for src, dst in nx.bridges(self.reduced_nxg):
             # a bridge bond, upon deletion, results in a disconnected graph, forming two node
             # partitions:
 
             # 1. one partition contains core atoms, the other partition contains only dummy atoms.
             # 2. both partitions contain core atoms (eg. if bridge exists in the core)
+            graph_copy = self.nxg.copy()
+            graph_copy.remove_edge(src, dst)
 
-            # check if bridge is a dummy bond.
-            
-            if src in self.dummy_atoms or dst in self.dummy_atoms:
-                graph_copy = self.nxg.copy()
-                graph_copy.remove_edge(src, dst)
+            ccs = list(nx.connected_components(graph_copy))
+            assert len(ccs) == 2
 
-                ccs = list(nx.connected_components(graph_copy))
-                assert len(ccs) == 2
-                
-                dummy_only_cc = None
-                for cc in ccs:
-                    if np.all([x in self.dummy_atoms for x in cc]):
-                        assert dummy_only_cc is None
-                        dummy_only_cc = cc
+            dummy_only_cc = None
+            for cc in ccs:
+                # remove bridge atoms from the connected components
+                cc_truncated = [x for x in cc if (x != src and x != dst)]
+                if np.all([x in self.dummy_atoms for x in cc_truncated]):
+                    assert dummy_only_cc is None
+                    dummy_only_cc = cc_truncated
 
-                assert dummy_only_cc is not None
-
-                atoms_to_delete = []
-                for x in dummy_only_cc:
-                    if x != src and x != dst:
-                        atoms_to_delete.append(x)
-                atom_groups.append(atoms_to_delete)
+            if dummy_only_cc:
+                atom_groups.append(dummy_only_cc)
 
         return atom_groups
 
@@ -395,18 +385,7 @@ class ComposedGPMol:
         return combined_state
 
     def find_allowed_atom_deletions(self):
-        # mol_a's atoms can be deleted
-        # i.e. mol_a's atom_states can only go from INTERACTING -> NON-INTERACTING
-        # and mol_b's atom_states can only go from NON-INTERACTING -> INTERACTING
-
-        # mol_b's atoms can be inserted.
-        return atoms
-
-    def find_allowed_atom_deletions(self):
         pass
 
     def find_allowed_bond_insertions(self):
-        pass
-
-    def find_allowed_bond_deletions(self):
         pass
