@@ -29,7 +29,9 @@ def process(mol_a, core_atoms):
 
     # assert 0
     # assert 0
-    print("!", gp_a.find_allowed_bond_deletions())
+    # print("!", gp_a.find_allowed_bond_deletions())
+
+    print("!", gp_a.find_simply_factorizable_atom_deletions())
 
     return [gp_a]
 
@@ -146,8 +148,11 @@ from rdkit import Chem
 
 def test_gmol():
     all_mols = read_sdf("/home/yzhao/Code/timemachine/timemachine/testsystems/data/ligands_40.sdf")
-    mol_a = all_mols[8]
-    mol_b = all_mols[1]
+    # mol_a = all_mols[1]
+    # mol_b = all_mols[8]
+
+    mol_a = all_mols[9]
+    mol_b = all_mols[8]
 
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
@@ -225,13 +230,13 @@ def test_gmol():
 
     print("fwd")
     pm_fwd = process(mol_a, core[:, 0])
-    print("bwd")
-    pm_rev = process(mol_b, core[:, 1])
+    # print("bwd")
+    # pm_rev = process(mol_b, core[:, 1])
     # pm_core = process_core(pm_fwd[-1], pm_rev[-1])
 
     # pm_all = pm_fwd + pm_core + pm_rev[::-1]
-    pm_all = pm_fwd + pm_rev[::-1]
-    # pm_all = pm_fwd
+    # pm_all = pm_fwd + pm_rev[::-1]
+    pm_all = pm_fwd
     pm_all = [recenter_mol(pm.induced_mol()) for pm in pm_all]
 
     # writer = Chem.SDWriter("out.sdf")

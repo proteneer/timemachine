@@ -113,7 +113,7 @@ class GPMol:
         self.reduced_nxg = self.nxg.subgraph(reduced_graph_atoms)
 
     # test idea: ensure that we can always delete down to the core and back up.
-    def find_allowed_atom_deletions(self):
+    def find_simply_factorizable_atom_deletions(self):
         # delete atoms in a way such that they are *simply* factorizable first.
         # a simply factorizable sub-group is a set of atoms that can be turned into a dummy state
         # *without* breaking any bond or angle terms.
@@ -133,27 +133,42 @@ class GPMol:
         #      C--C             D--D
         #
 
-        # v1: only allow deletions on dummy groups that are connected to a single anchor.
+        # self.nxg 
 
         atom_groups = []
 
-        for n in self.reduced_nxg.nodes():
-            # pick a terminal atom in the reduced graph
-            atoms = []
-            # if self.reduced_nxg.degree(n) == 1:
-            for nb in self.nxg.neighbors(n):
-                if nb in self.dummy_atoms and self.nxg.degree(nb) == 1:
-                    atoms.append(nb)
-            if len(atoms) > 0:
-                atom_groups.append(atoms)
+        # find bridges in the reduced graph
+        for src, dst in nx.bridges(self.reduced_nxg):
+            # a bridge bond, upon deletion, results in a disconnected graph, forming two node
+            # partitions:
 
-        # print("atom_groups", atom_groups)
+            # 1. one partition contains core atoms, the other partition contains only dummy atoms.
+            # 2. both partitions contain core atoms (eg. if bridge exists in the core)
+
+            # check if bridge is a dummy bond.
+            
+            if src in self.dummy_atoms or dst in self.dummy_atoms:
+                graph_copy = self.nxg.copy()
+                graph_copy.remove_edge(src, dst)
+
+                ccs = list(nx.connected_components(graph_copy))
+                assert len(ccs) == 2
+                
+                dummy_only_cc = None
+                for cc in ccs:
+                    if np.all([x in self.dummy_atoms for x in cc]):
+                        assert dummy_only_cc is None
+                        dummy_only_cc = cc
+
+                assert dummy_only_cc is not None
+
+                atoms_to_delete = []
+                for x in dummy_only_cc:
+                    if x != src and x != dst:
+                        atoms_to_delete.append(x)
+                atom_groups.append(atoms_to_delete)
 
         return atom_groups
-
-    # def find_allowed_atom_insertions(self):
-    # inversion of the above?
-    #     return atoms
 
     def find_dummy_groups(self):
         dummy_subgraph = nx.Graph()
