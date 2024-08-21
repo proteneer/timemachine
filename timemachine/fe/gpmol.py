@@ -86,7 +86,7 @@ class GPMol:
         # nxg is a subgraph comprised only of interacting atoms
         self.nxg = nx.Graph()
         for atom in mol.GetAtoms():
-            atom.SetProp("atomLabel", f"{atom.GetIdx()}")
+            # atom.SetProp("atomLabel", f"{atom.GetIdx()}")
             atom_idx = atom.GetIdx()
             if atom_idx not in core_atoms:
                 self.dummy_atoms.append(atom_idx)
@@ -110,6 +110,16 @@ class GPMol:
                 reduced_graph_atoms.add(n)
 
         self.reduced_nxg = self.nxg.subgraph(reduced_graph_atoms)
+
+    def find_anchor_dummy_atom_deletions(self):
+        # delete dummy atoms from the anchor. no guarantees are made about factorizability.
+        dummys_and_anchors, _ = self.find_dummy_groups()
+        atom_groups = []
+        for k, v in dummys_and_anchors.items():
+            if len(v) == 1:
+                atom_groups.append(k)
+
+        return atom_groups
 
     # test idea: ensure that we can always delete down to the core and back up.
     def find_simply_factorizable_atom_deletions(self):
@@ -157,6 +167,8 @@ class GPMol:
 
             if dummy_only_cc:
                 atom_groups.append(dummy_only_cc)
+
+        atom_groups.sort(key=len)
 
         return atom_groups
 
@@ -216,6 +228,16 @@ class GPMol:
                 assert 0
 
             all_bonds_to_delete.extend(bonds_to_delete)
+
+        # prefer dummy-dummy bonds to dummy-core bonds
+        def bond_score(bond):
+            src, dst = bond
+            if src in self.dummy_atoms and dst in self.dummy_atoms:
+                return 0
+            else:
+                return 1
+
+        all_bonds_to_delete.sort(key=bond_score)
 
         return all_bonds_to_delete
 
