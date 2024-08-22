@@ -7,7 +7,7 @@ import numpy as np
 import scipy
 
 from timemachine import potentials
-from timemachine.ff.nonbonded.handlers import EnvironmentBCCHandler
+from timemachine.ff import Forcefield
 from timemachine.integrator import simulate
 from timemachine.potentials import (
     BoundPotential,

@@ -9,6 +9,7 @@ import numpy as np
 from rdkit import Chem
 
 from timemachine import constants
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
@@ -507,17 +508,6 @@ class AM1BCCSolventHandler(AM1BCCHandler):
     pass
 
 
-class EnvironmentBCCPartialHandler(SerializableMixIn):
-    # stored in the ff.py file
-    def __init__(self, smirks, params, props):
-        self.smirks = smirks
-        self.params = params
-        self.props = props
-
-    def get_env_handle(self, omm_topology, ff: Forcefield) -> EnvironmentBCCHandler:
-        return EnvironmentBCCHandler(self.smirks, self.params, ff.protein_ff_name, ff.water_ff_name, omm_topology)
-
-
 class EnvironmentBCCHandler(SerializableMixIn):
     """
     Applies BCCs to residues in a forcefield. Needs a concrete openmm topology to use.
@@ -625,6 +615,17 @@ class EnvironmentBCCHandler(SerializableMixIn):
         )
 
         return final_charges
+
+
+class EnvironmentBCCPartialHandler(SerializableMixIn):
+    # stored in the ff.py file
+    def __init__(self, smirks, params, props):
+        self.smirks = smirks
+        self.params = params
+        self.props = props
+
+    def get_env_handle(self, omm_topology, ff: Forcefield) -> EnvironmentBCCHandler:
+        return EnvironmentBCCHandler(self.smirks, self.params, ff.protein_ff, ff.water_ff, omm_topology)
 
 
 class AM1CCCHandler(SerializableMixIn):
