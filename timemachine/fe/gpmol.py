@@ -7,7 +7,7 @@ from rdkit.Chem import BondType as BT
 from rdkit.Chem import HybridizationType as HT
 from rdkit.Chem.Draw import rdMolDraw2D
 
-# from rdkit.Chem.Draw import rdMolDraw2D
+from timemachine.fe.topology import BaseTopology
 
 
 class AtomState(IntEnum):
@@ -111,6 +111,13 @@ class GPMol:
 
         self.reduced_nxg = self.nxg.subgraph(reduced_graph_atoms)
 
+    def get_bond_state(self, src, dst):
+        bond = self.mol.GetBondBetweenAtoms(int(src), int(dst))
+        return self.bond_states[bond.GetIdx()]
+
+    def get_atom_state(self, src):
+        return self.atom_states[src]
+
     def find_anchor_dummy_atom_deletions(self):
         # delete dummy atoms from the anchor. no guarantees are made about factorizability.
         dummys_and_anchors, _ = self.find_dummy_groups()
@@ -121,7 +128,6 @@ class GPMol:
 
         return atom_groups
 
-    # test idea: ensure that we can always delete down to the core and back up.
     def find_simply_factorizable_atom_deletions(self):
         # delete atoms in a way such that they are *simply* factorizable first.
         # a simply factorizable sub-group is a set of atoms that can be turned into a dummy state
@@ -241,35 +247,6 @@ class GPMol:
 
         return all_bonds_to_delete
 
-    # def find_allowed_bond_deletions(self):
-    #     """
-    #     Find bonds that can be deleted to satisfy factorizability considerations.
-    #     """
-    #     bonds = []
-    #     bridges = nx.bridges(self.nxg)
-
-    #     ranks = []
-    #     for src_idx, dst_idx in self.nxg.edges():
-    #         src_is_dummy = src_idx in self.dummy_atoms
-    #         dst_is_dummy = dst_idx in self.dummy_atoms
-    #         if src_is_dummy or dst_is_dummy:
-    #             if (src_idx, dst_idx) not in bridges and (dst_idx, src_idx) not in bridges:
-
-    #                 # totally arbitrary, can be removed later when we do network-level
-    #                 # cost network analysis. for now, we arbitrarily prefer breaking ring
-    #                 # bonds in the middle vs in the middle of the chain. b
-    #                 if src_is_dummy and dst_is_dummy:
-    #                     ranks.append(0)
-    #                 else:
-    #                     ranks.append(1)
-
-    #                 bonds.append((src_idx, dst_idx))
-
-    #     # prefer breaking dummy-dummy over dummy-core bonds
-    #     perm = np.argsort(ranks)
-
-    #     return np.array(bonds)[perm].tolist()
-
     def turn_atoms_into_dummy(self, atom_group):
         new_atom_primitives = copy.copy(self.atom_primitives)
         new_atom_states = copy.copy(self.atom_states)
@@ -277,12 +254,7 @@ class GPMol:
 
         for idx in atom_group:
             new_atom_states[idx] = AtomState.NON_INTERACTING
-
             for nb in self.nxg.neighbors(idx):
-                # also turn all nearby dangling atoms into a dummy.
-                # if len(list(self.nxg.neighbors(nb))) == 1:
-                # new_atom_states[nb] = AtomState.NON_INTERACTING
-                # else:
                 new_atom_primitives[nb] = downgrade_atom_primitive(self.atom_primitives[nb])
 
         return GPMol(self.mol, self.core_atoms, new_atom_primitives, new_atom_states, new_bond_states)
@@ -327,18 +299,18 @@ class GPMol:
         drawer.FinishDrawing()
         return drawer.GetDrawingText()
 
-    def find_allowed_core_mutations(self, gp_b):
+    def find_allowed_core_geometry_mutations(self, gp_b):
         atoms = []
 
         # (ytz): TODO: only allow if valence rules are met
         # (dummy atoms are all non-interacting to avoid hyper valency)
         for c_a, c_b in zip(self.core_atoms, gp_b.core_atoms):
-            # print(self.atom_primitives[c_a], "vs", gp_b.atom_primitives[c_b])
             if self.atom_primitives[c_a] != gp_b.atom_primitives[c_b]:
                 atoms.append(c_a)
+
         return atoms
 
-    def mutate_atom(self, atom_idx_in_a, gp_b):
+    def mutate_core_atom(self, atom_idx_in_a, gp_b):
         a_to_b_core_map = dict()
         for c_a, c_b in zip(self.core_atoms, gp_b.core_atoms):
             a_to_b_core_map[c_a] = c_b
@@ -358,56 +330,328 @@ import numpy as np
 from timemachine.fe.single_topology import AtomMapMixin
 
 
-def _add_mol_to_graph(nxg, mol, mapping):
-    for atom in mol.GetAtoms():
-        nxg.add_node(mapping[atom.GetIdx()])
-
-    for bond in mol.GetBonds():
-        src_idx = bond.GetBeginAtomIdx()
-        dst_idx = bond.GetEndAtomIdx()
-        nxg.add_edge(mapping[src_idx], mapping[dst_idx])
+def initialize_mol_to_gp(mol, core_atoms):
+    atom_primitives = initialize_atom_primitives(mol)
+    atom_states = np.array([AtomState.INTERACTING for _ in range(mol.GetNumAtoms())])
+    bond_states = np.array([BondState.INTERACTING for _ in range(mol.GetNumBonds())])
+    return GPMol(mol, core_atoms, atom_primitives, atom_states, bond_states)
 
 
-class ComposedGPMol:
-    def __init__(self, gp_a, gp_b):
-        self.gp_a = gp_a
-        self.gp_b = gp_b
+from timemachine.fe.single_topology import canonicalize_bond, canonicalize_improper_idxs
+from timemachine.fe.system import VacuumSystem
+from timemachine.potentials import PeriodicTorsion
 
-        core = np.array([[x, y] for x, y in zip(gp_a.core_atoms, gp_b.core_Atoms)])
 
-        amm = AtomMapMixin(gp_a.mol, gp_b.mol, core)
-        self.amm = amm
+def get_atom_states(gp_a, gp_b, amm):
+    # compute an atom_state composed from individual atom_states.
+    combined_state = np.zeros(amm.get_num_atoms(), dtype=np.int32) - 1  # initialize to garbage
+    for atom_idx, state in enumerate(gp_a.atom_states):
+        if atom_idx in gp_a.core_atoms:
+            assert state == AtomState.INTERACTING
+        combined_state[amm.a_to_c[atom_idx]] = state
 
-        self.nxg = nx.Graph()
+    for atom_idx, state in enumerate(gp_b.atom_states):
+        if atom_idx in gp_b.core_atoms:
+            assert state == AtomState.INTERACTING
 
-        _add_mol_to_graph(self.nxg, gp_a, amm.a_to_c)
-        _add_mol_to_graph(self.nxg, gp_b, amm.b_to_c)
+        old_state = combined_state[amm.b_to_c[atom_idx]]
+        if old_state != -1:
+            state == old_state
+        else:
+            combined_state[amm.b_to_c[atom_idx]] = state
 
-    def get_atom_states(self):
-        # compute an atom_state composed from individual atom_states.
-        combined_state = np.zeros(self.amm.get_num_atoms()) - 1  # initialize to garbage
-        for atom_idx, state in enumerate(self.gp_a.atom_states):
-            if atom_idx in self.gp_a.core_atoms:
-                assert state == AtomState.INTERACTING
-            combined_state[self.amm.a_to_c[atom_idx]] = state
+    # print(gp_a.atom_states)
+    # print(gp_b.atom_states)
+    # print(combined_state)
 
-        for atom_idx, state in enumerate(self.gp_b.atom_states):
-            if atom_idx in self.gp_b.core_atoms:
-                assert state == AtomState.INTERACTING
+    # every atom should be in either one state or the other.
+    assert np.all([x != -1 for x in combined_state])
 
-            old_state = combined_state[self.amm.b_to_c[atom_idx]]
-            if old_state != -1:
-                state == old_state
+    return combined_state
+
+
+def induce_parameters(gp, bt, ff, a_to_c):
+    bond_params, hb = bt.parameterize_harmonic_bond(ff.hb_handle.params)
+    angle_params, ha = bt.parameterize_harmonic_angle(ff.ha_handle.params)
+    proper_params, pt = bt.parameterize_proper_torsion(ff.pt_handle.params)
+    improper_params, it = bt.parameterize_improper_torsion(ff.it_handle.params)
+    nbpl_params, nbpl = bt.parameterize_nonbonded_pairlist(
+        ff.q_handle.params,
+        ff.q_handle_intra.params,
+        ff.lj_handle.params,
+        ff.lj_handle_intra.params,
+        intramol_params=True,
+    )
+
+    for params, idxs in zip(bond_params, hb.idxs):
+        src, dst = idxs
+        if gp.get_bond_state(src, dst) == BondState.NON_INTERACTING:
+            params[0] = 0
+    hb.idxs = a_to_c[hb.idxs]
+    hb.idxs = np.array([canonicalize_bond(x) for x in hb.idxs], dtype=np.int32)
+    hb = hb.bind(bond_params)
+
+    for params, idxs in zip(angle_params, ha.idxs):
+        src, mid, dst = idxs
+        if (
+            gp.get_bond_state(src, mid) == BondState.NON_INTERACTING
+            or gp.get_bond_state(mid, dst) == BondState.NON_INTERACTING
+        ):
+            params[0] = 0
+    ha.idxs = a_to_c[ha.idxs]
+    ha.idxs = np.array([canonicalize_bond(x) for x in ha.idxs], dtype=np.int32)
+    ha = ha.bind(angle_params)
+
+    for params, idxs in zip(proper_params, pt.idxs):
+        if np.any([gp.get_atom_state(x) == AtomState.NON_INTERACTING for x in idxs]):
+            params[0] = 0
+    pt.idxs = a_to_c[pt.idxs]
+    pt.idxs = np.array([canonicalize_bond(x) for x in pt.idxs], dtype=np.int32)
+
+    for params, idxs in zip(improper_params, it.idxs):
+        if np.any([gp.get_atom_state(x) == AtomState.NON_INTERACTING for x in idxs]):
+            params[0] = 0
+    it.idxs = a_to_c[it.idxs]
+    it.idxs = np.array([canonicalize_improper_idxs(x) for x in it.idxs], dtype=np.int32)
+
+    torsion_idxs = np.concatenate([pt.idxs, it.idxs])
+    torsion_params = np.concatenate([proper_params, improper_params])
+    torsion = PeriodicTorsion(torsion_idxs).bind(torsion_params)
+
+    for params, idxs in zip(nbpl_params, nbpl.idxs):
+        src, dst = idxs
+        if gp.get_atom_state(src) == AtomState.NON_INTERACTING or gp.get_atom_state(dst) == AtomState.NON_INTERACTING:
+            # set w-offset to cutoff
+            params[-1] = 1.2
+    nbpl.idxs = a_to_c[nbpl.idxs]
+    nbpl.idxs = np.array([canonicalize_bond(x) for x in nbpl.idxs], dtype=np.int32)
+    nbpl = nbpl.bind(nbpl_params)
+
+    return VacuumSystem(hb, ha, torsion, nbpl, None, None)
+
+
+def make_mol(mol_a, mol_b, core, vs, dir, atom_states, min_bond_k=100.0) -> Chem.Mol:
+    """
+    Generate an RDKit mol, with the dummy atoms attached to the molecule. Atom types and bond parameters
+    guesstimated from the corresponding bond orders.
+
+    Tricky-bits to figure out later on: Inferring bond orders and atom-types.
+
+    Parameters
+    ----------
+    lamb: float
+        Lambda value to use
+
+    min_bond_k: float
+        Minimum force constant required for a bond to be present in the mol
+
+    Returns
+    -------
+    Chem.Mol
+    """
+
+    from timemachine.fe.single_topology import AtomMapMixin
+
+    amm = AtomMapMixin(mol_a, mol_b, core)
+    N = amm.get_num_atoms()
+    mol_a_atomic_nums = [a.GetAtomicNum() for a in mol_a.GetAtoms()]
+    mol_b_atomic_nums = [b.GetAtomicNum() for b in mol_b.GetAtoms()]
+    mol = Chem.RWMol()
+
+    old_to_new_kv = dict()
+    for c_idx in range(N):
+        if c_idx in amm.c_to_a and c_idx in amm.c_to_b:
+            # core, in both mol_a and mol_b
+            if dir == "fwd":
+                atomic_num = mol_a_atomic_nums[amm.c_to_a[c_idx]]
+            elif dir == "rev":
+                atomic_num = mol_b_atomic_nums[amm.c_to_b[c_idx]]
             else:
-                combined_state[self.amm.b_to_c[atom_idx]] = state
+                assert 0
+        elif c_idx in amm.c_to_a:
+            # only in mol_a
+            atomic_num = mol_a_atomic_nums[amm.c_to_a[c_idx]]
+        elif c_idx in amm.c_to_b:
+            # only in mol_b
+            atomic_num = mol_b_atomic_nums[amm.c_to_b[c_idx]]
+        else:
+            # in neither, assert
+            assert 0
 
-        # every atom should be in either one state or the other.
-        assert np.any(combined_state == -1) is False
+        if atom_states[c_idx] == AtomState.INTERACTING:
+            atom = Chem.Atom(atomic_num)
+            old_to_new_kv[c_idx] = mol.GetNumAtoms()
+            mol.AddAtom(atom)
+        else:
+            old_to_new_kv[c_idx] = -1
 
-        return combined_state
+    # print("VS BONDS", vs.bond.potential.idxs)
 
-    def find_allowed_atom_deletions(self):
-        pass
+    # setup bonds
+    for (old_i, old_j), (k, b) in zip(vs.bond.potential.idxs, vs.bond.params):
+        new_i, new_j = old_to_new_kv[old_i], old_to_new_kv[old_j]
 
-    def find_allowed_bond_insertions(self):
-        pass
+        if new_i != -1 and new_j != -1:
+            assert atom_states[old_i] == AtomState.INTERACTING
+            assert atom_states[old_j] == AtomState.INTERACTING
+
+            if k > min_bond_k:
+                print("adding new", int(new_i), int(new_j), "old", old_i, old_j)
+                mol.AddBond(int(new_i), int(new_j), Chem.BondType.SINGLE)
+
+    # assert 0
+    # make read-only
+    return Chem.Mol(mol), old_to_new_kv
+
+
+def combine_vacuum_systems(vs1, vs2):
+    """
+    Combine two vacuum systems. If there are duplicate idxs then parameters in vs_1 win.
+    """
+
+    vsc = copy.deepcopy(vs1)
+    vsc_bonds = set([tuple(x) for x in vsc.bond.potential.idxs])
+    extra_bond_idxs = []
+    extra_bond_params = []
+    for bond, params in zip(vs2.bond.potential.idxs, vs2.bond.params):
+        if tuple(bond) not in vsc_bonds:
+            extra_bond_idxs.append(bond)
+            extra_bond_params.append(params)
+
+    vsc.bond.potential.idxs = np.concatenate([vsc.bond.potential.idxs, np.array(extra_bond_idxs)])
+    vsc.bond.params = np.concatenate([vsc.bond.params, np.array(extra_bond_params)])
+
+    vsc_angles = set([tuple(x) for x in vsc.angle.potential.idxs])
+    extra_angle_idxs = []
+    extra_angle_params = []
+    for angle, params in zip(vs2.angle.potential.idxs, vs2.angle.params):
+        if tuple(angle) not in vsc_angles:
+            extra_angle_idxs.append(angle)
+            extra_angle_params.append(params)
+
+    vsc.angle.potential.idxs = np.concatenate([vsc.angle.potential.idxs, np.array(extra_angle_idxs)])
+    vsc.angle.params = np.concatenate([vsc.angle.params, np.array(extra_angle_params)])
+
+    vsc_torsions = set([tuple(x) for x in vsc.torsion.potential.idxs])
+    extra_torsion_idxs = []
+    extra_torsion_params = []
+    for torsion, params in zip(vs2.torsion.potential.idxs, vs2.torsion.params):
+        if tuple(torsion) not in vsc_torsions:
+            extra_torsion_idxs.append(torsion)
+            extra_torsion_params.append(params)
+
+    vsc.torsion.potential.idxs = np.concatenate([vsc.torsion.potential.idxs, np.array(extra_torsion_idxs)])
+    vsc.torsion.params = np.concatenate([vsc.torsion.params, np.array(extra_torsion_params)])
+
+    vsc_nonbondeds = set([tuple(x) for x in vsc.nonbonded.potential.idxs])
+    extra_nonbonded_idxs = []
+    extra_nonbonded_params = []
+    for nonbonded, params in zip(vs2.nonbonded.potential.idxs, vs2.nonbonded.params):
+        if tuple(nonbonded) not in vsc_nonbondeds:
+            extra_nonbonded_idxs.append(nonbonded)
+            extra_nonbonded_params.append(params)
+
+    vsc.nonbonded.potential.idxs = np.concatenate([vsc.nonbonded.potential.idxs, np.array(extra_nonbonded_idxs)])
+    vsc.nonbonded.params = np.concatenate([vsc.nonbonded.params, np.array(extra_nonbonded_params)])
+
+    return vsc
+
+
+def generate_chain(mol, core_atoms):
+    atom_primitives_a = initialize_atom_primitives(mol)
+
+    atom_states_a = np.array([AtomState.INTERACTING for _ in range(mol.GetNumAtoms())])
+    bond_states_a = np.array([BondState.INTERACTING for _ in range(mol.GetNumBonds())])
+    gp_a = GPMol(mol, core_atoms, atom_primitives_a, atom_states_a, bond_states_a)
+
+    cur_gp = gp_a
+    path_gps = []
+
+    counter = 0
+    while True:
+        # svg = cur_gp.draw_mol()
+        # fpath = f"mol_{counter}.svg"
+        # with open(fpath, "w") as fh:
+        #     fh.write(svg)
+
+        counter += 1
+        path_gps.append(cur_gp)
+
+        new_gp = None
+        for atom_group in cur_gp.find_simply_factorizable_atom_deletions():
+            new_gp = cur_gp.turn_atoms_into_dummy(atom_group)
+            break
+
+        # no atom edits were found
+        if new_gp is None:
+            for atom_group in cur_gp.find_anchor_dummy_atom_deletions():
+                new_gp = cur_gp.turn_atoms_into_dummy(atom_group)
+                break
+
+            if new_gp is None:
+                for src, dst in cur_gp.find_allowed_bond_deletions():
+                    new_gp = cur_gp.delete_bond(src, dst)
+                    break
+
+        if new_gp:
+            cur_gp = new_gp
+        else:
+            break
+
+    return path_gps
+
+
+class SingleTopologyV5(AtomMapMixin):
+    def __init__(self, mol_a, mol_b, core, ff):
+        super().__init__(mol_a, mol_b, core)
+
+        self.ff = ff
+
+        # generate chain of deletions
+        self.mol_a_path = generate_chain(self.mol_a, core[:, 0])
+        self.mol_b_path = generate_chain(self.mol_b, core[:, 1])
+
+        self.mol_c_path_fwd = []
+
+        bt_a = BaseTopology(mol_a, ff)
+        bt_b = BaseTopology(mol_b, ff)
+
+        vs_fwd = []
+        vs_rev = []
+
+        atom_states_fwd = []
+        atom_states_rev = []
+
+        print("FWD")
+        for gp_a in self.mol_a_path:
+            vs_a = induce_parameters(gp_a, bt_a, ff, self.a_to_c)
+            vs_b = induce_parameters(self.mol_b_path[-1], bt_b, ff, self.b_to_c)
+            vs_c = combine_vacuum_systems(vs_a, vs_b)  # direction matters!
+            atom_states_fwd.append(get_atom_states(gp_a, self.mol_b_path[-1], self))
+            vs_fwd.append(vs_c)
+
+        print("REV")
+        for gp_b in self.mol_b_path:
+            vs_b = induce_parameters(gp_b, bt_b, ff, self.b_to_c)
+            vs_a = induce_parameters(self.mol_a_path[-1], bt_a, ff, self.a_to_c)
+            vs_c = combine_vacuum_systems(vs_b, vs_a)  # direction matters!
+            atom_states_rev.append(get_atom_states(self.mol_a_path[-1], gp_b, self))
+            vs_rev.append(vs_c)
+
+        self.fwd_idx = len(atom_states_fwd)
+        self.chain_atom_states = atom_states_fwd + atom_states_rev[::-1]
+        self.checkpoint_states = vs_fwd + vs_rev[::-1]
+
+    def generate_intermediate_mols_and_kvs(self):
+        i_mols = []
+        kvs = []
+        for idx, (vs, atom_states) in enumerate(zip(self.checkpoint_states, self.chain_atom_states)):
+            if idx < self.fwd_idx:
+                dir = "fwd"
+            else:
+                dir = "rev"
+            mol, old_to_new_kv = make_mol(self.mol_a, self.mol_b, self.core, vs, dir, atom_states)
+            i_mols.append(mol)
+            kvs.append(old_to_new_kv)
+
+        return i_mols, kvs
