@@ -374,7 +374,7 @@ def test_get_water_sampler_params(num_windows):
     )
 
     num_host_atoms = solvent_conf.shape[0]
-    host_system, masses = convert_omm_system(solvent_sys)
+    host_system, masses = convert_omm_system(solvent_sys, solvent_top, forcefield)
     solvent_host = Host(host_system, masses, solvent_conf, solvent_box, num_host_atoms)
     mol_a_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 1])
     mol_b_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 2])

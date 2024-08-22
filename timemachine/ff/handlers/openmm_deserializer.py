@@ -6,8 +6,13 @@ import openmm as mm
 from openmm import unit
 
 from timemachine import constants, potentials
+from timemachine.ff import Forcefield
 
 ORDERED_FORCES = ["HarmonicBond", "HarmonicAngle", "PeriodicTorsion", "Nonbonded"]
+
+Q_IDX = 0
+LJ_SIG_IDX = 1
+LJ_EPS_IDX = 2
 
 
 def value(quantity):
@@ -105,8 +110,8 @@ def deserialize_nonbonded_force(force, N):
     )
 
     # optimizations
-    nb_params[:, 1] = nb_params[:, 1] / 2
-    nb_params[:, 2] = np.sqrt(nb_params[:, 2])
+    nb_params[:, LJ_SIG_IDX] = nb_params[:, 1] / 2
+    nb_params[:, LJ_EPS_IDX] = np.sqrt(nb_params[:, 2])
 
     beta = 2.0  # erfc correction
 
@@ -116,7 +121,9 @@ def deserialize_nonbonded_force(force, N):
     return nb_params, exclusion_idxs, beta, scale_factors
 
 
-def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.BoundPotential], List[float]]:
+def deserialize_system(
+    system: mm.System, omm_topology, ff: Forcefield, cutoff: float
+) -> Tuple[List[potentials.BoundPotential], List[float]]:
     """
     Deserialize an OpenMM XML file
 
@@ -201,6 +208,11 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
         if isinstance(force, mm.NonbondedForce):
             nb_params, exclusion_idxs, beta, scale_factors = deserialize_nonbonded_force(force, N)
+
+            if ff.env_bcc_handle is not None:
+                env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
+                nb_params[:, Q_IDX] = env_bcc_h.parameterize(nb_params[:, Q_IDX])
+
             bps_dict["Nonbonded"].append(
                 potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff).bind(nb_params)
             )
