@@ -408,7 +408,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.top = top
 
-    def prepare_host_edge(self, ff_params: ForcefieldParams, host_config: HostConfig, lamb: float):
+    def prepare_host_edge(self, ff: Forcefield, host_config: HostConfig, lamb: float):
         """
         Prepares the host-guest system
 
@@ -430,8 +430,11 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
         """
         ligand_masses = get_mol_masses(self.mol)
+        ff_params = ff.get_params()
 
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+        host_bps, host_masses = openmm_deserializer.deserialize_system(
+            host_config.omm_system, host_config.omm_topology, ff, cutoff=1.2
+        )
         hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)

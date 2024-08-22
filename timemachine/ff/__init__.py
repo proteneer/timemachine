@@ -69,6 +69,7 @@ class Forcefield:
 
     lj_handle: Optional[nonbonded.LennardJonesHandler]
     lj_handle_intra: Optional[nonbonded.LennardJonesIntraHandler]
+    env_bcc_handle: Optional[nonbonded.EnvironmentBCCPartialHandler]
 
     protein_ff: str
     water_ff: str
@@ -153,9 +154,13 @@ class Forcefield:
         q_handle = None
         q_handle_intra = None
         q_handle_solv = None
+        env_bcc_handle = None
 
         for handle in ff_handlers:
-            if isinstance(handle, bonded.HarmonicBondHandler):
+            if isinstance(handle, nonbonded.EnvironmentBCCPartialHandler):
+                assert env_bcc_handle is None
+                env_bcc_handle = handle
+            elif isinstance(handle, bonded.HarmonicBondHandler):
                 assert hb_handle is None
                 hb_handle = handle
             elif isinstance(handle, bonded.HarmonicAngleHandler):
@@ -238,6 +243,7 @@ class Forcefield:
             q_handle_intra,
             lj_handle,
             lj_handle_intra,
+            env_bcc_handle,
             protein_ff,
             water_ff,
         )
@@ -253,6 +259,7 @@ class Forcefield:
             self.q_handle_intra,
             self.lj_handle,
             self.lj_handle_intra,
+            self.env_bcc_handle,
         ]
 
     def get_params(self) -> ForcefieldParams:
@@ -268,6 +275,7 @@ class Forcefield:
             params(self.q_handle_intra),
             params(self.lj_handle),
             params(self.lj_handle_intra),
+            params(self.env_bcc_handle),
         )
 
     def serialize(self) -> str:
