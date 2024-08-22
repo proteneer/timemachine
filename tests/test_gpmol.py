@@ -118,7 +118,18 @@ def test_gmol():
     with open(fpath, "w") as fh:
         fh.write(svg)
 
+
     i_mols, kvs = st.generate_intermediate_mols_and_kvs()
+    # 0.3 relative to states 1/2, i.e. => 1.3333
+    intermediate_state = gpmol.setup_intermediate_state_standard(0.3, st.checkpoint_states[1], st.checkpoint_states[2])
+
+    # use left one right one depending if we're < left_idx or not.
+
+
+
+    # tbd: how do we generate an i_mol and kv for this intermediate state? can we infer it from the parameters somehow?
+    # if we had w-coordinates... maybe but should just record atom_states...
+
     for idx, (vs, i_mol, kv) in enumerate(zip(st.checkpoint_states, i_mols, kvs)):
         print("i_mol atoms/bonds", i_mol.GetNumAtoms(), i_mol.GetNumBonds())
 

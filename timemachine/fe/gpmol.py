@@ -400,7 +400,9 @@ def induce_parameters(gp, bt, ff, a_to_c):
             params[0] = 0
     ha.idxs = a_to_c[ha.idxs]
     ha.idxs = np.array([canonicalize_bond(x) for x in ha.idxs], dtype=np.int32)
-    ha = ha.bind(angle_params)
+    # ha = ha.bind(angle_params)
+    stable_angle_params =  np.hstack([angle_params, np.zeros((len(angle_params), 1))]) 
+    ha = HarmonicAngleStable(ha.idxs).bind(stable_angle_params)
 
     for params, idxs in zip(proper_params, pt.idxs):
         if np.any([gp.get_atom_state(x) == AtomState.NON_INTERACTING for x in idxs]):
@@ -600,6 +602,220 @@ def generate_chain(mol, core_atoms):
 
     return path_gps
 
+from functools import partial
+from timemachine.fe import interpolate
+from timemachine.fe.single_topology import interpolate_harmonic_bond_params, interpolate_harmonic_angle_params, interpolate_periodic_torsion_params
+from timemachine.potentials import (
+    BoundPotential,
+    ChiralAtomRestraint,
+    ChiralBondRestraint,
+    HarmonicAngleStable,
+    HarmonicBond,
+    Nonbonded,
+    NonbondedPairListPrecomputed,
+    PeriodicTorsion,
+    SummedPotential,
+)
+from typing import TypeVar, Union, cast
+from timemachine.fe.single_topology import interpolate_w_coord
+import jax
+import jax.numpy as jnp
+
+_Bonded = TypeVar("_Bonded", bound=Union[ChiralAtomRestraint, HarmonicAngleStable, HarmonicBond, PeriodicTorsion])
+
+
+def _setup_intermediate_bonded_term(
+    src_bond: BoundPotential[_Bonded], dst_bond: BoundPotential[_Bonded], lamb, align_fn, interpolate_fn
+) -> BoundPotential[_Bonded]:
+    src_cls_bond = type(src_bond.potential)
+    dst_cls_bond = type(dst_bond.potential)
+
+    assert src_cls_bond == dst_cls_bond
+
+    bond_idxs_and_params = align_fn(
+        src_bond.potential.idxs,
+        src_bond.params,
+        dst_bond.potential.idxs,
+        dst_bond.params,
+    )
+    bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params], dtype=np.int32)
+    if bond_idxs_and_params:
+        src_params = jnp.array([x for _, x, _ in bond_idxs_and_params])
+        dst_params = jnp.array([x for _, _, x in bond_idxs_and_params])
+        bond_params = jax.vmap(interpolate_fn, (0, 0, None))(src_params, dst_params, lamb)
+    else:
+        bond_params = jnp.array([])
+
+    r = src_cls_bond(bond_idxs).bind(bond_params)
+    return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
+
+def _setup_intermediate_nonbonded_term(
+    src_nonbonded: BoundPotential[NonbondedPairListPrecomputed],
+    dst_nonbonded: BoundPotential[NonbondedPairListPrecomputed],
+    lamb,
+    align_fn,
+    interpolate_qlj_fn,
+) -> BoundPotential[NonbondedPairListPrecomputed]:
+    assert src_nonbonded.potential.beta == dst_nonbonded.potential.beta
+    assert src_nonbonded.potential.cutoff == dst_nonbonded.potential.cutoff
+
+    cutoff = src_nonbonded.potential.cutoff
+
+    pair_idxs_and_params = align_fn(
+        src_nonbonded.potential.idxs,
+        src_nonbonded.params,
+        dst_nonbonded.potential.idxs,
+        dst_nonbonded.params,
+    )
+
+    pair_idxs = np.array([x for x, _, _ in pair_idxs_and_params], dtype=np.int32)
+
+    if pair_idxs_and_params:
+        src_params = jnp.array([x for _, x, _ in pair_idxs_and_params])
+        dst_params = jnp.array([x for _, _, x in pair_idxs_and_params])
+
+        src_qlj, src_w = src_params[:, :3], src_params[:, 3]
+        dst_qlj, dst_w = dst_params[:, :3], dst_params[:, 3]
+
+        is_excluded_src = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
+        is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
+
+        # parameters for pairs that do not interact in the src state
+        w = interpolate_w_coord(cutoff, dst_w, lamb)
+        pair_params_excluded_src = jnp.concatenate((dst_qlj, w[:, None]), axis=1)
+
+        # parameters for pairs that do not interact in the dst state
+        w = interpolate_w_coord(src_w, cutoff, lamb)
+        pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
+
+        # parameters for pairs that interact in both src and dst states
+        w = jax.vmap(interpolate.linear_interpolation, (0, 0, None))(src_w, dst_w, lamb)
+        qlj = interpolate_qlj_fn(src_qlj, dst_qlj, lamb)
+        pair_params_not_excluded = jnp.concatenate((qlj, w[:, None]), axis=1)
+
+        pair_params = jnp.where(
+            is_excluded_src,
+            pair_params_excluded_src,
+            jnp.where(
+                is_excluded_dst,
+                pair_params_excluded_dst,
+                pair_params_not_excluded,
+            ),
+        )
+    else:
+        pair_params = jnp.array([])
+
+    return NonbondedPairListPrecomputed(
+        pair_idxs, src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
+    ).bind(pair_params)
+
+def setup_intermediate_state_standard(lamb, src_system, dst_system) -> VacuumSystem:
+    r"""
+    Set up intermediate states at some value of the alchemical parameter :math:`\lambda`.
+
+    Parameters
+    ----------
+    lamb: float
+
+    Notes
+    -----
+    For transformations involving formation or deletion of valence terms (i.e., having force constants equal to zero
+    in the :math:`\lambda=0` or :math:`\lambda=1` state), harmonic bond and angle terms are activated before
+    torsions. This is to avoid a potential numerical instability in the torsion functional form when three atoms are
+    collinear.
+
+    - Bonds and angles with :math:`k=0` at :math:`\lambda=0` are activated in the interval :math:`0 \leq \lambda \leq 0.7`
+    - Torsions with :math:`k=0` at :math:`\lambda=0` are activated in the interval :math:`0.7 \leq \lambda \leq 1.0`
+
+    (and similarly for terms with :math:`k=0` at :math:`\lambda=0`, taking :math:`\lambda \to 1-\lambda` in the above.)
+
+    Note that the above only applies to the interactions whose force constant is zero in one end state; otherwise,
+    valence terms are interpolated simultaneously in the interval :math:`0 \leq \lambda \leq 1`)
+    """
+    # stagger the lambda schedule
+    bonds_min, bonds_max = [0.0, 0.7]
+    angles_min, angles_max = [0.0, 0.7]
+    torsions_min, torsions_max = [0.7, 1.0]
+    # chiral_atoms_min, chiral_atoms_max = [0.7, 1.0]
+
+    bond = _setup_intermediate_bonded_term(
+        src_system.bond,
+        dst_system.bond,
+        lamb,
+        interpolate.align_harmonic_bond_idxs_and_params,
+        partial(
+            interpolate_harmonic_bond_params,
+            k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
+            lambda_min=bonds_min,
+            lambda_max=bonds_max,
+        ),
+    )
+
+    angle = _setup_intermediate_bonded_term(
+        src_system.angle,
+        dst_system.angle,
+        lamb,
+        interpolate.align_harmonic_angle_idxs_and_params,
+        partial(
+            interpolate_harmonic_angle_params,
+            k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
+            lambda_min=angles_min,
+            lambda_max=angles_max,
+        ),
+    )
+
+    assert src_system.torsion
+    assert dst_system.torsion
+    torsion = _setup_intermediate_bonded_term(
+        src_system.torsion,
+        dst_system.torsion,
+        lamb,
+        interpolate.align_torsion_idxs_and_params,
+        partial(interpolate_periodic_torsion_params, lambda_min=torsions_min, lambda_max=torsions_max),
+    )
+
+    nonbonded = _setup_intermediate_nonbonded_term(
+        src_system.nonbonded,
+        dst_system.nonbonded,
+        lamb,
+        interpolate.align_nonbonded_idxs_and_params,
+        interpolate.linear_interpolation,
+    )
+
+    # assert src_system.chiral_atom
+    # assert dst_system.chiral_atom
+
+    # assert len(set(tuple(x) for x in src_system.chiral_atom.potential.idxs)) == len(
+    #     src_system.chiral_atom.potential.idxs
+    # )
+    # assert len(set(tuple(x) for x in dst_system.chiral_atom.potential.idxs)) == len(
+    #     dst_system.chiral_atom.potential.idxs
+    # )
+
+    # chiral_atom = self._setup_intermediate_bonded_term(
+    #     src_system.chiral_atom,
+    #     dst_system.chiral_atom,
+    #     lamb,
+    #     interpolate.align_chiral_atom_idxs_and_params,
+    #     partial(
+    #         interpolate_harmonic_force_constant,
+    #         k_min=0.025,
+    #         lambda_min=chiral_atoms_min,
+    #         lambda_max=chiral_atoms_max,
+    #     ),
+    # )
+
+    # assert src_system.chiral_bond
+    # assert dst_system.chiral_bond
+    # chiral_bond = self._setup_intermediate_chiral_bond_term(
+    #     src_system.chiral_bond,
+    #     dst_system.chiral_bond,
+    #     lamb,
+    #     interpolate.linear_interpolation,
+    # )
+
+    return VacuumSystem(bond, angle, torsion, nonbonded, None, None)
+
 
 class SingleTopologyV5(AtomMapMixin):
     def __init__(self, mol_a, mol_b, core, ff):
@@ -622,7 +838,6 @@ class SingleTopologyV5(AtomMapMixin):
         atom_states_fwd = []
         atom_states_rev = []
 
-        print("FWD")
         for gp_a in self.mol_a_path:
             vs_a = induce_parameters(gp_a, bt_a, ff, self.a_to_c)
             vs_b = induce_parameters(self.mol_b_path[-1], bt_b, ff, self.b_to_c)
@@ -630,7 +845,6 @@ class SingleTopologyV5(AtomMapMixin):
             atom_states_fwd.append(get_atom_states(gp_a, self.mol_b_path[-1], self))
             vs_fwd.append(vs_c)
 
-        print("REV")
         for gp_b in self.mol_b_path:
             vs_b = induce_parameters(gp_b, bt_b, ff, self.b_to_c)
             vs_a = induce_parameters(self.mol_a_path[-1], bt_a, ff, self.a_to_c)
