@@ -133,6 +133,7 @@ class Forcefield:
             q_handle_intra=q_handle_intra,
             lj_handle=ff.lj_handle,
             lj_handle_intra=ff.lj_handle_intra,
+            env_bcc_handle=None,
             protein_ff=ff.protein_ff,
             water_ff=ff.water_ff,
         )
