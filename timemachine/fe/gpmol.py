@@ -401,7 +401,7 @@ def induce_parameters(gp, bt, ff, a_to_c):
     ha.idxs = a_to_c[ha.idxs]
     ha.idxs = np.array([canonicalize_bond(x) for x in ha.idxs], dtype=np.int32)
     # ha = ha.bind(angle_params)
-    stable_angle_params =  np.hstack([angle_params, np.zeros((len(angle_params), 1))]) 
+    stable_angle_params = np.hstack([angle_params, np.zeros((len(angle_params), 1))])
     ha = HarmonicAngleStable(ha.idxs).bind(stable_angle_params)
 
     for params, idxs in zip(proper_params, pt.idxs):
@@ -498,7 +498,6 @@ def make_mol(mol_a, mol_b, core, vs, dir, atom_states, min_bond_k=100.0) -> Chem
             assert atom_states[old_j] == AtomState.INTERACTING
 
             if k > min_bond_k:
-                print("adding new", int(new_i), int(new_j), "old", old_i, old_j)
                 mol.AddBond(int(new_i), int(new_j), Chem.BondType.SINGLE)
 
     # assert 0
@@ -602,9 +601,20 @@ def generate_chain(mol, core_atoms):
 
     return path_gps
 
+
 from functools import partial
+from typing import TypeVar, Union, cast
+
+import jax
+import jax.numpy as jnp
+
 from timemachine.fe import interpolate
-from timemachine.fe.single_topology import interpolate_harmonic_bond_params, interpolate_harmonic_angle_params, interpolate_periodic_torsion_params
+from timemachine.fe.single_topology import (
+    interpolate_harmonic_angle_params,
+    interpolate_harmonic_bond_params,
+    interpolate_periodic_torsion_params,
+    interpolate_w_coord,
+)
 from timemachine.potentials import (
     BoundPotential,
     ChiralAtomRestraint,
@@ -616,10 +626,6 @@ from timemachine.potentials import (
     PeriodicTorsion,
     SummedPotential,
 )
-from typing import TypeVar, Union, cast
-from timemachine.fe.single_topology import interpolate_w_coord
-import jax
-import jax.numpy as jnp
 
 _Bonded = TypeVar("_Bonded", bound=Union[ChiralAtomRestraint, HarmonicAngleStable, HarmonicBond, PeriodicTorsion])
 
@@ -648,6 +654,7 @@ def _setup_intermediate_bonded_term(
 
     r = src_cls_bond(bond_idxs).bind(bond_params)
     return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
+
 
 def _setup_intermediate_nonbonded_term(
     src_nonbonded: BoundPotential[NonbondedPairListPrecomputed],
@@ -705,9 +712,10 @@ def _setup_intermediate_nonbonded_term(
     else:
         pair_params = jnp.array([])
 
-    return NonbondedPairListPrecomputed(
-        pair_idxs, src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
-    ).bind(pair_params)
+    return NonbondedPairListPrecomputed(pair_idxs, src_nonbonded.potential.beta, src_nonbonded.potential.cutoff).bind(
+        pair_params
+    )
+
 
 def setup_intermediate_state_standard(lamb, src_system, dst_system) -> VacuumSystem:
     r"""
@@ -856,6 +864,10 @@ class SingleTopologyV5(AtomMapMixin):
         self.chain_atom_states = atom_states_fwd + atom_states_rev[::-1]
         self.checkpoint_states = vs_fwd + vs_rev[::-1]
 
+        print("number of checkpoint states", len(self.checkpoint_states))
+
+        self.i_mols, self.i_kvs = self.generate_intermediate_mols_and_kvs()
+
     def generate_intermediate_mols_and_kvs(self):
         i_mols = []
         kvs = []
@@ -869,3 +881,43 @@ class SingleTopologyV5(AtomMapMixin):
             kvs.append(old_to_new_kv)
 
         return i_mols, kvs
+
+    def get_checkpoint_lambdas(self):
+        return np.linspace(0, 1, len(self.checkpoint_states))
+
+    def setup_intermediate_state(self, lamb):
+        checkpoint_schedule = self.get_checkpoint_lambdas()
+
+        # want lamb = 0 to be 0
+        # want lamb = 1 to be checkpoint_states[-1],
+
+        loc = lamb * (len(self.checkpoint_states) - 1)
+        lhs_idx = int(np.floor(loc))
+        rhs_idx = lhs_idx + 1
+        # deal with the case of lamb=1.0
+        rhs_idx = min(lhs_idx + 1, len(self.checkpoint_states) - 1)
+
+        # loc - checkpoint_schedule[lhs_idx]
+        frac_lamb = lamb - checkpoint_schedule[lhs_idx]
+
+        print("setup", frac_lamb, "lhs_idx", lhs_idx, "rhs_idx", rhs_idx)
+
+        assert frac_lamb >= 0.0
+        assert frac_lamb <= 1.0
+
+        return setup_intermediate_state_standard(
+            frac_lamb, self.checkpoint_states[lhs_idx], self.checkpoint_states[rhs_idx]
+        )
+
+    def setup_intermediate_mol_and_kv(self, lamb):
+        loc = lamb * (len(self.checkpoint_states) - 1)
+        lhs_idx = int(np.floor(loc))
+        # deal with the case of lamb=1.0
+        rhs_idx = min(lhs_idx + 1, len(self.checkpoint_states) - 1)
+
+        print("lambda", lamb, "indexing into", lhs_idx, rhs_idx)
+
+        if loc < self.fwd_idx:
+            return self.i_mols[lhs_idx], self.i_kvs[lhs_idx]
+        else:
+            return self.i_mols[rhs_idx], self.i_kvs[rhs_idx]

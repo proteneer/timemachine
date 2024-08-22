@@ -118,22 +118,69 @@ def test_gmol():
     with open(fpath, "w") as fh:
         fh.write(svg)
 
+    for lamb_idx, lamb in enumerate(np.linspace(0, 1.0, 20)):
+        # print("Processing lambda", lamb)
+        i_state = st.setup_intermediate_state(lamb)
+        i_mol, i_kv = st.setup_intermediate_mol_and_kv(lamb)
+
+        # continue
+
+        U_fn = i_state.get_U_fn()
+        x_a = get_romol_conf(mol_a)
+        x_b = get_romol_conf(mol_b)
+        x0 = SingleTopology(mol_a, mol_b, core, ff).combine_confs(x_a, x_b, 0)
+        frames = simulate_system(U_fn, x0, num_samples=200)
+
+        with open(f"intermediate_{lamb_idx}.sdf", "w") as fh:
+            writer = Chem.SDWriter(fh)
+            for frame in frames:
+                frame -= np.mean(frame, axis=0)
+                mol_conf = Chem.Conformer(i_mol.GetNumAtoms())
+                mol_copy = Chem.Mol(i_mol)
+                for a_idx, pos in enumerate(frame):
+                    if i_kv[a_idx] != -1:
+                        mol_conf.SetAtomPosition(i_kv[a_idx], (pos * 10).astype(np.float64))
+                mol_copy.AddConformer(mol_conf)
+                writer.write(mol_copy)
+            writer.close()
+
+    assert 0
 
     i_mols, kvs = st.generate_intermediate_mols_and_kvs()
     # 0.3 relative to states 1/2, i.e. => 1.3333
-    intermediate_state = gpmol.setup_intermediate_state_standard(0.3, st.checkpoint_states[1], st.checkpoint_states[2])
+    intermediate_state = gpmol.setup_intermediate_state_standard(0.3, st.checkpoint_states[2], st.checkpoint_states[3])
+
+    # careful: need to use the right idx if we're going from the right!
+    i_mol, kv = i_mols[2], kvs[2]
+
+    print("i_mol atoms/bonds", i_mol.GetNumAtoms(), i_mol.GetNumBonds())
+
+    print("Processing")
+    U_fn = intermediate_state.get_U_fn()
+    x_a = get_romol_conf(mol_a)
+    x_b = get_romol_conf(mol_b)
+    x0 = SingleTopology(mol_a, mol_b, core, ff).combine_confs(x_a, x_b, 0)
+    frames = simulate_system(U_fn, x0, num_samples=200)
+
+    with open(f"intermediate.sdf", "w") as fh:
+        writer = Chem.SDWriter(fh)
+        for frame in frames:
+            frame -= np.mean(frame, axis=0)
+            mol_conf = Chem.Conformer(i_mol.GetNumAtoms())
+            mol_copy = Chem.Mol(i_mol)
+            for a_idx, pos in enumerate(frame):
+                if kv[a_idx] != -1:
+                    mol_conf.SetAtomPosition(kv[a_idx], (pos * 10).astype(np.float64))
+            mol_copy.AddConformer(mol_conf)
+            writer.write(mol_copy)
+        writer.close()
 
     # use left one right one depending if we're < left_idx or not.
-
-
-
-    # tbd: how do we generate an i_mol and kv for this intermediate state? can we infer it from the parameters somehow?
-    # if we had w-coordinates... maybe but should just record atom_states...
 
     for idx, (vs, i_mol, kv) in enumerate(zip(st.checkpoint_states, i_mols, kvs)):
         print("i_mol atoms/bonds", i_mol.GetNumAtoms(), i_mol.GetNumBonds())
 
-        print("Processing intermediate state", idx)
+        print("Processing checkpoint state", idx)
         U_fn = vs.get_U_fn()
         x_a = get_romol_conf(mol_a)
         x_b = get_romol_conf(mol_b)
