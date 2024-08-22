@@ -7,6 +7,7 @@ import numpy as np
 import scipy
 
 from timemachine import potentials
+from timemachine.ff.nonbonded.handlers import EnvironmentBCCHandler
 from timemachine.integrator import simulate
 from timemachine.potentials import (
     BoundPotential,
@@ -22,7 +23,6 @@ from timemachine.potentials import (
     Potential,
     SummedPotential,
 )
-from timemachine.ff.nonbonded.handlers import EnvironmentBCCHandler
 
 # Chiral bond restraints are disabled until checks are added (see GH #815)
 # from timemachine.potentials import bonded, chiral_restraints, nonbonded
@@ -117,10 +117,7 @@ def convert_omm_system(omm_system, omm_topology, ff: Forcefield) -> Tuple["Vacuu
     """Convert an openmm.System to a VacuumSystem object, also returning the masses"""
     from timemachine.ff.handlers import openmm_deserializer
 
-    bps, masses = openmm_deserializer.deserialize_system(omm_system, cutoff=1.2)
-    env_bcc_h = get_env_bcc_h(ff)
-    if env_bcc_h is not None:
-        env_bcc_h.
+    bps, masses = openmm_deserializer.deserialize_system(omm_system, omm_topology, ff, cutoff=1.2)
     system = convert_bps_into_system(bps)
     return system, masses
 
