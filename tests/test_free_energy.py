@@ -1,3 +1,5 @@
+from copy import deepcopy
+from dataclasses import replace
 from functools import partial
 from importlib import resources
 from typing import List, Optional
@@ -23,6 +25,7 @@ from timemachine.fe.free_energy import (
     MinOverlapWarning,
     PairBarResult,
     Trajectory,
+    assert_potentials_compatible,
     batches,
     compute_potential_matrix,
     estimate_free_energy_bar,
@@ -41,6 +44,7 @@ from timemachine.md import builders
 from timemachine.md.hrex import HREX, HREXDiagnostics
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, Nonbonded, SummedPotential
+from timemachine.potentials.potentials import HarmonicBond, NonbondedPairListPrecomputed
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -553,3 +557,46 @@ def test_trajectories_by_replica_to_by_state(seed, n_states, n_iters, n_atoms):
     traj_by_replica = sim_res.extract_trajectories_by_replica(atom_idxs)
     traj_by_state = trajectories_by_replica_to_by_state(traj_by_replica, replica_idx_by_state_by_iter)
     np.testing.assert_array_equal(traj_by_state, frames[:, :, atom_idxs])
+
+
+def test_assert_potentials_compatible(hif2a_ligand_pair_single_topology):
+    st, ff = hif2a_ligand_pair_single_topology
+    bps = st.src_system.get_U_fns()
+
+    def should_raise(bps1, bps2, match=None):
+        with pytest.raises(AssertionError, match=match):
+            assert_potentials_compatible(bps1, bps2)
+        with pytest.raises(AssertionError, match=match):
+            assert_potentials_compatible(bps2, bps1)
+
+    should_raise(bps, [])
+    should_raise(bps, bps[::-1])
+    should_raise(bps, bps[1:])
+
+    def modify_hb_idxs(hb):
+        return replace(hb, potential=replace(hb.potential, idxs=hb.potential.idxs[::-1]))
+
+    bps1 = [modify_hb_idxs(bp) if isinstance(bp.potential, HarmonicBond) else bp for bp in bps]
+    should_raise(bps, bps1, "differ in field 'idxs'")
+
+    def modify_nb_cutoff(nb):
+        return replace(nb, potential=replace(nb.potential, cutoff=42.0))
+
+    assert any(isinstance(bp.potential, NonbondedPairListPrecomputed) for bp in bps)
+    bps1 = [modify_nb_cutoff(bp) if isinstance(bp.potential, NonbondedPairListPrecomputed) else bp for bp in bps]
+    should_raise(bps, bps1, "differ in field 'cutoff'")
+
+    def should_succeed(bps1, bps2):
+        assert_potentials_compatible(bps1, bps2)
+        assert_potentials_compatible(bps2, bps1)
+
+    should_succeed(bps, bps)
+
+    bps1 = deepcopy(bps)
+    should_succeed(bps, bps1)
+
+    def modify_hb_params(hb):
+        return replace(hb, params=10.0 * hb.params)
+
+    bps1 = [modify_hb_params(bp) if isinstance(bp.potential, HarmonicBond) else bp for bp in bps]
+    should_succeed(bps, bps1)
