@@ -839,7 +839,7 @@ def run_sims_sequential(
 
     # NOTE: this assumes that states differ only in their parameters, but we do not check this!
     unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in initial_states[0].potentials]
-    for initial_state in initial_states:
+    for i_idx, initial_state in enumerate(initial_states):
         # run simulation
         traj = sample(initial_state, md_params, max_buffer_frames=100)
         print(f"completed simulation at lambda={initial_state.lamb}!")

@@ -7,6 +7,7 @@ from rdkit.Chem import BondType as BT
 from rdkit.Chem import HybridizationType as HT
 from rdkit.Chem.Draw import rdMolDraw2D
 
+from timemachine.fe import model_utils, topology, utils
 from timemachine.fe.topology import BaseTopology
 
 
@@ -400,7 +401,6 @@ def induce_parameters(gp, bt, ff, a_to_c):
             params[0] = 0
     ha.idxs = a_to_c[ha.idxs]
     ha.idxs = np.array([canonicalize_bond(x) for x in ha.idxs], dtype=np.int32)
-    # ha = ha.bind(angle_params)
     stable_angle_params = np.hstack([angle_params, np.zeros((len(angle_params), 1))])
     ha = HarmonicAngleStable(ha.idxs).bind(stable_angle_params)
 
@@ -427,8 +427,11 @@ def induce_parameters(gp, bt, ff, a_to_c):
             params[-1] = 1.2
     nbpl.idxs = a_to_c[nbpl.idxs]
     nbpl.idxs = np.array([canonicalize_bond(x) for x in nbpl.idxs], dtype=np.int32)
-    nbpl = nbpl.bind(nbpl_params)
 
+    # sorted_nbpl_idxs, sorted_nbpl_params = sort_idxs_and_params(nbpl_idxs, nbpl_params)
+
+    # nbpl.idxs = sorted_nbpl_idxs
+    nbpl = nbpl.bind(nbpl_params)
     return VacuumSystem(hb, ha, torsion, nbpl, None, None)
 
 
@@ -480,7 +483,8 @@ def make_mol(mol_a, mol_b, core, vs, dir, atom_states, min_bond_k=100.0) -> Chem
             # in neither, assert
             assert 0
 
-        if atom_states[c_idx] == AtomState.INTERACTING:
+        # if atom_states[c_idx] == AtomState.INTERACTING:
+        if True:
             atom = Chem.Atom(atomic_num)
             old_to_new_kv[c_idx] = mol.GetNumAtoms()
             mol.AddAtom(atom)
@@ -494,8 +498,8 @@ def make_mol(mol_a, mol_b, core, vs, dir, atom_states, min_bond_k=100.0) -> Chem
         new_i, new_j = old_to_new_kv[old_i], old_to_new_kv[old_j]
 
         if new_i != -1 and new_j != -1:
-            assert atom_states[old_i] == AtomState.INTERACTING
-            assert atom_states[old_j] == AtomState.INTERACTING
+            # assert atom_states[old_i] == AtomState.INTERACTING
+            # assert atom_states[old_j] == AtomState.INTERACTING
 
             if k > min_bond_k:
                 mol.AddBond(int(new_i), int(new_j), Chem.BondType.SINGLE)
@@ -503,6 +507,16 @@ def make_mol(mol_a, mol_b, core, vs, dir, atom_states, min_bond_k=100.0) -> Chem
     # assert 0
     # make read-only
     return Chem.Mol(mol), old_to_new_kv
+
+
+def sort_idxs_and_params(idxs, params):
+    tuple_idxs_and_params = [(tuple(x), y) for x, y in zip(idxs, params)]
+    tuple_idxs_and_params.sort(key=lambda x: x[0])
+
+    sorted_idxs = [x[0] for x in tuple_idxs_and_params]
+    sorted_params = [x[1] for x in tuple_idxs_and_params]
+
+    return np.array(sorted_idxs, dtype=np.int32), np.array(sorted_params, dtype=np.float64)
 
 
 def combine_vacuum_systems(vs1, vs2):
@@ -759,6 +773,10 @@ def setup_intermediate_state_standard(lamb, src_system, dst_system) -> VacuumSys
         ),
     )
 
+    sorted_bond_idxs, sorted_bond_params = sort_idxs_and_params(bond.potential.idxs, bond.params)
+    bond.potential.idxs = sorted_bond_idxs
+    bond.params = sorted_bond_params
+
     angle = _setup_intermediate_bonded_term(
         src_system.angle,
         dst_system.angle,
@@ -772,6 +790,10 @@ def setup_intermediate_state_standard(lamb, src_system, dst_system) -> VacuumSys
         ),
     )
 
+    sorted_angle_idxs, sorted_angle_params = sort_idxs_and_params(angle.potential.idxs, angle.params)
+    angle.potential.idxs = sorted_angle_idxs
+    angle.params = sorted_angle_params
+
     assert src_system.torsion
     assert dst_system.torsion
     torsion = _setup_intermediate_bonded_term(
@@ -782,6 +804,10 @@ def setup_intermediate_state_standard(lamb, src_system, dst_system) -> VacuumSys
         partial(interpolate_periodic_torsion_params, lambda_min=torsions_min, lambda_max=torsions_max),
     )
 
+    sorted_torsion_idxs, sorted_torsion_params = sort_idxs_and_params(torsion.potential.idxs, torsion.params)
+    torsion.potential.idxs = sorted_torsion_idxs
+    torsion.params = sorted_torsion_params
+
     nonbonded = _setup_intermediate_nonbonded_term(
         src_system.nonbonded,
         dst_system.nonbonded,
@@ -790,6 +816,9 @@ def setup_intermediate_state_standard(lamb, src_system, dst_system) -> VacuumSys
         interpolate.linear_interpolation,
     )
 
+    sorted_nonbonded_idxs, sorted_nonbonded_params = sort_idxs_and_params(nonbonded.potential.idxs, nonbonded.params)
+    nonbonded.potential.idxs = sorted_nonbonded_idxs
+    nonbonded.params = sorted_nonbonded_params
     # assert src_system.chiral_atom
     # assert dst_system.chiral_atom
 
@@ -861,10 +890,12 @@ class SingleTopologyV5(AtomMapMixin):
             vs_rev.append(vs_c)
 
         self.fwd_idx = len(atom_states_fwd)
+
+        # print("fwd_idx", self.fwd_idx)
         self.chain_atom_states = atom_states_fwd + atom_states_rev[::-1]
         self.checkpoint_states = vs_fwd + vs_rev[::-1]
 
-        print("number of checkpoint states", len(self.checkpoint_states))
+        # print("number of checkpoint states", len(self.checkpoint_states))
 
         self.i_mols, self.i_kvs = self.generate_intermediate_mols_and_kvs()
 
@@ -898,9 +929,11 @@ class SingleTopologyV5(AtomMapMixin):
         rhs_idx = min(lhs_idx + 1, len(self.checkpoint_states) - 1)
 
         # loc - checkpoint_schedule[lhs_idx]
-        frac_lamb = lamb - checkpoint_schedule[lhs_idx]
+        frac_lamb = (lamb - checkpoint_schedule[lhs_idx]) * (len(self.checkpoint_states) - 1)
 
-        print("setup", frac_lamb, "lhs_idx", lhs_idx, "rhs_idx", rhs_idx)
+        # print(checkpoint_schedule)
+        # print(checkpoint_schedule[lhs_idx])
+        # print("lamb, frac lamb", lamb, frac_lamb)
 
         assert frac_lamb >= 0.0
         assert frac_lamb <= 1.0
@@ -915,9 +948,110 @@ class SingleTopologyV5(AtomMapMixin):
         # deal with the case of lamb=1.0
         rhs_idx = min(lhs_idx + 1, len(self.checkpoint_states) - 1)
 
-        print("lambda", lamb, "indexing into", lhs_idx, rhs_idx)
-
         if loc < self.fwd_idx:
             return self.i_mols[lhs_idx], self.i_kvs[lhs_idx]
         else:
             return self.i_mols[rhs_idx], self.i_kvs[rhs_idx]
+
+    def combine_masses(self, use_hmr=False):
+        """
+        Combine masses between two end-states by taking the heavier of the two core atoms.
+
+        Returns
+        -------
+        masses: list of float
+            len(masses) == self.get_num_atoms()
+        """
+        mol_a_masses = utils.get_mol_masses(self.mol_a)
+        mol_b_masses = utils.get_mol_masses(self.mol_b)
+
+        # with HMR, apply to each molecule independently
+        # then use the larger value for core atoms and the
+        # HMR value for dummy atoms
+        if use_hmr:
+            # Can't use src_system, dst_system as these have dummy atoms attached
+            mol_a_top = topology.BaseTopology(self.mol_a, self.ff)
+            mol_b_top = topology.BaseTopology(self.mol_b, self.ff)
+            _, mol_a_hb = mol_a_top.parameterize_harmonic_bond(self.ff.hb_handle.params)
+            _, mol_b_hb = mol_b_top.parameterize_harmonic_bond(self.ff.hb_handle.params)
+
+            mol_a_masses = model_utils.apply_hmr(mol_a_masses, mol_a_hb.idxs)
+            mol_b_masses = model_utils.apply_hmr(mol_b_masses, mol_b_hb.idxs)
+
+        mol_c_masses = []
+        for c_idx in range(self.get_num_atoms()):
+            indicator = self.c_flags[c_idx]
+            if indicator == 0:
+                mass_a = mol_a_masses[self.c_to_a[c_idx]]
+                mass_b = mol_b_masses[self.c_to_b[c_idx]]
+                mass = max(mass_a, mass_b)
+            elif indicator == 1:
+                mass = mol_a_masses[self.c_to_a[c_idx]]
+            elif indicator == 2:
+                mass = mol_b_masses[self.c_to_b[c_idx]]
+            else:
+                assert 0
+
+            mol_c_masses.append(mass)
+
+        return mol_c_masses
+
+    def combine_confs(self, x_a, x_b, lamb=1.0):
+        """
+        Combine conformations of two molecules.
+
+        TODO: interpolate confs based on the lambda value?
+
+        Parameters
+        ----------
+        x_a: np.array of shape (N_A,3)
+            First conformation
+
+        x_b: np.array of shape (N_B,3)
+            Second conformation
+
+        lamb: optional float
+            if lamb > 0.5, map atoms from x_a first, then overwrite with x_b,
+            otherwise use opposite order
+
+        Returns
+        -------
+        np.array of shape (self.num_atoms,3)
+            Combined conformation
+
+        """
+        loc = lamb * (len(self.checkpoint_states) - 1)
+        if loc < self.fwd_idx:
+            return self.combine_confs_lhs(x_a, x_b)
+        else:
+            return self.combine_confs_rhs(x_a, x_b)
+
+    def combine_confs_rhs(self, x_a, x_b):
+        """
+        Combine x_a and x_b conformations for lambda=1
+        """
+        # place a first, then b overrides a
+        assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
+        assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
+        x0 = np.zeros((self.get_num_atoms(), 3))
+        for src, dst in enumerate(self.a_to_c):
+            x0[dst] = x_a[src]
+        for src, dst in enumerate(self.b_to_c):
+            x0[dst] = x_b[src]
+
+        return x0
+
+    def combine_confs_lhs(self, x_a, x_b):
+        """
+        Combine x_a and x_b conformations for lambda=0
+        """
+        # place b first, then a overrides b
+        assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
+        assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
+        x0 = np.zeros((self.get_num_atoms(), 3))
+        for src, dst in enumerate(self.b_to_c):
+            x0[dst] = x_b[src]
+        for src, dst in enumerate(self.a_to_c):
+            x0[dst] = x_a[src]
+
+        return x0

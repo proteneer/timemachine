@@ -1,16 +1,25 @@
 # construct a relative transformation
 from importlib import resources
 
+import matplotlib.pyplot as plt
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import Draw
 from scipy.stats import special_ortho_group
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
-from timemachine.fe import atom_mapping, gpmol
-from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe import atom_mapping, cif_writer, gpmol
+from timemachine.fe.free_energy import HREXParams, MDParams
+from timemachine.fe.plots import (  # plot_hrex_replica_state_distribution_convergence,
+    plot_hrex_replica_state_distribution,
+    plot_hrex_replica_state_distribution_heatmap,
+    plot_hrex_swap_acceptance_rates_convergence,
+    plot_hrex_transition_matrix,
+)
+from timemachine.fe.rbfe import estimate_relative_free_energy, estimate_relative_free_energy_bisection_hrex
+from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
 from timemachine.fe.system import simulate_system
-from timemachine.fe.utils import get_romol_conf, read_sdf, recenter_mol, rotate_mol
+from timemachine.fe.utils import get_romol_conf, plot_atom_mapping_grid, read_sdf, recenter_mol, rotate_mol
 from timemachine.ff import Forcefield
 
 
@@ -74,6 +83,82 @@ def generate_good_rotations(
     return np.array(rotations)[perm][:num_rotations]
 
 
+def write_trajectory_as_cif(mol_a, mol_b, core, all_frames, prefix):
+    atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
+    for window_idx, window_frames in enumerate(all_frames):
+        out_path = f"{prefix}_{window_idx}.cif"
+        writer = cif_writer.CIFWriter([mol_a, mol_b], out_path)
+        for ligand_frame in window_frames:
+            mol_ab_frame = cif_writer.convert_single_topology_mols(ligand_frame, atom_map_mixin)
+            writer.write_frame(mol_ab_frame * 10)
+        writer.close()
+
+
+def plot_and_save(f, fname, *args, **kwargs) -> bytes:
+    """
+    Given a function which generates a plot, return the plot as png bytes.
+    """
+    plt.clf()
+    f(*args, **kwargs)
+    with open(fname, "wb") as fh:
+        plt.savefig(fh, format="png", bbox_inches="tight")
+
+
+def run_pair_vacuum(mol_a, mol_b, core, forcefield, md_params):
+    vacuum_res = estimate_relative_free_energy_bisection_hrex(
+        mol_a, mol_b, core, forcefield, None, md_params=md_params, prefix="vacuum", min_overlap=0.6667, n_windows=64
+    )
+
+    # vacuum_res = estimate_relative_free_energy(
+    #     mol_a, mol_b, core, forcefield, None, prefix="vacuum",
+    #     lambda_interval=(0, 1), # breaks
+    #     # lambda_interval=(0.61, 0.63),
+    #     n_windows=10, md_params=md_params
+    # )
+
+    with open("vacuum_overlap.png", "wb") as fh:
+        fh.write(vacuum_res.plots.overlap_detail_png)
+
+    plot_and_save(
+        plot_hrex_swap_acceptance_rates_convergence,
+        "vac_plot_hrex_swap_acceptance_rates_convergence.png",
+        vacuum_res.hrex_diagnostics.cumulative_swap_acceptance_rates,
+    )
+    plot_and_save(
+        plot_hrex_transition_matrix,
+        "vac_plot_hrex_transition_matrix.png",
+        vacuum_res.hrex_diagnostics.transition_matrix,
+    )
+    plot_and_save(
+        plot_hrex_replica_state_distribution,
+        "vac_plot_hrex_replica_state_distribution.png",
+        vacuum_res.hrex_diagnostics.cumulative_replica_state_counts,
+    )
+    # plot_and_save(
+    #     plot_hrex_replica_state_distribution_convergence,
+    #     "vac_plot_hrex_replica_state_distribution_convergence.png",
+    #     vacuum_res.hrex_diagnostics.cumulative_replica_state_counts,
+    # )
+    plot_and_save(
+        plot_hrex_replica_state_distribution_heatmap,
+        "vac_plot_hrex_replica_state_distribution_heatmap.png",
+        vacuum_res.hrex_diagnostics.cumulative_replica_state_counts,
+    )
+
+
+def test_run_vacuum_pair():
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        all_mols = read_sdf(str(path_to_ligand))
+    mol_a = all_mols[8]
+    mol_b = all_mols[1]
+    cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
+    core = cores[0]
+    ff = Forcefield.load_default()
+    hrex_params = HREXParams(100, 1)
+    md_params = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2024, hrex_params=hrex_params)
+    run_pair_vacuum(mol_a, mol_b, core, ff, md_params)
+
+
 def test_gmol():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(str(path_to_ligand))
@@ -84,10 +169,6 @@ def test_gmol():
     core = cores[0]
 
     ff = Forcefield.load_default()
-    # bt_a = BaseTopology(mol_a, ff)
-    # bt_b = BaseTopology(mol_b, ff)
-    # from timemachine.fe.single_topology import AtomMapMixin
-    # amm = AtomMapMixin(mol_a, mol_b, core)
 
     fpath = f"atom_mapping_{mol_a.GetProp('_Name')}_{mol_b.GetProp('_Name')}.svg"
     with open(fpath, "w") as fh:
@@ -95,36 +176,35 @@ def test_gmol():
 
         fh.write(plot_atom_mapping_grid(mol_a, mol_b, core))
 
+    # draw path
     st = gpmol.SingleTopologyV5(mol_a, mol_b, core, ff)
-    # pm_fwd = process(mol_a, core[:, 0])
-    # pm_rev = process(mol_b, core[:, 1])
-    # pm_core = process_core(pm_fwd[-1], pm_rev[-1])
-
-    # pm_all = pm_fwd + pm_core + pm_rev[::-1]
-    # pm_all = pm_fwd + pm_rev[::-1]
-    # pm_all = pm_fwd
     pm_all = st.mol_a_path + st.mol_b_path[::-1]
     pm_all = [recenter_mol(pm.induced_mol()) for pm in pm_all]
     extra_rotations = generate_good_rotations(pm_all, num_rotations=3)
 
     extra_mols = []
+
+    legends = [f"lamb={x:.2f}" for x in st.get_checkpoint_lambdas()]
     for rot in extra_rotations:
         for pm in pm_all:
             extra_mols.append(rotate_mol(pm, rot))
+            legends.append("")
 
-    svg = Draw.MolsToGridImage(pm_all + extra_mols, useSVG=True, molsPerRow=len(pm_all))
+    svg = Draw.MolsToGridImage(pm_all + extra_mols, useSVG=True, molsPerRow=len(pm_all), legends=legends)
 
     fpath = "path_all.svg"
     with open(fpath, "w") as fh:
         fh.write(svg)
 
-    for lamb_idx, lamb in enumerate(np.linspace(0, 1.0, 20)):
+    ref_frame = None
+
+    # for lamb_idx, lamb in enumerate(np.linspace(0, 1, 2)):
+    for lamb_idx, lamb in enumerate([0.59, 0.61]):
         # print("Processing lambda", lamb)
         i_state = st.setup_intermediate_state(lamb)
         i_mol, i_kv = st.setup_intermediate_mol_and_kv(lamb)
 
         # continue
-
         U_fn = i_state.get_U_fn()
         x_a = get_romol_conf(mol_a)
         x_b = get_romol_conf(mol_b)
@@ -134,7 +214,15 @@ def test_gmol():
         with open(f"intermediate_{lamb_idx}.sdf", "w") as fh:
             writer = Chem.SDWriter(fh)
             for frame in frames:
-                frame -= np.mean(frame, axis=0)
+                from scipy.spatial.transform import Rotation
+
+                frame = frame - np.mean(frame, axis=0, keepdims=True)
+                if ref_frame is None:
+                    ref_frame = frame
+                R, _ = Rotation.align_vectors(ref_frame, frame)
+                frame = R.apply(frame)
+
+                # frame -= np.mean(frame, axis=0)
                 mol_conf = Chem.Conformer(i_mol.GetNumAtoms())
                 mol_copy = Chem.Mol(i_mol)
                 for a_idx, pos in enumerate(frame):

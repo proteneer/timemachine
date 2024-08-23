@@ -480,7 +480,7 @@ def estimate_relative_free_energy(
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+    single_topology = SingleTopologyV5(mol_a, mol_b, core, ff)
 
     lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
     lambda_schedule = np.linspace(lambda_min, lambda_max, n_windows or DEFAULT_NUM_WINDOWS)
@@ -520,6 +520,9 @@ def estimate_relative_free_energy_bisection_or_hrex(*args, **kwargs) -> Simulati
         else estimate_relative_free_energy_bisection
     )
     return estimate_fxn(*args, **kwargs)
+
+
+from timemachine.fe.gpmol import SingleTopologyV5
 
 
 def estimate_relative_free_energy_bisection(
@@ -588,7 +591,7 @@ def estimate_relative_free_energy_bisection(
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+    single_topology = SingleTopologyV5(mol_a, mol_b, core, ff)
 
     lambda_interval = lambda_interval or (0.0, 1.0)
     lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
@@ -805,7 +808,7 @@ def estimate_relative_free_energy_bisection_hrex(
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+    single_topology = SingleTopologyV5(mol_a, mol_b, core, ff)
 
     lambda_interval = lambda_interval or (0.0, 1.0)
     lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
