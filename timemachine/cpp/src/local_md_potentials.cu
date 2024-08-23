@@ -68,14 +68,17 @@ LocalMDPotentials::LocalMDPotentials(
         construct_ixn_group_potential(N_, nonbonded_bp_->potential, nonbonded_bp_->size, nonbonded_bp_->d_p.data);
 
     // Add the restraint potential and ixn group potential
-    all_potentials_.push_back(bound_free_restraint_);
+    // Since the restraint has no sync, push to front
+    all_potentials_.insert(all_potentials_.begin(), bound_free_restraint_);
+    // Push ixn group to back since it has a sync
     all_potentials_.push_back(ixn_group_);
     if (!freeze_reference) {
         frozen_restraint_ = std::shared_ptr<LogFlatBottomBond<float>>(
             new LogFlatBottomBond<float>(default_bonds, 1 / (temperature * BOLTZ)));
         bound_frozen_restraint_ =
             std::shared_ptr<BoundPotential>(new BoundPotential(frozen_restraint_, default_params));
-        all_potentials_.push_back(bound_frozen_restraint_);
+        // Since the restraint has no sync, push to front
+        all_potentials_.insert(all_potentials_.begin(), bound_frozen_restraint_);
     }
 
     gpuErrchk(cub::DevicePartition::If(
