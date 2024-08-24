@@ -854,6 +854,37 @@ def setup_intermediate_state_standard(lamb, src_system, dst_system) -> VacuumSys
     return VacuumSystem(bond, angle, torsion, nonbonded, None, None)
 
 
+from scipy.stats import special_ortho_group
+
+from timemachine.fe.utils import get_romol_conf, score_2d
+
+
+def generate_good_rotations(
+    mols,
+    num_rotations: int = 3,
+    max_rotations: int = 1000,
+    seed: int = 1234,
+):
+    assert num_rotations < max_rotations
+    # generate some good rotations so that the viewing angle is pleasant, (so clashes are minimized):
+    confs = [get_romol_conf(mol) for mol in mols]
+
+    unif_so3 = special_ortho_group(dim=3, seed=seed)
+
+    scores = []
+    rotations = []
+    for _ in range(max_rotations):
+        r = unif_so3.rvs()
+        s = [score_2d(x @ r.T) for x in confs]
+        # score_b = score_2d(conf_b @ r.T)
+        # take the bigger of the two scores
+        scores.append(max(s))
+        rotations.append(r)
+
+    perm = np.argsort(scores, kind="stable")
+    return np.array(rotations)[perm][:num_rotations]
+
+
 class SingleTopologyV5(AtomMapMixin):
     def __init__(self, mol_a, mol_b, core, ff):
         super().__init__(mol_a, mol_b, core)
@@ -912,6 +943,27 @@ class SingleTopologyV5(AtomMapMixin):
             kvs.append(old_to_new_kv)
 
         return i_mols, kvs
+
+    def draw_path(self):
+        from rdkit.Chem import Draw
+
+        from timemachine.fe.utils import recenter_mol, rotate_mol
+
+        # st = gpmol.SingleTopologyV5(mol_a, mol_b, core, ff)
+        pm_all = self.mol_a_path + self.mol_b_path[::-1]
+        pm_all = [recenter_mol(pm.induced_mol()) for pm in pm_all]
+        extra_rotations = generate_good_rotations(pm_all, num_rotations=3)
+
+        extra_mols = []
+
+        legends = [f"lamb={x:.2f}" for x in self.get_checkpoint_lambdas()]
+        for rot in extra_rotations:
+            for pm in pm_all:
+                extra_mols.append(rotate_mol(pm, rot))
+                legends.append("")
+
+        svg = Draw.MolsToGridImage(pm_all + extra_mols, useSVG=True, molsPerRow=len(pm_all), legends=legends)
+        return svg
 
     def get_checkpoint_lambdas(self):
         return np.linspace(0, 1, len(self.checkpoint_states))

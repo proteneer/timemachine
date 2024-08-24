@@ -1005,6 +1005,8 @@ def run_sims_bisection(
 
     trajectories = [get_samples(lamb) for lamb in lambdas]
 
+    print("Bisected Lambda Schedule:", lambdas)
+
     return results, trajectories
 
 

@@ -45,44 +45,6 @@ def process_core(gp_a, gp_b):
     return path_gps
 
 
-def score_2d(conf, norm=2):
-    # get the goodness of a 2D depiction
-    # low_score = good, high_score = bad
-
-    score = 0
-    for idx, (x0, y0, _) in enumerate(conf):
-        for x1, y1, _ in conf[idx + 1 :]:
-            score += 1 / ((x0 - x1) ** norm + (y0 - y1) ** norm)
-
-    return score / len(conf)
-
-
-def generate_good_rotations(
-    mols,
-    num_rotations: int = 3,
-    max_rotations: int = 1000,
-    seed: int = 1234,
-):
-    assert num_rotations < max_rotations
-    # generate some good rotations so that the viewing angle is pleasant, (so clashes are minimized):
-    confs = [get_romol_conf(mol) for mol in mols]
-
-    unif_so3 = special_ortho_group(dim=3, seed=seed)
-
-    scores = []
-    rotations = []
-    for _ in range(max_rotations):
-        r = unif_so3.rvs()
-        s = [score_2d(x @ r.T) for x in confs]
-        # score_b = score_2d(conf_b @ r.T)
-        # take the bigger of the two scores
-        scores.append(max(s))
-        rotations.append(r)
-
-    perm = np.argsort(scores, kind="stable")
-    return np.array(rotations)[perm][:num_rotations]
-
-
 def write_trajectory_as_cif(mol_a, mol_b, core, all_frames, prefix):
     atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
     for window_idx, window_frames in enumerate(all_frames):
@@ -149,11 +111,23 @@ def run_pair_vacuum(mol_a, mol_b, core, forcefield, md_params):
 def test_run_vacuum_pair():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(str(path_to_ligand))
-    mol_a = all_mols[8]
-    mol_b = all_mols[1]
+    mol_a = all_mols[1]
+    mol_b = all_mols[4]
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
     ff = Forcefield.load_default()
+
+    st = gpmol.SingleTopologyV5(mol_a, mol_b, core, ff)
+    fpath = "path_all.svg"
+    with open(fpath, "w") as fh:
+        fh.write(st.draw_path())
+
+    fpath = f"atom_mapping_{mol_a.GetProp('_Name')}_{mol_b.GetProp('_Name')}.svg"
+    with open(fpath, "w") as fh:
+        from timemachine.fe.utils import plot_atom_mapping_grid
+
+        fh.write(plot_atom_mapping_grid(mol_a, mol_b, core))
+
     hrex_params = HREXParams(100, 1)
     md_params = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2024, hrex_params=hrex_params)
     run_pair_vacuum(mol_a, mol_b, core, ff, md_params)
@@ -178,23 +152,23 @@ def test_gmol():
 
     # draw path
     st = gpmol.SingleTopologyV5(mol_a, mol_b, core, ff)
-    pm_all = st.mol_a_path + st.mol_b_path[::-1]
-    pm_all = [recenter_mol(pm.induced_mol()) for pm in pm_all]
-    extra_rotations = generate_good_rotations(pm_all, num_rotations=3)
+    # pm_all = st.mol_a_path + st.mol_b_path[::-1]
+    # pm_all = [recenter_mol(pm.induced_mol()) for pm in pm_all]
+    # extra_rotations = generate_good_rotations(pm_all, num_rotations=3)
 
-    extra_mols = []
+    # extra_mols = []
 
-    legends = [f"lamb={x:.2f}" for x in st.get_checkpoint_lambdas()]
-    for rot in extra_rotations:
-        for pm in pm_all:
-            extra_mols.append(rotate_mol(pm, rot))
-            legends.append("")
+    # legends = [f"lamb={x:.2f}" for x in st.get_checkpoint_lambdas()]
+    # for rot in extra_rotations:
+    #     for pm in pm_all:
+    #         extra_mols.append(rotate_mol(pm, rot))
+    #         legends.append("")
 
-    svg = Draw.MolsToGridImage(pm_all + extra_mols, useSVG=True, molsPerRow=len(pm_all), legends=legends)
+    # svg = Draw.MolsToGridImage(pm_all + extra_mols, useSVG=True, molsPerRow=len(pm_all), legends=legends)
 
     fpath = "path_all.svg"
     with open(fpath, "w") as fh:
-        fh.write(svg)
+        fh.write(st.draw_path())
 
     ref_frame = None
 
