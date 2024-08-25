@@ -31,6 +31,7 @@ from timemachine.fe.rbfe import (
 )
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
+from timemachine.lib import VelocityVerletIntegrator
 from timemachine.md import builders
 from timemachine.potentials import (
     ChiralAtomRestraint,
@@ -263,6 +264,29 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
 @pytest.mark.parametrize("mode", ["sequential", "bisection", "hrex"])
 def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling):
     run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling)
+
+
+def test_combined_vacuum_matches_sequential(hif2a_single_topology_leg):
+    single_topology, host, host_name, n_frames, n_windows, initial_states = hif2a_single_topology_leg
+    assert n_windows >= 2
+    if host_name is not None:
+        pytest.skip("Only supports vacuum")
+
+    md_params = MDParams(n_frames=n_frames, n_eq_steps=1, steps_per_frame=400, seed=2023)
+
+    new_impl = VelocityVerletIntegrator(initial_states[0].integrator.dt, initial_states[0].integrator.masses)
+    for state in initial_states:
+        state.integrator = new_impl
+    mega_initial_state = combine_vacuum_initial_states(initial_states)
+
+    _, ref_trajs = run_sims_sequential(initial_states, md_params, temperature=DEFAULT_TEMP)
+    combined_trajs = sample(mega_initial_state, md_params, max_buffer_frames=n_frames)
+    state_coords = initial_states[0].x0
+    combined_xs = np.array(combined_trajs.frames).reshape(n_frames, n_windows, *state_coords.shape)
+    ref_xs_concat = np.hstack([np.array(traj.frames) for traj in ref_trajs]).reshape(
+        n_frames, n_windows, *state_coords.shape
+    )
+    np.testing.assert_array_equal(ref_xs_concat, combined_xs)
 
 
 if __name__ == "__main__":

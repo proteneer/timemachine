@@ -718,7 +718,7 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     ctxt = get_context(initial_state, md_params)
 
     return sample_with_context(
-        ctxt, md_params, initial_state.integrator.temperature, initial_state.ligand_idxs, max_buffer_frames
+        ctxt, md_params, getattr(initial_state.integrator, "temperature", 300.0), initial_state.ligand_idxs, max_buffer_frames
     )
 
 
