@@ -1118,7 +1118,10 @@ def compute_potential_matrix(
     """
 
     coords = np.array([xvb.coords for xvb in hrex.replicas])
+    print(coords.shape)
+    print(coords)
     boxes = np.array([xvb.box for xvb in hrex.replicas])
+    print(boxes.shape)
 
     def compute_sparse(k: int):
         n_states = len(hrex.replicas)
@@ -1131,6 +1134,7 @@ def compute_potential_matrix(
         _, _, U = potential.execute_batch_sparse(
             coords, params_by_state, boxes, coords_batch_idxs, params_batch_idxs, False, False, True
         )
+        print(U)
 
         U_kl = np.full((n_states, n_states), np.inf)
         U_kl[coords_batch_idxs, params_batch_idxs] = U
@@ -1405,6 +1409,268 @@ def run_sims_hrex(
     # Avoids repeated creation of underlying GPU potentials
     assert isinstance(potential, custom_ops.SummedPotential)
     unbound_impls = potential.get_potentials()
+
+    def make_energy_decomposed_state(
+        results: Tuple[StoredArrays, List[NDArray], InitialState]
+    ) -> EnergyDecomposedState[StoredArrays]:
+        frames, boxes, initial_state = results
+        # Reuse the existing unbound potentials already constructed to make a batch Us fn
+        return EnergyDecomposedState(
+            frames,
+            boxes,
+            get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature),
+        )
+
+    results_by_state = [
+        (samples.frames, samples.boxes, initial_state)
+        for samples, initial_state in zip(samples_by_state, initial_states)
+    ]
+
+    bar_results = list(
+        pairwise_transform_and_combine(
+            results_by_state,
+            make_energy_decomposed_state,
+            lambda s1, s2: estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature),
+        )
+    )
+
+    diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
+
+    return PairBarResult(list(initial_states), bar_results), samples_by_state, diagnostics
+
+
+def run_sims_hrex_combined(
+    initial_states: Sequence[InitialState],
+    md_params: MDParams,
+    n_swap_attempts_per_iter: Optional[int] = None,
+    print_diagnostics_interval: Optional[int] = 10,
+) -> Tuple[PairBarResult, List[Trajectory], HREXDiagnostics]:
+    r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
+
+    See documentation for :py:func:`timemachine.md.hrex.run_hrex` for details of the algorithm and implementation.
+
+    Parameters
+    ----------
+    initial_states: sequence of InitialState
+        States to sample. Should be ordered such that adjacent states have significant overlap for good mixing
+        performance
+
+    md_params: MDParams
+        MD parameters
+
+    n_swap_attempts_per_iter: int or None, optional
+        Number of nearest-neighbor swaps to attempt per iteration. Defaults to len(initial_states) ** 4.
+
+    print_diagnostics_interval: int or None, optional
+        If not None, print diagnostics every N iterations
+
+    Returns
+    -------
+    PairBarResult
+        results of pair BAR free energy analysis
+
+    list of Trajectory
+        Trajectory for each state
+
+    HREXDiagnostics
+        HREX statistics (e.g. swap rates, replica-state distribution)
+    """
+
+    assert md_params.hrex_params is not None
+
+    # TODO: to support replica exchange with variable temperatures,
+    #  consider modifying sample fxn to rescale velocities by sqrt(T_new/T_orig)
+    def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
+        """check that xvb from state_a can be swapped with xvb from state_b (up to timestep error),
+        with swap acceptance probability that depends only on U_a, U_b, kBT"""
+
+        # assert (A, B) have identical masses, temperature
+        intg_a = state_a.integrator
+        intg_b = state_b.integrator
+
+        assert (intg_a.masses == intg_b.masses).all()
+        assert intg_a.temperature == intg_b.temperature
+
+        # assert same pressure (or same volume)
+        assert (state_a.barostat is None) == (state_b.barostat is None), "should both be NVT or both be NPT"
+
+        if state_a.barostat and state_b.barostat:
+            # assert (A, B) are compatible NPT ensembles
+            baro_a: MonteCarloBarostat = state_a.barostat
+            baro_b: MonteCarloBarostat = state_b.barostat
+
+            assert baro_a.pressure == baro_b.pressure
+            assert baro_a.temperature == baro_b.temperature
+
+            # also, assert barostat and integrator are self-consistent
+            assert intg_a.temperature == baro_a.temperature
+
+        else:
+            # assert (A, B) are compatible NVT ensembles
+            assert (state_a.box0 == state_b.box0).all()
+
+    for s in initial_states[1:]:
+        assert_ensembles_compatible(initial_states[0], s)
+
+    if n_swap_attempts_per_iter is None:
+        n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
+
+    mega_state = combine_vacuum_initial_states(initial_states)
+    per_state_potential = get_context(initial_states[0], md_params=md_params).get_potentials()[0].get_potential()
+
+    # Set up overall potential and context using the first state.
+    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
+    context = get_context(mega_state, md_params=md_params)
+    bound_potentials = context.get_potentials()
+    assert len(bound_potentials) == 1
+    potential = bound_potentials[0].get_potential()
+    temperature = initial_states[0].integrator.temperature
+    ligand_idxs = initial_states[0].ligand_idxs
+
+    def get_flattened_params(initial_state: InitialState) -> NDArray:
+        return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
+
+    params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
+
+    def get_combined_params(replica_idx_by_state: List[ReplicaIdx]):
+        return np.concatenate([params_by_state[replica] for replica in replica_idx_by_state]).reshape(-1)
+
+    state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
+    neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
+
+    if len(initial_states) == 2:
+        # Add an identity move to the mixture to ensure aperiodicity
+        neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
+
+    barostat = context.get_barostat()
+    assert barostat is None
+
+    window_shape = (len(initial_states), *initial_states[0].x0.shape)
+
+    def get_equilibrated_xvbs() -> CoordsVelBox:
+        if md_params.n_eq_steps > 0:
+            # Set the movers to 0 to ensure they all equilibrate the same way
+            # Ensure initial mover state is consistent across replicas
+            for mover in context.get_movers():
+                mover.set_step(0)
+
+            xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
+            assert len(xs) == 1
+            x0 = xs[0]
+            v0 = context.get_v_t()
+            box0 = boxes[0]
+
+            x0 = x0.reshape(*window_shape)
+            v0 = v0.reshape(*window_shape)
+            print("DONE")
+            return [CoordsVelBox(x0[i], box0, v0[i]) for i in range(len(initial_states))]
+        else:
+            return [CoordsVelBox(state.x0, state.box0, state.v0) for state in initial_states]
+
+    initial_replicas = get_equilibrated_xvbs()
+
+    hrex = HREX.from_replicas(initial_replicas)
+
+    samples_by_state: List[Trajectory] = [Trajectory.empty() for _ in initial_states]
+    replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
+    fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
+
+    begin_loop_time = time.perf_counter()
+    last_update_time = begin_loop_time
+
+    print(md_params.n_frames)
+    for current_frame in range(md_params.n_frames):
+        bound_potentials[0].set_params(get_combined_params(hrex.replica_idx_by_state))
+        current_step = current_frame * md_params.steps_per_frame
+
+        # params = params_by_state[state_idx]
+        # bound_potentials[0].set_params(params)
+        md_params_replica = replace(md_params, n_frames=1, n_eq_steps=0, seed=current_frame)
+
+        assert md_params_replica.n_frames == 1
+        # Get the next set of frames from the iterator, which will be the only value returned
+        frame, box, final_velos = next(
+            sample_with_context_iter(context, md_params_replica, temperature, ligand_idxs, batch_size=1)
+        )
+        window_frames = frame.reshape(md_params_replica.n_frames, *window_shape)
+        window_velos = final_velos.reshape(*window_shape)
+        print(window_frames[:35])
+        print(window_frames[35:])
+
+        def sample_replica(_: CoordsVelBox, state_idx: StateIdx) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
+            return window_velos[state_idx], box[-1], window_velos[state_idx], None
+
+        def replica_from_samples(last_sample: Tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
+            frame, box, velos, _ = last_sample
+            return CoordsVelBox(frame, velos, box)
+
+        hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
+        U_kl = compute_potential_matrix(
+            per_state_potential, hrex, params_by_state, md_params.hrex_params.max_delta_states
+        )
+        log_q_kl = -U_kl / (BOLTZ * temperature)
+
+        replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
+
+        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
+            neighbor_pairs,
+            log_q_kl,
+            n_swap_attempts_per_iter,
+            md_params.seed + current_frame + 1,  # NOTE: "+ 1" is for bitwise compatibility with previous version
+        )
+
+        if len(initial_states) == 2:
+            fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
+
+        for samples, (xs, boxes, velos, final_barostat_volume_scale_factor) in zip(
+            samples_by_state, samples_by_state_iter
+        ):
+            samples.frames.extend([xs])
+            samples.boxes.extend([boxes])
+            samples.final_velocities = velos
+            samples.final_barostat_volume_scale_factor = final_barostat_volume_scale_factor
+
+        fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
+
+        if print_diagnostics_interval and (current_frame + 1) % print_diagnostics_interval == 0:
+            current_time = time.perf_counter()
+
+            def get_swap_acceptance_rates(fraction_accepted_by_pair):
+                return [
+                    n_accepted / n_proposed if n_proposed else np.nan
+                    for n_accepted, n_proposed in fraction_accepted_by_pair
+                ]
+
+            instantaneous_swap_acceptance_rates = get_swap_acceptance_rates(fraction_accepted_by_pair)
+            average_swap_acceptance_rates = get_swap_acceptance_rates(np.sum(fraction_accepted_by_pair_by_iter, axis=0))
+
+            wall_time_per_frame_current = (current_time - last_update_time) / print_diagnostics_interval
+            wall_time_per_frame_average = (current_time - begin_loop_time) / (current_frame + 1)
+            estimated_wall_time_remaining = wall_time_per_frame_average * (md_params.n_frames - (current_frame + 1))
+
+            def format_rate(r):
+                return f"{r * 100.0:5.1f}%"
+
+            def format_rates(rs):
+                return " | ".join(format_rate(r) for r in rs)
+
+            print("Frame", current_frame + 1)
+            print(
+                f"{estimated_wall_time_remaining:.1f} s remaining at "
+                f"{wall_time_per_frame_average:.2f} s/frame "
+                f"({wall_time_per_frame_current:.2f} s/frame since last message)"
+            )
+            print("HREX acceptance rates, current :", format_rates(instantaneous_swap_acceptance_rates))
+            print("HREX acceptance rates, average :", format_rates(average_swap_acceptance_rates))
+            print("HREX replica permutation       :", hrex.replica_idx_by_state)
+            print()
+
+            last_update_time = current_time
+
+    # Use the unbound potentials associated with the summed potential once to compute the u_kln
+    # Avoids repeated creation of underlying GPU potentials
+    assert isinstance(per_state_potential, custom_ops.SummedPotential)
+    unbound_impls = per_state_potential.get_potentials()
 
     def make_energy_decomposed_state(
         results: Tuple[StoredArrays, List[NDArray], InitialState]

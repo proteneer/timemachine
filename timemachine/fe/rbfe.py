@@ -24,6 +24,7 @@ from timemachine.fe.free_energy import (
     make_pair_bar_plots,
     run_sims_bisection,
     run_sims_hrex,
+    run_sims_hrex_combined,
     run_sims_sequential,
 )
 from timemachine.fe.lambda_schedule import bisection_lambda_schedule
@@ -713,10 +714,16 @@ def estimate_relative_free_energy_bisection_hrex_impl(
             for initial_state, traj in zip(initial_states, trajectories_by_state)
         ]
 
-        pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
-            initial_states_hrex,
-            replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
-        )
+        if initial_states[0].barostat is None:
+            print("RUNNING IT HERE")
+            pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex_combined(
+                initial_states_hrex, replace(md_params, n_eq_steps=0)
+            )
+        else:
+            pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
+                initial_states_hrex,
+                replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
+            )
 
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
 

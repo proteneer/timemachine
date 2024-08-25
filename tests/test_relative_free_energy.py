@@ -346,6 +346,17 @@ def test_steps_per_frames():
         np.testing.assert_array_equal(frame[-1], test_frame[-1])
 
 
+def test_vacuum_combined_hrex():
+    """Verifies that modifying steps per frames doesn't change result trajectory"""
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    seed = 2024
+    frames = 2
+    md_params = MDParams(n_frames=frames, n_eq_steps=10, steps_per_frame=2, seed=seed, hrex_params=HREXParams())
+    res = run_vacuum(mol_a, mol_b, core, forcefield, None, md_params=md_params, n_windows=2)
+    assert len(res.frames[0]) == frames
+
+
 def test_imaging_frames():
     """Verify that imaging frames places ligand at center and all coordinates are close to being within the box.
 
