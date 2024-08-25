@@ -69,7 +69,7 @@ def hif2a_single_topology_leg(request):
 
 
 def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpoints: Tuple[float, float]):
-    forcefield = Forcefield.load_default()
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     host_config: Optional[HostConfig] = None
     assert len(lambda_endpoints) == 2
     assert lambda_endpoints[0] < lambda_endpoints[1]
@@ -287,6 +287,37 @@ def test_combined_vacuum_matches_sequential(hif2a_single_topology_leg):
         n_frames, n_windows, *state_coords.shape
     )
     np.testing.assert_array_equal(ref_xs_concat, combined_xs)
+
+    last_combined_frame = combined_trajs.frames[-1]
+    combined_bound_impls = [pot.to_gpu(np.float32).bound_impl for pot in mega_initial_state.potentials]
+    combined_du_dx = [
+        bound_impl.execute(last_combined_frame, mega_initial_state.box0, compute_u=False)[0]
+        for bound_impl in combined_bound_impls
+    ]
+    combined_u = [
+        bound_impl.execute(last_combined_frame, mega_initial_state.box0, compute_du_dx=False, compute_u=True)[1]
+        for bound_impl in combined_bound_impls
+    ]
+    split_du_dx = []
+    split_u = []
+    for state, traj in zip(initial_states, ref_trajs):
+        state_du_dx = []
+        frame = traj.frames[-1]
+        box = traj.boxes[-1]
+        for pot in state.potentials:
+            bound_impl = pot.to_gpu(np.float32).bound_impl
+            du_dx, u = bound_impl.execute(frame, box, compute_u=True, compute_du_dx=True)
+            state_du_dx.append(du_dx)
+            split_u.append(u)
+
+        split_du_dx.append(state_du_dx)
+
+    combined_du_dx = np.array(combined_du_dx)
+    split_du_dx = np.array(split_du_dx)
+    split_du_dx = split_du_dx.swapaxes(0, 1).reshape(combined_du_dx.shape)
+    np.testing.assert_array_equal(combined_du_dx, split_du_dx)
+
+    np.testing.assert_allclose(np.sum(split_u), np.sum(combined_u))
 
 
 if __name__ == "__main__":
