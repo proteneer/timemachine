@@ -160,21 +160,13 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
             verbose=True,
         )
     elif mode == "combined":
+        assert host_name == "vacuum"
         mega_initial_state = combine_vacuum_initial_states(initial_states)
         run = partial(sample, mega_initial_state, md_params, max_buffer_frames=100)
     else:
         assert False
 
     var, elapsed_ns = run_with_timing(run)  # type: ignore
-    if mode == "combined":
-        print(len(var.frames), var.frames[0].shape, mega_initial_state.x0.shape)
-        last_frame = var.frames[-1]
-        box = var.boxes[-1]
-        for pot in mega_initial_state.potentials:
-            from timemachine.md.minimizer import check_force_norm
-
-            du_dx, _ = pot.to_gpu(np.float32).bound_impl.execute(last_frame, box, compute_u=False)
-            check_force_norm(-du_dx)
 
     print("water sampling:", enable_water_sampling)
     print("mode:", mode)
