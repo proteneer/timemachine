@@ -212,7 +212,16 @@ if __name__ == "__main__":
         )
         for mode in args.modes:
             ns_per_day = run_benchmark_hif2a_single_topology(
-                (single_topology, host, host_name if host_name != "vacuum" else None, args.n_frames, windows, initial_states), mode, args.water_sampling
+                (
+                    single_topology,
+                    host,
+                    host_name if host_name != "vacuum" else None,
+                    args.n_frames,
+                    windows,
+                    initial_states,
+                ),
+                mode,
+                args.water_sampling,
             )
             timings[mode].append(ns_per_day)
     with open(f"{args.leg}_{args.n_frames}_benchmarks.json", "w") as ofs:

@@ -2,7 +2,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, Iterator, List, Optional, Sequence, Tuple, Iterable
+from typing import Callable, Iterable, Iterator, List, Optional, Sequence, Tuple
 from warnings import warn
 
 import jax
@@ -35,7 +35,17 @@ from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get
 from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, HarmonicBond, NonbondedInteractionGroup, SummedPotential, HarmonicAngleStable, HarmonicAngle, PeriodicTorsion, NonbondedPairListPrecomputed, ChiralAtomRestraint
+from timemachine.potentials import (
+    BoundPotential,
+    ChiralAtomRestraint,
+    HarmonicAngle,
+    HarmonicAngleStable,
+    HarmonicBond,
+    NonbondedInteractionGroup,
+    NonbondedPairListPrecomputed,
+    PeriodicTorsion,
+    SummedPotential,
+)
 from timemachine.utils import batches, pairwise_transform_and_combine
 
 WATER_SAMPLER_MOVERS = (
@@ -787,7 +797,11 @@ def sample(initial_state: InitialState, md_params: MDParams, max_buffer_frames: 
     ctxt = get_context(initial_state, md_params)
 
     return sample_with_context(
-        ctxt, md_params, getattr(initial_state.integrator, "temperature", 300.0), initial_state.ligand_idxs, max_buffer_frames
+        ctxt,
+        md_params,
+        getattr(initial_state.integrator, "temperature", 300.0),
+        initial_state.ligand_idxs,
+        max_buffer_frames,
     )
 
 
