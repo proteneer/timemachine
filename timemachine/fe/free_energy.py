@@ -310,7 +310,11 @@ class HREXSimulationResult(SimulationResult):
         return self.extract_trajectories_by_replica(ligand_idxs)
 
 
-def combine_vacuum_initial_states(states: Iterable[InitialState]):
+def combine_vacuum_initial_states(states: Iterable[InitialState]) -> InitialState:
+    """Combine a series of IntitialStates that are Vacuum systems.
+
+    This allows for a linear speed up.
+    """
     atoms_per_state = [state.x0.shape[0] for state in states]
     combined_coords = np.concatenate([state.x0 for state in states])
     combined_masses = np.concatenate([state.integrator.masses for state in states])

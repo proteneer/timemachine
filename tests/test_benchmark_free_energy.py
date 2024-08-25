@@ -108,6 +108,8 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
     assert n_windows >= 2
     if host_name != "complex" and enable_water_sampling:
         pytest.skip("Water sampling disabled outside of complex")
+    elif mode == "combined" and host_name is not None:
+        pytest.skip("Can't run combined without vacuum")
 
     md_params = MDParams(n_frames=n_frames, n_eq_steps=1, steps_per_frame=400, seed=2023)
     if enable_water_sampling:
@@ -160,7 +162,7 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
             verbose=True,
         )
     elif mode == "combined":
-        assert host_name == "vacuum"
+        assert host_name is None
         mega_initial_state = combine_vacuum_initial_states(initial_states)
         run = partial(sample, mega_initial_state, md_params, max_buffer_frames=100)
     else:
@@ -186,7 +188,7 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
 
 @pytest.mark.nightly(reason="Slow")
 @pytest.mark.parametrize("enable_water_sampling", [False, True])
-@pytest.mark.parametrize("mode", ["sequential", "bisection", "hrex"])
+@pytest.mark.parametrize("mode", ["sequential", "bisection", "hrex", "combined"])
 def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling):
     run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling)
 
@@ -210,7 +212,7 @@ if __name__ == "__main__":
         )
         for mode in args.modes:
             ns_per_day = run_benchmark_hif2a_single_topology(
-                (single_topology, host, host_name, args.n_frames, windows, initial_states), mode, args.water_sampling
+                (single_topology, host, host_name if host_name != "vacuum" else None, args.n_frames, windows, initial_states), mode, args.water_sampling
             )
             timings[mode].append(ns_per_day)
     with open(f"{args.leg}_{args.n_frames}_benchmarks.json", "w") as ofs:
