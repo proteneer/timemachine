@@ -1,7 +1,8 @@
 import time
+from collections import defaultdict
 from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, Iterator, List, Optional, Sequence, Tuple
+from typing import Callable, Iterator, List, Optional, Sequence, Tuple, Iterable
 from warnings import warn
 
 import jax
@@ -34,7 +35,7 @@ from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get
 from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, HarmonicBond, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials import BoundPotential, HarmonicBond, NonbondedInteractionGroup, SummedPotential, HarmonicAngleStable, HarmonicAngle, PeriodicTorsion, NonbondedPairListPrecomputed, ChiralAtomRestraint
 from timemachine.utils import batches, pairwise_transform_and_combine
 
 WATER_SAMPLER_MOVERS = (
@@ -307,6 +308,70 @@ class HREXSimulationResult(SimulationResult):
         ligand_idxs = self.final_result.initial_states[0].ligand_idxs
         assert all(np.all(s.ligand_idxs == ligand_idxs) for s in self.final_result.initial_states)
         return self.extract_trajectories_by_replica(ligand_idxs)
+
+
+def combine_vacuum_initial_states(states: Iterable[InitialState]):
+    atoms_per_state = [state.x0.shape[0] for state in states]
+    combined_coords = np.concatenate([state.x0 for state in states])
+    combined_masses = np.concatenate([state.integrator.masses for state in states])
+    combined_velos = np.concatenate([state.v0 for state in states])
+    # Box doesn't really matter, pick the largest to be safe
+    box = max([x.box0 for x in states], key=lambda x: np.linalg.det(x))
+    potentials_by_type = defaultdict(list)
+    for state in states:
+        for pot in state.potentials:
+            potentials_by_type[type(pot.potential)].append(pot)
+    valid = [
+        HarmonicBond,
+        HarmonicAngle,
+        HarmonicAngleStable,
+        PeriodicTorsion,
+        NonbondedPairListPrecomputed,
+        ChiralAtomRestraint,
+    ]
+    for x in potentials_by_type.keys():
+        if x not in valid:
+            raise ValueError(f"Potential {x} is not a valid potential: {valid}")
+    mega_bps = []
+    for pot_type, bps in potentials_by_type.items():
+        assert len(bps) == len(states)
+        if pot_type in (PeriodicTorsion, HarmonicBond, HarmonicAngleStable, HarmonicAngle, ChiralAtomRestraint):
+            new_idxs = []
+            new_params = []
+            offset = 0
+            for i, bp in enumerate(bps):
+                pot = bp.potential
+                # Offset the indices by the number of atoms that have come before
+                idxs = pot.idxs + offset
+                new_params.append(bp.params)
+                new_idxs.append(idxs)
+                offset += atoms_per_state[i]
+            mega_bps.append(pot_type(idxs=np.concatenate(new_idxs)).bind(np.concatenate(new_params)))
+        elif pot_type == NonbondedPairListPrecomputed:
+            new_idxs = []
+            new_params = []
+            cutoff = bps[0].potential.cutoff
+            beta = bps[0].potential.beta
+            offset = 0
+            for i, bp in enumerate(bps):
+                pot = bp.potential
+                assert pot.cutoff == cutoff, "Cutoffs doesn't match between NonbondedPairListPrecomputed"
+                assert pot.beta == beta, "Beta doesn't match between NonbondedPairListPrecomputed"
+                # Offset the indices by the number of atoms that have come before
+                idxs = pot.idxs + offset
+                new_params.append(bp.params)
+                new_idxs.append(idxs)
+                offset += atoms_per_state[i]
+            mega_bps.append(
+                pot_type(idxs=np.concatenate(new_idxs), cutoff=cutoff, beta=beta).bind(np.concatenate(new_params))
+            )
+        else:
+            assert 0
+    assert len(mega_bps) == len(states[0].potentials)
+    new_integrator = replace(states[0].integrator, masses=combined_masses)
+    return replace(
+        states[0], integrator=new_integrator, x0=combined_coords, v0=combined_velos, box0=box, potentials=mega_bps
+    )
 
 
 def trajectories_by_replica_to_by_state(

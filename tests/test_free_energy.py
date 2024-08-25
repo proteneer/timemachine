@@ -24,11 +24,13 @@ from timemachine.fe.free_energy import (
     PairBarResult,
     Trajectory,
     batches,
+    combine_vacuum_initial_states,
     compute_potential_matrix,
     estimate_free_energy_bar,
     get_water_sampler_params,
     make_pair_bar_plots,
     run_sims_bisection,
+    run_sims_sequential,
     sample,
     trajectories_by_replica_to_by_state,
 )
@@ -37,6 +39,7 @@ from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
+from timemachine.lib import VelocityVerletIntegrator
 from timemachine.md import builders
 from timemachine.md.hrex import HREX, HREXDiagnostics
 from timemachine.md.states import CoordsVelBox
@@ -553,3 +556,64 @@ def test_trajectories_by_replica_to_by_state(seed, n_states, n_iters, n_atoms):
     traj_by_replica = sim_res.extract_trajectories_by_replica(atom_idxs)
     traj_by_state = trajectories_by_replica_to_by_state(traj_by_replica, replica_idx_by_state_by_iter)
     np.testing.assert_array_equal(traj_by_state, frames[:, :, atom_idxs])
+
+
+@pytest.mark.parametrize("n_windows", [2, 4])
+@pytest.mark.parametrize("n_frames", [1, 2, 10])
+@pytest.mark.parametrize("seed", [2024])
+def test_combined_vacuum_matches_sequential(n_windows, n_frames, seed):
+    lambdas = np.linspace(0.0, 1.0, n_windows)
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+
+    single_topology = SingleTopology(mol_a, mol_b, core, forcefield)
+
+    initial_states = setup_initial_states(single_topology, None, DEFAULT_TEMP, lambdas, seed=seed, min_cutoff=None)
+
+    md_params = MDParams(n_frames=n_frames, n_eq_steps=1, steps_per_frame=400, seed=seed)
+
+    new_impl = VelocityVerletIntegrator(initial_states[0].integrator.dt, initial_states[0].integrator.masses)
+    for state in initial_states:
+        state.integrator = new_impl
+    mega_initial_state = combine_vacuum_initial_states(initial_states)
+
+    _, ref_trajs = run_sims_sequential(initial_states, md_params, temperature=DEFAULT_TEMP)
+    combined_trajs = sample(mega_initial_state, md_params, max_buffer_frames=n_frames)
+    state_coords = initial_states[0].x0
+    combined_xs = np.array(combined_trajs.frames).reshape(n_frames, n_windows, *state_coords.shape)
+    ref_xs_concat = np.hstack([np.array(traj.frames) for traj in ref_trajs]).reshape(
+        n_frames, n_windows, *state_coords.shape
+    )
+    np.testing.assert_array_equal(ref_xs_concat, combined_xs)
+
+    last_combined_frame = combined_trajs.frames[-1]
+    combined_bound_impls = [pot.to_gpu(np.float32).bound_impl for pot in mega_initial_state.potentials]
+    combined_du_dx = [
+        bound_impl.execute(last_combined_frame, mega_initial_state.box0, compute_u=False)[0]
+        for bound_impl in combined_bound_impls
+    ]
+    combined_u = [
+        bound_impl.execute(last_combined_frame, mega_initial_state.box0, compute_du_dx=False, compute_u=True)[1]
+        for bound_impl in combined_bound_impls
+    ]
+    split_du_dx = []
+    split_u = []
+    for state, traj in zip(initial_states, ref_trajs):
+        state_du_dx = []
+        frame = traj.frames[-1]
+        box = traj.boxes[-1]
+        for pot in state.potentials:
+            bound_impl = pot.to_gpu(np.float32).bound_impl
+            du_dx, u = bound_impl.execute(frame, box, compute_u=True, compute_du_dx=True)
+            state_du_dx.append(du_dx)
+            split_u.append(u)
+
+        split_du_dx.append(state_du_dx)
+
+    combined_du_dx = np.array(combined_du_dx)
+    split_du_dx = np.array(split_du_dx)
+    split_du_dx = split_du_dx.swapaxes(0, 1).reshape(combined_du_dx.shape)
+    np.testing.assert_array_equal(combined_du_dx, split_du_dx)
+
+    np.testing.assert_allclose(np.sum(split_u), np.sum(combined_u))
