@@ -338,18 +338,18 @@ void __global__ k_find_blocks_with_ixns(
         atom_j_idx = atom_j_idx < NC ? column_idxs[atom_j_idx] : N;
 
         // Compute overlap between column bounding box and row atom
-        RealType col_bb_ctr_x = column_bb_ctr[col_block * 3 + 0];
-        RealType col_bb_ctr_y = column_bb_ctr[col_block * 3 + 1];
-        RealType col_bb_ctr_z = column_bb_ctr[col_block * 3 + 2];
+        RealType col_bb_ctr_x = atom_i_idx < N ? column_bb_ctr[col_block * 3 + 0] : 0;
+        RealType col_bb_ctr_y = atom_i_idx < N ? column_bb_ctr[col_block * 3 + 1] : 0;
+        RealType col_bb_ctr_z = atom_i_idx < N ? column_bb_ctr[col_block * 3 + 2] : 0;
 
-        RealType col_bb_ext_x = column_bb_ext[col_block * 3 + 0];
-        RealType col_bb_ext_y = column_bb_ext[col_block * 3 + 1];
-        RealType col_bb_ext_z = column_bb_ext[col_block * 3 + 2];
+        RealType col_bb_ext_x = atom_i_idx < N ? column_bb_ext[col_block * 3 + 0] : 0;
+        RealType col_bb_ext_y = atom_i_idx < N ? column_bb_ext[col_block * 3 + 1] : 0;
+        RealType col_bb_ext_z = atom_i_idx < N ? column_bb_ext[col_block * 3 + 2] : 0;
 
         // Don't use pos_i_* here, as might have been shifted to center of row box
-        RealType atom_box_dx = (atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0) - col_bb_ctr_x;
-        RealType atom_box_dy = (atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0) - col_bb_ctr_y;
-        RealType atom_box_dz = (atom_i_idx < N ? coords[atom_i_idx * 3 + 2] : 0) - col_bb_ctr_z;
+        RealType atom_box_dx = (atom_i_idx < N ? coords[atom_i_idx * 3 + 0] - col_bb_ctr_x : 0);
+        RealType atom_box_dy = (atom_i_idx < N ? coords[atom_i_idx * 3 + 1] - col_bb_ctr_y : 0);
+        RealType atom_box_dz = (atom_i_idx < N ? coords[atom_i_idx * 3 + 2] - col_bb_ctr_z : 0);
 
         atom_box_dx -= bx * nearbyint(atom_box_dx * inv_bx);
         atom_box_dy -= by * nearbyint(atom_box_dy * inv_by);
