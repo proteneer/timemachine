@@ -1,14 +1,19 @@
-from typing import List, Tuple
+from importlib import resources
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pytest
 from common import hilbert_sort
 from numpy.typing import NDArray
 
+from timemachine.constants import DEFAULT_TEMP
+from timemachine.fe.free_energy import HostConfig, MDParams, sample
+from timemachine.fe.rbfe import setup_initial_states, setup_optimized_host
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import custom_ops
-from timemachine.md.builders import build_water_system
+from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -130,7 +135,6 @@ def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> Li
 
         deltas = image_coords(row_coords - col_coords, box_diag)
 
-        # block size x N, tbd make periodic
         dij = np.linalg.norm(deltas, axis=-1)
         dij[:, :row_start] = cutoff  # slight hack to discard duplicates
         idxs = np.argwhere(np.any(dij < cutoff, axis=0))
@@ -376,7 +380,109 @@ def test_nblist_max_interactions(block_size, tiles):
     nblist = custom_ops.Neighborlist_f32(coords.shape[0])
     max_ixn_count = nblist.get_max_ixn_count()
     test_ixn_list = nblist.get_nblist(coords, box, cutoff)
+    assert compute_block_occupancy(nblist, coords, box, cutoff) == 1.0
     assert len(test_ixn_list) == tiles
     for tile_ixns in test_ixn_list:
         assert len(tile_ixns) > 0
     assert nblist.get_tile_ixn_count() * block_size == max_ixn_count
+
+
+@pytest.fixture(scope="module", params=["solvent", "complex"])
+def hif2a_single_topology_leg(request):
+    return setup_hif2a_initial_state(request.param)
+
+
+def setup_hif2a_initial_state(host_name: str):
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    host_config: Optional[HostConfig] = None
+
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    if host_name == "complex":
+        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+            host_sys, host_conf, box, _, num_water_atoms = build_protein_system(
+                str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
+            )
+            box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+        host_config = HostConfig(host_sys, host_conf, box, num_water_atoms)
+    elif host_name == "solvent":
+        host_sys, host_conf, box, _ = build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
+        box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+        host_config = HostConfig(host_sys, host_conf, box, host_conf.shape[0])
+    else:
+        assert 0, "Invalid host name"
+
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    host = setup_optimized_host(st, host_config)
+
+    lambda_grid = np.array([0.0])
+
+    initial_state = setup_initial_states(st, host, DEFAULT_TEMP, lambda_grid, seed=2024, min_cutoff=None)[0]
+
+    return st, host, host_name, initial_state
+
+
+def compute_block_occupancy(
+    nblist, frame: NDArray, box: NDArray, cutoff: float, column_block: int = 32, row_block: int = 32
+) -> float:
+    assert column_block == 32
+    assert column_block == row_block
+    N = frame.shape[0]
+    assert nblist.get_num_row_idxs() == N
+    ixn_list = nblist.get_nblist(frame, box, cutoff)
+    block_occupancies = []
+    max_ixn_per_block = column_block * row_block * ((N + row_block - 1) // row_block)
+    max_ixn_per_block = min(N, max_ixn_per_block)
+
+    for i, ixn_block in enumerate(ixn_list):
+        assert max_ixn_per_block >= len(ixn_block)
+        block_occupancies.append(len(ixn_block) / max_ixn_per_block)
+        # Each interaction group can hold column_block fewer ixns as it is upper triangular
+        max_ixn_per_block -= column_block
+    return float(np.mean([block_occupancies]))
+
+
+@pytest.mark.parametrize("cutoff", [0.9, 1.0, 1.2])
+@pytest.mark.parametrize("precision", [np.float32, np.float64])
+def test_nblist_occupancy_dhfr(cutoff, precision):
+    _, _, coords, box = setup_dhfr()
+
+    if precision == np.float32:
+        nblist = custom_ops.Neighborlist_f32(coords.shape[0])
+    else:
+        nblist = custom_ops.Neighborlist_f64(coords.shape[0])
+    occupancy = compute_block_occupancy(nblist, coords, box, cutoff)
+    assert occupancy > 0.10
+    print(f"DHFR NBList Occupancy with Cutoff {cutoff}: {occupancy * 100.0:.3g}%")
+
+
+@pytest.mark.parametrize("frames", [10])
+@pytest.mark.parametrize("precision", [np.float32])
+def test_nblist_occupancy(hif2a_single_topology_leg, frames, precision):
+    cutoff = 1.2
+    st, host, host_name, initial_state = hif2a_single_topology_leg
+
+    md_params = MDParams(n_eq_steps=0, steps_per_frame=100, n_frames=frames, seed=2024)
+
+    traj = sample(initial_state, md_params, max_buffer_frames=md_params.n_frames)
+
+    if precision == np.float32:
+        nblist = custom_ops.Neighborlist_f32(initial_state.x0.shape[0])
+    else:
+        nblist = custom_ops.Neighborlist_f64(initial_state.x0.shape[0])
+    occupancies = []
+    occupancy = compute_block_occupancy(nblist, initial_state.x0, initial_state.box0, cutoff)
+    occupancies.append(occupancy)
+    for i, (frame, box) in enumerate(zip(traj.frames, traj.boxes)):
+        occupancy = compute_block_occupancy(nblist, frame, box, cutoff)
+        occupancies.append(occupancy)
+    total_steps = md_params.steps_per_frame * md_params.n_frames + md_params.n_eq_steps
+    print(f"Starting occupancy {occupancies[0]}")
+    print(f"Final occupancy after {total_steps:} {occupancies[-1]}")
+    # import matplotlib.pyplot as plt
+
+    # plt.plot(np.array(occupancies) * 100.0)
+    # plt.xlabel("Frame")
+    # plt.ylabel("Occupancy (%)")
+    # plt.title(f"Occupancy by Frame\n{host_name} Precision {precision.__name__}")
+    # plt.savefig(f"{host_name}_occupancy_{precision.__name__}.png", dpi=150)
+    # plt.clf()
