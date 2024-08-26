@@ -1118,10 +1118,8 @@ def compute_potential_matrix(
     """
 
     coords = np.array([xvb.coords for xvb in hrex.replicas])
-    print(coords.shape)
-    print(coords)
     boxes = np.array([xvb.box for xvb in hrex.replicas])
-    print(boxes.shape)
+    assert len(coords) == len(params_by_state)
 
     def compute_sparse(k: int):
         n_states = len(hrex.replicas)
@@ -1134,7 +1132,6 @@ def compute_potential_matrix(
         _, _, U = potential.execute_batch_sparse(
             coords, params_by_state, boxes, coords_batch_idxs, params_batch_idxs, False, False, True
         )
-        print(U)
 
         U_kl = np.full((n_states, n_states), np.inf)
         U_kl[coords_batch_idxs, params_batch_idxs] = U
@@ -1515,8 +1512,11 @@ def run_sims_hrex_combined(
     if n_swap_attempts_per_iter is None:
         n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
 
+    dummy_ctxt = get_context(initial_states[0], md_params=md_params)
+    dummy_pots = dummy_ctxt.get_potentials()
+    assert len(dummy_pots) == 1
+    per_state_potential = dummy_pots[0].get_potential()
     mega_state = combine_vacuum_initial_states(initial_states)
-    per_state_potential = get_context(initial_states[0], md_params=md_params).get_potentials()[0].get_potential()
 
     # Set up overall potential and context using the first state.
     # NOTE: this assumes that states differ only in their parameters, but we do not check this!
@@ -1533,7 +1533,8 @@ def run_sims_hrex_combined(
     params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
 
     def get_combined_params(replica_idx_by_state: List[ReplicaIdx]):
-        return np.concatenate([params_by_state[replica] for replica in replica_idx_by_state]).reshape(-1)
+        jank_state = combine_vacuum_initial_states([initial_states[replica] for replica in replica_idx_by_state])
+        return get_flattened_params(jank_state)
 
     state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
     neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
@@ -1549,11 +1550,7 @@ def run_sims_hrex_combined(
 
     def get_equilibrated_xvbs() -> CoordsVelBox:
         if md_params.n_eq_steps > 0:
-            # Set the movers to 0 to ensure they all equilibrate the same way
-            # Ensure initial mover state is consistent across replicas
-            for mover in context.get_movers():
-                mover.set_step(0)
-
+            # Not currently tested
             xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
             assert len(xs) == 1
             x0 = xs[0]
@@ -1562,10 +1559,10 @@ def run_sims_hrex_combined(
 
             x0 = x0.reshape(*window_shape)
             v0 = v0.reshape(*window_shape)
-            print("DONE")
-            return [CoordsVelBox(x0[i], box0, v0[i]) for i in range(len(initial_states))]
+
+            return [CoordsVelBox(x0[i], v0[i], box0) for i in range(len(initial_states))]
         else:
-            return [CoordsVelBox(state.x0, state.box0, state.v0) for state in initial_states]
+            return [CoordsVelBox(state.x0, state.v0, state.box0) for state in initial_states]
 
     initial_replicas = get_equilibrated_xvbs()
 
@@ -1578,33 +1575,32 @@ def run_sims_hrex_combined(
     begin_loop_time = time.perf_counter()
     last_update_time = begin_loop_time
 
-    print(md_params.n_frames)
     for current_frame in range(md_params.n_frames):
-        bound_potentials[0].set_params(get_combined_params(hrex.replica_idx_by_state))
+        latest_combined = get_combined_params(hrex.replica_idx_by_state)
+        bound_potentials[0].set_params(latest_combined)
+
         current_step = current_frame * md_params.steps_per_frame
 
-        # params = params_by_state[state_idx]
-        # bound_potentials[0].set_params(params)
         md_params_replica = replace(md_params, n_frames=1, n_eq_steps=0, seed=current_frame)
 
         assert md_params_replica.n_frames == 1
         # Get the next set of frames from the iterator, which will be the only value returned
-        frame, box, final_velos = next(
+        frame, boxes, final_velos = next(
             sample_with_context_iter(context, md_params_replica, temperature, ligand_idxs, batch_size=1)
         )
-        window_frames = frame.reshape(md_params_replica.n_frames, *window_shape)
+
+        window_frames = frame[-1].reshape(*window_shape)
         window_velos = final_velos.reshape(*window_shape)
-        print(window_frames[:35])
-        print(window_frames[35:])
 
         def sample_replica(_: CoordsVelBox, state_idx: StateIdx) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
-            return window_velos[state_idx], box[-1], window_velos[state_idx], None
+            return window_frames[state_idx], boxes[-1], window_velos[state_idx], None
 
         def replica_from_samples(last_sample: Tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
             frame, box, velos, _ = last_sample
             return CoordsVelBox(frame, velos, box)
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
+
         U_kl = compute_potential_matrix(
             per_state_potential, hrex, params_by_state, md_params.hrex_params.max_delta_states
         )
