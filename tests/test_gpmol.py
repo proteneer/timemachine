@@ -68,7 +68,7 @@ def plot_and_save(f, fname, *args, **kwargs) -> bytes:
 
 def run_pair_vacuum(mol_a, mol_b, core, forcefield, md_params):
     vacuum_res = estimate_relative_free_energy_bisection_hrex(
-        mol_a, mol_b, core, forcefield, None, md_params=md_params, prefix="vacuum", min_overlap=0.6667, n_windows=64
+        mol_a, mol_b, core, forcefield, None, md_params=md_params, prefix="vacuum", min_overlap=0.6667, n_windows=256, min_cutoff=500.0
     )
 
     # vacuum_res = estimate_relative_free_energy(
@@ -112,12 +112,36 @@ def test_run_vacuum_pair():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(str(path_to_ligand))
     mol_a = all_mols[1]
-    mol_b = all_mols[4]
+    # mol_b = all_mols[4]
+    mol_b = all_mols[8]
+
+    # replace Chlorine with Hydrogen
+    # print("Replacing Chlorine with Hydrogen")
+    # mol_b.GetAtomWithIdx(0).SetAtomicNum(1)
+
+    # for atom  in mol_b.GetAtoms():
+    #     print(atom.GetSymbol())
+
+    # assert 0
+
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
     ff = Forcefield.load_default()
 
     st = gpmol.SingleTopologyV5(mol_a, mol_b, core, ff)
+
+    from timemachine.constants import ONE_4PI_EPS0
+
+    net_charges = st.generate_intermediate_net_charges()/np.sqrt(ONE_4PI_EPS0)
+
+    print("Net charge along checkpoints", net_charges)
+    print("Checkpoint lambda Schedule", st.get_checkpoint_lambdas().tolist())
+
+    np.testing.assert_almost_equal(net_charges[0], 0)
+    np.testing.assert_almost_equal(net_charges[-1], 0)
+
+    # assert 0
+
     fpath = "path_all.svg"
     with open(fpath, "w") as fh:
         fh.write(st.draw_path())
@@ -136,8 +160,8 @@ def test_run_vacuum_pair():
 def test_gmol():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(str(path_to_ligand))
-    mol_a = all_mols[8]
-    mol_b = all_mols[1]
+    mol_a = all_mols[1]
+    mol_b = all_mols[4]
 
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
@@ -150,31 +174,14 @@ def test_gmol():
 
         fh.write(plot_atom_mapping_grid(mol_a, mol_b, core))
 
-    # draw path
     st = gpmol.SingleTopologyV5(mol_a, mol_b, core, ff)
-    # pm_all = st.mol_a_path + st.mol_b_path[::-1]
-    # pm_all = [recenter_mol(pm.induced_mol()) for pm in pm_all]
-    # extra_rotations = generate_good_rotations(pm_all, num_rotations=3)
-
-    # extra_mols = []
-
-    # legends = [f"lamb={x:.2f}" for x in st.get_checkpoint_lambdas()]
-    # for rot in extra_rotations:
-    #     for pm in pm_all:
-    #         extra_mols.append(rotate_mol(pm, rot))
-    #         legends.append("")
-
-    # svg = Draw.MolsToGridImage(pm_all + extra_mols, useSVG=True, molsPerRow=len(pm_all), legends=legends)
-
     fpath = "path_all.svg"
     with open(fpath, "w") as fh:
         fh.write(st.draw_path())
 
     ref_frame = None
 
-    # for lamb_idx, lamb in enumerate(np.linspace(0, 1, 2)):
-    for lamb_idx, lamb in enumerate([0.59, 0.61]):
-        # print("Processing lambda", lamb)
+    for lamb_idx, lamb in enumerate(np.linspace(0, 1, 5)):
         i_state = st.setup_intermediate_state(lamb)
         i_mol, i_kv = st.setup_intermediate_mol_and_kv(lamb)
 

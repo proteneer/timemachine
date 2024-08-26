@@ -483,8 +483,8 @@ def make_mol(mol_a, mol_b, core, vs, dir, atom_states, min_bond_k=100.0) -> Chem
             # in neither, assert
             assert 0
 
-        # if atom_states[c_idx] == AtomState.INTERACTING:
-        if True:
+        if atom_states[c_idx] == AtomState.INTERACTING:
+        # if True:
             atom = Chem.Atom(atomic_num)
             old_to_new_kv[c_idx] = mol.GetNumAtoms()
             mol.AddAtom(atom)
@@ -943,6 +943,52 @@ class SingleTopologyV5(AtomMapMixin):
             kvs.append(old_to_new_kv)
 
         return i_mols, kvs
+    
+    def generate_intermediate_net_charges(self):
+
+        mol_a_params = self.ff.q_handle.parameterize(self.mol_a)
+        mol_b_params = self.ff.q_handle.parameterize(self.mol_b)
+
+
+        # print(np.sum(mol_a_params))
+        # print(np.sum(mol_b_params))
+
+        # # for state_idx in self.
+
+        # print("mol_a_charges", mol_a_params)
+        # print("mol_b_charges", mol_b_params)
+        from timemachine.fe.single_topology import AtomMapFlags
+
+        net_charges = []
+        for lambda_idx, atom_states in enumerate(self.chain_atom_states):
+
+            print(atom_states)
+            charges = []
+            for atom_idx, atom_state in enumerate(atom_states):
+                if self.c_flags[atom_idx] == AtomMapFlags.CORE:
+                    assert atom_state == AtomState.INTERACTING
+                    if lambda_idx < self.fwd_idx:
+                        charges.append(mol_a_params[self.c_to_a[atom_idx]])
+                    else:
+                        charges.append(mol_b_params[self.c_to_b[atom_idx]])
+                elif self.c_flags[atom_idx] == AtomMapFlags.MOL_A:
+                    if atom_state == AtomState.INTERACTING:
+                        charges.append(mol_a_params[self.c_to_a[atom_idx]])
+                    else:
+                        charges.append(0)
+                elif self.c_flags[atom_idx] == AtomMapFlags.MOL_B:
+                    if atom_state == AtomState.INTERACTING:
+                        charges.append(mol_b_params[self.c_to_b[atom_idx]])
+                    else:
+                        charges.append(0)
+                else:
+                    assert 0
+
+            print("lambda_idx", lambda_idx, "charges", np.array(charges))
+
+            net_charges.append(np.sum(charges))
+
+        return np.array(net_charges)
 
     def draw_path(self):
         from rdkit.Chem import Draw
