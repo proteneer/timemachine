@@ -715,7 +715,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         ]
 
         if initial_states[0].barostat is None:
-            print("RUNNING IT HERE")
             pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex_combined(
                 initial_states_hrex, replace(md_params, n_eq_steps=0)
             )
