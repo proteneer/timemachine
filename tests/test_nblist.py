@@ -380,7 +380,7 @@ def test_nblist_max_interactions(block_size, tiles):
     nblist = custom_ops.Neighborlist_f32(coords.shape[0])
     max_ixn_count = nblist.get_max_ixn_count()
     test_ixn_list = nblist.get_nblist(coords, box, cutoff)
-    assert compute_block_occupancy(nblist, coords, box, cutoff) == 1.0
+    assert compute_mean_block_occupancy(nblist, coords, box, cutoff) == 1.0
     assert len(test_ixn_list) == tiles
     for tile_ixns in test_ixn_list:
         assert len(tile_ixns) > 0
@@ -421,7 +421,7 @@ def setup_hif2a_initial_state(host_name: str):
     return st, host, host_name, initial_state
 
 
-def compute_block_occupancy(
+def compute_mean_block_occupancy(
     nblist, frame: NDArray, box: NDArray, cutoff: float, column_block: int = 32, row_block: int = 32
 ) -> float:
     assert column_block == 32
@@ -450,7 +450,7 @@ def test_nblist_occupancy_dhfr(cutoff, precision):
         nblist = custom_ops.Neighborlist_f32(coords.shape[0])
     else:
         nblist = custom_ops.Neighborlist_f64(coords.shape[0])
-    occupancy = compute_block_occupancy(nblist, coords, box, cutoff)
+    occupancy = compute_mean_block_occupancy(nblist, coords, box, cutoff)
     assert occupancy > 0.10
     print(f"DHFR NBList Occupancy with Cutoff {cutoff}: {occupancy * 100.0:.3g}%")
 
@@ -470,10 +470,10 @@ def test_nblist_occupancy(hif2a_single_topology_leg, frames, precision):
     else:
         nblist = custom_ops.Neighborlist_f64(initial_state.x0.shape[0])
     occupancies = []
-    occupancy = compute_block_occupancy(nblist, initial_state.x0, initial_state.box0, cutoff)
+    occupancy = compute_mean_block_occupancy(nblist, initial_state.x0, initial_state.box0, cutoff)
     occupancies.append(occupancy)
     for i, (frame, box) in enumerate(zip(traj.frames, traj.boxes)):
-        occupancy = compute_block_occupancy(nblist, frame, box, cutoff)
+        occupancy = compute_mean_block_occupancy(nblist, frame, box, cutoff)
         occupancies.append(occupancy)
     total_steps = md_params.steps_per_frame * md_params.n_frames + md_params.n_eq_steps
     print(f"Starting occupancy {occupancies[0]}")
