@@ -33,15 +33,6 @@ from timemachine.fe.rbfe import (
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.md import builders
-from timemachine.potentials import (
-    ChiralAtomRestraint,
-    HarmonicAngle,
-    HarmonicAngleStable,
-    HarmonicBond,
-    NonbondedPairList,
-    NonbondedPairListPrecomputed,
-    PeriodicTorsion,
-)
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 A = TypeVar("A")

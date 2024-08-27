@@ -2,7 +2,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from functools import cache
-from typing import Callable, Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 from warnings import warn
 
 import jax
@@ -320,7 +320,7 @@ class HREXSimulationResult(SimulationResult):
         return self.extract_trajectories_by_replica(ligand_idxs)
 
 
-def combine_vacuum_initial_states(states: Iterable[InitialState]) -> InitialState:
+def combine_vacuum_initial_states(states: Sequence[InitialState]) -> InitialState:
     """Combine a series of IntitialStates that are Vacuum systems.
 
     This allows for a linear speed up.
@@ -347,14 +347,16 @@ def combine_vacuum_initial_states(states: Iterable[InitialState]) -> InitialStat
         if x not in valid:
             raise ValueError(f"Potential {x} is not a valid potential: {valid}")
     mega_bps = []
+    bonded_types = (PeriodicTorsion, HarmonicBond, HarmonicAngleStable, HarmonicAngle, ChiralAtomRestraint)
     for pot_type, bps in potentials_by_type.items():
         assert len(bps) == len(states)
-        if pot_type in (PeriodicTorsion, HarmonicBond, HarmonicAngleStable, HarmonicAngle, ChiralAtomRestraint):
-            new_idxs = []
-            new_params = []
+        if pot_type in bonded_types:
+            new_idxs: List[int] = []
+            new_params: List[NDArray] = []
             offset = 0
             for i, bp in enumerate(bps):
                 pot = bp.potential
+                assert isinstance(pot, bonded_types)
                 # Offset the indices by the number of atoms that have come before
                 idxs = pot.idxs + offset
                 new_params.append(bp.params)
@@ -369,6 +371,7 @@ def combine_vacuum_initial_states(states: Iterable[InitialState]) -> InitialStat
             offset = 0
             for i, bp in enumerate(bps):
                 pot = bp.potential
+                assert isinstance(pot, NonbondedPairListPrecomputed)
                 assert pot.cutoff == cutoff, "Cutoffs doesn't match between NonbondedPairListPrecomputed"
                 assert pot.beta == beta, "Beta doesn't match between NonbondedPairListPrecomputed"
                 # Offset the indices by the number of atoms that have come before
@@ -1523,7 +1526,6 @@ def run_sims_hrex_combined(
     context = get_context(mega_state, md_params=md_params)
     bound_potentials = context.get_potentials()
     assert len(bound_potentials) == 1
-    potential = bound_potentials[0].get_potential()
     temperature = initial_states[0].integrator.temperature
     ligand_idxs = initial_states[0].ligand_idxs
 
@@ -1578,8 +1580,6 @@ def run_sims_hrex_combined(
     for current_frame in range(md_params.n_frames):
         latest_combined = get_combined_params(hrex.replica_idx_by_state)
         bound_potentials[0].set_params(latest_combined)
-
-        current_step = current_frame * md_params.steps_per_frame
 
         md_params_replica = replace(md_params, n_frames=1, n_eq_steps=0, seed=current_frame)
 
