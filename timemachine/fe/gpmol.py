@@ -4,11 +4,14 @@ from enum import IntEnum
 import networkx as nx
 from rdkit import Chem
 from rdkit.Chem import BondType as BT
+from rdkit.Chem import Draw
 from rdkit.Chem import HybridizationType as HT
 from rdkit.Chem.Draw import rdMolDraw2D
 
 from timemachine.fe import model_utils, topology, utils
+from timemachine.fe.single_topology import AtomMapFlags
 from timemachine.fe.topology import BaseTopology
+from timemachine.fe.utils import recenter_mol, rotate_mol
 
 
 class AtomState(IntEnum):
@@ -357,13 +360,11 @@ def get_atom_states(gp_a, gp_b, amm):
 
         old_state = combined_state[amm.b_to_c[atom_idx]]
         if old_state != -1:
-            state == old_state
+            assert atom_idx in gp_b.core_atoms
+            assert state == old_state
         else:
+            assert atom_idx not in gp_b.core_atoms
             combined_state[amm.b_to_c[atom_idx]] = state
-
-    # print(gp_a.atom_states)
-    # print(gp_b.atom_states)
-    # print(combined_state)
 
     # every atom should be in either one state or the other.
     assert np.all([x != -1 for x in combined_state])
@@ -388,10 +389,10 @@ def induce_parameters(gp, bt, ff, a_to_c):
         src, dst = idxs
         if gp.get_bond_state(src, dst) == BondState.NON_INTERACTING:
             params[0] = 0
-    hb.idxs = a_to_c[hb.idxs]
-    hb.idxs = np.array([canonicalize_bond(x) for x in hb.idxs], dtype=np.int32)
+    hb.idxs = np.array([canonicalize_bond(x) for x in a_to_c[hb.idxs]], dtype=np.int32)
     hb = hb.bind(bond_params)
 
+    # wrong, we need to turn off angle anchor interactions still
     for params, idxs in zip(angle_params, ha.idxs):
         src, mid, dst = idxs
         if (
@@ -399,22 +400,19 @@ def induce_parameters(gp, bt, ff, a_to_c):
             or gp.get_bond_state(mid, dst) == BondState.NON_INTERACTING
         ):
             params[0] = 0
-    ha.idxs = a_to_c[ha.idxs]
-    ha.idxs = np.array([canonicalize_bond(x) for x in ha.idxs], dtype=np.int32)
+    ha.idxs = np.array([canonicalize_bond(x) for x in a_to_c[ha.idxs]], dtype=np.int32)
     stable_angle_params = np.hstack([angle_params, np.zeros((len(angle_params), 1))])
     ha = HarmonicAngleStable(ha.idxs).bind(stable_angle_params)
 
     for params, idxs in zip(proper_params, pt.idxs):
         if np.any([gp.get_atom_state(x) == AtomState.NON_INTERACTING for x in idxs]):
             params[0] = 0
-    pt.idxs = a_to_c[pt.idxs]
-    pt.idxs = np.array([canonicalize_bond(x) for x in pt.idxs], dtype=np.int32)
+    pt.idxs = np.array([canonicalize_bond(x) for x in a_to_c[pt.idxs]], dtype=np.int32)
 
     for params, idxs in zip(improper_params, it.idxs):
         if np.any([gp.get_atom_state(x) == AtomState.NON_INTERACTING for x in idxs]):
             params[0] = 0
-    it.idxs = a_to_c[it.idxs]
-    it.idxs = np.array([canonicalize_improper_idxs(x) for x in it.idxs], dtype=np.int32)
+    it.idxs = np.array([canonicalize_improper_idxs(x) for x in a_to_c[it.idxs]], dtype=np.int32)
 
     torsion_idxs = np.concatenate([pt.idxs, it.idxs])
     torsion_params = np.concatenate([proper_params, improper_params])
@@ -425,12 +423,8 @@ def induce_parameters(gp, bt, ff, a_to_c):
         if gp.get_atom_state(src) == AtomState.NON_INTERACTING or gp.get_atom_state(dst) == AtomState.NON_INTERACTING:
             # set w-offset to cutoff
             params[-1] = 1.2
-    nbpl.idxs = a_to_c[nbpl.idxs]
-    nbpl.idxs = np.array([canonicalize_bond(x) for x in nbpl.idxs], dtype=np.int32)
+    nbpl.idxs = np.array([canonicalize_bond(x) for x in a_to_c[nbpl.idxs]], dtype=np.int32)
 
-    # sorted_nbpl_idxs, sorted_nbpl_params = sort_idxs_and_params(nbpl_idxs, nbpl_params)
-
-    # nbpl.idxs = sorted_nbpl_idxs
     nbpl = nbpl.bind(nbpl_params)
     return VacuumSystem(hb, ha, torsion, nbpl, None, None)
 
@@ -483,15 +477,14 @@ def make_mol(mol_a, mol_b, core, vs, dir, atom_states, min_bond_k=100.0) -> Chem
             # in neither, assert
             assert 0
 
+        # do we want to always draw dummy atoms or not
         if atom_states[c_idx] == AtomState.INTERACTING:
-        # if True:
+            # if True:
             atom = Chem.Atom(atomic_num)
             old_to_new_kv[c_idx] = mol.GetNumAtoms()
             mol.AddAtom(atom)
         else:
             old_to_new_kv[c_idx] = -1
-
-    # print("VS BONDS", vs.bond.potential.idxs)
 
     # setup bonds
     for (old_i, old_j), (k, b) in zip(vs.bond.potential.idxs, vs.bond.params):
@@ -500,12 +493,9 @@ def make_mol(mol_a, mol_b, core, vs, dir, atom_states, min_bond_k=100.0) -> Chem
         if new_i != -1 and new_j != -1:
             # assert atom_states[old_i] == AtomState.INTERACTING
             # assert atom_states[old_j] == AtomState.INTERACTING
-
             if k > min_bond_k:
                 mol.AddBond(int(new_i), int(new_j), Chem.BondType.SINGLE)
 
-    # assert 0
-    # make read-only
     return Chem.Mol(mol), old_to_new_kv
 
 
@@ -906,6 +896,8 @@ class SingleTopologyV5(AtomMapMixin):
         atom_states_fwd = []
         atom_states_rev = []
 
+        # did we turn off angle terms properly??
+
         for gp_a in self.mol_a_path:
             vs_a = induce_parameters(gp_a, bt_a, ff, self.a_to_c)
             vs_b = induce_parameters(self.mol_b_path[-1], bt_b, ff, self.b_to_c)
@@ -921,12 +913,8 @@ class SingleTopologyV5(AtomMapMixin):
             vs_rev.append(vs_c)
 
         self.fwd_idx = len(atom_states_fwd)
-
-        # print("fwd_idx", self.fwd_idx)
         self.chain_atom_states = atom_states_fwd + atom_states_rev[::-1]
         self.checkpoint_states = vs_fwd + vs_rev[::-1]
-
-        # print("number of checkpoint states", len(self.checkpoint_states))
 
         self.i_mols, self.i_kvs = self.generate_intermediate_mols_and_kvs()
 
@@ -943,26 +931,13 @@ class SingleTopologyV5(AtomMapMixin):
             kvs.append(old_to_new_kv)
 
         return i_mols, kvs
-    
-    def generate_intermediate_net_charges(self):
 
+    def generate_intermediate_net_charges(self):
         mol_a_params = self.ff.q_handle.parameterize(self.mol_a)
         mol_b_params = self.ff.q_handle.parameterize(self.mol_b)
 
-
-        # print(np.sum(mol_a_params))
-        # print(np.sum(mol_b_params))
-
-        # # for state_idx in self.
-
-        # print("mol_a_charges", mol_a_params)
-        # print("mol_b_charges", mol_b_params)
-        from timemachine.fe.single_topology import AtomMapFlags
-
         net_charges = []
         for lambda_idx, atom_states in enumerate(self.chain_atom_states):
-
-            print(atom_states)
             charges = []
             for atom_idx, atom_state in enumerate(atom_states):
                 if self.c_flags[atom_idx] == AtomMapFlags.CORE:
@@ -984,18 +959,11 @@ class SingleTopologyV5(AtomMapMixin):
                 else:
                     assert 0
 
-            print("lambda_idx", lambda_idx, "charges", np.array(charges))
-
             net_charges.append(np.sum(charges))
 
         return np.array(net_charges)
 
     def draw_path(self):
-        from rdkit.Chem import Draw
-
-        from timemachine.fe.utils import recenter_mol, rotate_mol
-
-        # st = gpmol.SingleTopologyV5(mol_a, mol_b, core, ff)
         pm_all = self.mol_a_path + self.mol_b_path[::-1]
         pm_all = [recenter_mol(pm.induced_mol()) for pm in pm_all]
         extra_rotations = generate_good_rotations(pm_all, num_rotations=3)
@@ -1019,7 +987,6 @@ class SingleTopologyV5(AtomMapMixin):
 
         # want lamb = 0 to be 0
         # want lamb = 1 to be checkpoint_states[-1],
-
         loc = lamb * (len(self.checkpoint_states) - 1)
         lhs_idx = int(np.floor(loc))
         rhs_idx = lhs_idx + 1
@@ -1028,10 +995,6 @@ class SingleTopologyV5(AtomMapMixin):
 
         # loc - checkpoint_schedule[lhs_idx]
         frac_lamb = (lamb - checkpoint_schedule[lhs_idx]) * (len(self.checkpoint_states) - 1)
-
-        # print(checkpoint_schedule)
-        # print(checkpoint_schedule[lhs_idx])
-        # print("lamb, frac lamb", lamb, frac_lamb)
 
         assert frac_lamb >= 0.0
         assert frac_lamb <= 1.0

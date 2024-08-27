@@ -68,8 +68,20 @@ def plot_and_save(f, fname, *args, **kwargs) -> bytes:
 
 def run_pair_vacuum(mol_a, mol_b, core, forcefield, md_params):
     vacuum_res = estimate_relative_free_energy_bisection_hrex(
-        mol_a, mol_b, core, forcefield, None, md_params=md_params, prefix="vacuum", min_overlap=0.6667, n_windows=256, min_cutoff=500.0
+        mol_a,
+        mol_b,
+        core,
+        forcefield,
+        None,
+        md_params=md_params,
+        prefix="vacuum",
+        min_overlap=0.6667,
+        n_windows=256,
+        min_cutoff=500.0,
+        lambda_interval=(0, 1),
     )
+
+    print("deltaG sum", np.sum(vacuum_res.final_result.dGs), "kJ/mol")
 
     # vacuum_res = estimate_relative_free_energy(
     #     mol_a, mol_b, core, forcefield, None, prefix="vacuum",
@@ -112,8 +124,8 @@ def test_run_vacuum_pair():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(str(path_to_ligand))
     mol_a = all_mols[1]
-    # mol_b = all_mols[4]
-    mol_b = all_mols[8]
+    mol_b = all_mols[4]  # easy
+    # mol_b = all_mols[8] # hard
 
     # replace Chlorine with Hydrogen
     # print("Replacing Chlorine with Hydrogen")
@@ -132,15 +144,13 @@ def test_run_vacuum_pair():
 
     from timemachine.constants import ONE_4PI_EPS0
 
-    net_charges = st.generate_intermediate_net_charges()/np.sqrt(ONE_4PI_EPS0)
+    net_charges = st.generate_intermediate_net_charges() / np.sqrt(ONE_4PI_EPS0)
 
     print("Net charge along checkpoints", net_charges)
     print("Checkpoint lambda Schedule", st.get_checkpoint_lambdas().tolist())
 
     np.testing.assert_almost_equal(net_charges[0], 0)
     np.testing.assert_almost_equal(net_charges[-1], 0)
-
-    # assert 0
 
     fpath = "path_all.svg"
     with open(fpath, "w") as fh:
