@@ -478,6 +478,11 @@ def test_nblist_occupancy(hif2a_single_topology_leg, frames, precision):
     total_steps = md_params.steps_per_frame * md_params.n_frames + md_params.n_eq_steps
     print(f"Starting occupancy {occupancies[0]}")
     print(f"Final occupancy after {total_steps:} {occupancies[-1]}")
+    # The final occupancy should be higher since the barostat will reduce the box size
+    assert occupancies[0] < occupancies[-1]
+    # After equilibration the occupancies are above 40% for both solvent and complex
+    assert occupancies[-1] >= 0.40
+
     # import matplotlib.pyplot as plt
 
     # plt.plot(np.array(occupancies) * 100.0)
