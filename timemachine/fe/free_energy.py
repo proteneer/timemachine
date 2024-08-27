@@ -1593,7 +1593,10 @@ def run_sims_hrex_combined(
         window_velos = final_velos.reshape(*window_shape)
 
         def sample_replica(_: CoordsVelBox, state_idx: StateIdx) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
-            return window_frames[state_idx], boxes[-1], window_velos[state_idx], None
+            # The ordering of the frames/velos is by replica and is constant, the states change ordering
+            replica_idx = hrex.replica_idx_by_state[state_idx]
+
+            return window_frames[replica_idx], boxes[-1], window_velos[replica_idx], None
 
         def replica_from_samples(last_sample: Tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
             frame, box, velos, _ = last_sample
