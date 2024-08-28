@@ -380,7 +380,7 @@ def test_nblist_max_interactions(block_size, tiles):
     nblist = custom_ops.Neighborlist_f32(coords.shape[0])
     max_ixn_count = nblist.get_max_ixn_count()
     test_ixn_list = nblist.get_nblist(coords, box, cutoff)
-    assert compute_mean_block_occupancy(nblist, coords, box, cutoff) == 1.0
+    assert compute_mean_block_density(nblist, coords, box, cutoff) == 1.0
     assert len(test_ixn_list) == tiles
     for tile_ixns in test_ixn_list:
         assert len(tile_ixns) > 0
@@ -421,7 +421,7 @@ def setup_hif2a_initial_state(host_name: str):
     return st, host, host_name, initial_state
 
 
-def compute_mean_block_occupancy(
+def compute_mean_block_density(
     nblist, frame: NDArray, box: NDArray, cutoff: float, column_block: int = 32, row_block: int = 32
 ) -> float:
     assert column_block == 32
@@ -429,35 +429,35 @@ def compute_mean_block_occupancy(
     N = frame.shape[0]
     assert nblist.get_num_row_idxs() == N
     ixn_list = nblist.get_nblist(frame, box, cutoff)
-    block_occupancies = []
+    block_densities = []
     max_ixn_per_block = column_block * row_block * ((N + row_block - 1) // row_block)
     max_ixn_per_block = min(N, max_ixn_per_block)
 
     for i, ixn_block in enumerate(ixn_list):
         assert max_ixn_per_block >= len(ixn_block)
-        block_occupancies.append(len(ixn_block) / max_ixn_per_block)
+        block_densities.append(len(ixn_block) / max_ixn_per_block)
         # Each interaction group can hold column_block fewer ixns as it is upper triangular
         max_ixn_per_block -= column_block
-    return float(np.mean([block_occupancies]))
+    return float(np.mean([block_densities]))
 
 
 @pytest.mark.parametrize("cutoff", [0.9, 1.0, 1.2])
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
-def test_nblist_occupancy_dhfr(cutoff, precision):
+def test_nblist_density_dhfr(cutoff, precision):
     _, _, coords, box = setup_dhfr()
 
     if precision == np.float32:
         nblist = custom_ops.Neighborlist_f32(coords.shape[0])
     else:
         nblist = custom_ops.Neighborlist_f64(coords.shape[0])
-    occupancy = compute_mean_block_occupancy(nblist, coords, box, cutoff)
-    assert occupancy > 0.10
-    print(f"DHFR NBList Occupancy with Cutoff {cutoff}: {occupancy * 100.0:.3g}%")
+    density = compute_mean_block_density(nblist, coords, box, cutoff)
+    assert density > 0.10
+    print(f"DHFR NBList Occupancy with Cutoff {cutoff}: {density * 100.0:.3g}%")
 
 
 @pytest.mark.parametrize("frames", [10])
 @pytest.mark.parametrize("precision", [np.float32])
-def test_nblist_occupancy(hif2a_single_topology_leg, frames, precision):
+def test_nblist_density(hif2a_single_topology_leg, frames, precision):
     cutoff = 1.2
     st, host, host_name, initial_state = hif2a_single_topology_leg
 
@@ -469,25 +469,25 @@ def test_nblist_occupancy(hif2a_single_topology_leg, frames, precision):
         nblist = custom_ops.Neighborlist_f32(initial_state.x0.shape[0])
     else:
         nblist = custom_ops.Neighborlist_f64(initial_state.x0.shape[0])
-    occupancies = []
-    occupancy = compute_mean_block_occupancy(nblist, initial_state.x0, initial_state.box0, cutoff)
-    occupancies.append(occupancy)
+    densities = []
+    density = compute_mean_block_density(nblist, initial_state.x0, initial_state.box0, cutoff)
+    densities.append(density)
     for i, (frame, box) in enumerate(zip(traj.frames, traj.boxes)):
-        occupancy = compute_mean_block_occupancy(nblist, frame, box, cutoff)
-        occupancies.append(occupancy)
+        density = compute_mean_block_density(nblist, frame, box, cutoff)
+        densities.append(density)
     total_steps = md_params.steps_per_frame * md_params.n_frames + md_params.n_eq_steps
-    print(f"Starting occupancy {occupancies[0]}")
-    print(f"Final occupancy after {total_steps:} {occupancies[-1]}")
-    # The final occupancy should be higher since the barostat will reduce the box size
-    assert occupancies[0] < occupancies[-1]
-    # After equilibration the occupancies are above 40% for both solvent and complex
-    assert occupancies[-1] >= 0.40
+    print(f"Starting density {densities[0]}")
+    print(f"Final density after {total_steps:} {densities[-1]}")
+    # The final density should be higher since the barostat will reduce the box size
+    assert densities[0] < densities[-1]
+    # After equilibration the densities are above 40% for both solvent and complex
+    assert densities[-1] >= 0.40
 
     # import matplotlib.pyplot as plt
 
-    # plt.plot(np.array(occupancies) * 100.0)
+    # plt.plot(np.array(densities) * 100.0)
     # plt.xlabel("Frame")
     # plt.ylabel("Occupancy (%)")
     # plt.title(f"Occupancy by Frame\n{host_name} Precision {precision.__name__}")
-    # plt.savefig(f"{host_name}_occupancy_{precision.__name__}.png", dpi=150)
+    # plt.savefig(f"{host_name}_density_{precision.__name__}.png", dpi=150)
     # plt.clf()
