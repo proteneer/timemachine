@@ -427,17 +427,26 @@ def compute_mean_block_density(
     assert column_block == 32
     assert column_block == row_block
     N = frame.shape[0]
+    box_diag = np.diagonal(box)
     assert nblist.get_num_row_idxs() == N
     ixn_list = nblist.get_nblist(frame, box, cutoff)
     block_densities = []
-    max_ixn_per_block = column_block * row_block * ((N + row_block - 1) // row_block)
-    max_ixn_per_block = min(N, max_ixn_per_block)
+    max_ixn_per_block = min(N, column_block) * min(N, row_block) * ((N + row_block - 1) // row_block)
 
+    offset = 0
     for i, ixn_block in enumerate(ixn_list):
         assert max_ixn_per_block >= len(ixn_block)
-        block_densities.append(len(ixn_block) / max_ixn_per_block)
+        col_coords = frame[offset : offset + column_block]
+        col_coords = np.expand_dims(col_coords, axis=0)
+        row_coords = frame[np.array(ixn_block)]
+        row_coords = np.expand_dims(row_coords, axis=1)
+        deltas = image_coords(row_coords - col_coords, box_diag)
+        dij = np.linalg.norm(deltas, axis=-1)
+        ixns = np.sum(dij < cutoff)
+        block_densities.append(ixns / max_ixn_per_block)
         # Each interaction group can hold column_block fewer ixns as it is upper triangular
         max_ixn_per_block -= column_block
+        offset += column_block
     return float(np.mean([block_densities]))
 
 
