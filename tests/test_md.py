@@ -1,6 +1,7 @@
 import gc
 import re
 import weakref
+from multiprocessing.pool import ThreadPool
 
 import jax
 import numpy as np
@@ -8,6 +9,7 @@ import pytest
 from common import prepare_nb_system
 
 from timemachine import constants
+from timemachine.fe.free_energy import MDParams, sample_with_context
 from timemachine.ff import Forcefield
 from timemachine.integrator import langevin_coefficients
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerletIntegrator, custom_ops
@@ -957,7 +959,44 @@ def test_context_invalid_boxes_without_nonbonded_potentials():
 
     ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
 
-    # Make the box way too small, which should trigger the failure
+    # Make the box way too small, which would trigger the failure if the all pairs potential existed
     ctxt.set_box(box * 0.01)
     _, boxes = ctxt.multiple_steps(steps)
     assert len(boxes) == 1
+
+
+@pytest.mark.parametrize("num_threads", [1, 2, 4])
+def test_context_with_threads(num_threads):
+    mol, _ = get_biphenyl()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    temperature = constants.DEFAULT_TEMP
+    dt = 1.5e-3
+    friction = 0.0
+    seed = 2024
+
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
+    v0 = np.zeros_like(coords)
+
+    ctxts = []
+    sample_params = []
+    for thread_idx in range(num_threads):
+        bps = [pot.bind(p).to_gpu(np.float32).bound_impl for p, pot in zip(sys_params, unbound_potentials)]
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed + thread_idx)
+        ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+        ctxts.append(ctxt)
+
+        md_params = MDParams(n_eq_steps=100_000, n_frames=100, steps_per_frame=400, seed=seed + thread_idx)
+        sample_params.append(md_params)
+
+    def thread_sampling(args):
+        ctxt, md_params = args
+        traj = sample_with_context(
+            ctxt, md_params, constants.DEFAULT_TEMP, np.empty((0,)), max_buffer_frames=md_params.n_frames
+        )
+        return traj
+
+    with ThreadPool(num_threads) as pool:
+        for traj in pool.imap_unordered(thread_sampling, zip(ctxts, sample_params)):
+            print(len(traj.frames))
