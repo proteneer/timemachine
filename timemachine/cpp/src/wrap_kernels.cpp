@@ -349,6 +349,7 @@ void declare_context(py::module &m) {
         .def(
             "multiple_steps",
             [](Context &ctxt, const int n_steps, int store_x_interval) -> py::tuple {
+                py::gil_scoped_release release;
                 // (ytz): I hate C++
                 int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
                 std::array<std::vector<double>, 2> result = ctxt.multiple_steps(n_steps, x_interval);
@@ -356,6 +357,7 @@ void declare_context(py::module &m) {
                 int N = ctxt.num_atoms();
                 int D = 3;
                 int F = result[0].size() / (N * D);
+                py::gil_scoped_acquire acquire;
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
                 std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
 
@@ -415,10 +417,12 @@ void declare_context(py::module &m) {
                 std::vector<int> vec_local_idxs = py_array_to_vector(local_idxs);
                 verify_atom_idxs(N, vec_local_idxs);
 
+                py::gil_scoped_release release; // Release the GIL
                 std::array<std::vector<double>, 2> result =
                     ctxt.multiple_steps_local(n_steps, vec_local_idxs, x_interval, radius, k, seed);
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
+                py::gil_scoped_acquire acquire;
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
                 std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
 
@@ -512,11 +516,13 @@ void declare_context(py::module &m) {
                 if (selection_set.find(reference_idx) != selection_set.end()) {
                     throw std::runtime_error("reference idx must not be in selection idxs");
                 }
+                py::gil_scoped_release release; // Release the GIL
 
                 std::array<std::vector<double>, 2> result = ctxt.multiple_steps_local_selection(
                     n_steps, reference_idx, vec_selection_idxs, x_interval, radius, k);
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
+                py::gil_scoped_acquire acquire; // Re-aquire the GIL to construct python objects
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
                 std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
 
