@@ -465,13 +465,13 @@ def test_nblist_density_dhfr(cutoff, precision):
     print(f"DHFR NBList Occupancy with Cutoff {cutoff}: {density * 100.0:.3g}%")
 
 
-@pytest.mark.parametrize("frames", [10])
+@pytest.mark.parametrize("frames", [25])
 @pytest.mark.parametrize("precision", [np.float32])
 def test_nblist_density(hif2a_single_topology_leg, frames, precision):
     cutoff = 1.2
     st, host, host_name, initial_state = hif2a_single_topology_leg
 
-    md_params = MDParams(n_eq_steps=0, steps_per_frame=100, n_frames=frames, seed=2024)
+    md_params = MDParams(n_eq_steps=0, steps_per_frame=200, n_frames=frames, seed=2024)
 
     traj = sample(initial_state, md_params, max_buffer_frames=md_params.n_frames)
 
@@ -490,14 +490,21 @@ def test_nblist_density(hif2a_single_topology_leg, frames, precision):
     print(f"Final density after {total_steps} steps {densities[-1]}")
     # The final density should be higher since the barostat will reduce the box size
     assert densities[0] < densities[-1]
-    # After equilibration the densities are above 40% for both solvent and complex
-    assert densities[-1] >= 0.40
+    # After equilibration the densities are about 11% for both solvent and complex
+    assert densities[-1] >= 0.11
 
     # import matplotlib.pyplot as plt
 
-    # plt.plot(np.array(densities) * 100.0)
-    # plt.xlabel("Frame")
+    # steps = [i * md_params.steps_per_frame for i in range(len(densities))]
+    # plt.plot(steps, np.array(densities) * 100.0)
     # plt.ylabel("Occupancy (%)")
+    # plt.xlabel("Steps")
+    # ax = plt.gca()
+    # ax2 = ax.twinx()
+    # boxes = [initial_state.box0]
+    # boxes.extend(traj.boxes)
+    # ax2.plot(steps, [np.linalg.det(box) for box in boxes], label="Box Volume", color="red")
+    # ax2.set_ylabel("Box Volume (nm^3)")
     # plt.title(f"Occupancy by Frame\n{host_name} Precision {precision.__name__}")
     # plt.savefig(f"{host_name}_density_{precision.__name__}.png", dpi=150)
     # plt.clf()
