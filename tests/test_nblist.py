@@ -380,7 +380,7 @@ def test_nblist_max_interactions(block_size, tiles):
     nblist = custom_ops.Neighborlist_f32(coords.shape[0])
     max_ixn_count = nblist.get_max_ixn_count()
     test_ixn_list = nblist.get_nblist(coords, box, cutoff)
-    assert compute_mean_block_density(nblist, coords, box, cutoff) == 1.0
+    assert compute_mean_tile_density(nblist, coords, box, cutoff) == 1.0
     assert len(test_ixn_list) == tiles
     for tile_ixns in test_ixn_list:
         assert len(tile_ixns) > 0
@@ -421,7 +421,7 @@ def setup_hif2a_initial_state(host_name: str):
     return st, host, host_name, initial_state
 
 
-def compute_mean_block_density(
+def compute_mean_tile_density(
     nblist, frame: NDArray, box: NDArray, cutoff: float, column_block: int = 32, row_block: int = 32
 ) -> float:
     assert column_block == 32
@@ -431,7 +431,8 @@ def compute_mean_block_density(
     assert nblist.get_num_row_idxs() == N
     ixn_list = nblist.get_nblist(frame, box, cutoff)
     block_densities = []
-    max_ixn_per_block = min(N, column_block) * min(N, row_block) * ((N + row_block - 1) // row_block)
+    ixns_per_tile = min(N, column_block) * min(N, row_block)
+    max_ixn_per_block = ixns_per_tile * ((N + row_block - 1) // row_block)
 
     offset = 0
     for i, ixn_block in enumerate(ixn_list):
@@ -444,8 +445,8 @@ def compute_mean_block_density(
         dij = np.linalg.norm(deltas, axis=-1)
         ixns = np.sum(dij < cutoff)
         block_densities.append(ixns / max_ixn_per_block)
-        # Each interaction group can hold column_block fewer ixns as it is upper triangular
-        max_ixn_per_block -= column_block
+        # Each interaction block can hold one tile fewer ixns as it is upper triangular
+        max_ixn_per_block -= ixns_per_tile
         offset += column_block
     return float(np.mean([block_densities]))
 
@@ -459,7 +460,7 @@ def test_nblist_density_dhfr(cutoff, precision):
         nblist = custom_ops.Neighborlist_f32(coords.shape[0])
     else:
         nblist = custom_ops.Neighborlist_f64(coords.shape[0])
-    density = compute_mean_block_density(nblist, coords, box, cutoff)
+    density = compute_mean_tile_density(nblist, coords, box, cutoff)
     assert density > 0.10
     print(f"DHFR NBList Occupancy with Cutoff {cutoff}: {density * 100.0:.3g}%")
 
@@ -479,14 +480,14 @@ def test_nblist_density(hif2a_single_topology_leg, frames, precision):
     else:
         nblist = custom_ops.Neighborlist_f64(initial_state.x0.shape[0])
     densities = []
-    density = compute_mean_block_density(nblist, initial_state.x0, initial_state.box0, cutoff)
+    density = compute_mean_tile_density(nblist, initial_state.x0, initial_state.box0, cutoff)
     densities.append(density)
     for i, (frame, box) in enumerate(zip(traj.frames, traj.boxes)):
-        density = compute_mean_block_density(nblist, frame, box, cutoff)
+        density = compute_mean_tile_density(nblist, frame, box, cutoff)
         densities.append(density)
     total_steps = md_params.steps_per_frame * md_params.n_frames + md_params.n_eq_steps
     print(f"Starting density {densities[0]}")
-    print(f"Final density after {total_steps:} {densities[-1]}")
+    print(f"Final density after {total_steps} steps {densities[-1]}")
     # The final density should be higher since the barostat will reduce the box size
     assert densities[0] < densities[-1]
     # After equilibration the densities are above 40% for both solvent and complex
