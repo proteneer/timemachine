@@ -87,6 +87,8 @@ private:
     double *d_v_t_;   // velocities
     double *d_box_t_; // box vectors
 
+    cudaStream_t stream_; // Stream work will be scheduled into
+
     std::shared_ptr<Integrator> intg_;
     std::vector<std::shared_ptr<BoundPotential>> bps_;
     std::vector<std::shared_ptr<BoundPotential>> nonbonded_pots_; // Potentials used to verify
