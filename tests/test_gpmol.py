@@ -76,7 +76,7 @@ def run_pair_vacuum(mol_a, mol_b, core, forcefield, md_params):
         md_params=md_params,
         prefix="vacuum",
         min_overlap=0.6667,
-        n_windows=256,
+        n_windows=64,
         min_cutoff=500.0,
         lambda_interval=(0, 1),
     )
@@ -127,15 +127,6 @@ def test_run_vacuum_pair():
     mol_b = all_mols[4]  # easy
     # mol_b = all_mols[8] # hard
 
-    # replace Chlorine with Hydrogen
-    # print("Replacing Chlorine with Hydrogen")
-    # mol_b.GetAtomWithIdx(0).SetAtomicNum(1)
-
-    # for atom  in mol_b.GetAtoms():
-    #     print(atom.GetSymbol())
-
-    # assert 0
-
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
     ff = Forcefield.load_default()
@@ -144,13 +135,13 @@ def test_run_vacuum_pair():
 
     from timemachine.constants import ONE_4PI_EPS0
 
-    net_charges = st.generate_intermediate_net_charges() / np.sqrt(ONE_4PI_EPS0)
+    all_charges = st.generate_intermediate_charges()
+    net_charges = [np.sum(x)/np.sqrt(ONE_4PI_EPS0) for x in all_charges]
 
-    print("Net charge along checkpoints", net_charges)
-    print("Checkpoint lambda Schedule", st.get_checkpoint_lambdas().tolist())
+    print("e0 charges", all_charges[0])
+    print("e1 charges", all_charges[1])
 
-    np.testing.assert_almost_equal(net_charges[0], 0)
-    np.testing.assert_almost_equal(net_charges[-1], 0)
+    np.testing.assert_array_almost_equal(net_charges, np.zeros_like(net_charges))
 
     fpath = "path_all.svg"
     with open(fpath, "w") as fh:

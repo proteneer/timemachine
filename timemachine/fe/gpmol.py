@@ -915,8 +915,47 @@ class SingleTopologyV5(AtomMapMixin):
         self.fwd_idx = len(atom_states_fwd)
         self.chain_atom_states = atom_states_fwd + atom_states_rev[::-1]
         self.checkpoint_states = vs_fwd + vs_rev[::-1]
+        self.checkpoint_charges = self.generate_intermediate_charges()
+
+        # recompute exclusion idxs
+        ekv = self.generate_combined_exclusion_idxs_and_scale_factors()
+        for state, charges in zip(self.checkpoint_states, self.checkpoint_charges):
+            for (i,j), params in zip(state.nonbonded.potential.idxs, state.nonbonded.params):
+                assert i < j
+                if (i,j) in ekv:
+                    sf = 1 - ekv[(i,j)]
+                else:
+                    sf = 1
+                params[0] = charges[i]*charges[j]*sf
 
         self.i_mols, self.i_kvs = self.generate_intermediate_mols_and_kvs()
+
+    def generate_combined_exclusion_idxs_and_scale_factors(self):
+
+        from timemachine.ff.handlers import nonbonded
+
+        exclusion_idxs_a, scale_factors_a = nonbonded.generate_exclusion_idxs(
+            self.mol_a, scale12=topology._SCALE_12, scale13=topology._SCALE_13, scale14=topology._SCALE_14
+        )
+
+        exclusion_idxs_b, scale_factors_b = nonbonded.generate_exclusion_idxs(
+            self.mol_b, scale12=topology._SCALE_12, scale13=topology._SCALE_13, scale14=topology._SCALE_14
+        )
+
+        exclusion_idxs_c_kv = dict()
+
+        for (i,j), sf in zip(exclusion_idxs_a, scale_factors_a):
+            i, j = sorted([self.a_to_c[i], self.a_to_c[j]])
+            exclusion_idxs_c_kv[(i,j)] = sf
+
+        for (i,j), sf in zip(exclusion_idxs_b, scale_factors_b):
+            i, j = sorted([self.b_to_c[i], self.b_to_c[j]])
+            if (i,j) in exclusion_idxs_c_kv:
+                assert exclusion_idxs_c_kv[(i,j)] == sf
+            else:
+                exclusion_idxs_c_kv[(i,j)] = sf
+
+        return exclusion_idxs_c_kv
 
     def generate_intermediate_mols_and_kvs(self):
         i_mols = []
@@ -932,12 +971,41 @@ class SingleTopologyV5(AtomMapMixin):
 
         return i_mols, kvs
 
-    def generate_intermediate_net_charges(self):
+    def find_non_interacting_groups_and_anchors(self, lambda_idx):
+        interacting_atoms = []
+        non_interacting_atoms = []
+        for atom_idx, state in enumerate(self.chain_atom_states[lambda_idx]):
+            if state == AtomState.NON_INTERACTING:
+                non_interacting_atoms.append(atom_idx)
+            else:
+                interacting_atoms.append(atom_idx)
+
+        nxg = nx.Graph()
+        for n in range(self.get_num_atoms()):
+            nxg.add_node(n)
+        bond_list = self.checkpoint_states[lambda_idx].bond.potential.idxs
+        for i,j in bond_list:
+            nxg.add_edge(i, j)
+
+        induced_g = nx.subgraph(nxg, non_interacting_atoms)
+
+        def get_bond_anchors(dummy_group):
+            bond_anchors = [n for dummy_atom in dummy_group for n in nxg.neighbors(dummy_atom) if n in interacting_atoms]
+            if len(bond_anchors) > 1:
+                assert 0
+            return bond_anchors[0]
+        
+        res = [(cc, get_bond_anchors(cc)) for cc in nx.connected_components(induced_g)]
+
+        return res
+
+    def generate_intermediate_charges(self):
         mol_a_params = self.ff.q_handle.parameterize(self.mol_a)
         mol_b_params = self.ff.q_handle.parameterize(self.mol_b)
 
-        net_charges = []
+        all_charges = []
         for lambda_idx, atom_states in enumerate(self.chain_atom_states):
+            non_interacting_atoms_and_anchors = self.find_non_interacting_groups_and_anchors(lambda_idx)
             charges = []
             for atom_idx, atom_state in enumerate(atom_states):
                 if self.c_flags[atom_idx] == AtomMapFlags.CORE:
@@ -959,9 +1027,21 @@ class SingleTopologyV5(AtomMapMixin):
                 else:
                     assert 0
 
-            net_charges.append(np.sum(charges))
+            charges = np.array(charges)
 
-        return np.array(net_charges)
+            for cc, anchor in non_interacting_atoms_and_anchors:
+                for c_idx in cc:
+                    old_charge = 0
+                    if self.c_flags[c_idx] == AtomMapFlags.MOL_A and lambda_idx < self.fwd_idx:
+                        old_charge = mol_a_params[self.c_to_a[c_idx]]
+                    elif self.c_flags[c_idx] == AtomMapFlags.MOL_B and lambda_idx >= self.fwd_idx:
+                        old_charge = mol_b_params[self.c_to_b[c_idx]]
+
+                    charges[anchor] += old_charge
+            
+            all_charges.append(charges)
+
+        return all_charges
 
     def draw_path(self):
         pm_all = self.mol_a_path + self.mol_b_path[::-1]
