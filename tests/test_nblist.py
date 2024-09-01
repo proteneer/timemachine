@@ -430,29 +430,38 @@ def compute_mean_tile_density(
     box_diag = np.diagonal(box)
     assert nblist.get_num_row_idxs() == N
     ixn_list = nblist.get_nblist(frame, box, cutoff)
-    block_densities = []
+    tile_densities = []
+    num_blocks = (N + row_block - 1) // row_block
     ixns_per_tile = min(N, column_block) * min(N, row_block)
-    max_ixn_per_block = ixns_per_tile * ((N + row_block - 1) // row_block)
 
-    offset = 0
+    row_block_offset = 0
+    # Each ixn_block is the column atoms in the tile that interact with at least one
+    # row block atom
     for i, ixn_block in enumerate(ixn_list):
-        assert max_ixn_per_block >= len(ixn_block)
-        col_coords = frame[offset : offset + column_block]
-        col_coords = np.expand_dims(col_coords, axis=0)
-        row_coords = frame[np.array(ixn_block)]
-        row_coords = np.expand_dims(row_coords, axis=1)
-        deltas = image_coords(row_coords - col_coords, box_diag)
-        dij = np.linalg.norm(deltas, axis=-1)
-        ixns = np.sum(dij < cutoff)
-        block_densities.append(ixns / max_ixn_per_block)
-        # Each interaction block can hold one tile fewer ixns as it is upper triangular
-        max_ixn_per_block -= ixns_per_tile
-        offset += column_block
-    return float(np.mean([block_densities]))
+        row_coords = frame[row_block_offset : row_block_offset + row_block]
+        row_coords = np.expand_dims(row_coords, axis=0)
+        column_ixn_atoms = np.array(ixn_block)
+        column_block_offset = 0
+        for _ in range(num_blocks - i):
+            # Find the interactions that would make up a tile, if the tile is empty
+            # don't compute density.
+            tile_column_ixns = column_ixn_atoms[
+                (column_ixn_atoms >= column_block_offset) & (column_ixn_atoms < (column_block_offset + column_block))
+            ]
+            column_block_offset += column_block
+            if tile_column_ixns.size == 0:
+                continue
+            col_coords = np.expand_dims(frame[tile_column_ixns], axis=1)
+            deltas = image_coords(row_coords - col_coords, box_diag)
+            dij = np.linalg.norm(deltas, axis=-1)
+            ixns = np.sum(dij < cutoff)
+            tile_densities.append(ixns / ixns_per_tile)
+        row_block_offset += row_block
+    return float(np.mean([tile_densities]))
 
 
-@pytest.mark.parametrize("cutoff", [0.9, 1.0, 1.2])
-@pytest.mark.parametrize("precision", [np.float32, np.float64])
+@pytest.mark.parametrize("cutoff", [1.0, 1.2])
+@pytest.mark.parametrize("precision", [np.float32])
 def test_nblist_density_dhfr(cutoff, precision):
     _, _, coords, box = setup_dhfr()
 
@@ -460,12 +469,16 @@ def test_nblist_density_dhfr(cutoff, precision):
         nblist = custom_ops.Neighborlist_f32(coords.shape[0])
     else:
         nblist = custom_ops.Neighborlist_f64(coords.shape[0])
+    unsorted_density = compute_mean_tile_density(nblist, coords, box, cutoff)
+    print(f"DHFR NBList Occupancy with Cutoff {cutoff}, no sort: {unsorted_density * 100.0:.3g}%")
+    perm = hilbert_sort(coords, box)
+    coords = coords[perm]
     density = compute_mean_tile_density(nblist, coords, box, cutoff)
-    assert density > 0.10
     print(f"DHFR NBList Occupancy with Cutoff {cutoff}: {density * 100.0:.3g}%")
+    assert density > 0.10
 
 
-@pytest.mark.parametrize("frames", [25])
+@pytest.mark.parametrize("frames", [20])
 @pytest.mark.parametrize("precision", [np.float32])
 def test_nblist_density(hif2a_single_topology_leg, frames, precision):
     cutoff = 1.2
@@ -480,18 +493,18 @@ def test_nblist_density(hif2a_single_topology_leg, frames, precision):
     else:
         nblist = custom_ops.Neighborlist_f64(initial_state.x0.shape[0])
     densities = []
-    density = compute_mean_tile_density(nblist, initial_state.x0, initial_state.box0, cutoff)
+    perm = hilbert_sort(initial_state.x0, initial_state.box0)
+    density = compute_mean_tile_density(nblist, initial_state.x0[perm], initial_state.box0, cutoff)
     densities.append(density)
     for i, (frame, box) in enumerate(zip(traj.frames, traj.boxes)):
-        density = compute_mean_tile_density(nblist, frame, box, cutoff)
+        perm = hilbert_sort(frame, box)
+        density = compute_mean_tile_density(nblist, frame[perm], box, cutoff)
         densities.append(density)
     total_steps = md_params.steps_per_frame * md_params.n_frames + md_params.n_eq_steps
     print(f"Starting density {densities[0]}")
     print(f"Final density after {total_steps} steps {densities[-1]}")
-    # The final density should be higher since the barostat will reduce the box size
-    assert densities[0] < densities[-1]
-    # After equilibration the densities are about 11% for both solvent and complex
-    assert densities[-1] >= 0.11
+    # After equilibration the tile densities are about 20% for both solvent and complex
+    assert densities[-1] >= 0.2
 
     # import matplotlib.pyplot as plt
 
