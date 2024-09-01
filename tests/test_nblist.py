@@ -17,9 +17,8 @@ from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
-pytestmark = [pytest.mark.memcheck]
 
-
+@pytest.mark.memcheck
 def test_empty_neighborlist():
     with pytest.raises(RuntimeError, match="Neighborlist N must be at least 1"):
         custom_ops.Neighborlist_f32(0)
@@ -55,6 +54,7 @@ def reference_block_bounds(coords: NDArray, box: NDArray, block_size: int) -> Tu
     return ref_ctrs, ref_exts
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("precision,atol,rtol", [(np.float32, 1e-6, 1e-6), (np.float64, 1e-7, 1e-7)])
 @pytest.mark.parametrize("sort", [True, False])
 def test_block_bounds_dhfr(precision, atol, rtol, sort):
@@ -80,6 +80,7 @@ def test_block_bounds_dhfr(precision, atol, rtol, sort):
         np.testing.assert_allclose(ref_ext, test_ext, atol=atol, rtol=rtol, err_msg=f"Extent {i} has mismatch")
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("precision,atol,rtol", [(np.float32, 1e-6, 1e-6), (np.float64, 1e-7, 1e-7)])
 @pytest.mark.parametrize("size", [12, 128, 156, 298])
 def test_block_bounds(precision, atol, rtol, size):
@@ -190,92 +191,86 @@ def assert_ixn_lists_are_equal(ref_ixn, test_ixn):
         np.testing.assert_equal(sorted(a), sorted(b))
 
 
-def test_nblist_row_indices_are_order_independent():
+@pytest.mark.memcheck
+@pytest.mark.parametrize("num_atoms", [35, 64, 129, 1025, 1259, 2029])
+def test_nblist_row_indices_are_order_independent(num_atoms):
     D = 3
     cutoff = 1.0
     padding = 0.1
-    sizes = [35, 64, 129, 1025, 1259, 2029]
-    max_size = max(sizes)
     water_coords = get_water_coords(D, sort=False)
-    nblists = [custom_ops.Neighborlist_f32(max_size), custom_ops.Neighborlist_f64(max_size)]
-    for size in sizes:
-        print("testing size:", size)
+    nblists = [custom_ops.Neighborlist_f32(num_atoms), custom_ops.Neighborlist_f64(num_atoms)]
 
-        np.random.seed(1234)
-        water_idxs = np.random.choice(np.arange(water_coords.shape[0]), size, replace=False)
-        coords = water_coords[water_idxs]
-        diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
-        box = np.diag(diag)
+    np.random.seed(1234)
+    water_idxs = np.random.choice(np.arange(water_coords.shape[0]), num_atoms, replace=False)
+    coords = water_coords[water_idxs]
+    diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
+    box = np.diag(diag)
 
-        atom_idxs = np.random.choice(np.arange(coords.shape[0]), size // 2, replace=False)
-        atom_idxs = atom_idxs.astype(np.uint32)
+    atom_idxs = np.random.choice(np.arange(coords.shape[0]), num_atoms // 2, replace=False)
+    atom_idxs = atom_idxs.astype(np.uint32)
 
-        reference_ixns = build_reference_ixn_list_with_subset(coords, box, cutoff, atom_idxs)
-        # Shuffle idxs, should still have the same set of interactions
-        shuffled_idxs = atom_idxs.copy()
-        np.random.shuffle(shuffled_idxs)
+    reference_ixns = build_reference_ixn_list_with_subset(coords, box, cutoff, atom_idxs)
+    # Shuffle idxs, should still have the same set of interactions
+    shuffled_idxs = atom_idxs.copy()
+    np.random.shuffle(shuffled_idxs)
 
-        assert not np.all(shuffled_idxs == atom_idxs)
+    assert not np.all(shuffled_idxs == atom_idxs)
 
-        shuffled_ixns = build_reference_ixn_list_with_subset(coords, box, cutoff, shuffled_idxs)
+    shuffled_ixns = build_reference_ixn_list_with_subset(coords, box, cutoff, shuffled_idxs)
 
-        # Verify that the ixns are the same, different ordering so each block will be different
-        reference_ixns_set = set(np.concatenate(reference_ixns).reshape(-1))
-        shuffled_ixns_set = set(np.concatenate(shuffled_ixns).reshape(-1))
+    # Verify that the ixns are the same, different ordering so each block will be different
+    reference_ixns_set = set(np.concatenate(reference_ixns).reshape(-1))
+    shuffled_ixns_set = set(np.concatenate(shuffled_ixns).reshape(-1))
 
-        np.testing.assert_array_equal(reference_ixns_set, shuffled_ixns_set)
+    np.testing.assert_array_equal(reference_ixns_set, shuffled_ixns_set)
 
-        # Verify that the C++ agrees
-        for nblist in nblists:
-            nblist.resize(size)
-            nblist.set_row_idxs(atom_idxs)
-            test_ixn_list = nblist.get_nblist(coords, box, cutoff)
-            test_ixns_set = set(np.concatenate(test_ixn_list).reshape(-1))
-            assert reference_ixns_set == test_ixns_set
-            assert_ixn_lists_are_equal(reference_ixns, test_ixn_list)
+    # Verify that the C++ agrees
+    for nblist in nblists:
+        nblist.set_row_idxs(atom_idxs)
+        test_ixn_list = nblist.get_nblist(coords, box, cutoff)
+        test_ixns_set = set(np.concatenate(test_ixn_list).reshape(-1))
+        assert reference_ixns_set == test_ixns_set
+        assert_ixn_lists_are_equal(reference_ixns, test_ixn_list)
 
-            nblist.set_row_idxs(shuffled_idxs)
-            test_shuffle_ixn_list = nblist.get_nblist(coords, box, cutoff)
-            test_shuffle_ixns_set = set(np.concatenate(test_shuffle_ixn_list).reshape(-1))
-            assert shuffled_ixns_set == test_shuffle_ixns_set
-            assert_ixn_lists_are_equal(shuffled_ixns, test_shuffle_ixn_list)
+        nblist.set_row_idxs(shuffled_idxs)
+        test_shuffle_ixn_list = nblist.get_nblist(coords, box, cutoff)
+        test_shuffle_ixns_set = set(np.concatenate(test_shuffle_ixn_list).reshape(-1))
+        assert shuffled_ixns_set == test_shuffle_ixns_set
+        assert_ixn_lists_are_equal(shuffled_ixns, test_shuffle_ixn_list)
 
 
-def test_neighborlist():
+@pytest.mark.memcheck
+@pytest.mark.parametrize("sort", [True])
+@pytest.mark.parametrize("num_atoms", [35, 64, 129, 1025, 1259, 2029])
+def test_neighborlist(num_atoms, sort):
     water_coords = get_water_coords(3, sort=False)
-    sizes = [35, 64, 129, 1025, 1259, 2029]
-    max_size = max(sizes)
-    nblists = [custom_ops.Neighborlist_f32(max_size), custom_ops.Neighborlist_f64(max_size)]
-    for size in sizes:
-        print("testing size:", size)
+    nblists = [custom_ops.Neighborlist_f32(num_atoms), custom_ops.Neighborlist_f64(num_atoms)]
 
-        np.random.seed(1234)
-        atom_idxs = np.random.choice(np.arange(size), size, replace=False)
-        coords = water_coords[atom_idxs]
-        padding = 0.1
-        diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
-        box = np.eye(3) * diag
+    np.random.seed(1234)
+    atom_idxs = np.random.choice(np.arange(num_atoms), num_atoms, replace=False)
+    coords = water_coords[atom_idxs]
+    padding = 0.1
+    diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
+    box = np.eye(3) * diag
 
-        cutoff = 1.0
+    cutoff = 1.0
 
-        sort = True
-        if sort:
-            perm = hilbert_sort(coords, box)
-            coords = coords[perm]
+    if sort:
+        perm = hilbert_sort(coords, box)
+        coords = coords[perm]
 
-        ref_ixn_list = build_reference_ixn_list(coords, box, cutoff)
-        for nblist in nblists:
-            # Resize the nblist accordingly
-            nblist.resize(size)
-            # Run twice to ensure deterministic results
-            for _ in range(2):
-                test_ixn_list = nblist.get_nblist(coords, box, cutoff)
+    ref_ixn_list = build_reference_ixn_list(coords, box, cutoff)
+    for nblist in nblists:
+        # Run twice to ensure deterministic results
+        for _ in range(2):
+            test_ixn_list = nblist.get_nblist(coords, box, cutoff)
 
-                assert len(ref_ixn_list) == len(test_ixn_list)
+            assert len(ref_ixn_list) == len(test_ixn_list)
 
-                assert_ixn_lists_are_equal(ref_ixn_list, test_ixn_list)
+            assert_ixn_lists_are_equal(ref_ixn_list, test_ixn_list)
 
 
+@pytest.mark.memcheck
 def test_neighborlist_resize():
     N = 3
 
@@ -290,7 +285,10 @@ def test_neighborlist_resize():
         with pytest.raises(RuntimeError, match=f"size is greater than max size: {N + 1} > {N}"):
             nblist.resize(N + 1)
 
+        nblist.resize(N - 1)
 
+
+@pytest.mark.memcheck
 def test_neighborlist_invalid_row_idxs():
     N = 3
 
@@ -316,6 +314,7 @@ def test_neighborlist_invalid_row_idxs():
         assert "indices values must be less than N" == str(e.value)
 
 
+@pytest.mark.memcheck
 def test_neighborlist_on_subset_of_system():
     ligand, _, _ = get_hif2a_ligand_pair_single_topology()
     ligand_coords = get_romol_conf(ligand)
@@ -367,6 +366,7 @@ def test_neighborlist_on_subset_of_system():
         assert_ixn_lists_are_equal(reference_complete_ixns, test_ixn_list)
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("block_size", [32])
 @pytest.mark.parametrize("tiles", [2, 10, 100])
 def test_nblist_max_interactions(block_size, tiles):
@@ -387,7 +387,10 @@ def test_nblist_max_interactions(block_size, tiles):
     assert nblist.get_tile_ixn_count() * block_size == max_ixn_count
 
 
-@pytest.fixture(scope="module", params=["solvent", "complex"])
+@pytest.fixture(
+    scope="module",
+    params=[pytest.param("solvent", marks=pytest.mark.memcheck), pytest.param("complex", marks=pytest.mark.memcheck)],
+)
 def hif2a_single_topology_leg(request):
     return setup_hif2a_initial_state(request.param)
 
@@ -460,6 +463,7 @@ def compute_mean_tile_density(
     return float(np.mean([tile_densities]))
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("cutoff", [1.0, 1.2])
 @pytest.mark.parametrize("precision", [np.float32])
 def test_nblist_density_dhfr(cutoff, precision):
