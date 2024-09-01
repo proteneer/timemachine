@@ -19,9 +19,8 @@ from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import SummedPotential
 from timemachine.testsystems.ligands import get_biphenyl
 
-pytestmark = [pytest.mark.memcheck]
 
-
+@pytest.mark.memcheck
 def test_multiple_steps_store_interval():
     np.random.seed(2022)
 
@@ -73,6 +72,7 @@ def test_multiple_steps_store_interval():
     _, _ = bps[0].execute(test_xs[0], test_boxes[0])
 
 
+@pytest.mark.memcheck
 def test_set_and_get():
     """
     This test the setters and getters in the context.
@@ -137,6 +137,7 @@ def test_set_and_get():
     np.testing.assert_equal(ctxt.get_box(), new_box)
 
 
+@pytest.mark.memcheck
 def test_fwd_mode():
     """
     This test verifies that stepping forward in time matches whether using the
@@ -245,6 +246,7 @@ def test_fwd_mode():
     assert test_boxes.shape[2] == test_xs.shape[2]
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_multiple_steps_local_validation(freeze_reference):
     seed = 2022
@@ -311,6 +313,7 @@ def test_multiple_steps_local_validation(freeze_reference):
         ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=1e7)
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_multiple_steps_local_selection_validation(freeze_reference):
     seed = 2022
@@ -379,6 +382,7 @@ def test_multiple_steps_local_selection_validation(freeze_reference):
         ctxt.multiple_steps_local_selection(100, -1, np.array([3], dtype=np.int32))
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_multiple_steps_local_consistency(freeze_reference):
     """Verify that running multiple_steps_local is consistent.
@@ -496,6 +500,7 @@ def test_multiple_steps_local_consistency(freeze_reference):
     np.testing.assert_array_equal(summed_pot_boxes, boxes)
 
 
+@pytest.mark.memcheck
 def test_get_movers():
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
@@ -530,6 +535,7 @@ def test_get_movers():
     assert movers[0] == barostat_impl
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_multiple_steps_local_entire_system(freeze_reference):
     """Verify that running multiple_steps_local is valid even when consuming the entire system, IE radius ~= inf.
@@ -571,6 +577,7 @@ def test_multiple_steps_local_entire_system(freeze_reference):
         assert np.all(xs[0] != coords), "All coordinates should have moved"
 
 
+@pytest.mark.memcheck
 def test_multiple_steps_local_no_free_particles():
     """Verify that running multiple_steps_local, with free_reference=True raises an exception if no free particles
     selected. In this case we can trigger this failure by having a single atom molecule, and moving it away from
@@ -615,6 +622,7 @@ def test_multiple_steps_local_no_free_particles():
         xs, boxes = ctxt.multiple_steps_local(1, local_idxs, radius=radius, k=k, seed=seed)
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_local_md_initialization(freeze_reference):
     """Verify that initialization of local md doesn't impact behavior of context."""
@@ -698,6 +706,7 @@ def test_local_md_initialization(freeze_reference):
     np.testing.assert_array_equal(ref_local_boxes, comp_local_boxes)
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_local_md_with_selection_mask(freeze_reference):
     """Verify that running local md with a selection mask works as expected"""
@@ -754,6 +763,7 @@ def test_local_md_with_selection_mask(freeze_reference):
     assert np.all(xs[-1][frozen_particles] == coords[frozen_particles])
 
 
+@pytest.mark.memcheck
 def test_setup_context_with_references():
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
@@ -821,6 +831,7 @@ def test_setup_context_with_references():
         assert ref() is None
 
 
+@pytest.mark.memcheck
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_local_md_nonbonded_all_pairs_subset(freeze_reference):
     """Test that if the nonbonded all pairs is set up on a subset of the system, that local MD can correctly
@@ -879,6 +890,7 @@ def test_local_md_nonbonded_all_pairs_subset(freeze_reference):
         check_force_norm(-test_du_dx)
 
 
+@pytest.mark.memcheck
 def test_context_invalid_boxes():
     """Verify that nonbonded all pairs potentials provided to the context will correctly validate the box size"""
     mol, _ = get_biphenyl()
@@ -933,6 +945,7 @@ def test_context_invalid_boxes():
     assert len(boxes) == 0
 
 
+@pytest.mark.memcheck
 def test_context_invalid_boxes_without_nonbonded_potentials():
     """Verify that without a nonbonded all pairs potentials the context performs no check"""
     mol, _ = get_biphenyl()
@@ -974,6 +987,7 @@ def test_context_with_threads(num_threads):
     dt = 1.5e-3
     friction = 0.0
     seed = 2024
+    n_frames = 100
 
     unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
     v0 = np.zeros_like(coords)
@@ -987,16 +1001,14 @@ def test_context_with_threads(num_threads):
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
         ctxts.append(ctxt)
 
-        md_params = MDParams(n_eq_steps=100_000, n_frames=100, steps_per_frame=400, seed=seed + thread_idx)
+        md_params = MDParams(n_eq_steps=100_000, n_frames=n_frames, steps_per_frame=400, seed=seed + thread_idx)
         sample_params.append(md_params)
 
     def thread_sampling(args):
         ctxt, md_params = args
-        traj = sample_with_context(
-            ctxt, md_params, constants.DEFAULT_TEMP, np.empty((0,)), max_buffer_frames=md_params.n_frames
-        )
+        traj = sample_with_context(ctxt, md_params, constants.DEFAULT_TEMP, np.empty((0,)), max_buffer_frames=n_frames)
         return traj
 
     with ThreadPool(num_threads) as pool:
         for traj in pool.imap_unordered(thread_sampling, zip(ctxts, sample_params)):
-            print(len(traj.frames))
+            assert len(traj.frames) == n_frames
