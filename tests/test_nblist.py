@@ -389,7 +389,7 @@ def test_nblist_max_interactions(block_size, tiles):
 
 @pytest.fixture(
     scope="module",
-    params=[pytest.param("solvent", marks=pytest.mark.memcheck), pytest.param("complex", marks=pytest.mark.memcheck)],
+    params=["solvent", "complex"],
 )
 def hif2a_single_topology_leg(request):
     return setup_hif2a_initial_state(request.param)
