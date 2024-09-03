@@ -103,9 +103,9 @@ class NPTMove(NVTMove):
     ):
         super().__init__(bps, masses, temperature, n_steps, seed, dt=dt, friction=friction)
 
-        assert isinstance(bps[0].potential, HarmonicBond), "First potential must be of type HarmonicBond"
+        bonded_pot = next(bp.potential for bp in bps if isinstance(bp.potential, HarmonicBond))
 
-        bond_list = get_bond_list(bps[0].potential)
+        bond_list = get_bond_list(bonded_pot)
         group_idxs = get_group_indices(bond_list, len(masses))
 
         barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, barostat_interval, seed + 1)
