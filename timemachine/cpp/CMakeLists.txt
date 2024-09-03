@@ -114,6 +114,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/tibd_exchange_move.cu
   src/nonbonded_mol_energy.cu
   src/kernels/k_hilbert.cu
+  src/kernels/k_nonbonded_common.cu
   src/kernels/k_indices.cu
   src/kernels/k_logsumexp.cu
   src/kernels/k_rotations.cu

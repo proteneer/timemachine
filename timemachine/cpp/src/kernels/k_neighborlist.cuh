@@ -12,6 +12,7 @@ template <typename RealType>
 void __global__ k_find_block_bounds(
     const int num_tiles,                       // Number of tiles
     const int num_indices,                     // Number of indices
+    const int *__restrict__ rebuild_flag,      // [1] Flag indicating to rebuild
     const unsigned int *__restrict__ row_idxs, // [num_indices]
     const double *__restrict__ coords,         // [N*3]
     const double *__restrict__ box,            // [3*3]
@@ -22,6 +23,10 @@ void __global__ k_find_block_bounds(
 
     // Algorithm taken from https://github.com/openmm/openmm/blob/master/platforms/cuda/src/kernels/findInteractingBlocks.cu#L7
     // Computes smaller bounding boxes than simpler form by accounting for periodic box conditions
+
+    if (*rebuild_flag == 0) {
+        return;
+    }
 
     // each warp processes one tile
     int tile_idx = (blockIdx.x * blockDim.x + threadIdx.x) / WARP_SIZE;
@@ -118,10 +123,15 @@ void __global__ k_find_block_bounds(
 void __global__ k_compact_trim_atoms(
     const int N,
     const int Y,
+    const int *rebuild_flag, // [1] Flag indicating whether to rebuild
     unsigned int *__restrict__ trim_atoms,
     unsigned int *__restrict__ interactionCount,
     int *__restrict__ interactingTiles,
     unsigned int *__restrict__ interactingAtoms) {
+
+    if (*rebuild_flag == 0) {
+        return;
+    }
 
     // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
     __shared__ int ixn_j_buffer[2 * WARP_SIZE];
@@ -201,6 +211,7 @@ void __global__ k_find_blocks_with_ixns(
     const int N,                                  // Total number of atoms
     const int NC,                                 // Number of columns idxs
     const int NR,                                 // Number of rows idxs
+    const int *rebuild_flag,                      // [1] Flag indicating whether to rebuild
     const unsigned int *__restrict__ column_idxs, // [NC]
     const unsigned int *__restrict__ row_idxs,    // [NR]
     const RealType *__restrict__ column_bb_ctr,   // [N * 3] block centers
@@ -216,6 +227,10 @@ void __global__ k_find_blocks_with_ixns(
     const double cutoff) {
 
     static_assert(TILE_SIZE == WARP_SIZE, "TILE_SIZE != WARP_SIZE is not currently supported");
+
+    if (*rebuild_flag == 0) {
+        return;
+    }
 
     const int indexInWarp = threadIdx.x % WARP_SIZE;
     const int warpMask = (1 << indexInWarp) - 1;

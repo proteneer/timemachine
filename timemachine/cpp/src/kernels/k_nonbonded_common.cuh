@@ -245,4 +245,13 @@ void __device__ __forceinline__ compute_lj(
     eps_grad = lj_scale * 4 * (sig6_inv_d6ij - 1) * sig6_inv_d6ij;
 }
 
+void __global__ k_update_neighborlist_state(
+    const int N,
+    const int *__restrict__ rebuild_flag, // [1]
+    const double *__restrict__ coords,    // [N, 3]
+    const double *__restrict__ box,       // [3, 3]
+    double *__restrict__ nblist_coords,   // [N, 3]
+    double *__restrict__ nblist_box       // [3, 3]
+);
+
 } // namespace timemachine

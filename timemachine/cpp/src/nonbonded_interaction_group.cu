@@ -66,7 +66,6 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     cudaSafeMalloc(&d_nblist_box_, 3 * 3 * sizeof(*d_nblist_box_));
     gpuErrchk(cudaMemset(d_nblist_box_, 0, 3 * 3 * sizeof(*d_nblist_box_)));
     cudaSafeMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_));
-    gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
 
     gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, NONBONDED_KERNEL_BLOCKS));
 
@@ -98,7 +97,6 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
     gpuErrchk(cudaFree(d_nblist_x_));
     gpuErrchk(cudaFree(d_nblist_box_));
     gpuErrchk(cudaFree(d_rebuild_nblist_));
-    gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
 
     gpuErrchk(cudaEventDestroy(nblist_flag_sync_event_));
 
@@ -122,8 +120,6 @@ void NonbondedInteractionGroup<RealType>::sort(const double *d_coords, const dou
             d_perm_ + NR_, d_col_atom_idxs_, NC_ * sizeof(*d_col_atom_idxs_), cudaMemcpyDeviceToDevice, stream));
     }
     gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, sizeof(*d_rebuild_nblist_), stream));
-    // Set the pinned memory to indicate that we need to rebuild
-    p_rebuild_nblist_[0] = 1;
 }
 
 template <typename RealType>
@@ -185,10 +181,6 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         k_check_rebuild_coords_and_box_gather<RealType><<<B_K, tpb, 0, stream>>>(
             NR_ + NC_, d_perm_, d_x, d_nblist_x_, d_box, d_nblist_box_, nblist_padding_, d_rebuild_nblist_);
         gpuErrchk(cudaPeekAtLastError());
-        // we can optimize this away by doing the check on the GPU directly.
-        gpuErrchk(cudaMemcpyAsync(
-            p_rebuild_nblist_, d_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
-        gpuErrchk(cudaEventRecord(nblist_flag_sync_event_, stream));
     }
 
     // compute new coordinates/params
@@ -203,17 +195,12 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, K * PARAMS_PER_ATOM * sizeof(*d_sorted_du_dp_), stream))
     }
 
-    // Syncing to an event allows having additional kernels run while we synchronize
-    // Note that if no event is recorded, this is effectively a no-op, such as in the case of sorting.
-    gpuErrchk(cudaEventSynchronize(nblist_flag_sync_event_));
-    if (p_rebuild_nblist_[0] > 0) {
-
-        nblist_.build_nblist_device(K, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
-
-        gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
-        gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-        gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3 * 3 * sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
-    }
+    nblist_.build_nblist_device(K, d_rebuild_nblist_, d_sorted_x_, d_box, cutoff_ + nblist_padding_, stream);
+    // Update the neighborlist state if necessary
+    k_update_neighborlist_state<<<ceil_divide(N, tpb), tpb, 0, stream>>>(
+        N, d_rebuild_nblist_, d_x, d_box, d_nblist_x_, d_nblist_box_);
+    gpuErrchk(cudaPeekAtLastError());
+    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
 
     // look up which kernel we need for this computation
     int kernel_idx = 0;
