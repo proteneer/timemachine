@@ -1023,7 +1023,7 @@ def test_combine_with_host_split(precision, rtol, atol):
             ligand_idxs,
             host_system.nonbonded.potential.beta,
             cutoff,
-            col_atom_idxs=protein_idxs + water_idxs,
+            col_atom_idxs=np.array(list(protein_idxs) + list(water_idxs), dtype=np.int32),
         )
 
         q_handle = ff.q_handle
