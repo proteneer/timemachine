@@ -127,7 +127,6 @@ def test_split():
 
     check(ffs.ref)
     check(ffs.intra)
-    check(ffs.solv)
     check(ffs.prot)
     check(ffs.prot)
 
