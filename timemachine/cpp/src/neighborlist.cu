@@ -61,8 +61,11 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     const int N, const double *h_coords, const double *h_box, double *h_bb_ctrs, double *h_bb_exts) {
 
     const int D = 3;
+
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
     DeviceBuffer<double> d_coords(N * D);
     DeviceBuffer<double> d_box(D * D);
+    DeviceBuffer<int> d_rebuild(1);
 
     std::vector<RealType> h_block_bounds_centers(this->num_column_blocks() * 3);
     std::vector<RealType> h_block_bounds_extents(this->num_column_blocks() * 3);
@@ -70,7 +73,10 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     d_coords.copy_from(h_coords);
     d_box.copy_from(h_box);
 
-    this->compute_block_bounds_device(N, D, d_coords.data, d_box.data, static_cast<cudaStream_t>(0));
+    // Make sure the flag is set to rebuild
+    gpuErrchk(cudaMemsetAsync(d_rebuild.data, 1, d_rebuild.size(), stream));
+
+    this->compute_block_bounds_device(N, D, d_rebuild.data, d_coords.data, d_box.data, stream);
     gpuErrchk(cudaDeviceSynchronize());
 
     gpuErrchk(cudaMemcpy(
@@ -108,12 +114,17 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
         throw std::runtime_error("N != N_");
     }
 
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+
+    DeviceBuffer<int> d_rebuild(1);
     DeviceBuffer<double> d_coords(N * 3);
     DeviceBuffer<double> d_box(3 * 3);
     d_coords.copy_from(h_coords);
     d_box.copy_from(h_box);
+    // Make sure the flag is set to rebuild
+    gpuErrchk(cudaMemsetAsync(d_rebuild.data, 1, d_rebuild.size(), stream));
 
-    this->build_nblist_device(N, d_coords.data, d_box.data, cutoff, static_cast<cudaStream_t>(0));
+    this->build_nblist_device(N, d_rebuild.data, d_coords.data, d_box.data, cutoff, stream);
 
     gpuErrchk(cudaDeviceSynchronize());
     const int column_blocks = this->num_column_blocks();
@@ -147,10 +158,15 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
 
 template <typename RealType>
 void Neighborlist<RealType>::build_nblist_device(
-    const int N, const double *d_coords, const double *d_box, const double cutoff, const cudaStream_t stream) {
+    const int N,
+    const int *rebuild_flag,
+    const double *d_coords,
+    const double *d_box,
+    const double cutoff,
+    const cudaStream_t stream) {
 
     const int D = 3;
-    this->compute_block_bounds_device(N, D, d_coords, d_box, stream);
+    this->compute_block_bounds_device(N, D, rebuild_flag, d_coords, d_box, stream);
     const int tpb = TILE_SIZE;
     const int row_blocks = this->num_row_blocks();
     const int Y = this->Y();
@@ -165,6 +181,7 @@ void Neighborlist<RealType>::build_nblist_device(
             N_,
             NC_,
             NR_,
+            rebuild_flag,
             d_column_idxs_,
             d_row_idxs_,
             d_column_block_bounds_ctr_,
@@ -183,6 +200,7 @@ void Neighborlist<RealType>::build_nblist_device(
             N_,
             NC_,
             NR_,
+            rebuild_flag,
             d_column_idxs_,
             d_row_idxs_,
             d_column_block_bounds_ctr_,
@@ -200,17 +218,18 @@ void Neighborlist<RealType>::build_nblist_device(
 
     gpuErrchk(cudaPeekAtLastError());
     k_compact_trim_atoms<<<row_blocks, tpb, 0, stream>>>(
-        N_, Y, d_trim_atoms_, d_ixn_count_, d_ixn_tiles_, d_ixn_atoms_);
+        N_, Y, rebuild_flag, d_trim_atoms_, d_ixn_count_, d_ixn_tiles_, d_ixn_atoms_);
 
     gpuErrchk(cudaPeekAtLastError());
 }
 
 template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_device(
-    const int N,            // Number of atoms
-    const int D,            // Box dimensions
-    const double *d_coords, // [N*3]
-    const double *d_box,    // [D*3]
+    const int N,             // Number of atoms
+    const int D,             // Box dimensions
+    const int *rebuild_flag, // [1] flag indicating to rebuild
+    const double *d_coords,  // [N*3]
+    const double *d_box,     // [D*3]
     const cudaStream_t stream) {
 
     if (D != 3) {
@@ -222,6 +241,7 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     k_find_block_bounds<RealType><<<ceil_divide(NC_, tpb), tpb, 0, stream>>>(
         this->num_column_blocks(),
         NC_,
+        rebuild_flag,
         d_column_idxs_,
         d_coords,
         d_box,
@@ -235,6 +255,7 @@ void Neighborlist<RealType>::compute_block_bounds_device(
         k_find_block_bounds<RealType><<<ceil_divide(NR_, tpb), tpb, 0, stream>>>(
             this->num_row_blocks(),
             NR_,
+            rebuild_flag,
             d_row_idxs_,
             d_coords,
             d_box,
