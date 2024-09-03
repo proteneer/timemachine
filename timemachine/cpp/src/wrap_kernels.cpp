@@ -522,7 +522,7 @@ void declare_context(py::module &m) {
                     n_steps, reference_idx, vec_selection_idxs, x_interval, radius, k);
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
-                py::gil_scoped_acquire acquire; // Re-aquire the GIL to construct python objects
+                py::gil_scoped_acquire acquire; // Re-acquire the GIL to construct python objects
                 py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
                 std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
 
@@ -733,6 +733,9 @@ void declare_potential(py::module &m) {
                 if (params.ndim() < 2) {
                     throw std::runtime_error("parameters must have at least 2 dimensions");
                 }
+
+                py::gil_scoped_release release;
+
                 const long unsigned int coord_batches = coords.shape()[0];
                 const long unsigned int N = coords.shape()[1];
                 const long unsigned int D = coords.shape()[2];
@@ -769,6 +772,7 @@ void declare_potential(py::module &m) {
                     compute_du_dp ? du_dp.data() : nullptr,
                     compute_u ? u.data() : nullptr);
 
+                py::gil_scoped_acquire acquire;
                 auto result = py::make_tuple(py::none(), py::none(), py::none());
                 if (compute_du_dx) {
                     py::array_t<double, py::array::c_style> py_du_dx({coord_batches, param_batches, N, D});
@@ -889,6 +893,8 @@ void declare_potential(py::module &m) {
                     }
                 }
 
+                py::gil_scoped_release release;
+
                 const long unsigned int coords_size = coords.shape()[0];
                 const long unsigned int N = coords.shape()[1];
                 const long unsigned int D = coords.shape()[2];
@@ -926,6 +932,7 @@ void declare_potential(py::module &m) {
                     compute_du_dp ? du_dp.data() : nullptr,
                     compute_u ? u.data() : nullptr);
 
+                py::gil_scoped_acquire acquire;
                 auto result = py::make_tuple(py::none(), py::none(), py::none());
                 if (compute_du_dx) {
                     py::array_t<double, py::array::c_style> py_du_dx({batch_size, N, D});
@@ -1030,6 +1037,8 @@ void declare_potential(py::module &m) {
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
                 verify_coords_and_box(coords, box);
+
+                py::gil_scoped_release release;
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx;
                 if (compute_du_dx) {
@@ -1053,6 +1062,8 @@ void declare_potential(py::module &m) {
                     compute_du_dx ? &du_dx[0] : nullptr,
                     compute_du_dp ? &du_dp[0] : nullptr,
                     compute_u ? &u[0] : nullptr);
+
+                py::gil_scoped_acquire acquire;
 
                 auto result = py::make_tuple(py::none(), py::none(), py::none());
 
@@ -1139,6 +1150,9 @@ void declare_bound_potential(py::module &m) {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 verify_coords_and_box(coords, box);
+
+                py::gil_scoped_release release;
+
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx;
                 if (compute_du_dx) {
@@ -1152,6 +1166,7 @@ void declare_bound_potential(py::module &m) {
                 bp.execute_host(
                     N, coords.data(), box.data(), compute_du_dx ? &du_dx[0] : nullptr, compute_u ? &u[0] : nullptr);
 
+                py::gil_scoped_acquire acquire;
                 auto result = py::make_tuple(py::none(), py::none());
 
                 if (compute_du_dx) {
@@ -1187,6 +1202,8 @@ void declare_bound_potential(py::module &m) {
                 if (coords.shape()[0] != boxes.shape()[0]) {
                     throw std::runtime_error("number of batches of coords and boxes don't match");
                 }
+
+                py::gil_scoped_release release;
                 const long unsigned int coord_batches = coords.shape()[0];
                 const long unsigned int N = coords.shape()[1];
                 const long unsigned int D = coords.shape()[2];
@@ -1209,6 +1226,8 @@ void declare_bound_potential(py::module &m) {
                     boxes.data(),
                     compute_du_dx ? du_dx.data() : nullptr,
                     compute_u ? u.data() : nullptr);
+
+                py::gil_scoped_acquire acquire;
 
                 auto result = py::make_tuple(py::none(), py::none());
                 if (compute_du_dx) {
