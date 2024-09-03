@@ -854,7 +854,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
             vacuum_u_inter_scaled,
             solvent_grad_inter_scaled,
             solvent_u_inter_scaled,
-        ) = get_vacuum_solvent_u_grads(ffs.solv, lamb)
+        ) = get_vacuum_solvent_u_grads(ffs.prot, lamb)
 
         # Compute the expected intermol scaled potential
         expected_inter_scaled_u = solvent_u_scaled - vacuum_u_scaled + vacuum_u_ref
@@ -1023,11 +1023,11 @@ def test_combine_with_host_split(precision, rtol, atol):
             ligand_idxs,
             host_system.nonbonded.potential.beta,
             cutoff,
-            col_atom_idxs=water_idxs if is_solvent else protein_idxs,
+            col_atom_idxs=protein_idxs + water_idxs,
         )
 
-        q_handle = ff.q_handle_solv if is_solvent else ff.q_handle
-        lj_handle = ff.lj_handle_solv if is_solvent else ff.lj_handle
+        q_handle = ff.q_handle
+        lj_handle = ff.lj_handle
         guest_params = st._get_guest_params(q_handle, lj_handle, lamb, cutoff)
 
         host_params = host_system.nonbonded.params

@@ -1869,8 +1869,7 @@ class SingleTopology(AtomMapMixin):
         num_guest_atoms = self.get_num_atoms()
         cutoff = host_nonbonded.potential.cutoff
 
-        guest_ixn_water_params = self._get_guest_params(self.ff.q_handle_solv, self.ff.lj_handle_solv, lamb, cutoff)
-        guest_ixn_other_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
+        guest_ixn_env_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
 
         # L-W terms
         num_other_atoms = num_host_atoms - num_water_atoms
@@ -1886,11 +1885,9 @@ class SingleTopology(AtomMapMixin):
 
         ixn_pots, ixn_params = get_ligand_ixn_pots_params(
             get_lig_idxs(),
-            get_water_idxs(),
-            get_other_idxs(),
+            get_other_idxs() + get_water_idxs(),
             host_nonbonded.params,
-            guest_ixn_water_params,
-            guest_ixn_other_params,
+            guest_ixn_env_params,
             beta=host_nonbonded.potential.beta,
             cutoff=cutoff,
         )

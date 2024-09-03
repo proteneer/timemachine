@@ -101,10 +101,8 @@ def test_split():
         np.testing.assert_array_equal(ff.it_handle.params, params.it_params)
         np.testing.assert_array_equal(ff.q_handle.params, params.q_params)
         np.testing.assert_array_equal(ff.q_handle_intra.params, params.q_params_intra)
-        np.testing.assert_array_equal(ff.q_handle_solv.params, params.q_params_solv)
         np.testing.assert_array_equal(ff.lj_handle.params, params.lj_params)
         np.testing.assert_array_equal(ff.lj_handle_intra.params, params.lj_params_intra)
-        np.testing.assert_array_equal(ff.lj_handle_solv.params, params.lj_params_solv)
 
         assert ff.get_ordered_handles() == [
             ff.hb_handle,
@@ -113,10 +111,8 @@ def test_split():
             ff.it_handle,
             ff.q_handle,
             ff.q_handle_intra,
-            ff.q_handle_solv,
             ff.lj_handle,
             ff.lj_handle_intra,
-            ff.lj_handle_solv,
         ]
 
         combined = combine_params(ff.get_params(), ff.get_params())
@@ -126,10 +122,8 @@ def test_split():
         np.testing.assert_array_equal((ff.it_handle.params, ff.it_handle.params), combined.it_params)
         np.testing.assert_array_equal((ff.q_handle.params, ff.q_handle.params), combined.q_params)
         np.testing.assert_array_equal((ff.q_handle_intra.params, ff.q_handle_intra.params), combined.q_params_intra)
-        np.testing.assert_array_equal((ff.q_handle_solv.params, ff.q_handle_solv.params), combined.q_params_solv)
         np.testing.assert_array_equal((ff.lj_handle.params, ff.lj_handle.params), combined.lj_params)
         np.testing.assert_array_equal((ff.lj_handle_intra.params, ff.lj_handle_intra.params), combined.lj_params_intra)
-        np.testing.assert_array_equal((ff.lj_handle_solv.params, ff.lj_handle_solv.params), combined.lj_params_solv)
 
     check(ffs.ref)
     check(ffs.intra)

@@ -120,20 +120,16 @@ class BaseTopologyRescaledCharges(topology.BaseTopology):
         self,
         ff_q_params,
         ff_q_params_intra,
-        ff_q_params_solv,
         ff_lj_params,
         ff_lj_params_intra,
-        ff_lj_params_solv,
         intramol_params=True,
     ):
         params, nb = topology.BaseTopology.parameterize_nonbonded(
             self,
             ff_q_params,
             ff_q_params_intra,
-            ff_q_params_solv,
             ff_lj_params,
             ff_lj_params_intra,
-            ff_lj_params_solv,
             intramol_params=intramol_params,
         )
         charge_indices = jnp.index_exp[:, 0]

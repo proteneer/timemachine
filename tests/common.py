@@ -378,7 +378,6 @@ def gen_nonbonded_params_with_4d_offsets(
 class SplitForcefield:
     ref: Forcefield  # ref ff
     intra: Forcefield  # intermolecular charge terms/LJ terms scaled
-    solv: Forcefield  # water-ligand charge terms/LJ terms scaled
     prot: Forcefield  # protein-ligand charge terms/LJ terms scaled
     scaled: Forcefield  # all NB terms scaled
 
@@ -403,13 +402,6 @@ def load_split_forcefields() -> SplitForcefield:
     ff_intra.lj_handle_intra.params[:, SIG_IDX] *= SIG_SCALE
     ff_intra.lj_handle_intra.params[:, EPS_IDX] *= EPS_SCALE
 
-    ff_solv = Forcefield.load_default()
-    assert ff_solv.q_handle_solv is not None
-    assert ff_solv.lj_handle_solv is not None
-    ff_solv.q_handle_solv.params *= Q_SCALE
-    ff_solv.lj_handle_solv.params[:, SIG_IDX] *= SIG_SCALE
-    ff_solv.lj_handle_solv.params[:, EPS_IDX] *= EPS_SCALE
-
     ff_prot = Forcefield.load_default()
     assert ff_prot.q_handle is not None
     assert ff_prot.lj_handle is not None
@@ -420,20 +412,15 @@ def load_split_forcefields() -> SplitForcefield:
     ff_scaled = Forcefield.load_default()
     assert ff_scaled.q_handle is not None
     assert ff_scaled.q_handle_intra is not None
-    assert ff_scaled.q_handle_solv is not None
     assert ff_scaled.lj_handle is not None
     assert ff_scaled.lj_handle_intra is not None
-    assert ff_scaled.lj_handle_solv is not None
     ff_scaled.q_handle.params *= Q_SCALE
     ff_scaled.q_handle_intra.params *= Q_SCALE
-    ff_scaled.q_handle_solv.params *= Q_SCALE
     ff_scaled.lj_handle.params[:, SIG_IDX] *= SIG_SCALE
     ff_scaled.lj_handle.params[:, EPS_IDX] *= EPS_SCALE
     ff_scaled.lj_handle_intra.params[:, SIG_IDX] *= SIG_SCALE
     ff_scaled.lj_handle_intra.params[:, EPS_IDX] *= EPS_SCALE
-    ff_scaled.lj_handle_solv.params[:, SIG_IDX] *= SIG_SCALE
-    ff_scaled.lj_handle_solv.params[:, EPS_IDX] *= EPS_SCALE
-    return SplitForcefield(ff_ref, ff_intra, ff_solv, ff_prot, ff_scaled)
+    return SplitForcefield(ff_ref, ff_intra, ff_prot, ff_scaled)
 
 
 def check_split_ixns(
@@ -477,7 +464,6 @@ def check_split_ixns(
             ref - ref ff
             intra - ligand-ligand intramolecular parameters are scaled
             prot - protein-ligand interaction parameters are scaled
-            solv - water-ligand interaction parameters are scaled
         """
 
         # Compute the grads, potential with the ref ff
@@ -532,31 +518,6 @@ def check_split_ixns(
 
         np.testing.assert_allclose(expected_u, sum_u_intra, rtol=rtol, atol=atol)
         np.testing.assert_allclose(expected_grad, sum_grad_intra, rtol=rtol, atol=atol)
-
-        # Compute the grads, potential with the ligand-water terms scaled
-        sum_grad_solv, sum_u_solv = compute_new_grad_u(
-            ffs.solv, precision, coords0, box, lamb, num_water_atoms, host_bps
-        )
-        WL_grad_solv, WL_u_solv = compute_ixn_grad_u(
-            ffs.solv,
-            precision,
-            coords0,
-            box,
-            lamb,
-            num_water_atoms,
-            host_bps,
-            water_idxs,
-            ligand_idxs,
-            protein_idxs,
-            is_solvent=True,
-        )
-
-        # U_solv = U_sum_ref - WL_ref + WL_solv
-        expected_u = sum_u_ref - WL_u_ref + WL_u_solv
-        expected_grad = sum_grad_ref - WL_grad_ref + WL_grad_solv
-
-        np.testing.assert_allclose(expected_u, sum_u_solv, rtol=rtol, atol=atol)
-        np.testing.assert_allclose(expected_grad, sum_grad_solv, rtol=rtol, atol=atol)
 
         # Compute the grads, potential with the protein-ligand terms scaled
         sum_grad_prot, sum_u_prot = compute_new_grad_u(
