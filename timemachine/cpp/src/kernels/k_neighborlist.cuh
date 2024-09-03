@@ -24,14 +24,14 @@ void __global__ k_find_block_bounds(
     // Algorithm taken from https://github.com/openmm/openmm/blob/master/platforms/cuda/src/kernels/findInteractingBlocks.cu#L7
     // Computes smaller bounding boxes than simpler form by accounting for periodic box conditions
 
+    if (*rebuild_flag == 0) {
+        return;
+    }
+
     // each warp processes one tile
     int tile_idx = (blockIdx.x * blockDim.x + threadIdx.x) / WARP_SIZE;
 
     if (tile_idx >= num_tiles) {
-        return;
-    }
-
-    if (*rebuild_flag == 0) {
         return;
     }
 
