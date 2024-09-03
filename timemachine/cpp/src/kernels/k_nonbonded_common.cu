@@ -19,7 +19,7 @@ void __global__ k_update_neighborlist_state(
     }
 
     while (block_idx < N * D) {
-        if (block_idx < constexpr(D * D)) {
+        if (block_idx < D * D) {
             nblist_box[block_idx] = box[block_idx];
         }
         nblist_coords[block_idx] = coords[block_idx];
