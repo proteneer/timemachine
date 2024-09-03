@@ -296,8 +296,8 @@ def setup_initial_states(
             bp = ubp.bind(param)
             bps.append(bp)
 
-        bond_potential = ubps[0]
-        assert isinstance(bond_potential, potentials.HarmonicBond)
+        bond_potential = next(pot for pot in ubps if isinstance(pot, potentials.HarmonicBond))
+
         hmr_masses = model_utils.apply_hmr(masses, bond_potential.idxs)
         group_idxs = get_group_indices(get_bond_list(bond_potential), len(masses))
         baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, seed)

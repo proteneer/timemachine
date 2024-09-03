@@ -17,6 +17,7 @@ from timemachine.fe.reweighting import one_sided_exp
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
+from timemachine.potentials import Nonbonded
 from timemachine.potentials.jax_utils import get_all_pairs_indices, pairs_from_interaction_groups, pairwise_distances
 from timemachine.potentials.nonbonded import (
     basis_expand_lj_atom,
@@ -117,7 +118,7 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = bps[-1]
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     params = nb.params
 
     beta = nb.potential.beta
@@ -330,7 +331,7 @@ def test_jax_nonbonded_block():
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = bps[-1]
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     params = nb.params
 
     N = conf.shape[0]
@@ -364,7 +365,7 @@ def test_jax_nonbonded_block_unsummed():
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = bps[-1]
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     params = nb.params
 
     N = conf.shape[0]
@@ -437,7 +438,7 @@ def test_precomputation():
     ff = Forcefield.load_default()
     system, conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = bps[-1]
+    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
     params = nb.params
 
     n_atoms = conf.shape[0]

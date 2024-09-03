@@ -66,8 +66,9 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     temperature = constants.DEFAULT_TEMP
     pressure = constants.DEFAULT_PRESSURE
 
-    harmonic_bond_potential = initial_state.potentials[0].potential
-    assert isinstance(harmonic_bond_potential, HarmonicBond)
+    harmonic_bond_potential = next(
+        bp.potential for bp in initial_state.potentials if isinstance(bp.potential, HarmonicBond)
+    )
     bond_list = get_bond_list(harmonic_bond_potential)
     masses = initial_state.integrator.masses
     if hmr:

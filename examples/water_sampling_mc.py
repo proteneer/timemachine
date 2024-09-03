@@ -25,7 +25,7 @@ from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDEx
 from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.moves import MonteCarloMove
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import HarmonicBond
+from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
 
 
 def image_xvb(initial_state, xvb_t):
@@ -115,15 +115,21 @@ def test_exchange():
     # all_pairs has masked charges
     if mol:
         # uses a summed potential
-        nb_beta = bps[-1].potential.potentials[1].beta
-        nb_cutoff = bps[-1].potential.potentials[1].cutoff
-        nb_water_ligand_params = bps[-1].potential.params_init[1]
+        summed_pot = next(bp.potential for bp in bps if isinstance(bp.potential, SummedPotential))
+        ixn_group_idx = next(
+            i for i, pot in enumerate(summed_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
+        )
+        # Use the Ixn Group params
+        nb_beta = summed_pot.potentials[ixn_group_idx].beta
+        nb_cutoff = summed_pot.potentials[ixn_group_idx].cutoff
+        nb_water_ligand_params = summed_pot.params_init[ixn_group_idx]
         print("number of ligand atoms", mol.GetNumAtoms())
     else:
+        nb_pot = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
         # does not use a summed potential
-        nb_beta = bps[-1].potential.beta
-        nb_cutoff = bps[-1].potential.cutoff
-        nb_water_ligand_params = bps[-1].params
+        nb_beta = nb_pot.potential.beta
+        nb_cutoff = nb_pot.potential.cutoff
+        nb_water_ligand_params = nb_pot.params
     print("number of water atoms", nwm * 3)
     print("water_ligand parameters", nb_water_ligand_params)
 
