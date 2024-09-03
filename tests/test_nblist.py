@@ -14,6 +14,7 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import custom_ops
 from timemachine.md.builders import build_protein_system, build_water_system
+from timemachine.potentials.jax_utils import delta_r
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -28,8 +29,8 @@ def reference_block_bounds(coords: NDArray, box: NDArray, block_size: int) -> Tu
     # Make a copy to avoid modify the coordinates that end up used later by the Neighborlist
     coords = coords.copy()
     N = coords.shape[0]
-    box_diag = np.diagonal(box)
     num_blocks = (N + block_size - 1) // block_size
+    box_diag = np.diagonal(box)
 
     _ref_ctrs = []
     _ref_exts = []
@@ -113,10 +114,6 @@ def get_water_coords(D, sort=False):
     return x
 
 
-def image_coords(x: NDArray, box_diag: NDArray) -> NDArray:
-    return x - box_diag * np.floor(x / box_diag + 0.5)
-
-
 def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> List[List[float]]:
     # compute the sparsity of the tile
     ref_ixn_list = []
@@ -127,14 +124,13 @@ def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> Li
     num_blocks = (N + block_size - 1) // block_size
     col_coords = np.expand_dims(coords, axis=0)
 
-    box_diag = np.diagonal(box)
     for rbidx in range(num_blocks):
         row_start = rbidx * block_size
         row_end = min((rbidx + 1) * block_size, N)
         row_coords = coords[row_start:row_end]
         row_coords = np.expand_dims(row_coords, axis=1)
 
-        deltas = image_coords(row_coords - col_coords, box_diag)
+        deltas = delta_r(row_coords, col_coords, box)
 
         dij = np.linalg.norm(deltas, axis=-1)
         dij[:, :row_start] = cutoff  # slight hack to discard duplicates
@@ -150,7 +146,6 @@ def build_reference_ixn_list_with_subset(
     block_size = 32
     identity_idxs = np.arange(N)
     col_idxs = np.delete(identity_idxs, row_idxs)
-    box_diag = np.diagonal(box)
 
     # Verify that the row_idxs and col_idxs are unique
     np.testing.assert_array_equal(
@@ -171,7 +166,7 @@ def build_reference_ixn_list_with_subset(
         row_end = min((rbidx + 1) * block_size, N)
         row_coords = all_row_coords[row_start:row_end]
         row_coords = np.expand_dims(row_coords, axis=1)
-        deltas = image_coords(row_coords - col_coords, box_diag)
+        deltas = delta_r(row_coords, col_coords, box)
 
         dij = np.linalg.norm(deltas, axis=-1)
         # Since the row and columns are unique, don't need to handle duplicates
@@ -430,7 +425,6 @@ def compute_mean_tile_density(
     assert column_block == 32
     assert column_block == row_block
     N = frame.shape[0]
-    box_diag = np.diagonal(box)
     assert nblist.get_num_row_idxs() == N
     ixn_list = nblist.get_nblist(frame, box, cutoff)
     tile_densities = []
@@ -455,7 +449,7 @@ def compute_mean_tile_density(
             if tile_column_ixns.size == 0:
                 continue
             col_coords = np.expand_dims(frame[tile_column_ixns], axis=1)
-            deltas = image_coords(row_coords - col_coords, box_diag)
+            deltas = delta_r(row_coords, col_coords, box)
             dij = np.linalg.norm(deltas, axis=-1)
             ixns = np.sum(dij < cutoff)
             tile_densities.append(ixns / ixns_per_tile)
