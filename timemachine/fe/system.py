@@ -170,15 +170,16 @@ class HostGuestSystem:
     nonbonded_host_guest_ixn: BoundPotential[SummedPotential]
 
     def get_U_fns(self):
+        # Ordering here is from the slowest to the fastest kernel
         return [
-            self.bond,
-            self.angle,
-            self.torsion,
-            # Chiral bond restraints are disabled until checks are added
-            # for consistency.
-            self.chiral_atom,
-            # self.chiral_bond,
-            self.nonbonded_guest_pairs,
             self.nonbonded_host,
             self.nonbonded_host_guest_ixn,
+            self.nonbonded_guest_pairs,
+            self.torsion,
+            self.chiral_atom,
+            self.angle,
+            self.bond,
+            # Chiral bond restraints are disabled until checks are added
+            # for consistency.
+            # self.chiral_bond,
         ]

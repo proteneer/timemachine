@@ -126,7 +126,7 @@ class Nonbonded(Potential):
         atom_idxs = self.atom_idxs if self.atom_idxs is not None else np.arange(self.num_atoms, dtype=np.int32)
         exclusion_idxs, scale_factors = nonbonded.filter_exclusions(atom_idxs, self.exclusion_idxs, self.scale_factors)
         exclusions = NonbondedExclusions(exclusion_idxs, scale_factors, self.beta, self.cutoff)
-        return FanoutSummedPotential([all_pairs, exclusions]).to_gpu(precision)
+        return FanoutSummedPotential([exclusions, all_pairs]).to_gpu(precision)
 
 
 @dataclass

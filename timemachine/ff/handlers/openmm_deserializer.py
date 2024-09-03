@@ -7,7 +7,8 @@ from openmm import unit
 
 from timemachine import constants, potentials
 
-ORDERED_FORCES = ["HarmonicBond", "HarmonicAngle", "PeriodicTorsion", "Nonbonded"]
+# These forces are ordered for performance
+ORDERED_FORCES = ["Nonbonded", "PeriodicTorsion", "HarmonicBond", "HarmonicAngle"]
 
 
 def value(quantity):
