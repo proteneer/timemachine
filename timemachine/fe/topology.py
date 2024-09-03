@@ -81,6 +81,9 @@ class HostGuestTopology:
     def get_num_atoms(self) -> int:
         return self.num_host_atoms + self.guest_topology.get_num_atoms()
 
+    def get_env_idxs(self) -> NDArray:
+        return np.array(list(self.get_other_idxs()) + list(self.get_water_idxs()), dtype=np.int32)
+
     def get_lig_idxs(self) -> NDArray:
         def to_np(a):
             return np.concatenate([np.array(v, dtype=np.int32) for v in a])
@@ -158,7 +161,7 @@ class HostGuestTopology:
         # ligand-environment interactions
         # NOTE: None is passed for the other params to indicate they are not used.
         guest_ixn_env_params, _ = self.guest_topology.parameterize_nonbonded(
-            ff_q_params, None, None, ff_lj_params, None, None, lamb, intramol_params=False
+            ff_q_params, None, ff_lj_params, None, lamb, intramol_params=False
         )
 
         # ligand intramolecular interactions
@@ -170,12 +173,18 @@ class HostGuestTopology:
         beta = guest_intra_pot.beta
         cutoff = guest_intra_pot.cutoff
         guest_intra_pot.idxs = guest_intra_pot.idxs + self.num_host_atoms
+        assert guest_ixn_env_params.shape == (num_guest_atoms, 4)
         assert self.host_nonbonded is not None
         assert beta == self.host_nonbonded.potential.beta
         assert cutoff == self.host_nonbonded.potential.cutoff
 
         exclusion_idxs = self.host_nonbonded.potential.exclusion_idxs
         scale_factors = self.host_nonbonded.potential.scale_factors
+
+        # Note: The choice of zeros here is arbitrary. It doesn't affect the
+        # potentials or grads, but anything that looks at the parameters
+        # (such as hashing for the seed) could depend on these values
+        hg_nb_params = jnp.concatenate([self.host_nonbonded.params, np.zeros(guest_ixn_env_params.shape)])
 
         host_guest_pot = potentials.Nonbonded(
             self.num_host_atoms + num_guest_atoms,
@@ -188,7 +197,7 @@ class HostGuestTopology:
 
         ixn_pots, ixn_params = get_ligand_ixn_pots_params(
             self.get_lig_idxs(),
-            self.get_other_idxs() + self.get_water_idxs(),
+            self.get_env_idxs(),
             self.host_nonbonded.params,
             guest_ixn_env_params,
             beta=beta,
@@ -196,7 +205,7 @@ class HostGuestTopology:
         )
 
         hg_total_pot = [host_guest_pot] + ixn_pots
-        hg_total_params = [self.host_nonbonded.params] + ixn_params
+        hg_total_params = [hg_nb_params] + ixn_params
 
         # If the molecule has < 4 atoms there may not be any intramolecular terms
         # so they should be ignored here
@@ -706,13 +715,13 @@ def get_ligand_ixn_pots_params(
 
     guest_params_ixn_env:
         Parameters for the guest (ligand) NB interactions with the
-        non-water environment atoms.
+        environment atoms.
     """
 
     # Init
     env_idxs = env_idxs if env_idxs is not None else np.array([])
 
-    # Ligand-Water terms
+    # Ligand-Env terms
     num_lig_atoms = len(lig_idxs)
     num_total_atoms = num_lig_atoms + len(env_idxs)
 

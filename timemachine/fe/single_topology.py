@@ -1883,9 +1883,12 @@ class SingleTopology(AtomMapMixin):
         def get_other_idxs():
             return np.arange(num_other_atoms, dtype=np.int32)
 
+        def get_env_idxs():
+            return np.array(list(get_other_idxs()) + list(get_water_idxs()), dtype=np.int32)
+
         ixn_pots, ixn_params = get_ligand_ixn_pots_params(
             get_lig_idxs(),
-            get_other_idxs() + get_water_idxs(),
+            get_env_idxs(),
             host_nonbonded.params,
             guest_ixn_env_params,
             beta=host_nonbonded.potential.beta,
