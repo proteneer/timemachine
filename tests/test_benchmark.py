@@ -69,7 +69,6 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     harmonic_bond_potential = next(
         bp.potential for bp in initial_state.potentials if isinstance(bp.potential, HarmonicBond)
     )
-
     bond_list = get_bond_list(harmonic_bond_potential)
     masses = initial_state.integrator.masses
     if hmr:
