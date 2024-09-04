@@ -10,10 +10,8 @@ from timemachine.ff.handlers.bonded import (
 from timemachine.ff.handlers.nonbonded import (
     LennardJonesHandler,
     LennardJonesIntraHandler,
-    LennardJonesSolventHandler,
     SimpleChargeHandler,
     SimpleChargeIntraHandler,
-    SimpleChargeSolventHandler,
 )
 
 # bonded
@@ -34,7 +32,6 @@ _q_params = np.zeros(1)
 
 placeholder_q_handle = SimpleChargeHandler(smirks=_q_smirks, params=_q_params, props=None)
 placeholder_q_handle_intra = SimpleChargeIntraHandler(smirks=_q_smirks, params=_q_params, props=None)
-placeholder_q_handle_solv = SimpleChargeSolventHandler(smirks=_q_smirks, params=_q_params, props=None)
 
 # lj / ljintra / ljsolvent
 _lj_smirks = ["[*:1]"]
@@ -42,7 +39,6 @@ _lj_params = np.array([[0.1, 1.0]])
 
 placeholder_lj_handle = LennardJonesHandler(smirks=_lj_smirks, params=_lj_params, props=None)
 placeholder_lj_handle_intra = LennardJonesIntraHandler(smirks=_lj_smirks, params=_lj_params, props=None)
-placeholder_lj_handle_solv = LennardJonesSolventHandler(smirks=_lj_smirks, params=_lj_params, props=None)
 
 # construct
 placeholder_ff = Forcefield(
@@ -52,10 +48,8 @@ placeholder_ff = Forcefield(
     it_handle=placeholder_it_handle,
     q_handle=placeholder_q_handle,
     q_handle_intra=placeholder_q_handle_intra,
-    q_handle_solv=placeholder_q_handle_solv,
     lj_handle=placeholder_lj_handle,
     lj_handle_intra=placeholder_lj_handle_intra,
-    lj_handle_solv=placeholder_lj_handle_solv,
     protein_ff="amber99sbildn",
     water_ff="amber14/tip3p",
 )

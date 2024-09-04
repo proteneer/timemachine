@@ -94,10 +94,8 @@ class VacuumState:
         self.nb_params, self.nb_potential = bt.parameterize_nonbonded(
             ff.q_handle.params,
             ff.q_handle_intra.params,
-            ff.q_handle_solv.params,
             ff.lj_handle.params,
             ff.lj_handle_intra.params,
-            ff.lj_handle_solv.params,
             self.lamb,
         )
 

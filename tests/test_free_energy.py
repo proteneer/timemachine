@@ -370,9 +370,7 @@ def test_get_water_sampler_params(num_windows):
         state = setup_initial_state(st, lamb, solvent_host, DEFAULT_TEMP, 2024)
         water_sampler_nb_params = get_water_sampler_params(state)
         nb_pot = next(p.potential for p in state.potentials if isinstance(p.potential, Nonbonded))
-        ligand_water_params = st._get_guest_params(
-            forcefield.q_handle_solv, forcefield.lj_handle_solv, lamb, nb_pot.cutoff
-        )
+        ligand_water_params = st._get_guest_params(forcefield.q_handle, forcefield.lj_handle, lamb, nb_pot.cutoff)
         if lamb == 0.0:
             assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == 0.0)
             assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == nb_pot.cutoff)
