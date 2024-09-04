@@ -695,8 +695,7 @@ class AM1CCCHandler(SerializableMixIn):
             deltas,
             runtime_validate=False,  # required for jit
         )
-
-        # q_params = jnp.zeros_like(q_params)
+        q_params = jnp.zeros_like(q_params)
 
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 

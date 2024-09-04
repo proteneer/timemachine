@@ -121,14 +121,18 @@ def run_pair_vacuum(mol_a, mol_b, core, forcefield, md_params):
 
 
 def test_run_vacuum_pair():
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    # with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with resources.path("timemachine.testsystems.data", "test_ligands.sdf") as path_to_ligand:
         all_mols = read_sdf(str(path_to_ligand))
-    mol_a = all_mols[1]
-    mol_b = all_mols[4]  # easy
-    # mol_b = all_mols[8] # hard
+    mol_a = all_mols[0]
+    mol_b = all_mols[1]  # easy
+
+    print(mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
 
     cores = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)
     core = cores[0]
+
+    print(core)
     ff = Forcefield.load_default()
 
     st = gpmol.SingleTopologyV5(mol_a, mol_b, core, ff)
@@ -136,7 +140,7 @@ def test_run_vacuum_pair():
     from timemachine.constants import ONE_4PI_EPS0
 
     all_charges = st.generate_intermediate_charges()
-    net_charges = [np.sum(x)/np.sqrt(ONE_4PI_EPS0) for x in all_charges]
+    net_charges = [np.sum(x) / np.sqrt(ONE_4PI_EPS0) for x in all_charges]
 
     print("e0 charges", all_charges[0])
     print("e1 charges", all_charges[1])

@@ -523,8 +523,11 @@ def combine_vacuum_systems(vs1, vs2):
             extra_bond_idxs.append(bond)
             extra_bond_params.append(params)
 
-    vsc.bond.potential.idxs = np.concatenate([vsc.bond.potential.idxs, np.array(extra_bond_idxs)])
-    vsc.bond.params = np.concatenate([vsc.bond.params, np.array(extra_bond_params)])
+    vsc.bond.potential.idxs = np.concatenate(
+        [vsc.bond.potential.idxs, np.array(extra_bond_idxs, dtype=np.int32).reshape(-1, 2)]
+    )
+
+    vsc.bond.params = np.concatenate([vsc.bond.params, np.array(extra_bond_params).reshape(-1, 2)])
 
     vsc_angles = set([tuple(x) for x in vsc.angle.potential.idxs])
     extra_angle_idxs = []
@@ -534,8 +537,12 @@ def combine_vacuum_systems(vs1, vs2):
             extra_angle_idxs.append(angle)
             extra_angle_params.append(params)
 
-    vsc.angle.potential.idxs = np.concatenate([vsc.angle.potential.idxs, np.array(extra_angle_idxs)])
-    vsc.angle.params = np.concatenate([vsc.angle.params, np.array(extra_angle_params)])
+    vsc.angle.potential.idxs = np.concatenate(
+        [vsc.angle.potential.idxs, np.array(extra_angle_idxs, dtype=np.int32).reshape(-1, 3)]
+    )
+    vsc.angle.params = np.concatenate(
+        [vsc.angle.params, np.array(extra_angle_params).reshape(-1, 3)]
+    )  # stable angle has 3 params
 
     vsc_torsions = set([tuple(x) for x in vsc.torsion.potential.idxs])
     extra_torsion_idxs = []
@@ -545,8 +552,10 @@ def combine_vacuum_systems(vs1, vs2):
             extra_torsion_idxs.append(torsion)
             extra_torsion_params.append(params)
 
-    vsc.torsion.potential.idxs = np.concatenate([vsc.torsion.potential.idxs, np.array(extra_torsion_idxs)])
-    vsc.torsion.params = np.concatenate([vsc.torsion.params, np.array(extra_torsion_params)])
+    vsc.torsion.potential.idxs = np.concatenate(
+        [vsc.torsion.potential.idxs, np.array(extra_torsion_idxs, dtype=np.int32).reshape(-1, 4)]
+    )
+    vsc.torsion.params = np.concatenate([vsc.torsion.params, np.array(extra_torsion_params).reshape(-1, 3)])
 
     vsc_nonbondeds = set([tuple(x) for x in vsc.nonbonded.potential.idxs])
     extra_nonbonded_idxs = []
@@ -556,8 +565,10 @@ def combine_vacuum_systems(vs1, vs2):
             extra_nonbonded_idxs.append(nonbonded)
             extra_nonbonded_params.append(params)
 
-    vsc.nonbonded.potential.idxs = np.concatenate([vsc.nonbonded.potential.idxs, np.array(extra_nonbonded_idxs)])
-    vsc.nonbonded.params = np.concatenate([vsc.nonbonded.params, np.array(extra_nonbonded_params)])
+    vsc.nonbonded.potential.idxs = np.concatenate(
+        [vsc.nonbonded.potential.idxs, np.array(extra_nonbonded_idxs, dtype=np.int32).reshape(-1, 2)]
+    )
+    vsc.nonbonded.params = np.concatenate([vsc.nonbonded.params, np.array(extra_nonbonded_params).reshape(-1, 4)])
 
     return vsc
 
@@ -920,18 +931,17 @@ class SingleTopologyV5(AtomMapMixin):
         # recompute exclusion idxs
         ekv = self.generate_combined_exclusion_idxs_and_scale_factors()
         for state, charges in zip(self.checkpoint_states, self.checkpoint_charges):
-            for (i,j), params in zip(state.nonbonded.potential.idxs, state.nonbonded.params):
+            for (i, j), params in zip(state.nonbonded.potential.idxs, state.nonbonded.params):
                 assert i < j
-                if (i,j) in ekv:
-                    sf = 1 - ekv[(i,j)]
+                if (i, j) in ekv:
+                    sf = 1 - ekv[(i, j)]
                 else:
                     sf = 1
-                params[0] = charges[i]*charges[j]*sf
+                params[0] = charges[i] * charges[j] * sf
 
         self.i_mols, self.i_kvs = self.generate_intermediate_mols_and_kvs()
 
     def generate_combined_exclusion_idxs_and_scale_factors(self):
-
         from timemachine.ff.handlers import nonbonded
 
         exclusion_idxs_a, scale_factors_a = nonbonded.generate_exclusion_idxs(
@@ -944,16 +954,16 @@ class SingleTopologyV5(AtomMapMixin):
 
         exclusion_idxs_c_kv = dict()
 
-        for (i,j), sf in zip(exclusion_idxs_a, scale_factors_a):
+        for (i, j), sf in zip(exclusion_idxs_a, scale_factors_a):
             i, j = sorted([self.a_to_c[i], self.a_to_c[j]])
-            exclusion_idxs_c_kv[(i,j)] = sf
+            exclusion_idxs_c_kv[(i, j)] = sf
 
-        for (i,j), sf in zip(exclusion_idxs_b, scale_factors_b):
+        for (i, j), sf in zip(exclusion_idxs_b, scale_factors_b):
             i, j = sorted([self.b_to_c[i], self.b_to_c[j]])
-            if (i,j) in exclusion_idxs_c_kv:
-                assert exclusion_idxs_c_kv[(i,j)] == sf
+            if (i, j) in exclusion_idxs_c_kv:
+                assert exclusion_idxs_c_kv[(i, j)] == sf
             else:
-                exclusion_idxs_c_kv[(i,j)] = sf
+                exclusion_idxs_c_kv[(i, j)] = sf
 
         return exclusion_idxs_c_kv
 
@@ -984,17 +994,19 @@ class SingleTopologyV5(AtomMapMixin):
         for n in range(self.get_num_atoms()):
             nxg.add_node(n)
         bond_list = self.checkpoint_states[lambda_idx].bond.potential.idxs
-        for i,j in bond_list:
+        for i, j in bond_list:
             nxg.add_edge(i, j)
 
         induced_g = nx.subgraph(nxg, non_interacting_atoms)
 
         def get_bond_anchors(dummy_group):
-            bond_anchors = [n for dummy_atom in dummy_group for n in nxg.neighbors(dummy_atom) if n in interacting_atoms]
+            bond_anchors = [
+                n for dummy_atom in dummy_group for n in nxg.neighbors(dummy_atom) if n in interacting_atoms
+            ]
             if len(bond_anchors) > 1:
                 assert 0
             return bond_anchors[0]
-        
+
         res = [(cc, get_bond_anchors(cc)) for cc in nx.connected_components(induced_g)]
 
         return res
@@ -1038,7 +1050,7 @@ class SingleTopologyV5(AtomMapMixin):
                         old_charge = mol_b_params[self.c_to_b[c_idx]]
 
                     charges[anchor] += old_charge
-            
+
             all_charges.append(charges)
 
         return all_charges
