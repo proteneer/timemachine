@@ -978,8 +978,9 @@ def test_context_invalid_boxes_without_nonbonded_potentials():
     assert len(boxes) == 1
 
 
-@pytest.mark.parametrize("num_threads", [1, 2, 4])
-def test_context_with_threads(num_threads):
+@pytest.mark.parametrize("local_md", [False, True])
+@pytest.mark.parametrize("num_threads", [1, 2])
+def test_context_with_threads(num_threads, local_md):
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
@@ -988,9 +989,11 @@ def test_context_with_threads(num_threads):
     friction = 0.0
     seed = 2024
     n_frames = 100
+    steps_per_frame = 400
 
     unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
     v0 = np.zeros_like(coords)
+    ligand_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
 
     ctxts = []
     sample_params = []
@@ -1001,14 +1004,20 @@ def test_context_with_threads(num_threads):
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
         ctxts.append(ctxt)
 
-        md_params = MDParams(n_eq_steps=100_000, n_frames=n_frames, steps_per_frame=400, seed=seed + thread_idx)
+        md_params = MDParams(
+            n_eq_steps=100_000,
+            n_frames=n_frames,
+            steps_per_frame=steps_per_frame,
+            local_steps=steps_per_frame if local_md else 0,
+            seed=seed + thread_idx,
+        )
         sample_params.append(md_params)
 
     def thread_sampling(args):
         ctxt, md_params = args
-        traj = sample_with_context(ctxt, md_params, constants.DEFAULT_TEMP, np.empty((0,)), max_buffer_frames=n_frames)
+        traj = sample_with_context(ctxt, md_params, constants.DEFAULT_TEMP, ligand_idxs, max_buffer_frames=n_frames)
         return traj
 
     with ThreadPool(num_threads) as pool:
-        for traj in pool.imap_unordered(thread_sampling, zip(ctxts, sample_params)):
+        for traj in pool.map(thread_sampling, zip(ctxts, sample_params)):
             assert len(traj.frames) == n_frames
