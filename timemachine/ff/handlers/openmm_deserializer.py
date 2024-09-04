@@ -8,7 +8,7 @@ from openmm import unit
 from timemachine import constants, potentials
 
 # These forces are ordered for performance
-ORDERED_FORCES = ["Nonbonded", "PeriodicTorsion", "HarmonicBond", "HarmonicAngle"]
+ORDERED_FORCES = ["Nonbonded", "PeriodicTorsion", "HarmonicAngle", "HarmonicBond"]
 
 
 def value(quantity):
@@ -208,8 +208,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
             # nrg_fns.append(('Exclusions', (exclusion_idxs, scale_factors, es_scale_factors)))
 
-    # ugh, ... various parts of our code assume the bps are in a certain order
-    # so put them back in that order here
+    # Re-order potentials for performance reasons.
     bps = []
     for k in ORDERED_FORCES:
         if bps_dict.get(k):
