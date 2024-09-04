@@ -848,33 +848,33 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
             ffs.scaled, lamb
         )
 
-        # Compute the grads, potential with the intermol scaled ff
+        # Compute the grads, potential with the intermol (ligand-env) scaled ff
         (
-            vacuum_grad_inter_scaled,
-            vacuum_u_inter_scaled,
-            solvent_grad_inter_scaled,
-            solvent_u_inter_scaled,
-        ) = get_vacuum_solvent_u_grads(ffs.solv, lamb)
+            vacuum_grad_env,
+            vacuum_u_env,
+            solvent_grad_env,
+            solvent_u_env,
+        ) = get_vacuum_solvent_u_grads(ffs.env, lamb)
 
         # Compute the expected intermol scaled potential
-        expected_inter_scaled_u = solvent_u_scaled - vacuum_u_scaled + vacuum_u_ref
+        expected_env_u = solvent_u_scaled - vacuum_u_scaled + vacuum_u_ref
 
         # Pad gradients for the solvent
         vacuum_grad_scaled_padded = np.concatenate([np.zeros(solvent_conf.shape), vacuum_grad_scaled])
         vacuum_grad_ref_padded = np.concatenate([np.zeros(solvent_conf.shape), vacuum_grad_ref])
-        expected_inter_scaled_grad = solvent_grad_scaled - vacuum_grad_scaled_padded + vacuum_grad_ref_padded
+        expected_env_grad = solvent_grad_scaled - vacuum_grad_scaled_padded + vacuum_grad_ref_padded
 
         # They should be equal
-        assert expected_inter_scaled_u == pytest.approx(solvent_u_inter_scaled, rel=rtol, abs=atol)
-        minimizer.check_force_norm(-expected_inter_scaled_grad)
-        minimizer.check_force_norm(-solvent_grad_inter_scaled)
-        np.testing.assert_allclose(expected_inter_scaled_grad, solvent_grad_inter_scaled, rtol=rtol, atol=atol)
+        assert expected_env_u == pytest.approx(solvent_u_env, rel=rtol, abs=atol)
+        minimizer.check_force_norm(-expected_env_grad)
+        minimizer.check_force_norm(-solvent_grad_env)
+        np.testing.assert_allclose(expected_env_grad, solvent_grad_env, rtol=rtol, atol=atol)
 
         # The vacuum term should be the same as the ref
-        assert vacuum_u_inter_scaled == pytest.approx(vacuum_u_ref, rel=rtol, abs=atol)
+        assert vacuum_u_env == pytest.approx(vacuum_u_ref, rel=rtol, abs=atol)
         minimizer.check_force_norm(-vacuum_grad_ref)
-        minimizer.check_force_norm(-vacuum_grad_inter_scaled)
-        np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_inter_scaled, rtol=rtol, atol=atol)
+        minimizer.check_force_norm(-vacuum_grad_env)
+        np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_env, rtol=rtol, atol=atol)
 
 
 class SingleTopologyRef(SingleTopology):
@@ -1026,8 +1026,8 @@ def test_combine_with_host_split(precision, rtol, atol):
             col_atom_idxs=water_idxs if is_solvent else protein_idxs,
         )
 
-        q_handle = ff.q_handle_solv if is_solvent else ff.q_handle
-        lj_handle = ff.lj_handle_solv if is_solvent else ff.lj_handle
+        q_handle = ff.q_handle
+        lj_handle = ff.lj_handle
         guest_params = st._get_guest_params(q_handle, lj_handle, lamb, cutoff)
 
         host_params = host_system.nonbonded.params

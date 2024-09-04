@@ -28,10 +28,8 @@ def test_dual_topology_nonbonded_pairlist():
     nb_params, nb = dt.parameterize_nonbonded(
         ff.q_handle.params,
         ff.q_handle_intra.params,
-        ff.q_handle_solv.params,
         ff.lj_handle.params,
         ff.lj_handle_intra.params,
-        ff.lj_handle_solv.params,
         0.0,
     )
 
@@ -62,16 +60,14 @@ def parameterize_nonbonded_full(
     hgt: topology.HostGuestTopology,
     ff_q_params,
     ff_q_params_intra,
-    ff_q_params_solv,
     ff_lj_params,
     ff_lj_params_intra,
-    ff_lj_params_solv,
     lamb: float,
 ):
     # Implements the full NB potential for the host guest system
     num_guest_atoms = hgt.guest_topology.get_num_atoms()
     guest_params, guest_pot = hgt.guest_topology.parameterize_nonbonded(
-        ff_q_params, ff_q_params_intra, ff_q_params_solv, ff_lj_params, ff_lj_params_intra, ff_lj_params_solv, lamb
+        ff_q_params, ff_q_params_intra, ff_lj_params, ff_lj_params_intra, lamb
     )
     assert hgt.host_nonbonded is not None
     hg_exclusion_idxs = np.concatenate(
@@ -97,10 +93,8 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
             hgt,
             ff.q_handle.params,
             ff.q_handle_intra.params,
-            ff.q_handle_solv.params,
             ff.lj_handle.params,
             ff.lj_handle_intra.params,
-            ff.lj_handle_solv.params,
             lamb=lamb,
         )
         u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
@@ -113,10 +107,8 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         params, us = hgt.parameterize_nonbonded(
             ff.q_handle.params,
             ff.q_handle_intra.params,
-            ff.q_handle_solv.params,
             ff.lj_handle.params,
             ff.lj_handle_intra.params,
-            ff.lj_handle_solv.params,
             lamb=lamb,
         )
         u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
@@ -128,10 +120,8 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         params, us = bt.parameterize_nonbonded(
             ff.q_handle.params,
             ff.q_handle_intra.params,
-            ff.q_handle_solv.params,
             ff.lj_handle.params,
             ff.lj_handle_intra.params,
-            ff.lj_handle_solv.params,
             lamb=lamb,
         )
         u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
@@ -166,12 +156,10 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
             col_atom_idxs=water_idxs if is_solvent else protein_idxs,
         )
         lig_params, _ = bt.parameterize_nonbonded(
-            ff.q_handle_solv.params if is_solvent else ff.q_handle.params,
+            ff.q_handle.params,
             ff.q_handle_intra.params,
-            ff.q_handle_solv.params,
-            ff.lj_handle_solv.params if is_solvent else ff.lj_handle.params,
+            ff.lj_handle.params,
             ff.lj_handle_intra.params,
-            ff.lj_handle_solv.params,
             lamb=lamb,
             intramol_params=False,
         )
