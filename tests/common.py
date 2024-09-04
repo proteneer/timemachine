@@ -378,7 +378,7 @@ def gen_nonbonded_params_with_4d_offsets(
 class SplitForcefield:
     ref: Forcefield  # ref ff
     intra: Forcefield  # intermolecular charge terms/LJ terms scaled
-    prot: Forcefield  # protein-ligand charge terms/LJ terms scaled
+    env: Forcefield  # ligand-environment charge terms/LJ terms scaled
     scaled: Forcefield  # all NB terms scaled
 
 
@@ -402,12 +402,12 @@ def load_split_forcefields() -> SplitForcefield:
     ff_intra.lj_handle_intra.params[:, SIG_IDX] *= SIG_SCALE
     ff_intra.lj_handle_intra.params[:, EPS_IDX] *= EPS_SCALE
 
-    ff_prot = Forcefield.load_default()
-    assert ff_prot.q_handle is not None
-    assert ff_prot.lj_handle is not None
-    ff_prot.q_handle.params *= Q_SCALE
-    ff_prot.lj_handle.params[:, SIG_IDX] *= SIG_SCALE
-    ff_prot.lj_handle.params[:, EPS_IDX] *= EPS_SCALE
+    ff_env = Forcefield.load_default()
+    assert ff_env.q_handle is not None
+    assert ff_env.lj_handle is not None
+    ff_env.q_handle.params *= Q_SCALE
+    ff_env.lj_handle.params[:, SIG_IDX] *= SIG_SCALE
+    ff_env.lj_handle.params[:, EPS_IDX] *= EPS_SCALE
 
     ff_scaled = Forcefield.load_default()
     assert ff_scaled.q_handle is not None
@@ -420,7 +420,7 @@ def load_split_forcefields() -> SplitForcefield:
     ff_scaled.lj_handle.params[:, EPS_IDX] *= EPS_SCALE
     ff_scaled.lj_handle_intra.params[:, SIG_IDX] *= SIG_SCALE
     ff_scaled.lj_handle_intra.params[:, EPS_IDX] *= EPS_SCALE
-    return SplitForcefield(ff_ref, ff_intra, ff_prot, ff_scaled)
+    return SplitForcefield(ff_ref, ff_intra, ff_env, ff_scaled)
 
 
 def check_split_ixns(
@@ -458,12 +458,13 @@ def check_split_ixns(
             LL - ligand-ligand intramolecular interactions
             PL - protein-ligand interactions
             WL - water-ligand interactions
+            LE - ligand-environment interactions
             sum - full NB potential
 
         scaled term:
             ref - ref ff
             intra - ligand-ligand intramolecular parameters are scaled
-            prot - protein-ligand interaction parameters are scaled
+            env - ligand-environment interaction parameters are scaled
         """
 
         # Compute the grads, potential with the ref ff
@@ -519,12 +520,12 @@ def check_split_ixns(
         np.testing.assert_allclose(expected_u, sum_u_intra, rtol=rtol, atol=atol)
         np.testing.assert_allclose(expected_grad, sum_grad_intra, rtol=rtol, atol=atol)
 
-        # Compute the grads, potential with the protein-ligand terms scaled
+        # Compute the grads, potential with the ligand-env terms scaled
         sum_grad_prot, sum_u_prot = compute_new_grad_u(
-            ffs.prot, precision, coords0, box, lamb, num_water_atoms, host_bps
+            ffs.env, precision, coords0, box, lamb, num_water_atoms, host_bps
         )
-        PL_grad_prot, PL_u_prot = compute_ixn_grad_u(
-            ffs.prot,
+        PL_grad_env, PL_u_env = compute_ixn_grad_u(
+            ffs.env,
             precision,
             coords0,
             box,
@@ -536,10 +537,29 @@ def check_split_ixns(
             protein_idxs,
             is_solvent=False,
         )
+        WL_grad_env, WL_u_env = compute_ixn_grad_u(
+            ffs.env,
+            precision,
+            coords0,
+            box,
+            lamb,
+            num_water_atoms,
+            host_bps,
+            water_idxs,
+            ligand_idxs,
+            protein_idxs,
+            is_solvent=True,
+        )
 
-        # U_prot = U_sum_ref - PL_ref + PL_prot
-        expected_u = sum_u_ref - PL_u_ref + PL_u_prot
-        expected_grad = sum_grad_ref - PL_grad_ref + PL_grad_prot
+        LE_u_ref = WL_u_ref + PL_u_ref
+        LE_u_env = WL_u_env + PL_u_env
+
+        LE_grad_ref = WL_grad_ref + PL_grad_ref
+        LE_grad_env = WL_grad_env + PL_grad_env
+
+        # U_prot = U_sum_ref - LE_u_ref + LE_env
+        expected_u = sum_u_ref - LE_u_ref + LE_u_env
+        expected_grad = sum_grad_ref - LE_grad_ref + LE_grad_env
 
         np.testing.assert_allclose(expected_u, sum_u_prot, rtol=rtol, atol=atol)
         np.testing.assert_allclose(expected_grad, sum_grad_prot, rtol=rtol, atol=atol)

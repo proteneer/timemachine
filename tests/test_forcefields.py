@@ -127,8 +127,8 @@ def test_split():
 
     check(ffs.ref)
     check(ffs.intra)
-    check(ffs.prot)
-    check(ffs.prot)
+    check(ffs.env)
+    check(ffs.scaled)
 
 
 def test_amber14_tip3p_matches_tip3p():

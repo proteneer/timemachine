@@ -153,7 +153,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
             ligand_idxs,
             hgt.host_nonbonded.potential.beta,
             hgt.host_nonbonded.potential.cutoff,
-            col_atom_idxs=np.array(list(protein_idxs) + list(water_idxs), dtype=np.int32),
+            col_atom_idxs=water_idxs if is_solvent else protein_idxs,
         )
         lig_params, _ = bt.parameterize_nonbonded(
             ff.q_handle.params,

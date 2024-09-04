@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Generic, Iterable, Optional, Tuple, TypeVar, Union
 from warnings import warn
 
-from numpy.testing import assert_almost_equal
+from numpy.testing import assert_equal
 
 from timemachine.constants import DEFAULT_FF, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.ff.handlers import bonded, nonbonded
@@ -202,7 +202,7 @@ class Forcefield:
         if lj_handle_solv is not None:
             assert lj_handle is not None
             assert lj_handle_solv is not None
-            assert_almost_equal(
+            assert_equal(
                 lj_handle.params,
                 lj_handle_solv.params,
                 err_msg="Split ligand-solvent LJ interactions are no longer supported",
@@ -223,7 +223,7 @@ class Forcefield:
         if q_handle_solv is not None:
             assert q_handle is not None
             assert q_handle_solv is not None
-            assert_almost_equal(
+            assert_equal(
                 q_handle.params,
                 q_handle_solv.params,
                 err_msg="Split ligand-solvent charge interactions are no longer supported",
