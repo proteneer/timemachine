@@ -248,18 +248,15 @@ std::array<std::vector<double>, 2> Context::multiple_steps_local_selection(
     return std::array<std::vector<double>, 2>({h_x_buffer, h_box_buffer});
 }
 
-std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, int store_x_interval) {
-    if (store_x_interval <= 0) {
-        throw std::runtime_error("store_x_interval <= 0");
+void Context::multiple_steps(const int n_steps, const int n_samples, double *h_x, double *h_box) {
+    int store_x_interval = n_samples > 0 ? n_steps / n_samples : n_steps + 1;
+    if (n_samples < 0) {
+        throw std::runtime_error("n_samples < 0");
     }
     if (n_steps % store_x_interval != 0) {
         std::cout << "warning:: n_steps modulo store_x_interval does not equal zero" << std::endl;
     }
-
-    int x_buffer_size = n_steps / store_x_interval;
-    int box_buffer_size = x_buffer_size * 3 * 3;
-
-    std::vector<double> h_x_buffer(x_buffer_size * N_ * 3);
+    int box_buffer_size = n_samples * 3 * 3;
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
 
@@ -274,7 +271,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
 
         if (i % store_x_interval == 0) {
             gpuErrchk(cudaMemcpyAsync(
-                &h_x_buffer[0] + ((i / store_x_interval) - 1) * N_ * 3,
+                h_x + ((i / store_x_interval) - 1) * N_ * 3,
                 d_x_t_,
                 N_ * 3 * sizeof(*d_x_t_),
                 cudaMemcpyDeviceToHost,
@@ -292,12 +289,9 @@ std::array<std::vector<double>, 2> Context::multiple_steps(const int n_steps, in
 
     gpuErrchk(cudaStreamSynchronize(stream));
 
-    std::vector<double> h_box_buffer(box_buffer_size);
     if (box_buffer_size > 0) {
-        d_box_buffer.copy_to(&h_box_buffer[0]);
+        d_box_buffer.copy_to(h_box);
     }
-
-    return std::array<std::vector<double>, 2>({h_x_buffer, h_box_buffer});
 }
 
 void Context::step() {

@@ -349,16 +349,15 @@ void declare_context(py::module &m) {
             "multiple_steps",
             [](Context &ctxt, const int n_steps, int store_x_interval) -> py::tuple {
                 // (ytz): I hate C++
-                int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
-                std::array<std::vector<double>, 2> result = ctxt.multiple_steps(n_steps, x_interval);
-
                 int N = ctxt.num_atoms();
                 int D = 3;
-                int F = result[0].size() / (N * D);
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D}, result[0].data());
-
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D}, result[1].data());
-                return py::make_tuple(out_x_buffer, box_buffer);
+                int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
+                int n_samples = store_x_interval > n_steps ? 0 : n_steps / x_interval;
+                py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
+                py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
+                auto res = py::make_tuple(out_x_buffer, box_buffer);
+                ctxt.multiple_steps(n_steps, n_samples, out_x_buffer.mutable_data(), box_buffer.mutable_data());
+                return res;
             },
             py::arg("n_steps"),
             py::arg("store_x_interval") = 0,

@@ -26,7 +26,7 @@ public:
     void initialize();
     void finalize();
 
-    std::array<std::vector<double>, 2> multiple_steps(const int n_steps, int store_x_interval);
+    void multiple_steps(const int n_steps, const int n_samples, double *h_x, double *h_box);
 
     std::array<std::vector<double>, 2> multiple_steps_local(
         const int n_steps,
