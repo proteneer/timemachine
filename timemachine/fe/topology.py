@@ -195,7 +195,7 @@ class HostGuestTopology:
             atom_idxs=np.arange(self.num_host_atoms, dtype=np.int32),
         )
 
-        ixn_pots, ixn_params = get_ligand_ixn_pots_params(
+        ixn_pot, ixn_params = get_ligand_ixn_pots_params(
             self.get_lig_idxs(),
             self.get_env_idxs(),
             self.host_nonbonded.params,
@@ -204,8 +204,8 @@ class HostGuestTopology:
             cutoff=cutoff,
         )
 
-        hg_total_pot = [host_guest_pot] + ixn_pots
-        hg_total_params = [hg_nb_params] + ixn_params
+        hg_total_pot = [host_guest_pot, ixn_pot]
+        hg_total_params = [hg_nb_params, ixn_params]
 
         # If the molecule has < 4 atoms there may not be any intramolecular terms
         # so they should be ignored here
