@@ -1075,5 +1075,16 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
 def test_targeted_insertion_invalid_sample_bug():
     with open(Path(__file__).parent / "data" / "water_sampling_bug.pkl", "rb") as ifs:
         state, md_params = pickle.load(ifs)
+
+    # Need to flatten the summed potentials now that we no longer have SummedPotential for the host-guest nb ixns
+    potentials = state.potentials
+    summed_pot_idx = next(i for i, bp in enumerate(potentials) if isinstance(bp.potential, SummedPotential))
+    summed_pot = potentials.pop(summed_pot_idx)
+    flattened_pots = [
+        pot.bind(params) for pot, params in zip(summed_pot.potential.potentials, summed_pot.potential.params_init)
+    ]
+    potentials.extend(flattened_pots)
+    state = replace(state, potentials=potentials)
+
     md_params = replace(md_params, n_eq_steps=2_000, steps_per_frame=10)
     sample(state, md_params, 100)
