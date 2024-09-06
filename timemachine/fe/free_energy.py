@@ -1,6 +1,8 @@
+import os
 import time
 from dataclasses import asdict, dataclass, is_dataclass, replace
 from functools import cache
+from multiprocessing.pool import ThreadPool
 from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 from warnings import warn
 
@@ -1123,6 +1125,7 @@ def run_sims_hrex(
     md_params: MDParams,
     n_swap_attempts_per_iter: Optional[int] = None,
     print_diagnostics_interval: Optional[int] = 10,
+    n_threads: Optional[int] = 4,
 ) -> Tuple[PairBarResult, List[Trajectory], HREXDiagnostics]:
     r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
 
@@ -1142,6 +1145,9 @@ def run_sims_hrex(
 
     print_diagnostics_interval: int or None, optional
         If not None, print diagnostics every N iterations
+
+    n_threads: int or None, optional
+        Number of threads to parallelize, if None set to to os.cpu_count().
 
     Returns
     -------
@@ -1188,22 +1194,26 @@ def run_sims_hrex(
             # assert (A, B) are compatible NVT ensembles
             assert (state_a.box0 == state_b.box0).all()
 
-    for s in initial_states[1:]:
-        assert_ensembles_compatible(initial_states[0], s)
-
-    if n_swap_attempts_per_iter is None:
-        n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
-
     # Ensure that states differ only in their parameters so that we can safely instantiate potentials from the first
     # state and use set_params for efficiency
     for s in initial_states[1:]:
         assert_potentials_compatible(initial_states[0].potentials, s.potentials)
 
-    # Set up overall potential and context using the first state.
-    context = get_context(initial_states[0], md_params=md_params)
-    bound_potentials = context.get_potentials()
-    assert len(bound_potentials) == 1
-    potential = bound_potentials[0].get_potential()
+    if n_swap_attempts_per_iter is None:
+        n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
+
+    # Each state gets its own context to ensure deterministic results
+    state_ctxts = [get_context(state, md_params=md_params) for state in initial_states]
+
+    if n_threads is None:
+        n_threads = os.cpu_count()
+    assert isinstance(n_threads, int)
+
+    # Don't use more threads than there are states
+    n_threads = min(len(initial_states), n_threads)
+
+    pool = ThreadPool(n_threads)
+
     temperature = initial_states[0].integrator.temperature
     ligand_idxs = initial_states[0].ligand_idxs
 
@@ -1211,9 +1221,6 @@ def run_sims_hrex(
         return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
 
     params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
-    water_params_by_state: Optional[NDArray] = None
-    if md_params.water_sampling_params is not None:
-        water_params_by_state = np.array([get_water_sampler_params(initial_state) for initial_state in initial_states])
 
     state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
     neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
@@ -1222,54 +1229,47 @@ def run_sims_hrex(
         # Add an identity move to the mixture to ensure aperiodicity
         neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
-    # Setup the barostat to run more often for equilibration
     equil_barostat_interval = 15
-    barostat = context.get_barostat()
-    if barostat is not None:
-        barostat.set_interval(equil_barostat_interval)
 
     def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
-        # Set up parameters of the water sampler movers
-        if md_params.water_sampling_params is not None:
-            for mover in context.get_movers():
-                if isinstance(mover, WATER_SAMPLER_MOVERS):
-                    assert water_params_by_state is not None
-                    mover.set_params(water_params_by_state[state_idx])
+        context = state_ctxts[state_idx]
+        state_barostat = initial_states[state_idx].barostat
+        if state_barostat is not None:
+            # Setup the barostat to run more often for equilibration
+            barostat = context.get_barostat()
+            assert barostat is not None
+            barostat.set_interval(equil_barostat_interval)
         if md_params.n_eq_steps > 0:
-            # Set the movers to 0 to ensure they all equilibrate the same way
-            # Ensure initial mover state is consistent across replicas
-            for mover in context.get_movers():
-                mover.set_step(0)
-
-            params = params_by_state[state_idx]
-            bound_potentials[0].set_params(params)
-
-            context.set_x_t(xvb.coords)
-            context.set_v_t(xvb.velocities)
-            context.set_box(xvb.box)
-
+            # Context will already be set up with the correct coords, vel, box no need to update
             xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
             assert len(xs) == 1
             x0 = xs[0]
             v0 = context.get_v_t()
             box0 = boxes[0]
             xvb = CoordsVelBox(x0, v0, box0)
+        # Reset the barostat interval
+        if state_barostat is not None:
+            barostat = context.get_barostat()
+            assert barostat is not None
+            barostat.set_interval(state_barostat.interval)
         return xvb
 
-    initial_replicas = [
-        get_equilibrated_xvb(CoordsVelBox(s.x0, s.v0, s.box0), StateIdx(i)) for i, s in enumerate(initial_states)
-    ]
+    initial_replicas = pool.starmap(
+        get_equilibrated_xvb,
+        [(CoordsVelBox(s.x0, s.v0, s.box0), StateIdx(i)) for i, s in enumerate(initial_states)],
+    )
+
+    # Set up energy potential using the first state's context
+    context = state_ctxts[0]
+    bound_potentials = context.get_potentials()
+    assert len(bound_potentials) == 1
+    potential = bound_potentials[0].get_potential()
 
     hrex = HREX.from_replicas(initial_replicas)
 
     samples_by_state: List[Trajectory] = [Trajectory.empty() for _ in initial_states]
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
-
-    # Reset the barostat from the equilibration interval to the production interval
-    state = initial_states[0]
-    if barostat is not None and state.barostat is not None:
-        barostat.set_interval(state.barostat.interval)
 
     if (
         md_params.water_sampling_params is not None
@@ -1283,21 +1283,10 @@ def run_sims_hrex(
     for current_frame in range(md_params.n_frames):
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
+            context = state_ctxts[state_idx]
             context.set_x_t(xvb.coords)
             context.set_v_t(xvb.velocities)
             context.set_box(xvb.box)
-
-            params = params_by_state[state_idx]
-            bound_potentials[0].set_params(params)
-
-            current_step = current_frame * md_params.steps_per_frame
-            # Setup the MC movers of the Context
-            for mover in context.get_movers():
-                if md_params.water_sampling_params is not None and isinstance(mover, WATER_SAMPLER_MOVERS):
-                    assert water_params_by_state is not None
-                    mover.set_params(water_params_by_state[state_idx])
-                # Set the step so that all windows have the movers be called the same number of times.
-                mover.set_step(current_step)
 
             md_params_replica = replace(md_params, n_frames=1, n_eq_steps=0, seed=state_idx + current_frame)
 
@@ -1308,15 +1297,29 @@ def run_sims_hrex(
             )
             assert frame.shape[0] == 1
 
+            barostat = context.get_barostat()
             final_barostat_volume_scale_factor = barostat.get_volume_scale_factor() if barostat is not None else None
 
             return frame[-1], box[-1], final_velos, final_barostat_volume_scale_factor
+
+        state_idx_to_replica = {state_idx: i for i, (state_idx, _) in enumerate(hrex.state_replica_pairs)}
+
+        replica_results = pool.starmap(
+            sample_replica,
+            [(replica, state_idx) for state_idx, replica in hrex.state_replica_pairs],
+        )
+
+        def get_replica_samples(
+            xvb: CoordsVelBox, state_idx: StateIdx
+        ) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
+            replica_idx = state_idx_to_replica[state_idx]
+            return replica_results[replica_idx]
 
         def replica_from_samples(last_sample: Tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
             frame, box, velos, _ = last_sample
             return CoordsVelBox(frame, velos, box)
 
-        hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
+        hrex, samples_by_state_iter = hrex.sample_replicas(get_replica_samples, replica_from_samples)
         U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
         log_q_kl = -U_kl / (BOLTZ * temperature)
 

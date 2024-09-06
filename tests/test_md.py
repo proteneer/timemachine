@@ -55,6 +55,8 @@ def test_multiple_steps_store_interval():
     test_xs, test_boxes = ctxt.multiple_steps(10, 10)
     assert len(test_xs) == 1
     assert len(test_xs) == len(test_boxes)
+    print(test_xs.shape, test_boxes.shape)
+    print(test_boxes)
     # We should not get out the input frame
     assert np.any(np.not_equal(x0, test_xs[0]))
 
