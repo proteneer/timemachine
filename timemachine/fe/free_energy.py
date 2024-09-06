@@ -499,15 +499,9 @@ def get_water_sampler_params(initial_state: InitialState) -> NDArray:
     Since we split the different components of the NB into ligand-water, ligand-protein, we want to use the ligand-water parameter
     to ensure that the ligand component is correctly configured for the specific lambda window.
     """
-    summed_pot = next(p.potential for p in initial_state.potentials if isinstance(p.potential, SummedPotential))
-    # TBD Figure out a better way of handling the jankyness of having to select the IxnGroup that defines the Ligand-Water
-    # Currently this just hardcodes to the first ixn group potential which is the ligand-water ixn group as returned by HostTopology.parameterize_nonbonded
-    ixn_group_idx = next(i for i, pot in enumerate(summed_pot.potentials) if isinstance(pot, NonbondedInteractionGroup))
-    assert isinstance(summed_pot.potentials[ixn_group_idx], NonbondedInteractionGroup)
-    water_params = summed_pot.params_init[ixn_group_idx]
-    assert water_params.shape[1] == 4
-    water_params = np.asarray(water_params)
-    return water_params
+    nb_ixn_pot = next(bp for bp in initial_state.potentials if isinstance(bp.potential, NonbondedInteractionGroup))
+    assert nb_ixn_pot.params.shape[1] == 4
+    return np.asarray(nb_ixn_pot.params)
 
 
 def get_context(initial_state: InitialState, md_params: Optional[MDParams] = None) -> Context:
@@ -532,9 +526,7 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
         water_idxs = get_water_idxs(group_indices, ligand_idxs=initial_state.ligand_idxs)
 
-        summed_pot = next(p.potential for p in initial_state.potentials if isinstance(p.potential, SummedPotential))
-        # Select a Nonbonded Potential to get the the cutoff/beta, assumes all have same cutoff/beta.
-        nb = next(p for p in summed_pot.potentials if isinstance(p, NonbondedInteractionGroup))
+        nb = next(p.potential for p in initial_state.potentials if isinstance(p.potential, NonbondedInteractionGroup))
 
         water_params = get_water_sampler_params(initial_state)
 
