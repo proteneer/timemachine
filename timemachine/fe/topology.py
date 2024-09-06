@@ -694,8 +694,8 @@ def get_ligand_ixn_pots_params(
     env_idxs: Optional[NDArray],
     host_nb_params: Params,
     guest_params_ixn_env: Params,
-    beta=2.0,
-    cutoff=1.2,
+    beta: float = 2.0,
+    cutoff: float = 1.2,
 ):
     """
     Return the interaction group potentials and corresponding parameters
@@ -716,6 +716,12 @@ def get_ligand_ixn_pots_params(
     guest_params_ixn_env:
         Parameters for the guest (ligand) NB interactions with the
         environment atoms.
+
+    beta:
+        nonbonded beta parameter used in direct space pme
+
+    cutoff:
+        nonbonded cutoff
     """
 
     # Init
@@ -725,14 +731,12 @@ def get_ligand_ixn_pots_params(
     num_lig_atoms = len(lig_idxs)
     num_total_atoms = num_lig_atoms + len(env_idxs)
 
-    hg_ixn_pots = [
-        potentials.NonbondedInteractionGroup(
-            num_total_atoms,
-            lig_idxs,
-            beta,
-            cutoff,
-            col_atom_idxs=env_idxs,
-        )
-    ]
-    hg_ixn_params = [jnp.concatenate([host_nb_params, guest_params_ixn_env])]
-    return hg_ixn_pots, hg_ixn_params
+    hg_ixn_pot = potentials.NonbondedInteractionGroup(
+        num_total_atoms,
+        lig_idxs,
+        beta,
+        cutoff,
+        col_atom_idxs=env_idxs,
+    )
+    hg_ixn_params = jnp.concatenate([host_nb_params, guest_params_ixn_env])
+    return hg_ixn_pot, hg_ixn_params

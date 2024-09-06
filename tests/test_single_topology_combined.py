@@ -185,34 +185,31 @@ def test_combined_parameters_nonbonded_intermediate(
 
     hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
 
-    assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 1  # ligand-env
+    assert isinstance(hgs.nonbonded_host_guest_ixn.potential, potentials.NonbondedInteractionGroup)
+    potential = hgs.nonbonded_host_guest_ixn.potential
+    params = hgs.nonbonded_host_guest_ixn.params
+    guest_params = np.array(params[num_host_atoms:])
+    ws_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
+    ws_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]
+    ws_b = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 2]
 
-    for potential, params in zip(
-        hgs.nonbonded_host_guest_ixn.potential.potentials, hgs.nonbonded_host_guest_ixn.potential.params_init
-    ):
-        assert isinstance(potential, potentials.NonbondedInteractionGroup)
-        guest_params = np.array(params[num_host_atoms:])
-        ws_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
-        ws_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]
-        ws_b = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 2]
+    # core atoms fixed at w = 0
+    assert all(w == 0.0 for w in ws_core)
 
-        # core atoms fixed at w = 0
-        assert all(w == 0.0 for w in ws_core)
+    # dummy groups have consistent w coords
+    assert len(set(ws_a)) == 1
+    assert len(set(ws_b)) == 1
+    (w_a,) = set(ws_a)
+    (w_b,) = set(ws_b)
 
-        # dummy groups have consistent w coords
-        assert len(set(ws_a)) == 1
-        assert len(set(ws_b)) == 1
-        (w_a,) = set(ws_a)
-        (w_b,) = set(ws_b)
+    # w in [0, cutoff]
+    assert 0 < w_a < potential.cutoff
+    assert 0 < w_b < potential.cutoff
 
-        # w in [0, cutoff]
-        assert 0 < w_a < potential.cutoff
-        assert 0 < w_b < potential.cutoff
-
-        if lamb < 0.5:
-            assert w_a < w_b
-        else:
-            assert w_b < w_a
+    if lamb < 0.5:
+        assert w_a < w_b
+    else:
+        assert w_b < w_a
 
 
 @pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
