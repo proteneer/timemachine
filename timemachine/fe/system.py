@@ -172,8 +172,8 @@ class HostGuestSystem:
     def get_U_fns(self):
         # Ordering here is from the slowest to the fastest kernel
         return [
-            self.nonbonded_host,
             self.nonbonded_host_guest_ixn,
+            self.nonbonded_host,  # Prefer after host-guest as it is AllPairs + exclusions
             self.nonbonded_guest_pairs,
             self.torsion,
             self.chiral_atom,
