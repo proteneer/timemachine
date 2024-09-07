@@ -187,8 +187,7 @@ void declare_hilbert_sort(py::module &m) {
                 verify_coords_and_box(coords, box);
 
                 std::vector<unsigned int> sort_perm = sorter.sort_host(N, coords.data(), box.data());
-                py::array_t<uint32_t, py::array::c_style> output_perm(sort_perm.size());
-                std::memcpy(output_perm.mutable_data(), sort_perm.data(), sort_perm.size() * sizeof(unsigned int));
+                py::array_t<uint32_t, py::array::c_style> output_perm(sort_perm.size(), sort_perm.data());
                 return output_perm;
             },
             py::arg("coords"),
@@ -358,12 +357,9 @@ void declare_context(py::module &m) {
                 int D = 3;
                 int F = result[0].size() / (N * D);
                 py::gil_scoped_acquire acquire;
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D}, result[0].data());
 
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
-
+                py::array_t<double, py::array::c_style> box_buffer({F, D, D}, result[1].data());
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
             py::arg("n_steps"),
@@ -422,12 +418,11 @@ void declare_context(py::module &m) {
                     ctxt.multiple_steps_local(n_steps, vec_local_idxs, x_interval, radius, k, seed);
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
-                py::gil_scoped_acquire acquire;
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
 
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
+                py::gil_scoped_acquire acquire;
+                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D}, result[0].data());
+
+                py::array_t<double, py::array::c_style> box_buffer({F, D, D}, result[1].data());
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
             py::arg("n_steps"),
@@ -523,11 +518,9 @@ void declare_context(py::module &m) {
                 const int D = 3;
                 const int F = result[0].size() / (N * D);
                 py::gil_scoped_acquire acquire; // Re-acquire the GIL to construct python objects
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D}, result[0].data());
 
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
+                py::array_t<double, py::array::c_style> box_buffer({F, D, D}, result[1].data());
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
             py::arg("n_steps"),
@@ -1603,13 +1596,9 @@ void declare_mover(py::module &m) {
 
                 std::array<std::vector<double>, 2> result = mover.move_host(N, coords.data(), box.data());
 
-                py::array_t<double, py::array::c_style> out_x_buffer({N, D});
-                std::memcpy(
-                    out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(*result[0].data()));
+                py::array_t<double, py::array::c_style> out_x_buffer({N, D}, result[0].data());
 
-                py::array_t<double, py::array::c_style> box_buffer({D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(*result[1].data()));
-
+                py::array_t<double, py::array::c_style> box_buffer({D, D}, result[1].data());
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
             py::arg("coords"),
@@ -1801,12 +1790,9 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
 
                 std::array<std::vector<double>, 2> result = mover.move_host(N, coords.data(), box.data());
 
-                py::array_t<double, py::array::c_style> out_x_buffer({N, D});
-                std::memcpy(
-                    out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(*result[0].data()));
+                py::array_t<double, py::array::c_style> out_x_buffer({N, D}, result[0].data());
 
-                py::array_t<double, py::array::c_style> box_buffer({D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(*result[1].data()));
+                py::array_t<double, py::array::c_style> box_buffer({D, D}, result[1].data());
 
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
@@ -1872,9 +1858,7 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
                 std::vector<double> flat_params = mover.get_params();
                 const int D = PARAMS_PER_ATOM;
                 const int N = flat_params.size() / D;
-                py::array_t<double, py::array::c_style> out_params({N, D});
-                std::memcpy(
-                    out_params.mutable_data(), flat_params.data(), flat_params.size() * sizeof(*flat_params.data()));
+                py::array_t<double, py::array::c_style> out_params({N, D}, flat_params.data());
                 return out_params;
             })
         .def(
