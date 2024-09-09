@@ -53,10 +53,8 @@ def parameterize_system(topo, ff: Forcefield, lamb: float) -> Tuple[List[Potenti
         topo.parameterize_nonbonded(
             ff_params.q_params,
             ff_params.q_params_intra,
-            ff_params.q_params_solv,
             ff_params.lj_params,
             ff_params.lj_params_intra,
-            ff_params.lj_params_solv,
             lamb,
         ),
     ]

@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any, Generic, Iterable, Optional, Tuple, TypeVar, Union
 from warnings import warn
 
+from numpy.testing import assert_equal
+
 from timemachine.constants import DEFAULT_FF, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
@@ -21,10 +23,8 @@ class ForcefieldParams(Generic[_T]):
     it_params: _T
     q_params: _T
     q_params_intra: _T
-    q_params_solv: _T
     lj_params: _T
     lj_params_intra: _T
-    lj_params_solv: _T
 
 
 def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> ForcefieldParams[Tuple[_T, _T]]:
@@ -35,10 +35,8 @@ def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> Forcefie
         (a.it_params, b.it_params),
         (a.q_params, b.q_params),
         (a.q_params_intra, b.q_params_intra),
-        (a.q_params_solv, b.q_params_solv),
         (a.lj_params, b.lj_params),
         (a.lj_params_intra, b.lj_params_intra),
-        (a.lj_params_solv, b.lj_params_solv),
     )
 
 
@@ -68,17 +66,9 @@ class Forcefield:
             nonbonded.PrecomputedChargeHandler,
         ]
     ]
-    q_handle_solv: Optional[
-        Union[
-            nonbonded.SimpleChargeSolventHandler,
-            nonbonded.AM1BCCSolventHandler,
-            nonbonded.AM1CCCSolventHandler,
-            nonbonded.PrecomputedChargeHandler,
-        ]
-    ]
+
     lj_handle: Optional[nonbonded.LennardJonesHandler]
     lj_handle_intra: Optional[nonbonded.LennardJonesIntraHandler]
-    lj_handle_solv: Optional[nonbonded.LennardJonesSolventHandler]
 
     protein_ff: str
     water_ff: str
@@ -133,17 +123,14 @@ class Forcefield:
         ff = cls.load_default()
         q_handle = PrecomputedChargeHandler()
         q_handle_intra = PrecomputedChargeHandler()
-        q_handle_solv = PrecomputedChargeHandler()
         return Forcefield(
             ff.hb_handle,
             ff.ha_handle,
             ff.pt_handle,
             ff.it_handle,
             q_handle=q_handle,
-            q_handle_solv=q_handle_solv,
             q_handle_intra=q_handle_intra,
             lj_handle=ff.lj_handle,
-            lj_handle_solv=ff.lj_handle_solv,
             lj_handle_intra=ff.lj_handle_intra,
             protein_ff=ff.protein_ff,
             water_ff=ff.water_ff,
@@ -212,11 +199,14 @@ class Forcefield:
                     lj_handle.smirks, lj_handle.params, lj_handle.props
                 )
 
-        if lj_handle_solv is None:
-            if isinstance(lj_handle, nonbonded.LennardJonesHandler):
-                lj_handle_solv = nonbonded.LennardJonesSolventHandler(
-                    lj_handle.smirks, lj_handle.params, lj_handle.props
-                )
+        if lj_handle_solv is not None:
+            assert lj_handle is not None
+            assert lj_handle_solv is not None
+            assert_equal(
+                lj_handle.params,
+                lj_handle_solv.params,
+                err_msg="Split ligand-solvent LJ interactions are no longer supported",
+            )
 
         if q_handle_intra is None:
             # Copy the forcefield parameters to the intramolecular term if not
@@ -230,17 +220,14 @@ class Forcefield:
             else:
                 raise ValueError(f"Unsupported charge handler {q_handle}")
 
-        if q_handle_solv is None:
-            # Copy the forcefield parameters to the solvent term if not
-            # already handled.
-            if isinstance(q_handle, nonbonded.AM1CCCHandler):
-                q_handle_solv = nonbonded.AM1CCCSolventHandler(q_handle.smirks, q_handle.params, q_handle.props)
-            elif isinstance(q_handle, nonbonded.AM1BCCHandler):
-                q_handle_solv = nonbonded.AM1BCCSolventHandler(q_handle.smirks, q_handle.params, q_handle.props)
-            elif isinstance(q_handle, nonbonded.SimpleChargeHandler):
-                q_handle_solv = nonbonded.SimpleChargeSolventHandler(q_handle.smirks, q_handle.params, q_handle.props)
-            else:
-                raise ValueError(f"Unsupported charge handler {q_handle}")
+        if q_handle_solv is not None:
+            assert q_handle is not None
+            assert q_handle_solv is not None
+            assert_equal(
+                q_handle.params,
+                q_handle_solv.params,
+                err_msg="Split ligand-solvent charge interactions are no longer supported",
+            )
 
         return cls(
             hb_handle,
@@ -249,10 +236,8 @@ class Forcefield:
             it_handle,
             q_handle,
             q_handle_intra,
-            q_handle_solv,
             lj_handle,
             lj_handle_intra,
-            lj_handle_solv,
             protein_ff,
             water_ff,
         )
@@ -266,10 +251,8 @@ class Forcefield:
             self.it_handle,
             self.q_handle,
             self.q_handle_intra,
-            self.q_handle_solv,
             self.lj_handle,
             self.lj_handle_intra,
-            self.lj_handle_solv,
         ]
 
     def get_params(self) -> ForcefieldParams:
@@ -283,10 +266,8 @@ class Forcefield:
             params(self.it_handle),
             params(self.q_handle),
             params(self.q_handle_intra),
-            params(self.q_handle_solv),
             params(self.lj_handle),
             params(self.lj_handle_intra),
-            params(self.lj_handle_solv),
         )
 
     def serialize(self) -> str:
