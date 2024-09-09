@@ -554,6 +554,7 @@ def test_trajectories_by_replica_to_by_state(seed, n_states, n_iters, n_atoms):
     np.testing.assert_array_equal(traj_by_state, frames[:, :, atom_idxs])
 
 
+@pytest.mark.nogpu
 def test_assert_potentials_compatible(hif2a_ligand_pair_single_topology):
     st, _ = hif2a_ligand_pair_single_topology
     bps = st.src_system.get_U_fns()
