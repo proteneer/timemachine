@@ -1,5 +1,5 @@
 import time
-from dataclasses import dataclass, fields, replace
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from functools import cache
 from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 from warnings import warn
@@ -803,27 +803,50 @@ def make_pair_bar_plots(res: PairBarResult, temperature: float, prefix: str) -> 
     return PairBarPlots(dG_errs_png, overlap_summary_png, overlap_detail_png)
 
 
+def assert_deep_eq(obj1, obj2, custom_assertion=lambda path, x1, x2: False):
+    def is_dataclass_instance(obj):
+        return is_dataclass(obj) and not isinstance(obj, type)
+
+    def go(x1, x2, path=("$",)):
+        def assert_(cond):
+            assert cond, f"objects differ in field {'.'.join(path)}"
+
+        if custom_assertion(path, x1, x2):
+            pass
+        elif is_dataclass_instance(x1) and is_dataclass_instance(x2):
+            go(asdict(x1), asdict(x2), path)
+        elif isinstance(x1, (np.ndarray, jax.Array)):
+            assert_(np.array_equal(x1, x2))
+        elif isinstance(x1, dict):
+            assert_(x1.keys() == x2.keys())
+            for k in x1.keys():
+                go(x1[k], x2[k], path + (str(k),))
+        elif isinstance(x1, Sequence):
+            assert_(len(x1) == len(x2))
+            for idx, (v1, v2) in enumerate(zip(x1, x2)):
+                go(v1, v2, path + (f"[{idx}]",))
+        else:
+            assert_(x1 == x2)
+
+    return go(obj1, obj2, ("$",))
+
+
 def assert_potentials_compatible(bps1: Sequence[BoundPotential], bps2: Sequence[BoundPotential]):
     """Asserts that two sequences of bound potentials are equivalent except for their parameters"""
 
-    def field_equal(x1, x2):
-        assert type(x1) is type(x2)
-        if isinstance(x1, np.ndarray):
-            return np.all(x1 == x2)
-        else:
-            return x1 == x2
+    ps1 = [bp.potential for bp in bps1]
+    ps2 = [bp.potential for bp in bps2]
 
-    def assert_equal(p1, p2):
-        assert type(p1) is type(p2)
-        for field in fields(p1):
-            assert field_equal(
-                getattr(p1, field.name), getattr(p2, field.name)
-            ), f"objects differ in field '{field.name}'"
+    # We override the default deep equality check to allow SummedPotentials to differ in the values of the initial
+    # parameters, as long as the shapes are consistent
 
-    assert len(bps1) == len(bps2)
+    def custom_assertion(path, x1, x2):
+        if len(path) >= 2 and path[-2] == "params_init":
+            assert x1.shape == x2.shape, f"shape mismatch in field {'.'.join(path)}"
+            return True
+        return False
 
-    for bp1, bp2 in zip(bps1, bps2):
-        assert_equal(bp1.potential, bp2.potential)
+    assert_deep_eq(ps1, ps2, custom_assertion)
 
 
 def run_sims_sequential(
