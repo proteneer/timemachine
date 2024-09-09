@@ -2,7 +2,7 @@ from copy import deepcopy
 from dataclasses import replace
 from functools import partial
 from importlib import resources
-from typing import List, Optional
+from typing import Optional
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -43,7 +43,7 @@ from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.md.hrex import HREX, HREXDiagnostics
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, Nonbonded, SummedPotential
+from timemachine.potentials import Nonbonded, SummedPotential, make_summed_potential
 from timemachine.potentials.potentials import HarmonicBond, NonbondedPairListPrecomputed
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -480,11 +480,6 @@ def test_estimate_free_energy_bar_with_energy_overflow():
 def test_compute_potential_matrix(hif2a_ligand_pair_single_topology, n_states: int, max_delta_states: int | None, seed):
     st, _ = hif2a_ligand_pair_single_topology
     states = [st.setup_intermediate_state(lam) for lam in np.linspace(0.0, 1.0, n_states)]
-
-    def make_summed_potential(bps: List[BoundPotential]):
-        potentials = [bp.potential for bp in bps]
-        params = [bp.params for bp in bps]
-        return SummedPotential(potentials, params).bind_params_list(params)
 
     bps = [make_summed_potential(s.get_U_fns()) for s in states]
     potential = bps[0].potential
