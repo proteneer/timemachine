@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from importlib import resources
 from typing import List, Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from common import prepare_single_topology_initial_state
@@ -41,6 +42,18 @@ class BenchmarkConfig:
     num_batches: int
     steps_per_batch: int
     verbose: bool
+    generate_plots: bool
+
+
+def plot_batch_times(batch_times: List[float], label: str):
+    plt.title(label)
+    plt.plot(batch_times)
+    plt.axhline(np.mean(batch_times), linestyle="--", c="gray", label="Mean")
+    plt.legend()
+    plt.xlabel("Batch")
+    plt.ylabel("Batch times (s)")
+    plt.savefig(f"{label}.png", dpi=150)
+    plt.clf()
 
 
 @pytest.fixture(scope="module")
@@ -239,6 +252,9 @@ def benchmark(
             print(f"steps per second: {steps_per_second:.3f}")
             print(f"ns per day: {ns_per_day:.3f}")
 
+    if config.generate_plots:
+        plot_batch_times(batch_times, label)
+
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
@@ -308,6 +324,8 @@ def benchmark_rbfe_water_sampling(
             print(f"steps per second: {steps_per_second:.3f}")
             print(f"ns per day: {ns_per_day:.3f}")
 
+    if config.generate_plots:
+        plot_batch_times(batch_times, label)
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
@@ -387,6 +405,8 @@ def benchmark_local(
             print(f"steps per second: {steps_per_second:.3f}")
             print(f"ns per day: {ns_per_day:.3f}")
 
+    if config.generate_plots:
+        plot_batch_times(batch_times, label)
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
@@ -518,19 +538,19 @@ def benchmark_vacuum(config: BenchmarkConfig):
 
 
 def test_dhfr():
-    benchmark_dhfr(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
+    benchmark_dhfr(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
 
 
 def test_hif2a():
-    benchmark_hif2a(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
+    benchmark_hif2a(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
 
 
 def test_solvent():
-    benchmark_solvent(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
+    benchmark_solvent(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
 
 
 def test_vacuum():
-    benchmark_vacuum(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
+    benchmark_vacuum(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
 
 
 def get_nonbonded_pot_params(bps):
@@ -545,7 +565,7 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     bps, frames, boxes, ligand_idxs = hi2fa_test_frames
     nonbonded_potential, nonbonded_params = get_nonbonded_pot_params(bps)
 
-    config = BenchmarkConfig(num_batches=2, steps_per_batch=0, verbose=False)
+    config = BenchmarkConfig(num_batches=2, steps_per_batch=0, verbose=False, generate_plots=False)
 
     num_param_batches = 5
     beta = 1 / (constants.BOLTZ * constants.DEFAULT_TEMP)
@@ -576,7 +596,7 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
 def test_hif2a_potentials(hi2fa_test_frames):
     bps, frames, boxes, _ = hi2fa_test_frames
 
-    config = BenchmarkConfig(num_batches=2, steps_per_batch=0, verbose=False)
+    config = BenchmarkConfig(num_batches=2, steps_per_batch=0, verbose=False, generate_plots=False)
 
     num_param_batches = 5
 
@@ -607,10 +627,16 @@ if __name__ == "__main__":
     parser.add_argument("--skip_solvent", action="store_true")
     parser.add_argument("--skip_vacuum", action="store_true")
     parser.add_argument("--skip_potentials", action="store_true")
+    parser.add_argument("--skip_plots", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
-    config = BenchmarkConfig(verbose=args.verbose, num_batches=args.num_batches, steps_per_batch=args.steps_per_batch)
+    config = BenchmarkConfig(
+        verbose=args.verbose,
+        num_batches=args.num_batches,
+        steps_per_batch=args.steps_per_batch,
+        generate_plots=not args.skip_plots,
+    )
 
     if not args.skip_dhfr:
         benchmark_dhfr(config)
