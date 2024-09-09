@@ -17,6 +17,7 @@ from .potentials import (
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
     SummedPotential,
+    make_summed_potential,
 )
 
 __all__ = [
@@ -41,4 +42,5 @@ __all__ = [
     "PeriodicTorsion",
     "Potential",
     "SummedPotential",
+    "make_summed_potential",
 ]
