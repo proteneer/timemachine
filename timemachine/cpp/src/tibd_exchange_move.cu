@@ -206,168 +206,174 @@ void TIBDExchangeMove<RealType>::move(
     // For the first pass just set the value to zero on the host
     *this->p_noise_offset_.data = 0;
     while (*this->p_noise_offset_.data < this->num_proposals_per_move_) {
-        // To ensure determinism between running 1 step per move or K steps per move we have to partition each pass
-        // Ordering is consistent, with the tail reversed.
-        // https://nvlabs.github.io/cub/structcub_1_1_device_partition.html#a47515ec2a15804719db1b8f3b3124e43
-        gpuErrchk(cub::DevicePartition::Flagged(
-            d_temp_storage_buffer_.data,
-            temp_storage_bytes_,
-            d_identify_indices_.data,
-            d_inner_flags_.data,
-            d_partitioned_indices_.data,
-            d_inner_mols_count_.data,
-            this->num_target_mols_,
-            stream));
+        // Compute the minimum number of iterations to run, reduces the number of copies from device->host
+        int min_iterations_left = static_cast<int>(ceil(
+            (this->num_proposals_per_move_ - *this->p_noise_offset_.data) / static_cast<float>(this->batch_size_)));
+        for (int i = 0; i < min_iterations_left; i++) {
+            // To ensure determinism between running 1 step per move or K steps per move we have to partition each pass
+            // Ordering is consistent, with the tail reversed.
+            // https://nvlabs.github.io/cub/structcub_1_1_device_partition.html#a47515ec2a15804719db1b8f3b3124e43
+            gpuErrchk(cub::DevicePartition::Flagged(
+                d_temp_storage_buffer_.data,
+                temp_storage_bytes_,
+                d_identify_indices_.data,
+                d_inner_flags_.data,
+                d_partitioned_indices_.data,
+                d_inner_mols_count_.data,
+                this->num_target_mols_,
+                stream));
 
-        k_decide_targeted_moves<<<sample_blocks, tpb, 0, stream>>>(
-            this->num_proposals_per_move_,
-            this->batch_size_,
-            this->num_target_mols_,
-            this->d_noise_offset_.data,
-            this->d_uniform_noise_buffer_.data,
-            d_inner_mols_count_.data,
-            this->d_translations_.data,
-            d_targeting_inner_vol_.data,
-            d_weights_before_counts_.data,
-            d_weights_after_counts_.data,
-            d_selected_translations_.data);
-        gpuErrchk(cudaPeekAtLastError());
-
-        // TBD: Combine the two inclusive sums into a single large inclusive sum
-        gpuErrchk(cub::DeviceScan::InclusiveSum(
-            d_temp_storage_buffer_.data,
-            temp_storage_bytes_,
-            d_weights_before_counts_.data,
-            this->d_sample_segments_offsets_.data + 1, // Offset by one as the first idx is always 0
-            this->batch_size_,
-            stream));
-
-        gpuErrchk(cub::DeviceScan::InclusiveSum(
-            d_temp_storage_buffer_.data,
-            temp_storage_bytes_,
-            d_weights_after_counts_.data,
-            d_sample_after_segment_offsets_.data + 1, // Offset by one as the first idx is always 0
-            this->batch_size_,
-            stream));
-
-        k_separate_weights_for_targeted<RealType><<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
-            this->batch_size_,
-            this->num_target_mols_,
-            this->d_sample_segments_offsets_.data,
-            d_targeting_inner_vol_.data,
-            d_inner_mols_count_.data,
-            d_partitioned_indices_.data,
-            this->d_log_weights_before_.data,
-            d_src_log_weights_.data);
-        gpuErrchk(cudaPeekAtLastError());
-
-        // Have to construct the gumbel buffer directly here to get the sampler to be bitwise deterministic
-        // refer to k_setup_gumbel_max_trick_targeted_insertion impl documentation.
-        k_setup_gumbel_max_trick_targeted_insertion<RealType>
-            <<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
+            k_decide_targeted_moves<<<sample_blocks, tpb, 0, stream>>>(
+                this->num_proposals_per_move_,
                 this->batch_size_,
                 this->num_target_mols_,
-                static_cast<int>(this->d_sample_noise_.length),
                 this->d_noise_offset_.data,
+                this->d_uniform_noise_buffer_.data,
+                d_inner_mols_count_.data,
+                this->d_translations_.data,
+                d_targeting_inner_vol_.data,
+                d_weights_before_counts_.data,
+                d_weights_after_counts_.data,
+                d_selected_translations_.data);
+            gpuErrchk(cudaPeekAtLastError());
+
+            // TBD: Combine the two inclusive sums into a single large inclusive sum
+            gpuErrchk(cub::DeviceScan::InclusiveSum(
+                d_temp_storage_buffer_.data,
+                temp_storage_bytes_,
+                d_weights_before_counts_.data,
+                this->d_sample_segments_offsets_.data + 1, // Offset by one as the first idx is always 0
+                this->batch_size_,
+                stream));
+
+            gpuErrchk(cub::DeviceScan::InclusiveSum(
+                d_temp_storage_buffer_.data,
+                temp_storage_bytes_,
+                d_weights_after_counts_.data,
+                d_sample_after_segment_offsets_.data + 1, // Offset by one as the first idx is always 0
+                this->batch_size_,
+                stream));
+
+            k_separate_weights_for_targeted<RealType><<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
+                this->batch_size_,
+                this->num_target_mols_,
+                this->d_sample_segments_offsets_.data,
+                d_targeting_inner_vol_.data,
+                d_inner_mols_count_.data,
+                d_partitioned_indices_.data,
+                this->d_log_weights_before_.data,
+                d_src_log_weights_.data);
+            gpuErrchk(cudaPeekAtLastError());
+
+            // Have to construct the gumbel buffer directly here to get the sampler to be bitwise deterministic
+            // refer to k_setup_gumbel_max_trick_targeted_insertion impl documentation.
+            k_setup_gumbel_max_trick_targeted_insertion<RealType>
+                <<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
+                    this->batch_size_,
+                    this->num_target_mols_,
+                    static_cast<int>(this->d_sample_noise_.length),
+                    this->d_noise_offset_.data,
+                    this->d_sample_segments_offsets_.data,
+                    d_src_log_weights_.data,
+                    this->d_sample_noise_.data,
+                    this->d_sampling_intermediate_.data);
+            gpuErrchk(cudaPeekAtLastError());
+
+            this->sampler_.sample_given_gumbel_noise_device(
+                this->batch_size_,
+                this->d_sample_segments_offsets_.data,
+                this->d_sampling_intermediate_.data,
+                this->d_samples_.data,
+                stream);
+
+            this->logsumexp_.sum_device(
+                this->num_target_mols_ * this->batch_size_,
+                this->batch_size_,
                 this->d_sample_segments_offsets_.data,
                 d_src_log_weights_.data,
-                this->d_sample_noise_.data,
-                this->d_sampling_intermediate_.data);
-        gpuErrchk(cudaPeekAtLastError());
+                d_lse_max_src_.data,
+                d_lse_exp_sum_src_.data,
+                stream);
 
-        this->sampler_.sample_given_gumbel_noise_device(
-            this->batch_size_,
-            this->d_sample_segments_offsets_.data,
-            this->d_sampling_intermediate_.data,
-            this->d_samples_.data,
-            stream);
+            // Selected an index from the src weights, need to remap the samples idx to the mol indices
+            k_adjust_sample_idxs<<<sample_blocks, tpb, 0, stream>>>(
+                this->num_proposals_per_move_,
+                this->batch_size_,
+                this->d_noise_offset_.data,
+                d_targeting_inner_vol_.data,
+                d_inner_mols_count_.data,
+                d_partitioned_indices_.data,
+                this->d_samples_.data);
+            gpuErrchk(cudaPeekAtLastError());
 
-        this->logsumexp_.sum_device(
-            this->num_target_mols_ * this->batch_size_,
-            this->batch_size_,
-            this->d_sample_segments_offsets_.data,
-            d_src_log_weights_.data,
-            d_lse_max_src_.data,
-            d_lse_exp_sum_src_.data,
-            stream);
+            // Don't move translations into computation of the incremental, as different translations can be used
+            // by different bias deletion movers (such as targeted insertion)
+            // Don't scale the translations as they are computed to be within the targeted region
+            this->compute_incremental_log_weights_device(
+                N, false, d_box, d_coords, this->d_quaternions_.data, this->d_selected_translations_.data, stream);
 
-        // Selected an index from the src weights, need to remap the samples idx to the mol indices
-        k_adjust_sample_idxs<<<sample_blocks, tpb, 0, stream>>>(
-            this->num_proposals_per_move_,
-            this->batch_size_,
-            this->d_noise_offset_.data,
-            d_targeting_inner_vol_.data,
-            d_inner_mols_count_.data,
-            d_partitioned_indices_.data,
-            this->d_samples_.data);
-        gpuErrchk(cudaPeekAtLastError());
+            k_setup_destination_weights_for_targeted<RealType>
+                <<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
+                    this->batch_size_,
+                    this->num_target_mols_,
+                    this->d_samples_.data,
+                    d_sample_after_segment_offsets_.data,
+                    d_targeting_inner_vol_.data,
+                    d_inner_mols_count_.data,
+                    d_partitioned_indices_.data,
+                    this->d_log_weights_after_.data,
+                    d_dest_log_weights_.data);
+            gpuErrchk(cudaPeekAtLastError());
 
-        // Don't move translations into computation of the incremental, as different translations can be used
-        // by different bias deletion movers (such as targeted insertion)
-        // Don't scale the translations as they are computed to be within the targeted region
-        this->compute_incremental_log_weights_device(
-            N, false, d_box, d_coords, this->d_quaternions_.data, this->d_selected_translations_.data, stream);
+            this->logsumexp_.sum_device(
+                this->num_target_mols_ * this->batch_size_,
+                this->batch_size_,
+                d_sample_after_segment_offsets_.data,
+                d_dest_log_weights_.data,
+                this->d_lse_max_after_.data,
+                this->d_lse_exp_sum_after_.data,
+                stream);
 
-        k_setup_destination_weights_for_targeted<RealType><<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
-            this->batch_size_,
-            this->num_target_mols_,
-            this->d_samples_.data,
-            d_sample_after_segment_offsets_.data,
-            d_targeting_inner_vol_.data,
-            d_inner_mols_count_.data,
-            d_partitioned_indices_.data,
-            this->d_log_weights_after_.data,
-            d_dest_log_weights_.data);
-        gpuErrchk(cudaPeekAtLastError());
+            k_accept_first_valid_move_targeted<RealType><<<1, min(512, this->batch_size_), 0, stream>>>(
+                this->num_proposals_per_move_,
+                this->num_target_mols_,
+                this->batch_size_,
+                inner_volume_,
+                d_targeting_inner_vol_.data,
+                d_inner_mols_count_.data,
+                d_box_volume_.data,
+                this->d_noise_offset_.data,
+                this->d_samples_.data,
+                d_lse_max_src_.data,
+                d_lse_exp_sum_src_.data,
+                this->d_lse_max_after_.data,
+                this->d_lse_exp_sum_after_.data,
+                this->d_mh_noise_.data,
+                this->d_selected_sample_.data);
+            gpuErrchk(cudaPeekAtLastError());
 
-        this->logsumexp_.sum_device(
-            this->num_target_mols_ * this->batch_size_,
-            this->batch_size_,
-            d_sample_after_segment_offsets_.data,
-            d_dest_log_weights_.data,
-            this->d_lse_max_after_.data,
-            this->d_lse_exp_sum_after_.data,
-            stream);
-
-        k_accept_first_valid_move_targeted<RealType><<<1, min(512, this->batch_size_), 0, stream>>>(
-            this->num_proposals_per_move_,
-            this->num_target_mols_,
-            this->batch_size_,
-            inner_volume_,
-            d_targeting_inner_vol_.data,
-            d_inner_mols_count_.data,
-            d_box_volume_.data,
-            this->d_noise_offset_.data,
-            this->d_samples_.data,
-            d_lse_max_src_.data,
-            d_lse_exp_sum_src_.data,
-            this->d_lse_max_after_.data,
-            this->d_lse_exp_sum_after_.data,
-            this->d_mh_noise_.data,
-            this->d_selected_sample_.data);
-        gpuErrchk(cudaPeekAtLastError());
-
-        k_store_exchange_move<<<mol_blocks, tpb, 0, stream>>>(
-            this->batch_size_,
-            this->num_target_mols_,
-            this->d_selected_sample_.data,
-            this->d_samples_.data,
-            this->d_target_mol_offsets_.data,
-            this->d_sample_segments_offsets_.data,
-            this->d_intermediate_coords_.data,
-            d_coords,
-            this->d_before_mol_energy_buffer_.data,
-            this->d_proposal_mol_energy_buffer_.data,
-            this->d_noise_offset_.data,
-            d_inner_flags_.data,
-            this->d_num_accepted_.data);
-        gpuErrchk(cudaPeekAtLastError());
-        k_convert_energies_to_log_weights<RealType><<<mol_blocks, tpb, 0, stream>>>(
-            this->num_target_mols_,
-            this->beta_,
-            this->d_before_mol_energy_buffer_.data,
-            this->d_log_weights_before_.data);
-        gpuErrchk(cudaPeekAtLastError());
+            k_store_exchange_move<<<mol_blocks, tpb, 0, stream>>>(
+                this->batch_size_,
+                this->num_target_mols_,
+                this->d_selected_sample_.data,
+                this->d_samples_.data,
+                this->d_target_mol_offsets_.data,
+                this->d_sample_segments_offsets_.data,
+                this->d_intermediate_coords_.data,
+                d_coords,
+                this->d_before_mol_energy_buffer_.data,
+                this->d_proposal_mol_energy_buffer_.data,
+                this->d_noise_offset_.data,
+                d_inner_flags_.data,
+                this->d_num_accepted_.data);
+            gpuErrchk(cudaPeekAtLastError());
+            k_convert_energies_to_log_weights<RealType><<<mol_blocks, tpb, 0, stream>>>(
+                this->num_target_mols_,
+                this->beta_,
+                this->d_before_mol_energy_buffer_.data,
+                this->d_log_weights_before_.data);
+            gpuErrchk(cudaPeekAtLastError());
+        }
 
         gpuErrchk(cudaMemcpyAsync(
             this->p_noise_offset_.data,
