@@ -591,29 +591,29 @@ def test_assert_potentials_compatible(hif2a_ligand_pair_single_topology):
         with pytest.raises(AssertionError, match=match):
             assert_potentials_compatible(bps2, bps1)
 
-    should_raise(bps, [])
-    should_raise(bps, bps[::-1])
-    should_raise(bps, bps[1:])
+    should_raise(bps, [], match=r"objects differ in field \$: lengths differ")
+    should_raise(bps, bps[::-1], match=r"objects differ in field \$\.\[0\]: types differ")
+    should_raise(bps, bps[1:], match=r"objects differ in field \$: lengths differ")
 
     def modify_hb_idxs(hb):
         return replace(hb, potential=replace(hb.potential, idxs=hb.potential.idxs[::-1]))
 
     bps1 = [modify_hb_idxs(bp) if isinstance(bp.potential, HarmonicBond) else bp for bp in bps]
-    should_raise(bps, bps1, r"objects differ in field \$\.\[\d\]\.idxs")
+    should_raise(bps, bps1, r"objects differ in field \$\.\[\d\]\.idxs: arrays not equal")
 
     def modify_nb_cutoff(nb):
         return replace(nb, potential=replace(nb.potential, cutoff=nb.potential.cutoff + 1.0))
 
     assert any(isinstance(bp.potential, NonbondedPairListPrecomputed) for bp in bps)
     bps1 = [modify_nb_cutoff(bp) if isinstance(bp.potential, NonbondedPairListPrecomputed) else bp for bp in bps]
-    should_raise(bps, bps1, r"objects differ in field \$\.\[\d\]\.cutoff")
+    should_raise(bps, bps1, r"objects differ in field \$\.\[\d\]\.cutoff: left != right")
 
     # Check that we detect differences in summed potentials
     sp = make_summed_potential(bps)
     sp1 = make_summed_potential(
         [modify_nb_cutoff(bp) if isinstance(bp.potential, NonbondedPairListPrecomputed) else bp for bp in bps]
     )
-    should_raise([sp], [sp1], r"objects differ in field \$\.\[\d\]\.potentials\.\[\d\]\.cutoff")
+    should_raise([sp], [sp1], r"objects differ in field \$\.\[\d\]\.potentials\.\[\d\]\.cutoff: left != right")
 
     # Should raise if params_init differs in shape
     params_init_1 = list(sp.potential.params_init)

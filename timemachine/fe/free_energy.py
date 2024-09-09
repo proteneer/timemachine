@@ -806,25 +806,27 @@ def assert_deep_eq(obj1, obj2, custom_assertion=lambda path, x1, x2: False):
         return is_dataclass(obj) and not isinstance(obj, type)
 
     def go(x1, x2, path=("$",)):
-        def assert_(cond):
-            assert cond, f"objects differ in field {'.'.join(path)}"
+        def assert_(cond, reason):
+            assert cond, f"objects differ in field {'.'.join(path)}: {reason}"
 
         if custom_assertion(path, x1, x2):
             pass
+        elif type(x1) is not type(x2):
+            assert_(False, f"types differ (left={type(x1)}, right={type(x2)})")
         elif is_dataclass_instance(x1) and is_dataclass_instance(x2):
             go(asdict(x1), asdict(x2), path)
         elif isinstance(x1, (np.ndarray, jax.Array)):
-            assert_(np.array_equal(x1, x2))
+            assert_(np.array_equal(x1, x2), "arrays not equal")
         elif isinstance(x1, dict):
-            assert_(x1.keys() == x2.keys())
+            assert_(x1.keys() == x2.keys(), "dataclass fields or dictionary keys differ")
             for k in x1.keys():
                 go(x1[k], x2[k], path + (str(k),))
         elif isinstance(x1, Sequence):
-            assert_(len(x1) == len(x2))
+            assert_(len(x1) == len(x2), f"lengths differ (left={len(x1)}, right={len(x2)})")
             for idx, (v1, v2) in enumerate(zip(x1, x2)):
                 go(v1, v2, path + (f"[{idx}]",))
         else:
-            assert_(x1 == x2)
+            assert_(x1 == x2, "left != right")
 
     return go(obj1, obj2, ("$",))
 
