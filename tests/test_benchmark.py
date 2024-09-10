@@ -604,7 +604,7 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     bps, frames, boxes, ligand_idxs = hi2fa_test_frames
     nonbonded_potential, nonbonded_params = get_nonbonded_pot_params(bps)
 
-    config = BenchmarkConfig(num_batches=2, steps_per_batch=0, verbose=False, generate_plots=False)
+    config = BenchmarkConfig(num_batches=2, steps_per_batch=1, verbose=False, generate_plots=False)
 
     num_param_batches = 5
     beta = 1 / (constants.BOLTZ * constants.DEFAULT_TEMP)
@@ -635,7 +635,7 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
 def test_hif2a_potentials(hi2fa_test_frames):
     bps, frames, boxes, _ = hi2fa_test_frames
 
-    config = BenchmarkConfig(num_batches=2, steps_per_batch=0, verbose=False, generate_plots=False)
+    config = BenchmarkConfig(num_batches=2, steps_per_batch=1, verbose=False, generate_plots=False)
 
     num_param_batches = 5
 
