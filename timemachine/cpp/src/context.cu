@@ -54,19 +54,17 @@ bool is_barostat(std::shared_ptr<Mover> &mover) {
     return false;
 }
 
-void Context::_verify_box(cudaStream_t stream) {
+void Context::_verify_box(const double *box_buffer, cudaStream_t stream) {
     // If there are no nonbonded potentials, nothing to check.
     if (nonbonded_pots_.size() == 0) {
         return;
     }
-    std::vector<double> h_box(9);
-    gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box_t_, 9 * sizeof(*d_box_t_), cudaMemcpyDeviceToHost, stream));
     gpuErrchk(cudaStreamSynchronize(stream));
     for (auto boundpot : nonbonded_pots_) {
         double cutoff = get_nonbonded_all_pair_cutoff_with_padding(boundpot->potential);
         double db_cutoff = 2 * cutoff;
         for (int i = 0; i < 3; i++) {
-            if (h_box[i * 3 + i] < db_cutoff) {
+            if (box_buffer[i * 3 + i] < db_cutoff) {
                 throw std::runtime_error(
                     "cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
             }
@@ -114,19 +112,12 @@ void Context::multiple_steps_local(
     const int seed,
     double *h_x,
     double *h_box) {
-    int store_x_interval = n_samples > 0 ? n_steps / n_samples : n_steps + 1;
+    const int store_x_interval = n_samples > 0 ? n_steps / n_samples : n_steps + 1;
     if (n_samples < 0) {
         throw std::runtime_error("n_samples < 0");
     }
     if (n_steps % store_x_interval != 0) {
         std::cout << "warning:: n_steps modulo store_x_interval does not equal zero" << std::endl;
-    }
-    int box_buffer_size = n_samples * 3 * 3;
-
-    // Store boxes on GPU as boxes are a constant size and relatively small
-    DeviceBuffer<double> d_box_traj;
-    if (box_buffer_size > 0) {
-        d_box_traj.realloc(box_buffer_size);
     }
 
     this->_ensure_local_md_intialized();
@@ -149,13 +140,9 @@ void Context::multiple_steps_local(
                     N_ * 3 * sizeof(*d_x_t_),
                     cudaMemcpyDeviceToHost,
                     stream_));
-                gpuErrchk(cudaMemcpyAsync(
-                    &d_box_traj.data[0] + ((i / store_x_interval) - 1) * 3 * 3,
-                    d_box_t_,
-                    3 * 3 * sizeof(*d_box_traj.data),
-                    cudaMemcpyDeviceToDevice,
-                    stream_));
-                this->_verify_box(stream_);
+                double *box_ptr = h_box + ((i / store_x_interval) - 1) * 3 * 3;
+                gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream_));
+                this->_verify_box(box_ptr, stream_);
             }
         }
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream_);
@@ -165,10 +152,6 @@ void Context::multiple_steps_local(
         throw;
     }
     gpuErrchk(cudaStreamSynchronize(stream_));
-
-    if (box_buffer_size > 0) {
-        d_box_traj.copy_to(h_box);
-    }
 }
 
 void Context::multiple_steps_local_selection(
@@ -180,19 +163,12 @@ void Context::multiple_steps_local_selection(
     const double k,
     double *h_x,
     double *h_box) {
-    int store_x_interval = n_samples > 0 ? n_steps / n_samples : n_steps + 1;
+    const int store_x_interval = n_samples > 0 ? n_steps / n_samples : n_steps + 1;
     if (n_samples < 0) {
         throw std::runtime_error("n_samples < 0");
     }
     if (n_steps % store_x_interval != 0) {
         std::cout << "warning:: n_steps modulo store_x_interval does not equal zero" << std::endl;
-    }
-
-    int box_buffer_size = n_samples * 3 * 3;
-    // Store boxes on GPU as boxes are a constant size and relatively small
-    DeviceBuffer<double> d_box_traj;
-    if (box_buffer_size > 0) {
-        d_box_traj.realloc(box_buffer_size);
     }
 
     this->_ensure_local_md_intialized();
@@ -215,13 +191,9 @@ void Context::multiple_steps_local_selection(
                     N_ * 3 * sizeof(*d_x_t_),
                     cudaMemcpyDeviceToHost,
                     stream_));
-                gpuErrchk(cudaMemcpyAsync(
-                    &d_box_traj.data[0] + ((i / store_x_interval) - 1) * 3 * 3,
-                    d_box_t_,
-                    3 * 3 * sizeof(*d_box_traj.data),
-                    cudaMemcpyDeviceToDevice,
-                    stream_));
-                this->_verify_box(stream_);
+                double *box_ptr = h_box + ((i / store_x_interval) - 1) * 3 * 3;
+                gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream_));
+                this->_verify_box(box_ptr, stream_);
             }
         }
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream_);
@@ -231,25 +203,15 @@ void Context::multiple_steps_local_selection(
         throw;
     }
     gpuErrchk(cudaStreamSynchronize(stream_));
-
-    if (box_buffer_size > 0) {
-        d_box_traj.copy_to(h_box);
-    }
 }
 
 void Context::multiple_steps(const int n_steps, const int n_samples, double *h_x, double *h_box) {
-    int store_x_interval = n_samples > 0 ? n_steps / n_samples : n_steps + 1;
+    const int store_x_interval = n_samples > 0 ? n_steps / n_samples : n_steps + 1;
     if (n_samples < 0) {
         throw std::runtime_error("n_samples < 0");
     }
     if (n_steps % store_x_interval != 0) {
         std::cout << "warning:: n_steps modulo store_x_interval does not equal zero" << std::endl;
-    }
-    int box_buffer_size = n_samples * 3 * 3;
-
-    DeviceBuffer<double> d_box_buffer;
-    if (box_buffer_size > 0) {
-        d_box_buffer.realloc(box_buffer_size);
     }
 
     intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream_);
@@ -263,22 +225,14 @@ void Context::multiple_steps(const int n_steps, const int n_samples, double *h_x
                 N_ * 3 * sizeof(*d_x_t_),
                 cudaMemcpyDeviceToHost,
                 stream_));
-            gpuErrchk(cudaMemcpyAsync(
-                &d_box_buffer.data[0] + ((i / store_x_interval) - 1) * 3 * 3,
-                d_box_t_,
-                3 * 3 * sizeof(*d_box_buffer.data),
-                cudaMemcpyDeviceToDevice,
-                stream_));
-            this->_verify_box(stream_);
+            double *box_ptr = h_box + ((i / store_x_interval) - 1) * 3 * 3;
+            gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream_));
+            this->_verify_box(box_ptr, stream_);
         }
     }
     intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream_);
 
     gpuErrchk(cudaStreamSynchronize(stream_));
-
-    if (box_buffer_size > 0) {
-        d_box_buffer.copy_to(h_box);
-    }
 }
 
 void Context::step() {

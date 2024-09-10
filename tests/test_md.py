@@ -927,14 +927,11 @@ def test_context_invalid_boxes():
     ctxt.set_box(box * 0.01)
     err_msg = "cutoff with padding is more than half of the box width, neighborlist is no longer reliable"
     with pytest.raises(RuntimeError, match=err_msg):
-        _, boxes = ctxt.multiple_steps(steps)
-        assert len(boxes) == 1
+        ctxt.multiple_steps(steps)
     with pytest.raises(RuntimeError, match=err_msg):
-        _, boxes = ctxt.multiple_steps_local(steps, ligand_idxs)
-        assert len(boxes) == 1
+        ctxt.multiple_steps_local(steps, ligand_idxs)
     with pytest.raises(RuntimeError, match=err_msg):
-        _, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, selection)
-        assert len(boxes) == 1
+        ctxt.multiple_steps_local_selection(steps, reference_idx, selection)
 
     # Without returning boxes no check will be performed
     _, boxes = ctxt.multiple_steps(steps, store_x_interval=steps + 1)
