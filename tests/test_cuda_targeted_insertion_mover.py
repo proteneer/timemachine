@@ -440,7 +440,7 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
     box = host_box
 
     bps = [pot.bind(p) for pot, p in zip(potentials, params)]
-    summed_pot = get_bound_potential_by_type(bps, SummedPotential)
+    summed_pot = get_bound_potential_by_type(bps, SummedPotential).potential
     nb = next(
         pot.bind(p) for pot, p in zip(summed_pot.potentials, summed_pot.params_init) if isinstance(pot, Nonbonded)
     )
@@ -678,7 +678,7 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
     box = host_box
 
     bps = [pot.bind(p) for pot, p in zip(potentials, params)]
-    summed_pot = get_bound_potential_by_type(bps, SummedPotential)
+    summed_pot = get_bound_potential_by_type(bps, SummedPotential).potential
     nb = next(
         pot.bind(p) for pot, p in zip(summed_pot.potentials, summed_pot.params_init) if isinstance(pot, Nonbonded)
     )
