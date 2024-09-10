@@ -1,6 +1,8 @@
+from copy import deepcopy
+from dataclasses import replace
 from functools import partial
 from importlib import resources
-from typing import List, Optional
+from typing import Optional
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -23,6 +25,7 @@ from timemachine.fe.free_energy import (
     MinOverlapWarning,
     PairBarResult,
     Trajectory,
+    assert_potentials_compatible,
     batches,
     compute_potential_matrix,
     estimate_free_energy_bar,
@@ -40,7 +43,8 @@ from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.md.hrex import HREX, HREXDiagnostics
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, Nonbonded, SummedPotential
+from timemachine.potentials import Nonbonded, SummedPotential, make_summed_potential
+from timemachine.potentials.potentials import HarmonicBond, NonbondedPairListPrecomputed
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -475,11 +479,6 @@ def test_compute_potential_matrix(hif2a_ligand_pair_single_topology, n_states: i
     st, _ = hif2a_ligand_pair_single_topology
     states = [st.setup_intermediate_state(lam) for lam in np.linspace(0.0, 1.0, n_states)]
 
-    def make_summed_potential(bps: List[BoundPotential]):
-        potentials = [bp.potential for bp in bps]
-        params = [bp.params for bp in bps]
-        return SummedPotential(potentials, params).bind_params_list(params)
-
     bps = [make_summed_potential(s.get_U_fns()) for s in states]
     potential = bps[0].potential
     params_by_state = np.array([bp.params for bp in bps])
@@ -551,3 +550,76 @@ def test_trajectories_by_replica_to_by_state(seed, n_states, n_iters, n_atoms):
     traj_by_replica = sim_res.extract_trajectories_by_replica(atom_idxs)
     traj_by_state = trajectories_by_replica_to_by_state(traj_by_replica, replica_idx_by_state_by_iter)
     np.testing.assert_array_equal(traj_by_state, frames[:, :, atom_idxs])
+
+
+@pytest.mark.nogpu
+def test_assert_potentials_compatible(hif2a_ligand_pair_single_topology):
+    st, _ = hif2a_ligand_pair_single_topology
+    bps = st.src_system.get_U_fns()
+
+    def should_succeed(bps1, bps2):
+        # should not depend on instances
+        bps1 = deepcopy(bps1)
+        bps2 = deepcopy(bps2)
+
+        assert_potentials_compatible(bps1, bps2)
+        assert_potentials_compatible(bps2, bps1)
+
+    should_succeed(bps, bps)
+
+    def modify_hb_params(hb):
+        return replace(hb, params=10.0 * hb.params)
+
+    bps1 = [modify_hb_params(bp) if isinstance(bp.potential, HarmonicBond) else bp for bp in bps]
+    should_succeed(bps, bps1)
+
+    # Check that we handle summed potentials
+    sp = make_summed_potential(bps)
+    should_succeed([sp], [sp])
+
+    # Should not raise if params_init differs only in values but not shape
+    params_init_1 = [np.array(ps) + 1.0 for ps in sp.potential.params_init]
+    should_succeed([sp], [replace(sp, potential=replace(sp.potential, params_init=params_init_1))])
+
+    def should_raise(bps1, bps2, match=None):
+        # should not depend on instances
+        bps1 = deepcopy(bps1)
+        bps2 = deepcopy(bps2)
+
+        with pytest.raises(AssertionError, match=match):
+            assert_potentials_compatible(bps1, bps2)
+        with pytest.raises(AssertionError, match=match):
+            assert_potentials_compatible(bps2, bps1)
+
+    should_raise(bps, [], match=r"objects differ in field \$: lengths differ")
+    should_raise(bps, bps[::-1], match=r"objects differ in field \$\.\[0\]: types differ")
+    should_raise(bps, bps[1:], match=r"objects differ in field \$: lengths differ")
+
+    def modify_hb_idxs(hb):
+        return replace(hb, potential=replace(hb.potential, idxs=hb.potential.idxs[::-1]))
+
+    bps1 = [modify_hb_idxs(bp) if isinstance(bp.potential, HarmonicBond) else bp for bp in bps]
+    should_raise(bps, bps1, r"objects differ in field \$\.\[\d\]\.idxs: arrays not equal")
+
+    def modify_nb_cutoff(nb):
+        return replace(nb, potential=replace(nb.potential, cutoff=nb.potential.cutoff + 1.0))
+
+    assert any(isinstance(bp.potential, NonbondedPairListPrecomputed) for bp in bps)
+    bps1 = [modify_nb_cutoff(bp) if isinstance(bp.potential, NonbondedPairListPrecomputed) else bp for bp in bps]
+    should_raise(bps, bps1, r"objects differ in field \$\.\[\d\]\.cutoff: left != right")
+
+    # Check that we detect differences in summed potentials
+    sp = make_summed_potential(bps)
+    sp1 = make_summed_potential(
+        [modify_nb_cutoff(bp) if isinstance(bp.potential, NonbondedPairListPrecomputed) else bp for bp in bps]
+    )
+    should_raise([sp], [sp1], r"objects differ in field \$\.\[\d\]\.potentials\.\[\d\]\.cutoff: left != right")
+
+    # Should raise if params_init differs in shape
+    params_init_1 = list(sp.potential.params_init)
+    params_init_1[0] = np.zeros((42, 42))
+    should_raise(
+        [sp],
+        [replace(sp, potential=replace(sp.potential, params_init=params_init_1))],
+        r"shape mismatch in field \$\.\[\d\].params_init\.\[0\]",
+    )
