@@ -21,7 +21,8 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
 from timemachine.md.exchange.exchange_mover import get_water_idxs, translate_coordinates
 from timemachine.md.minimizer import check_force_norm
-from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
+from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -202,8 +203,8 @@ def test_pair_of_waters_in_box(proposals_per_move, total_num_proposals, batch_si
     system, host_conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
 
@@ -263,8 +264,8 @@ def test_sampling_single_water_in_bulk(
     box += np.diag([0.1, 0.1, 0.1])
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
@@ -314,8 +315,8 @@ def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
     system, conf, box, _ = builders.build_water_system(4.0, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -404,8 +405,8 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
@@ -463,8 +464,8 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
     system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
@@ -546,8 +547,8 @@ def test_moves_in_a_water_box(
     box += np.diag([0.1, 0.1, 0.1])
     bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     bond_list = get_bond_list(bond_pot)
     group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -714,8 +715,8 @@ def test_compute_incremental_log_weights(batch_size, samples, box_size, precisio
     system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
@@ -781,7 +782,7 @@ def hif2a_complex():
         complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
     bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -841,8 +842,8 @@ def test_moves_with_complex(
 ):
     complex_system, conf, box = hif2a_complex
     bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -931,11 +932,15 @@ def test_bd_moves_with_complex_and_ligand(
     box = initial_state.box0
 
     bps = initial_state.potentials
-    summed_pot = next(bp for bp in bps if isinstance(bp.potential, SummedPotential))
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    ligand_env_pot = get_bound_potential_by_type(bps, SummedPotential)
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
-    water_params = summed_pot.potential.params_init[0]
+    ixn_group_idx = next(
+        i for i, pot in enumerate(ligand_env_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
+    )
+
+    water_params = ligand_env_pot.potential.params_init[ixn_group_idx]
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])

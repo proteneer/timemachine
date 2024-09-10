@@ -13,6 +13,7 @@ from timemachine.lib.fixed_point import fixed_to_float
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
+from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 pytestmark = [pytest.mark.memcheck]
@@ -51,7 +52,7 @@ def test_deterministic_energies(precision, rtol, atol):
     x0 = min_coords
     v0 = np.zeros_like(x0)
 
-    harmonic_bond_potential = next(bp for bp in host_fns if isinstance(bp.potential, HarmonicBond))
+    harmonic_bond_potential = get_bound_potential_by_type(host_fns, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential.potential)
     group_idxs = get_group_indices(bond_list, len(host_masses))
     water_idxs = [group for group in group_idxs if len(group) == 3]
@@ -65,7 +66,7 @@ def test_deterministic_energies(precision, rtol, atol):
         seed,
     )
 
-    nb = next(bp for bp in host_fns if isinstance(bp.potential, Nonbonded))
+    nb = get_bound_potential_by_type(host_fns, Nonbonded)
 
     # Select the protein as the target for targeted insertion
     radius = 1.0

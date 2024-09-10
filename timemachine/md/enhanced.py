@@ -27,6 +27,7 @@ from timemachine.md.barostat.moves import NPTMove
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import HarmonicBond, bonded, rmsd
+from timemachine.potentials.potential import get_potential_by_type
 
 logger = logging.getLogger(__name__)
 
@@ -475,7 +476,7 @@ def equilibrate_solvent_phase(
 
     all_impls = [bp.to_gpu(np.float32).bound_impl for bp in bps]
 
-    bonded_pot = next(pot for pot in potentials if isinstance(pot, HarmonicBond))
+    bonded_pot = get_potential_by_type(potentials, HarmonicBond)
 
     intg_equil = lib.LangevinIntegrator(temperature, dt, friction, masses, seed)
     intg_equil_impl = intg_equil.impl()

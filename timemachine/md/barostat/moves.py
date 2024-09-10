@@ -11,6 +11,7 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.moves import NVTMove
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import BoundPotential, HarmonicBond
+from timemachine.potentials.potential import get_bound_potential_by_type
 
 
 def compute_centroid(group):
@@ -103,7 +104,7 @@ class NPTMove(NVTMove):
     ):
         super().__init__(bps, masses, temperature, n_steps, seed, dt=dt, friction=friction)
 
-        bonded_pot = next(bp.potential for bp in bps if isinstance(bp.potential, HarmonicBond))
+        bonded_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
         bond_list = get_bond_list(bonded_pot)
         group_idxs = get_group_indices(bond_list, len(masses))

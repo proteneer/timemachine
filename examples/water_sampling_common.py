@@ -14,6 +14,7 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.builders import strip_units
 from timemachine.md.exchange.exchange_mover import delta_r_np
 from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
+from timemachine.potentials.potential import get_bound_potential_by_type
 
 DEFAULT_BB_RADIUS = 0.46
 # uncomment if we want to re-enable minimization
@@ -131,7 +132,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
 
     barostat_interval = 25
 
-    bond_list = get_bond_list(next(bp for bp in host_bps if isinstance(bp.potential, HarmonicBond)).potential)
+    bond_list = get_bond_list(get_bound_potential_by_type(host_bps, HarmonicBond).potential)
     group_idxs = get_group_indices(bond_list, len(combined_masses))
 
     if use_hmr == 0:

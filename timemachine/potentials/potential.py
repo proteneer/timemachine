@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import astuple, dataclass
-from typing import Any, Generic, Optional, TypeVar, cast
+from typing import Any, Generic, Optional, Sequence, TypeVar, cast
 
 import numpy as np
 from jax import Array
@@ -77,3 +77,41 @@ def get_custom_ops_class_name_suffix(precision: Precision):
         return "f64"
     else:
         raise ValueError("invalid precision")
+
+
+def get_bound_potential_by_type(bps: Sequence[BoundPotential[_P]], pot_type: type[_P]) -> BoundPotential[_P]:
+    """Given a list of bound potentials return a potential with the provided type.
+
+    Raises
+    ------
+        ValueError:
+            Unable to find potential or there are multiple potentials of the same type
+    """
+    result: Optional[BoundPotential[_P]] = None
+    for bp in bps:
+        if isinstance(bp.potential, pot_type):
+            if result is not None:
+                raise ValueError(f"Multiple potentials of type: {pot_type}")
+            result = bp
+    if result is None:
+        raise ValueError(f"Unable to find potential of type: {pot_type}")
+    return result
+
+
+def get_potential_by_type(pots: Sequence[Potential], pot_type: type[_P]) -> _P:
+    """Given a list of potentials return a potential with the provided type.
+
+    Raises
+    ------
+        ValueError:
+            Unable to find potential or there are multiple potentials of the same type
+    """
+    result: Optional[_P] = None
+    for pot in pots:
+        if isinstance(pot, pot_type):
+            if result is not None:
+                raise ValueError(f"Multiple potentials of type: {pot_type}")
+            result = pot
+    if result is None:
+        raise ValueError(f"Unable to find potential of type: {pot_type}")
+    return result

@@ -18,6 +18,7 @@ from timemachine.md.barostat.moves import NPTMove
 from timemachine.md.moves import NVTMove, OptimizedMTMMove
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import NonbondedInteractionGroup, SummedPotential, bonded, nonbonded
+from timemachine.potentials.potential import get_potential_by_type
 
 
 @pytest.mark.skip("Has shown to be flaky, needs further investigation. Condensed MTM not currently used")
@@ -63,7 +64,7 @@ def test_condensed_phase_mtm(seed):
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff, 0.0)
 
     # Unwrap SummedPotential to get water-ligand nonbonded potential
-    summed_pot = next(pot for pot in ubps if isinstance(pot, SummedPotential))
+    summed_pot = get_potential_by_type(ubps, SummedPotential)
 
     # Unwrap SummedPotential to get intermolecular water-ligand potential
     nb_idx, nb_wl_potential = next(

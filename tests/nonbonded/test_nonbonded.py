@@ -10,6 +10,7 @@ from timemachine import potentials
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
+from timemachine.potentials.potential import get_bound_potential_by_type
 
 np.set_printoptions(linewidth=500)
 
@@ -172,7 +173,7 @@ def test_nblist_box_resize(precision, rtol, atol, du_dp_rtol, du_dp_atol):
 
     host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
-    test_bp = next(bp for bp in host_fns if isinstance(bp.potential, potentials.Nonbonded))
+    test_bp = get_bound_potential_by_type(host_fns, potentials.Nonbonded)
     assert test_bp.params is not None
 
     big_box = box + np.eye(3) * 1000
