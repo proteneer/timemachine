@@ -22,7 +22,7 @@ from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
-from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices, compute_box_volume
 from timemachine.potentials import (
     BoundPotential,
     HarmonicBond,
@@ -45,7 +45,8 @@ class BenchmarkConfig:
     generate_plots: bool
 
 
-def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], label: str):
+
+def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], box_volumes: List[float], label: str):
     """
     Plot and save a figure of the batches of benchmarks run.
 
@@ -67,13 +68,19 @@ def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], 
     ns_per_day = ns_per_day * SECONDS_PER_DAY * dt * 1e-3
 
     plt.title(label)
-    plt.plot(ns_per_day)
-    plt.axhline(np.mean(ns_per_day), linestyle="--", c="gray", label="Mean")
-    plt.legend()
-    plt.xlabel("Batch")
-    plt.ylabel("ns per day")
-    plt.tight_layout()
-    plt.savefig(f"{label}.png", dpi=150)
+    fig, axes = plt.subplots(ncols=2)
+    fig.suptitle(label)
+    axes[0].plot(ns_per_day)
+    axes[0].axhline(np.mean(ns_per_day), linestyle="--", c="gray", label="Mean")
+    axes[0].legend()
+    axes[0].set_xlabel("Batch")
+    axes[0].set_ylabel("ns per day")
+
+    axes[1].plot(box_volumes)
+    axes[1].set_xlabel("Batch")
+    axes[1].set_ylabel("Box Volume (nm^3)")
+    fig.tight_layout()
+    fig.savefig(f"{label}.png", dpi=150)
     plt.clf()
 
 
@@ -244,6 +251,7 @@ def benchmark(
     )
 
     batch_times = []
+    box_volumes = []
 
     steps_per_batch = config.steps_per_batch
     num_batches = config.num_batches
@@ -256,8 +264,9 @@ def benchmark(
     for batch in range(num_batches):
         # time the current batch
         batch_start = time.time()
-        _, _ = ctxt.multiple_steps(steps_per_batch)
+        _, boxes = ctxt.multiple_steps(steps_per_batch)
         batch_end = time.time()
+        box_volumes.append(compute_box_volume(boxes[-1]))
 
         delta = batch_end - batch_start
 
@@ -274,7 +283,7 @@ def benchmark(
             print(f"ns per day: {ns_per_day:.3f}")
 
     if config.generate_plots:
-        plot_batch_times(steps_per_batch, dt, batch_times, label)
+        plot_batch_times(steps_per_batch, dt, batch_times, box_volumes, label)
 
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
@@ -314,6 +323,7 @@ def benchmark_rbfe_water_sampling(
     assert len(ctxt.get_movers()) == 2, "Expected barostat and water sampler"
 
     batch_times = []
+    box_volumes = []
 
     steps_per_batch = config.steps_per_batch
     num_batches = config.num_batches
@@ -328,8 +338,9 @@ def benchmark_rbfe_water_sampling(
     for batch in range(num_batches):
         # time the current batch
         batch_start = time.time()
-        _, _ = ctxt.multiple_steps(steps_per_batch)
+        _, boxes = ctxt.multiple_steps(steps_per_batch)
         batch_end = time.time()
+        box_volumes.append(compute_box_volume(boxes[-1]))
 
         delta = batch_end - batch_start
 
@@ -346,7 +357,7 @@ def benchmark_rbfe_water_sampling(
             print(f"ns per day: {ns_per_day:.3f}")
 
     if config.generate_plots:
-        plot_batch_times(steps_per_batch, dt, batch_times, label)
+        plot_batch_times(steps_per_batch, dt, batch_times, box_volumes, label)
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
@@ -393,6 +404,7 @@ def benchmark_local(
     )
 
     batch_times = []
+    box_volumes = []
 
     steps_per_batch = config.steps_per_batch
     num_batches = config.num_batches
@@ -409,8 +421,9 @@ def benchmark_local(
         local_seed = rng.integers(np.iinfo(np.int32).max)
         # time the current batch
         batch_start = time.time()
-        _, _ = ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed)
+        _, boxes = ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed)
         batch_end = time.time()
+        box_volumes.append(compute_box_volume(boxes[-1]))
 
         delta = batch_end - batch_start
 
@@ -427,7 +440,7 @@ def benchmark_local(
             print(f"ns per day: {ns_per_day:.3f}")
 
     if config.generate_plots:
-        plot_batch_times(steps_per_batch, dt, batch_times, label)
+        plot_batch_times(steps_per_batch, dt, batch_times, box_volumes, label)
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
