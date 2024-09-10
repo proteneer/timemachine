@@ -22,7 +22,7 @@ from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
-from timemachine.md.barostat.utils import get_bond_list, get_group_indices, compute_box_volume
+from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
 from timemachine.potentials import (
     BoundPotential,
     HarmonicBond,
@@ -43,7 +43,12 @@ class BenchmarkConfig:
     steps_per_batch: int
     verbose: bool
     generate_plots: bool
+    num_equil_batches: int = 1
 
+    def __post_init__(self):
+        assert self.num_batches >= 1
+        assert self.steps_per_batch >= 1
+        assert self.num_equil_batches >= 1
 
 
 def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], box_volumes: List[float], label: str):
@@ -256,8 +261,8 @@ def benchmark(
     steps_per_batch = config.steps_per_batch
     num_batches = config.num_batches
 
-    # run once before timer starts
-    ctxt.multiple_steps(steps_per_batch)
+    # run num_equil_batches before starting the time, can improve benchmark accuracy
+    ctxt.multiple_steps(steps_per_batch * config.num_equil_batches)
 
     start = time.time()
 
@@ -330,8 +335,8 @@ def benchmark_rbfe_water_sampling(
 
     dt = state.integrator.dt
 
-    # run once before timer starts
-    ctxt.multiple_steps(steps_per_batch)
+    # run num_equil_batches before starting the time, can improve benchmark accuracy
+    ctxt.multiple_steps(steps_per_batch * config.num_equil_batches)
 
     start = time.time()
 
@@ -412,8 +417,8 @@ def benchmark_local(
     ligand_idxs = ligand_idxs.astype(np.int32)
 
     local_seed = rng.integers(np.iinfo(np.int32).max)
-    # run once before timer starts
-    ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed)
+    # run num_equil_batches before starting the time, can improve benchmark accuracy
+    ctxt.multiple_steps_local(steps_per_batch * config.num_equil_batches, ligand_idxs, seed=local_seed)
 
     start = time.time()
 
@@ -654,6 +659,7 @@ def test_hif2a_potentials(hi2fa_test_frames):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
+    parser.add_argument("--equil_batches", default=10, type=int, help="Number of batches to run before taking timings")
     parser.add_argument("--num_batches", default=100, type=int)
     parser.add_argument("--steps_per_batch", default=1000, type=int)
     parser.add_argument("--skip_dhfr", action="store_true")
@@ -670,6 +676,7 @@ if __name__ == "__main__":
         num_batches=args.num_batches,
         steps_per_batch=args.steps_per_batch,
         generate_plots=not args.skip_plots,
+        num_equil_batches=args.equil_batches,
     )
 
     if not args.skip_dhfr:
