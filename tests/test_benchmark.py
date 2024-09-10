@@ -46,6 +46,23 @@ class BenchmarkConfig:
 
 
 def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], label: str):
+    """
+    Plot and save a figure of the batches of benchmarks run.
+
+    Parameters
+    ----------
+        steps_per_batch: int
+            Number of steps per each batch
+
+        dt: float
+            Timestep in femtoseconds
+
+        batch_times: list of floats
+            Times in seconds that each batch took
+
+        label: str
+            The label used as the file name as well as the title of the plot
+    """
     ns_per_day = steps_per_batch / np.array(batch_times)
     ns_per_day = ns_per_day * SECONDS_PER_DAY * dt * 1e-3
 
