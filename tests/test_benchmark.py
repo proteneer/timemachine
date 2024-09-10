@@ -52,6 +52,7 @@ def plot_batch_times(batch_times: List[float], label: str):
     plt.legend()
     plt.xlabel("Batch")
     plt.ylabel("Batch times (s)")
+    plt.tight_layout()
     plt.savefig(f"{label}.png", dpi=150)
     plt.clf()
 
