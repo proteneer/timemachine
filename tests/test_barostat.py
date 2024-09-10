@@ -310,7 +310,7 @@ def test_barostat_varying_pressure():
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = get_bound_potential_by_type(bps, HarmonicBond)
-    bond_list = get_bond_list(harmonic_bond_potential)
+    bond_list = get_bond_list(harmonic_bond_potential.potential)
     group_indices = get_group_indices(bond_list, len(masses))
 
     u_impls = []

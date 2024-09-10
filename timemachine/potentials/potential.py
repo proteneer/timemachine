@@ -80,38 +80,36 @@ def get_custom_ops_class_name_suffix(precision: Precision):
 
 
 def get_bound_potential_by_type(bps: Sequence[BoundPotential[_P]], pot_type: type[_P]) -> BoundPotential[_P]:
-    """Given a list of bound potentials return a potential with the provided type.
+    """Given a list of bound potentials return the first bound potential with the matching potential type.
 
     Raises
     ------
         ValueError:
-            Unable to find potential or there are multiple potentials of the same type
+            Unable to find potential with the expected type
     """
     result: Optional[BoundPotential[_P]] = None
     for bp in bps:
         if isinstance(bp.potential, pot_type):
-            if result is not None:
-                raise ValueError(f"Multiple potentials of type: {pot_type}")
             result = bp
+            break
     if result is None:
         raise ValueError(f"Unable to find potential of type: {pot_type}")
     return result
 
 
 def get_potential_by_type(pots: Sequence[Potential], pot_type: type[_P]) -> _P:
-    """Given a list of potentials return a potential with the provided type.
+    """Given a list of potentials return the first potential with the matching type.
 
     Raises
     ------
         ValueError:
-            Unable to find potential or there are multiple potentials of the same type
+            Unable to find potential with the expected type
     """
     result: Optional[_P] = None
     for pot in pots:
         if isinstance(pot, pot_type):
-            if result is not None:
-                raise ValueError(f"Multiple potentials of type: {pot_type}")
             result = pot
+            break
     if result is None:
         raise ValueError(f"Unable to find potential of type: {pot_type}")
     return result
