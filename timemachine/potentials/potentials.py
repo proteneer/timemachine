@@ -262,6 +262,12 @@ class SummedPotential(Potential):
         return summed.unflatten_params(params, self.params_shapes)
 
 
+def make_summed_potential(bps: List[BoundPotential]):
+    potentials = [bp.potential for bp in bps]
+    params = [bp.params for bp in bps]
+    return SummedPotential(potentials, params).bind_params_list(params)
+
+
 @dataclass
 class SummedPotentialGpuImplWrapper(GpuImplWrapper):
     """Handles flattening parameters before passing to kernel to provide a nicer interface"""

@@ -1,5 +1,5 @@
 import time
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from functools import cache
 from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 from warnings import warn
@@ -801,6 +801,54 @@ def make_pair_bar_plots(res: PairBarResult, temperature: float, prefix: str) -> 
     return PairBarPlots(dG_errs_png, overlap_summary_png, overlap_detail_png)
 
 
+def assert_deep_eq(obj1, obj2, custom_assertion=lambda path, x1, x2: False):
+    def is_dataclass_instance(obj):
+        return is_dataclass(obj) and not isinstance(obj, type)
+
+    def go(x1, x2, path=("$",)):
+        def assert_(cond, reason):
+            assert cond, f"objects differ in field {'.'.join(path)}: {reason}"
+
+        if custom_assertion(path, x1, x2):
+            pass
+        elif type(x1) is not type(x2):
+            assert_(False, f"types differ (left={type(x1)}, right={type(x2)})")
+        elif is_dataclass_instance(x1) and is_dataclass_instance(x2):
+            go(asdict(x1), asdict(x2), path)
+        elif isinstance(x1, (np.ndarray, jax.Array)):
+            assert_(np.array_equal(x1, x2), "arrays not equal")
+        elif isinstance(x1, dict):
+            assert_(x1.keys() == x2.keys(), "dataclass fields or dictionary keys differ")
+            for k in x1.keys():
+                go(x1[k], x2[k], path + (str(k),))
+        elif isinstance(x1, Sequence):
+            assert_(len(x1) == len(x2), f"lengths differ (left={len(x1)}, right={len(x2)})")
+            for idx, (v1, v2) in enumerate(zip(x1, x2)):
+                go(v1, v2, path + (f"[{idx}]",))
+        else:
+            assert_(x1 == x2, "left != right")
+
+    return go(obj1, obj2, ("$",))
+
+
+def assert_potentials_compatible(bps1: Sequence[BoundPotential], bps2: Sequence[BoundPotential]):
+    """Asserts that two sequences of bound potentials are equivalent except for their parameters"""
+
+    ps1 = [bp.potential for bp in bps1]
+    ps2 = [bp.potential for bp in bps2]
+
+    # We override the default deep equality check to allow SummedPotentials to differ in the values of the initial
+    # parameters, as long as the shapes are consistent
+
+    def custom_assertion(path, x1, x2):
+        if len(path) >= 2 and path[-2] == "params_init":
+            assert x1.shape == x2.shape, f"shape mismatch in field {'.'.join(path)}"
+            return True
+        return False
+
+    assert_deep_eq(ps1, ps2, custom_assertion)
+
+
 def run_sims_sequential(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
@@ -835,7 +883,11 @@ def run_sims_sequential(
     # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
     u_kln_by_component_by_lambda = []
 
-    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
+    # Ensure that states differ only in their parameters so that we can safely instantiate potentials from the first
+    # state and use set_params for efficiency
+    for s in initial_states[1:]:
+        assert_potentials_compatible(initial_states[0].potentials, s.potentials)
+
     unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in initial_states[0].potentials]
     for initial_state in initial_states:
         # run simulation
@@ -927,14 +979,18 @@ def run_sims_bisection(
         return traj
 
     # Set up a single set of unbound potentials for computing the batch U fns
-    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
-    unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in get_initial_state(lambdas[0]).potentials]
+    potentials_0 = get_initial_state(lambdas[0]).potentials
+    unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in potentials_0]
 
     # NOTE: we don't cache get_state to avoid holding BoundPotentials in memory since they
     # 1. can use significant GPU memory
     # 2. can be reconstructed relatively quickly
     def get_state(lamb: float) -> EnergyDecomposedState[StoredArrays]:
         initial_state = get_initial_state(lamb)
+
+        # Ensure that state differs only in parameters
+        assert_potentials_compatible(initial_state.potentials, potentials_0)
+
         traj = get_samples(lamb)
         batch_u_fns = get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature)
         return EnergyDecomposedState(traj.frames, traj.boxes, batch_u_fns)
@@ -1137,8 +1193,12 @@ def run_sims_hrex(
     if n_swap_attempts_per_iter is None:
         n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
 
+    # Ensure that states differ only in their parameters so that we can safely instantiate potentials from the first
+    # state and use set_params for efficiency
+    for s in initial_states[1:]:
+        assert_potentials_compatible(initial_states[0].potentials, s.potentials)
+
     # Set up overall potential and context using the first state.
-    # NOTE: this assumes that states differ only in their parameters, but we do not check this!
     context = get_context(initial_states[0], md_params=md_params)
     bound_potentials = context.get_potentials()
     assert len(bound_potentials) == 1
