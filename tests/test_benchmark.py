@@ -45,13 +45,16 @@ class BenchmarkConfig:
     generate_plots: bool
 
 
-def plot_batch_times(batch_times: List[float], label: str):
+def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], label: str):
+    ns_per_day = steps_per_batch / np.array(batch_times)
+    ns_per_day = ns_per_day * SECONDS_PER_DAY * dt * 1e-3
+
     plt.title(label)
-    plt.plot(batch_times)
-    plt.axhline(np.mean(batch_times), linestyle="--", c="gray", label="Mean")
+    plt.plot(ns_per_day)
+    plt.axhline(np.mean(ns_per_day), linestyle="--", c="gray", label="Mean")
     plt.legend()
     plt.xlabel("Batch")
-    plt.ylabel("Batch times (s)")
+    plt.ylabel("ns per day")
     plt.tight_layout()
     plt.savefig(f"{label}.png", dpi=150)
     plt.clf()
@@ -254,7 +257,7 @@ def benchmark(
             print(f"ns per day: {ns_per_day:.3f}")
 
     if config.generate_plots:
-        plot_batch_times(batch_times, label)
+        plot_batch_times(steps_per_batch, dt, batch_times, label)
 
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
@@ -326,7 +329,7 @@ def benchmark_rbfe_water_sampling(
             print(f"ns per day: {ns_per_day:.3f}")
 
     if config.generate_plots:
-        plot_batch_times(batch_times, label)
+        plot_batch_times(steps_per_batch, dt, batch_times, label)
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
@@ -407,7 +410,7 @@ def benchmark_local(
             print(f"ns per day: {ns_per_day:.3f}")
 
     if config.generate_plots:
-        plot_batch_times(batch_times, label)
+        plot_batch_times(steps_per_batch, dt, batch_times, label)
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
