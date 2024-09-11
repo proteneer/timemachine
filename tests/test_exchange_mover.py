@@ -12,6 +12,7 @@ from timemachine.md.builders import build_water_system
 from timemachine.md.exchange import exchange_mover
 from timemachine.md.exchange.exchange_mover import delta_r_np
 from timemachine.potentials import HarmonicBond
+from timemachine.potentials.potential import get_bound_potential_by_type
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -21,7 +22,7 @@ def test_get_water_idxs(num_lig_atoms):
     system, host_conf, _, _ = build_water_system(3.0, DEFAULT_WATER_FF)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
 

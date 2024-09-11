@@ -13,7 +13,8 @@ from timemachine.md.barostat.utils import compute_box_center, compute_box_volume
 from timemachine.md.builders import build_water_system
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.thermostat.utils import sample_velocities
-from timemachine.potentials import HarmonicBond
+from timemachine.potentials import HarmonicBond, SummedPotential
+from timemachine.potentials.potential import get_bound_potential_by_type, get_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -93,7 +94,7 @@ def test_barostat_with_clashes():
     coords = afe.prepare_combined_coords(host_coords=host_coords)
 
     # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = unbound_potentials[0]
+    harmonic_bond_potential = get_potential_by_type(unbound_potentials, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list, len(masses))
 
@@ -144,7 +145,7 @@ def test_barostat_zero_interval():
     )
 
     # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = unbound_potentials[0]
+    harmonic_bond_potential = get_potential_by_type(unbound_potentials, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list, len(masses))
 
@@ -192,7 +193,7 @@ def test_barostat_partial_group_idxs():
     )
 
     # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = unbound_potentials[0]
+    harmonic_bond_potential = get_potential_by_type(unbound_potentials, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list, len(masses))
 
@@ -251,7 +252,7 @@ def test_barostat_is_deterministic():
     )
 
     # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = unbound_potentials[0]
+    harmonic_bond_potential = get_potential_by_type(unbound_potentials, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list, len(masses))
 
@@ -308,8 +309,8 @@ def test_barostat_varying_pressure():
     masses = np.array(masses_)
 
     # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = next(bp.potential for bp in bps if isinstance(bp.potential, HarmonicBond))
-    bond_list = get_bond_list(harmonic_bond_potential)
+    harmonic_bond_potential = get_bound_potential_by_type(bps, HarmonicBond)
+    bond_list = get_bond_list(harmonic_bond_potential.potential)
     group_indices = get_group_indices(bond_list, len(masses))
 
     u_impls = []
@@ -365,7 +366,7 @@ def test_barostat_recentering_upon_acceptance():
     unbound_potentials, sys_params, masses, coords, complex_box = get_solvent_phase_system(mol_a, ff, lam, margin=0.0)
 
     # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = unbound_potentials[0]
+    harmonic_bond_potential = get_potential_by_type(unbound_potentials, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list, len(masses))
 
@@ -445,12 +446,16 @@ def test_molecular_ideal_gas():
         mol_a, ff, lamb=1.0, margin=0.0
     )
 
+    unbound_potentials = list(_unbound_potentials)
+    sys_params = list(_sys_params)
+
     # drop the nonbonded potential
-    unbound_potentials = _unbound_potentials[:-1]
-    sys_params = _sys_params[:-1]
+    nb_pot_idx = next(i for i, pot in enumerate(unbound_potentials) if isinstance(pot, SummedPotential))
+    unbound_potentials.pop(nb_pot_idx)
+    sys_params.pop(nb_pot_idx)
 
     # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = unbound_potentials[0]
+    harmonic_bond_potential = get_potential_by_type(unbound_potentials, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list, len(masses))
 
@@ -583,7 +588,7 @@ def test_barostat_scaling_behavior():
     )
 
     # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = unbound_potentials[0]
+    harmonic_bond_potential = get_potential_by_type(unbound_potentials, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list, len(masses))
 

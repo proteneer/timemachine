@@ -13,7 +13,8 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.builders import strip_units
 from timemachine.md.exchange.exchange_mover import delta_r_np
-from timemachine.potentials import HarmonicBond
+from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
+from timemachine.potentials.potential import get_bound_potential_by_type
 
 DEFAULT_BB_RADIUS = 0.46
 # uncomment if we want to re-enable minimization
@@ -86,7 +87,8 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
         afe = AbsoluteFreeEnergy(mol, bt)
         potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, lamb)
         ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms(), dtype=np.int32)
-        nb_params = np.array(params[-1])
+        summed_pot_idx = next(i for i, pot in enumerate(potentials) if isinstance(pot, SummedPotential))
+        nb_params = np.array(params[summed_pot_idx])
         final_conf = np.concatenate([solvent_conf, get_romol_conf(mol)], axis=0)
         component_dim = 4  # q,s,e,w
         num_atoms = len(final_conf)
@@ -111,14 +113,15 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
         params = [bp.params for bp in host_fns]
         final_conf = solvent_conf
         ligand_idxs = np.array([], dtype=np.int32)
-        nb_params = np.array(params[-1])
+        nb_params = np.array(next(p for pot, p in zip(potentials, params) if isinstance(pot, Nonbonded)))
 
-    # override last potential with the updated nb_params
+    # override water Nonbonded potential with the updated nb_params
     host_bps = []
-    for p, ubp in zip(params[:-1], potentials[:-1]):
-        host_bps.append(ubp.bind(p))
-
-    host_bps.append(potentials[-1].bind(nb_params))
+    for p, ubp in zip(params, potentials):
+        if isinstance(ubp, (Nonbonded, SummedPotential)):
+            host_bps.append(ubp.bind(nb_params))
+        else:
+            host_bps.append(ubp.bind(p))
 
     # (YTZ): This is disabled because the initial ligand and starting waters are pre-minimized
     # print("Minimizing the host system...", end="", flush=True)
@@ -129,7 +132,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
 
     barostat_interval = 25
 
-    bond_list = get_bond_list(next(bp for bp in host_bps if isinstance(bp.potential, HarmonicBond)).potential)
+    bond_list = get_bond_list(get_bound_potential_by_type(host_bps, HarmonicBond).potential)
     group_idxs = get_group_indices(bond_list, len(combined_masses))
 
     if use_hmr == 0:

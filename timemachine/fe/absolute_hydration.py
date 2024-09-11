@@ -31,6 +31,7 @@ from timemachine.md.barostat.moves import NPTMove
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import SummedPotential
+from timemachine.potentials.potential import get_potential_by_type
 
 DEFAULT_AHFE_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023)
 
@@ -296,8 +297,8 @@ def setup_initial_states(
             bp = ubp.bind(param)
             bps.append(bp)
 
-        bond_potential = ubps[0]
-        assert isinstance(bond_potential, potentials.HarmonicBond)
+        bond_potential = get_potential_by_type(ubps, potentials.HarmonicBond)
+
         hmr_masses = model_utils.apply_hmr(masses, bond_potential.idxs)
         group_idxs = get_group_indices(get_bond_list(bond_potential), len(masses))
         baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, seed)

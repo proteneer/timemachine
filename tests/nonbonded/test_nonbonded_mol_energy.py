@@ -15,6 +15,7 @@ from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove, randomly_rotate_and_translate
 from timemachine.potentials import HarmonicBond, Nonbonded
+from timemachine.potentials.potential import get_bound_potential_by_type
 
 
 @pytest.mark.memcheck
@@ -71,8 +72,8 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision
     system, conf, box, _ = builders.build_water_system(5.0, ff.water_ff)
     box += np.eye(3) * 0.1
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
@@ -123,8 +124,8 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
 
     system, conf, _, _ = builders.build_water_system(box_size, ff.water_ff)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
 
@@ -206,8 +207,8 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
     bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
-    nb = next(bp for bp in bps if isinstance(bp.potential, Nonbonded))
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    nb = get_bound_potential_by_type(bps, Nonbonded)
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])

@@ -169,7 +169,8 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
         .def("reset_row_idxs", &Neighborlist<RealType>::reset_row_idxs)
         .def("get_tile_ixn_count", &Neighborlist<RealType>::num_tile_ixns)
         .def("get_max_ixn_count", &Neighborlist<RealType>::max_ixn_count)
-        .def("resize", &Neighborlist<RealType>::resize, py::arg("size"));
+        .def("resize", &Neighborlist<RealType>::resize, py::arg("size"))
+        .def("get_num_row_idxs", &Neighborlist<RealType>::get_num_row_idxs);
 }
 
 void declare_hilbert_sort(py::module &m) {
