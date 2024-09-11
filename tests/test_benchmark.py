@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from importlib import resources
 from typing import List, Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from common import prepare_single_topology_initial_state
@@ -21,7 +22,7 @@ from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
-from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
 from timemachine.potentials import (
     BoundPotential,
     HarmonicBond,
@@ -41,6 +42,51 @@ class BenchmarkConfig:
     num_batches: int
     steps_per_batch: int
     verbose: bool
+    generate_plots: bool
+    num_equil_batches: int = 1
+
+    def __post_init__(self):
+        assert self.num_batches >= 1
+        assert self.steps_per_batch >= 1
+        assert self.num_equil_batches >= 1
+
+
+def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], box_volumes: List[float], label: str):
+    """
+    Plot and save a figure of the batches of benchmarks run.
+
+    Parameters
+    ----------
+        steps_per_batch: int
+            Number of steps per each batch
+
+        dt: float
+            Timestep in femtoseconds
+
+        batch_times: list of floats
+            Times in seconds that each batch took
+
+        label: str
+            The label used as the file name as well as the title of the plot
+    """
+    ns_per_day = steps_per_batch / np.array(batch_times)
+    ns_per_day = ns_per_day * SECONDS_PER_DAY * dt * 1e-3
+
+    plt.title(label)
+    fig, axes = plt.subplots(ncols=2)
+    fig.suptitle(label)
+    axes[0].plot(ns_per_day)
+    axes[0].axhline(np.mean(ns_per_day), linestyle="--", c="gray", label="Mean")
+    axes[0].legend()
+    axes[0].set_xlabel("Batch")
+    axes[0].set_ylabel("ns per day")
+
+    axes[1].plot(box_volumes)
+    axes[1].set_xlabel("Batch")
+    axes[1].set_ylabel("Box Volume (nm^3)")
+    fig.tight_layout()
+    fig.savefig(f"{label}.png", dpi=150)
+    plt.clf()
 
 
 @pytest.fixture(scope="module")
@@ -210,20 +256,22 @@ def benchmark(
     )
 
     batch_times = []
+    box_volumes = []
 
     steps_per_batch = config.steps_per_batch
     num_batches = config.num_batches
 
-    # run once before timer starts
-    ctxt.multiple_steps(steps_per_batch)
+    # run num_equil_batches before starting the time, can improve benchmark accuracy
+    ctxt.multiple_steps(steps_per_batch * config.num_equil_batches)
 
     start = time.time()
 
     for batch in range(num_batches):
         # time the current batch
         batch_start = time.time()
-        _, _ = ctxt.multiple_steps(steps_per_batch)
+        _, boxes = ctxt.multiple_steps(steps_per_batch)
         batch_end = time.time()
+        box_volumes.append(compute_box_volume(boxes[-1]))
 
         delta = batch_end - batch_start
 
@@ -238,6 +286,9 @@ def benchmark(
         if config.verbose:
             print(f"steps per second: {steps_per_second:.3f}")
             print(f"ns per day: {ns_per_day:.3f}")
+
+    if config.generate_plots:
+        plot_batch_times(steps_per_batch, dt, batch_times, box_volumes, label)
 
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
@@ -277,22 +328,24 @@ def benchmark_rbfe_water_sampling(
     assert len(ctxt.get_movers()) == 2, "Expected barostat and water sampler"
 
     batch_times = []
+    box_volumes = []
 
     steps_per_batch = config.steps_per_batch
     num_batches = config.num_batches
 
     dt = state.integrator.dt
 
-    # run once before timer starts
-    ctxt.multiple_steps(steps_per_batch)
+    # run num_equil_batches before starting the time, can improve benchmark accuracy
+    ctxt.multiple_steps(steps_per_batch * config.num_equil_batches)
 
     start = time.time()
 
     for batch in range(num_batches):
         # time the current batch
         batch_start = time.time()
-        _, _ = ctxt.multiple_steps(steps_per_batch)
+        _, boxes = ctxt.multiple_steps(steps_per_batch)
         batch_end = time.time()
+        box_volumes.append(compute_box_volume(boxes[-1]))
 
         delta = batch_end - batch_start
 
@@ -308,6 +361,8 @@ def benchmark_rbfe_water_sampling(
             print(f"steps per second: {steps_per_second:.3f}")
             print(f"ns per day: {ns_per_day:.3f}")
 
+    if config.generate_plots:
+        plot_batch_times(steps_per_batch, dt, batch_times, box_volumes, label)
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
@@ -354,6 +409,7 @@ def benchmark_local(
     )
 
     batch_times = []
+    box_volumes = []
 
     steps_per_batch = config.steps_per_batch
     num_batches = config.num_batches
@@ -361,8 +417,8 @@ def benchmark_local(
     ligand_idxs = ligand_idxs.astype(np.int32)
 
     local_seed = rng.integers(np.iinfo(np.int32).max)
-    # run once before timer starts
-    ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed)
+    # run num_equil_batches before starting the time, can improve benchmark accuracy
+    ctxt.multiple_steps_local(steps_per_batch * config.num_equil_batches, ligand_idxs, seed=local_seed)
 
     start = time.time()
 
@@ -370,8 +426,9 @@ def benchmark_local(
         local_seed = rng.integers(np.iinfo(np.int32).max)
         # time the current batch
         batch_start = time.time()
-        _, _ = ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed)
+        _, boxes = ctxt.multiple_steps_local(steps_per_batch, ligand_idxs, seed=local_seed)
         batch_end = time.time()
+        box_volumes.append(compute_box_volume(boxes[-1]))
 
         delta = batch_end - batch_start
 
@@ -387,6 +444,8 @@ def benchmark_local(
             print(f"steps per second: {steps_per_second:.3f}")
             print(f"ns per day: {ns_per_day:.3f}")
 
+    if config.generate_plots:
+        plot_batch_times(steps_per_batch, dt, batch_times, box_volumes, label)
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
@@ -518,19 +577,19 @@ def benchmark_vacuum(config: BenchmarkConfig):
 
 
 def test_dhfr():
-    benchmark_dhfr(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
+    benchmark_dhfr(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
 
 
 def test_hif2a():
-    benchmark_hif2a(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
+    benchmark_hif2a(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
 
 
 def test_solvent():
-    benchmark_solvent(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
+    benchmark_solvent(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
 
 
 def test_vacuum():
-    benchmark_vacuum(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100))
+    benchmark_vacuum(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
 
 
 def get_nonbonded_pot_params(bps):
@@ -545,7 +604,7 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
     bps, frames, boxes, ligand_idxs = hi2fa_test_frames
     nonbonded_potential, nonbonded_params = get_nonbonded_pot_params(bps)
 
-    config = BenchmarkConfig(num_batches=2, steps_per_batch=0, verbose=False)
+    config = BenchmarkConfig(num_batches=2, steps_per_batch=1, verbose=False, generate_plots=False)
 
     num_param_batches = 5
     beta = 1 / (constants.BOLTZ * constants.DEFAULT_TEMP)
@@ -576,7 +635,7 @@ def test_nonbonded_interaction_group_potential(hi2fa_test_frames):
 def test_hif2a_potentials(hi2fa_test_frames):
     bps, frames, boxes, _ = hi2fa_test_frames
 
-    config = BenchmarkConfig(num_batches=2, steps_per_batch=0, verbose=False)
+    config = BenchmarkConfig(num_batches=2, steps_per_batch=1, verbose=False, generate_plots=False)
 
     num_param_batches = 5
 
@@ -600,6 +659,7 @@ def test_hif2a_potentials(hi2fa_test_frames):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
+    parser.add_argument("--equil_batches", default=10, type=int, help="Number of batches to run before taking timings")
     parser.add_argument("--num_batches", default=100, type=int)
     parser.add_argument("--steps_per_batch", default=1000, type=int)
     parser.add_argument("--skip_dhfr", action="store_true")
@@ -607,10 +667,17 @@ if __name__ == "__main__":
     parser.add_argument("--skip_solvent", action="store_true")
     parser.add_argument("--skip_vacuum", action="store_true")
     parser.add_argument("--skip_potentials", action="store_true")
+    parser.add_argument("--skip_plots", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
-    config = BenchmarkConfig(verbose=args.verbose, num_batches=args.num_batches, steps_per_batch=args.steps_per_batch)
+    config = BenchmarkConfig(
+        verbose=args.verbose,
+        num_batches=args.num_batches,
+        steps_per_batch=args.steps_per_batch,
+        generate_plots=not args.skip_plots,
+        num_equil_batches=args.equil_batches,
+    )
 
     if not args.skip_dhfr:
         benchmark_dhfr(config)
