@@ -9,7 +9,6 @@ import numpy as np
 from rdkit import Chem
 
 from timemachine import constants
-from timemachine.ff import Forcefield
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
@@ -523,7 +522,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
 
         self.patterns = patterns
         self.params = np.array(params)
-        self.env_ff = ForceField(protein_ff_name, water_ff_name)
+        self.env_ff = ForceField(f"{protein_ff_name}.xml", f"{water_ff_name}.xml")
 
         # nested map of residue names to bonds to param_idxs:
         # kv = {
@@ -587,10 +586,13 @@ class EnvironmentBCCHandler(SerializableMixIn):
             # don't compare name, ASP-ASP would break this when processing the amide C-N bond since
             # those are not part of the type definitions.
             if src_atom.residue.index == dst_atom.residue.index:
-                bond_idxs.append((src_atom.index, dst_atom.index))
                 src_res_template_name = template_for_residue[src_atom.residue.index].name
                 dst_res_template_name = template_for_residue[dst_atom.residue.index].name
                 assert src_res_template_name == dst_res_template_name
+                if src_res_template_name == "HOH":
+                    # Don't fit waters
+                    continue
+                bond_idxs.append((src_atom.index, dst_atom.index))
                 residue_bond_kv = self.res_to_bonds_to_param_idxs[src_res_template_name]
                 # we have to do one extra level of indirection where by we want the src_atom, dst_atom to be matched
                 # to the corresponding src_template_atom, dst_template_atom in the template definitions themselves.
@@ -606,14 +608,24 @@ class EnvironmentBCCHandler(SerializableMixIn):
 
         self.bond_idxs = np.array(bond_idxs)
         self.param_idxs = np.array(param_idxs)
+        # print('ZZZ param_idxs', self.param_idxs.shape, self.param_idxs)
         self.signs = np.array(signs)
 
     def parameterize(self, params):
+        # If there aren't any matched parameters (i.e. it's all water),
+        # then there is nothing to do
+        if len(self.param_idxs) == 0:
+            return self.initial_charges
+
         bond_deltas = params[self.param_idxs] * self.signs
         final_charges = apply_bond_charge_corrections(
             self.initial_charges, self.bond_idxs, bond_deltas, runtime_validate=False
         )
-
+        # import jax
+        # print('FFNB initial_charges', self.initial_charges)
+        # jax.debug.print('FFNB params={p}', p=params)
+        # print('FFNB bond_deltas', bond_deltas)
+        # print('FFNB final_charges', final_charges)
         return final_charges
 
 
@@ -621,10 +633,10 @@ class EnvironmentBCCPartialHandler(SerializableMixIn):
     # stored in the ff.py file
     def __init__(self, smirks, params, props):
         self.smirks = smirks
-        self.params = params
+        self.params = np.array(params)
         self.props = props
 
-    def get_env_handle(self, omm_topology, ff: Forcefield) -> EnvironmentBCCHandler:
+    def get_env_handle(self, omm_topology, ff) -> EnvironmentBCCHandler:
         return EnvironmentBCCHandler(self.smirks, self.params, ff.protein_ff, ff.water_ff, omm_topology)
 
 
