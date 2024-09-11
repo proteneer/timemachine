@@ -43,8 +43,14 @@ from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.md.hrex import HREX, HREXDiagnostics
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import Nonbonded, SummedPotential, make_summed_potential
-from timemachine.potentials.potentials import HarmonicBond, NonbondedPairListPrecomputed
+from timemachine.potentials import (
+    HarmonicBond,
+    Nonbonded,
+    NonbondedPairListPrecomputed,
+    SummedPotential,
+    make_summed_potential,
+)
+from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -373,7 +379,7 @@ def test_get_water_sampler_params(num_windows):
     for lamb in np.linspace(0.0, 1.0, num_windows, endpoint=True):
         state = setup_initial_state(st, lamb, solvent_host, DEFAULT_TEMP, 2024)
         water_sampler_nb_params = get_water_sampler_params(state)
-        nb_pot = next(p.potential for p in state.potentials if isinstance(p.potential, Nonbonded))
+        nb_pot = get_bound_potential_by_type(state.potentials, Nonbonded).potential
         ligand_water_params = st._get_guest_params(forcefield.q_handle, forcefield.lj_handle, lamb, nb_pot.cutoff)
         if lamb == 0.0:
             assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == 0.0)

@@ -18,6 +18,7 @@ from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 from timemachine.potentials import BoundPotential, HarmonicBond, Potential, SummedPotential
+from timemachine.potentials.potential import get_potential_by_type
 
 
 class MinimizationWarning(UserWarning):
@@ -226,7 +227,7 @@ def pre_equilibrate_host(
     num_host_atoms = minimized_host_coords.shape[0]
 
     potentials, params = parameterize_system(hgt, ff, 0.0)
-    bond_pot = next(pot for pot in potentials if isinstance(pot, HarmonicBond))
+    bond_pot = get_potential_by_type(potentials, HarmonicBond)
     group_idxs = get_group_indices(get_bond_list(bond_pot), x0.shape[0])
     # Disallow the barostat from scaling the ligand coords, scale all of the other molecules to
     # reduce 'air bubbles' within the system. Less efficient than scaling the entire system, but

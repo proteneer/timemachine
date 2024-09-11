@@ -25,7 +25,8 @@ from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDEx
 from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.moves import MonteCarloMove
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import HarmonicBond
+from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials.potential import get_bound_potential_by_type
 
 
 def image_xvb(initial_state, xvb_t):
@@ -106,7 +107,7 @@ def test_exchange():
     initial_state, nwm, topology = get_initial_state(args.water_pdb, mol, ff, seed, nb_cutoff, args.use_hmr, lamb=0.0)
     # set up water indices, assumes that waters are placed at the front of the coordinates.
     bps = initial_state.potentials
-    bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, initial_state.x0.shape[0])
     water_idxs = get_water_idxs(all_group_idxs, initial_state.ligand_idxs)
@@ -115,15 +116,21 @@ def test_exchange():
     # all_pairs has masked charges
     if mol:
         # uses a summed potential
-        nb_beta = bps[-1].potential.potentials[1].beta
-        nb_cutoff = bps[-1].potential.potentials[1].cutoff
-        nb_water_ligand_params = bps[-1].potential.params_init[1]
+        summed_pot = get_bound_potential_by_type(bps, SummedPotential)
+        ixn_group_idx = next(
+            i for i, pot in enumerate(summed_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
+        )
+        # Use the Ixn Group params
+        nb_beta = summed_pot.potentials[ixn_group_idx].beta
+        nb_cutoff = summed_pot.potentials[ixn_group_idx].cutoff
+        nb_water_ligand_params = summed_pot.params_init[ixn_group_idx]
         print("number of ligand atoms", mol.GetNumAtoms())
     else:
+        nb_pot = get_bound_potential_by_type(bps, Nonbonded)
         # does not use a summed potential
-        nb_beta = bps[-1].potential.beta
-        nb_cutoff = bps[-1].potential.cutoff
-        nb_water_ligand_params = bps[-1].params
+        nb_beta = nb_pot.potential.beta
+        nb_cutoff = nb_pot.potential.cutoff
+        nb_water_ligand_params = nb_pot.params
     print("number of water atoms", nwm * 3)
     print("water_ligand parameters", nb_water_ligand_params)
 

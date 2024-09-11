@@ -3,7 +3,8 @@ from copy import deepcopy
 import numpy as np
 import pytest
 
-from timemachine import potentials
+from timemachine.potentials import Nonbonded
+from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.dhfr import setup_dhfr
 
 
@@ -19,7 +20,7 @@ def _example_system():
 @pytest.fixture()
 def example_nonbonded_potential(_example_system):
     host_fns, _, _, _ = _example_system
-    nonbonded_bp = next(bp for bp in host_fns if isinstance(bp.potential, potentials.Nonbonded))
+    nonbonded_bp = get_bound_potential_by_type(host_fns, Nonbonded)
     nonbonded_bp.cutoff = 1.2  # Need to set the cutoff to 1.2 to make the switch func happy
     return deepcopy(nonbonded_bp)
 

@@ -31,6 +31,7 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.hrex import HREXDiagnostics
 from timemachine.potentials import BoundPotential, NonbondedPairListPrecomputed, SummedPotential
 from timemachine.potentials.bonded import signed_torsion_angle
+from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.potentials.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, PeriodicTorsion
 from timemachine.testsystems.ligands import get_biphenyl
 
@@ -185,7 +186,7 @@ def sample_biphenyl_hrex(
         bps = get_potentials_solvent(
             top, ff.get_params(), intramol_atom_pairs_to_decouple, atoms_to_decouple_from_env, 0.0
         )
-        bond_pot = next(bp for bp in bps if isinstance(bp.potential, HarmonicBond)).potential
+        bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
         hmr_masses = model_utils.apply_hmr(combined_masses, bond_pot.idxs)
         group_idxs = get_group_indices(get_bond_list(bond_pot), len(combined_masses))
         baro = MonteCarloBarostat(len(hmr_masses), 1.0, temperature, group_idxs, 15, seed)

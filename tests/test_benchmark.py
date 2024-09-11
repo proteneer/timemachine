@@ -31,6 +31,7 @@ from timemachine.potentials import (
     Potential,
     SummedPotential,
 )
+from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -112,8 +113,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     temperature = constants.DEFAULT_TEMP
     pressure = constants.DEFAULT_PRESSURE
 
-    harmonic_bond_potential = initial_state.potentials[0].potential
-    assert isinstance(harmonic_bond_potential, HarmonicBond)
+    harmonic_bond_potential = get_bound_potential_by_type(initial_state.potentials, HarmonicBond).potential
     bond_list = get_bond_list(harmonic_bond_potential)
     masses = initial_state.integrator.masses
     if hmr:
@@ -221,7 +221,7 @@ def benchmark(
     temperature = constants.DEFAULT_TEMP
     pressure = constants.DEFAULT_PRESSURE
 
-    harmonic_bond_potential = next(p for p in bound_potentials if isinstance(p.potential, HarmonicBond))
+    harmonic_bond_potential = get_bound_potential_by_type(bound_potentials, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential.potential)
     if hmr:
         dt = 2.5e-3
@@ -388,7 +388,7 @@ def benchmark_local(
 
     rng = np.random.default_rng(seed)
 
-    harmonic_bond_potential = next(p for p in bound_potentials if isinstance(p.potential, HarmonicBond))
+    harmonic_bond_potential = get_bound_potential_by_type(bound_potentials, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential.potential)
     if hmr:
         dt = 2.5e-3

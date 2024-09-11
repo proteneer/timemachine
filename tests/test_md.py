@@ -14,7 +14,8 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerl
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.minimizer import check_force_norm
-from timemachine.potentials import SummedPotential
+from timemachine.potentials import HarmonicBond, SummedPotential
+from timemachine.potentials.potential import get_potential_by_type
 from timemachine.testsystems.ligands import get_biphenyl
 
 pytestmark = [pytest.mark.memcheck]
@@ -450,7 +451,8 @@ def test_multiple_steps_local_consistency(freeze_reference):
         check_force_norm(-ref_du_dx)
 
     # Verify that running with a barostat doesn't change the results
-    group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]), len(masses))
+    bonded_pot = get_potential_by_type(unbound_potentials, HarmonicBond)
+    group_idxs = get_group_indices(get_bond_list(bonded_pot), len(masses))
 
     pressure = 1.0
 
@@ -514,7 +516,8 @@ def test_get_movers():
 
     intg_impl = intg.impl()
 
-    group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]), len(masses))
+    bonded_pot = get_potential_by_type(unbound_potentials, HarmonicBond)
+    group_idxs = get_group_indices(get_bond_list(bonded_pot), len(masses))
 
     barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, 1, seed)
     barostat_impl = barostat.impl(bps)
@@ -779,7 +782,8 @@ def test_setup_context_with_references():
 
         movers = []
         if barostat_interval > 0:
-            group_idxs = get_group_indices(get_bond_list(unbound_potentials[0]), len(masses))
+            bonded_pot = get_potential_by_type(unbound_potentials, HarmonicBond)
+            group_idxs = get_group_indices(get_bond_list(bonded_pot), len(masses))
 
             barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, 1, seed)
             barostat_impl = barostat.impl(bps)

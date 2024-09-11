@@ -15,6 +15,7 @@ from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.local_resampling import local_resampling_move
 from timemachine.potentials import HarmonicBond
 from timemachine.potentials.jax_utils import delta_r
+from timemachine.potentials.potential import get_potential_by_type
 from timemachine.testsystems.ligands import get_biphenyl
 
 
@@ -226,7 +227,7 @@ def test_local_md_particle_density(freeze_reference, k):
         mol, ff, 0.0, box_width=4.0, margin=0.1
     )
 
-    bond_pot = next(pot for pot in unbound_potentials if isinstance(pot, HarmonicBond))
+    bond_pot = get_potential_by_type(unbound_potentials, HarmonicBond)
     bond_list = get_bond_list(bond_pot)
     group_idxs = get_group_indices(bond_list, coords.shape[0])
 
