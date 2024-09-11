@@ -414,8 +414,8 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
         Parameters
         ----------
-        ff_params: ForcefieldParams
-            forcefield parameters
+        ff: Forcefield
+            forcefield to use
 
         host_config: HostConfig
             HostConfig containing openmm System object to be deserialized.

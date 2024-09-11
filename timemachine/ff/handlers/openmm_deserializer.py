@@ -211,7 +211,7 @@ def deserialize_system(
 
             if ff.env_bcc_handle is not None:
                 env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
-                nb_params[:, Q_IDX] = env_bcc_h.parameterize(nb_params[:, Q_IDX])
+                nb_params[:, Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
 
             bps_dict["Nonbonded"].append(
                 potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff).bind(nb_params)

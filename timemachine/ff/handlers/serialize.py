@@ -13,6 +13,8 @@ def serialize_handlers(all_handlers, protein_ff, water_ff):
     final_ff[serialization_format.WATER_FF_TAG] = water_ff
 
     for handler in all_handlers:
+        if handler is None:  # optional handler not specified
+            continue
         ff_obj = handler.serialize()
 
         for k in ff_obj.keys():
