@@ -276,7 +276,6 @@ class Forcefield:
             params(self.q_handle_intra),
             params(self.lj_handle),
             params(self.lj_handle_intra),
-            params(self.env_bcc_handle),
         )
 
     def serialize(self) -> str:
