@@ -88,6 +88,7 @@ def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], 
     fig.tight_layout()
     fig.savefig(f"{label}.png", dpi=150)
 
+
 @pytest.fixture(scope="module")
 def hi2fa_test_frames():
     return generate_hif2a_frames(100, 10, seed=2022, barostat_interval=20)
