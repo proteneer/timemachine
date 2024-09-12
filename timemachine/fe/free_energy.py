@@ -372,8 +372,10 @@ def image_frames(initial_state: InitialState, frames: np.ndarray, boxes: np.ndar
 class BaseFreeEnergy:
     @staticmethod
     def _get_system_params_and_potentials(ff_params: ForcefieldParams, topology, lamb: float):
-        # Ordering of the pairs impacts performance. Prefer slower potentials first
         params_potential_pairs = [
+            topology.parameterize_harmonic_bond(ff_params.hb_params),
+            topology.parameterize_harmonic_angle(ff_params.ha_params),
+            topology.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
             topology.parameterize_nonbonded(
                 ff_params.q_params,
                 ff_params.q_params_intra,
@@ -381,9 +383,6 @@ class BaseFreeEnergy:
                 ff_params.lj_params_intra,
                 lamb,
             ),
-            topology.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
-            topology.parameterize_harmonic_angle(ff_params.ha_params),
-            topology.parameterize_harmonic_bond(ff_params.hb_params),
         ]
 
         params, potentials = zip(*params_potential_pairs)
