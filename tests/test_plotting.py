@@ -14,7 +14,7 @@ def test_forward_and_reverse_ddg_plot():
     dummy_solv_ukln = rng.random(size=ukln_shape)
     dummy_complex_ukln = rng.random(size=ukln_shape)
 
-    plot_forward_and_reverse_ddg(dummy_solv_ukln, dummy_complex_ukln)
+    assert len(plot_forward_and_reverse_ddg(dummy_solv_ukln, dummy_complex_ukln)) > 0
 
 
 def test_forward_and_reverse_ddg_plot_validation():
@@ -36,7 +36,7 @@ def test_forward_and_reverse_dg_plot(ukln_shape):
     dummy_ukln = rng.random(size=ukln_shape) * 1000
 
     frames_per_step = min(ukln_shape[-1], 100)
-    plot_forward_and_reverse_dg(dummy_ukln, frames_per_step=frames_per_step)
+    assert len(plot_forward_and_reverse_dg(dummy_ukln, frames_per_step=frames_per_step)) > 0
 
 
 def test_forward_and_reverse_dg_plot_validation():
