@@ -1,5 +1,6 @@
 import gc
 import re
+import time
 import weakref
 from multiprocessing.pool import ThreadPool
 
@@ -9,7 +10,6 @@ import pytest
 from common import prepare_nb_system
 
 from timemachine import constants
-from timemachine.fe.free_energy import MDParams, sample_with_context
 from timemachine.ff import Forcefield
 from timemachine.integrator import langevin_coefficients
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerletIntegrator, custom_ops
@@ -980,7 +980,7 @@ def test_context_invalid_boxes_without_nonbonded_potentials():
 
 
 @pytest.mark.parametrize("local_md", [False, True])
-@pytest.mark.parametrize("num_threads", [1, 2])
+@pytest.mark.parametrize("num_threads", [2, 4])
 def test_context_with_threads(num_threads, local_md):
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
@@ -997,7 +997,6 @@ def test_context_with_threads(num_threads, local_md):
     ligand_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
 
     ctxts = []
-    sample_params = []
     for thread_idx in range(num_threads):
         bps = [pot.bind(p).to_gpu(np.float32).bound_impl for p, pot in zip(sys_params, unbound_potentials)]
 
@@ -1005,20 +1004,18 @@ def test_context_with_threads(num_threads, local_md):
         ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
         ctxts.append(ctxt)
 
-        md_params = MDParams(
-            n_eq_steps=100_000,
-            n_frames=n_frames,
-            steps_per_frame=steps_per_frame,
-            local_steps=steps_per_frame if local_md else 0,
-            seed=seed + thread_idx,
-        )
-        sample_params.append(md_params)
-
-    def thread_sampling(args):
-        ctxt, md_params = args
-        traj = sample_with_context(ctxt, md_params, constants.DEFAULT_TEMP, ligand_idxs, max_buffer_frames=n_frames)
-        return traj
+    def thread_sampling(ctxt):
+        start_time = time.perf_counter()
+        if local_md:
+            ctxt.multiple_steps_local(
+                steps_per_frame * n_frames, ligand_idxs, seed=seed, store_x_interval=steps_per_frame
+            )
+        else:
+            ctxt.multiple_steps(steps_per_frame * n_frames, store_x_interval=steps_per_frame)
+        return start_time
 
     with ThreadPool(num_threads) as pool:
-        for traj in pool.map(thread_sampling, zip(ctxts, sample_params)):
-            assert len(traj.frames) == n_frames
+        thread_started_times = pool.map(thread_sampling, ctxts)
+        # All of the the threads should have started within a tenth of a second of each other.
+        # Dependent on the amount of MD run and how long MD takes. As of Sept 2024 MD is taking ~5 seconds
+        assert np.all(np.diff(thread_started_times) < 0.1), "Doesn't seem like GIL is released"
