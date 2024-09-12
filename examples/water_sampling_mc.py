@@ -116,14 +116,14 @@ def test_exchange():
     # all_pairs has masked charges
     if mol:
         # uses a summed potential
-        summed_pot = get_bound_potential_by_type(bps, SummedPotential)
+        ligand_env_pot = get_bound_potential_by_type(bps, SummedPotential).potential
         ixn_group_idx = next(
-            i for i, pot in enumerate(summed_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
+            i for i, pot in enumerate(ligand_env_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
         )
         # Use the Ixn Group params
-        nb_beta = summed_pot.potentials[ixn_group_idx].beta
-        nb_cutoff = summed_pot.potentials[ixn_group_idx].cutoff
-        nb_water_ligand_params = summed_pot.params_init[ixn_group_idx]
+        nb_beta = ligand_env_pot.potentials[ixn_group_idx].beta
+        nb_cutoff = ligand_env_pot.potentials[ixn_group_idx].cutoff
+        nb_water_ligand_params = ligand_env_pot.params_init[ixn_group_idx]
         print("number of ligand atoms", mol.GetNumAtoms())
     else:
         nb_pot = get_bound_potential_by_type(bps, Nonbonded)
