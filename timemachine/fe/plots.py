@@ -450,7 +450,7 @@ def plot_as_png_fxn(f, *args, **kwargs) -> bytes:
     f(*args, **kwargs)
     buffer = io.BytesIO()
     plt.savefig(buffer, format="png", bbox_inches="tight")
-    # plt.close()
+    plt.close()
     buffer.seek(0)
     plot_png = buffer.read()
     return plot_png
