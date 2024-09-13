@@ -103,9 +103,6 @@ def test_hrex_rbfe_hif2a_water_sampling_warning(hif2a_single_topology_leg, seed)
 
 @pytest.mark.parametrize("seed", [2024])
 def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
-    plt.close()  # Close the open figures in case it was opened before the test
-    # Reduce the threshold for the maximum plots open, should only open one at any given time
-    plt.rcParams.update({"figure.max_open_warning": 2})
     host_name, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
     md_params = MDParams(
         n_frames=200,
