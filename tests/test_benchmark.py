@@ -15,9 +15,18 @@ from common import prepare_single_topology_initial_state
 from numpy.typing import NDArray
 
 from timemachine import constants
-from timemachine.fe.free_energy import HostConfig, InitialState, MDParams, WaterSamplingParams, get_context
+from timemachine.fe import absolute_hydration
+from timemachine.fe.free_energy import (
+    AbsoluteFreeEnergy,
+    HostConfig,
+    InitialState,
+    MDParams,
+    WaterSamplingParams,
+    get_context,
+)
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
@@ -575,6 +584,53 @@ def benchmark_vacuum(config: BenchmarkConfig):
     run_single_topology_benchmarks(config, "vacuum", st, None)
 
 
+def benchmark_ahfe(config: BenchmarkConfig):
+    # we use simple charge "sc" to be able to run on machines that don't have openeye licenses.
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    seed = 2024
+    mol, _, _ = get_hif2a_ligand_pair_single_topology()
+
+    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol])
+
+    num_water_atoms = host_coords.shape[0]
+
+    # resolve host clashes
+    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms)
+
+    bt = BaseTopology(mol, forcefield)
+    afe = AbsoluteFreeEnergy(mol, bt)
+
+    initial_state = absolute_hydration.setup_initial_states(
+        afe, forcefield, host_config, constants.DEFAULT_TEMP, np.array([0.0]), seed
+    )[0]
+
+    barostat_interval = 0
+    if initial_state.barostat is not None:
+        barostat_interval = initial_state.barostat.interval
+
+    benchmark(
+        config,
+        "ahfe",
+        initial_state.integrator.masses,
+        initial_state.x0,
+        initial_state.v0,
+        initial_state.box0,
+        initial_state.potentials,
+        barostat_interval=barostat_interval,
+    )
+    if host_config is not None:
+        benchmark_local(
+            config,
+            "ahfe-local",
+            initial_state.integrator.masses,
+            initial_state.x0,
+            initial_state.v0,
+            initial_state.box0,
+            initial_state.potentials,
+            initial_state.ligand_idxs,
+        )
+
+
 def test_dhfr():
     benchmark_dhfr(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
 
@@ -589,6 +645,10 @@ def test_solvent():
 
 def test_vacuum():
     benchmark_vacuum(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
+
+
+def test_ahfe():
+    benchmark_ahfe(BenchmarkConfig(verbose=True, num_batches=2, steps_per_batch=100, generate_plots=False))
 
 
 def get_nonbonded_pot_params(bps):
@@ -663,6 +723,7 @@ if __name__ == "__main__":
     parser.add_argument("--steps_per_batch", default=1000, type=int)
     parser.add_argument("--skip_dhfr", action="store_true")
     parser.add_argument("--skip_hif2a", action="store_true")
+    parser.add_argument("--skip_ahfe", action="store_true")
     parser.add_argument("--skip_solvent", action="store_true")
     parser.add_argument("--skip_vacuum", action="store_true")
     parser.add_argument("--skip_potentials", action="store_true")
@@ -684,6 +745,8 @@ if __name__ == "__main__":
         benchmark_hif2a(config)
     if not args.skip_solvent:
         benchmark_solvent(config)
+    if not args.skip_ahfe:
+        benchmark_ahfe(config)
     if not args.skip_vacuum:
         benchmark_vacuum(config)
 
