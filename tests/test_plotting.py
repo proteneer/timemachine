@@ -1,3 +1,5 @@
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -46,6 +48,24 @@ def test_forward_and_reverse_dg_plot_validation():
 
     with pytest.raises(AssertionError, match="fewer samples than frames_per_step"):
         plot_forward_and_reverse_dg(dummy_ukln, frames_per_step=ukln_shape[-1] + 1)
+
+
+def test_plots_correctly_closed():
+    """Ensure that we are correctly closing figures and don't trigger a warning indicating figures that are still open"""
+    # Get the number of figures that can be open before triggering a warning
+    max_figures = plt.rcParams["figure.max_open_warning"]
+
+    rng = np.random.default_rng(2024)
+    ukln_shape = (10, 2, 2, 1000)
+    dummy_ukln = rng.random(size=ukln_shape)
+
+    with warnings.catch_warnings(record=True) as captured_warnings:
+        for _ in range(max_figures + 1):
+            assert len(plot_forward_and_reverse_dg(dummy_ukln, frames_per_step=ukln_shape[-1])) > 0
+    assert all(
+        "are retained until explicitly closed and may consume too much memory" not in str(warn.message)
+        for warn in captured_warnings
+    )
 
 
 def test_plot_work_with_infs():

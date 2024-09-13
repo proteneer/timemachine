@@ -124,24 +124,19 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
         rss_traj.append(Process().memory_info().rss)
         return traj
 
-    with catch_warnings(record=True) as captured_warnings:
-        with patch("timemachine.fe.free_energy.sample_with_context", sample_and_record_rss):
-            result = estimate_relative_free_energy_bisection_hrex(
-                mol_a,
-                mol_b,
-                core,
-                forcefield,
-                host_config,
-                md_params,
-                lambda_interval=(0.0, 0.15),
-                n_windows=n_windows,
-                min_cutoff=0.7 if host_name == "complex" else None,
-            )
+    with patch("timemachine.fe.free_energy.sample_with_context", sample_and_record_rss):
+        result = estimate_relative_free_energy_bisection_hrex(
+            mol_a,
+            mol_b,
+            core,
+            forcefield,
+            host_config,
+            md_params,
+            lambda_interval=(0.0, 0.15),
+            n_windows=n_windows,
+            min_cutoff=0.7 if host_name == "complex" else None,
+        )
 
-    assert all(
-        "are retained until explicitly closed and may consume too much memory" not in str(warn.message)
-        for warn in captured_warnings
-    )
     # Check that memory usage is not increasing
     rss_traj = rss_traj[10:]  # discard initial transients
     rss_diff_count = np.sum(np.diff(rss_traj) != 0)
