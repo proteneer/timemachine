@@ -50,8 +50,6 @@ def get_hif2a_single_topology_leg(host_name: str | None):
         box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
         host_config = HostConfig(host_sys, host_conf, box, host_conf.shape[0])
 
-    forcefield = Forcefield.load_default()
-
     return mol_a, mol_b, core, forcefield, host_config
 
 
