@@ -217,7 +217,7 @@ def plot_forward_and_reverse_ddg(
     fwd_err = np.linalg.norm([complex_fwd_err, solvent_fwd_err], axis=0) * kBT / KCAL_TO_KJ
     rev_err = np.linalg.norm([complex_rev_err, solvent_rev_err], axis=0) * kBT / KCAL_TO_KJ
 
-    return plot_fwd_reverse_predictions(fwd, fwd_err, rev, rev_err)
+    return plot_as_png_fxn(plot_fwd_reverse_predictions, fwd, fwd_err, rev, rev_err)
 
 
 def plot_forward_and_reverse_dg(
@@ -249,7 +249,8 @@ def plot_forward_and_reverse_dg(
 
     kBT = BOLTZ * temperature
 
-    return plot_fwd_reverse_predictions(
+    return plot_as_png_fxn(
+        plot_fwd_reverse_predictions,
         fwd * kBT / KCAL_TO_KJ,
         fwd_err * kBT / KCAL_TO_KJ,
         rev * kBT / KCAL_TO_KJ,
@@ -279,10 +280,6 @@ def plot_fwd_reverse_predictions(
         Energies std errors computed in reverse direction, in units of kcal/mol
     energy_type: string
         The type of free energy that is being plotted, typically '∆∆G' or '∆G'
-
-    Returns
-    -------
-    energy_convergence_plot_bytes: bytes
     """
     assert len(fwd) == len(rev)
     assert len(fwd) == len(fwd_err)
@@ -319,13 +316,6 @@ def plot_fwd_reverse_predictions(
     plt.xlabel("Fraction of simulation time")
     plt.ylabel(f"{energy_type} (kcal/mol)")
     plt.legend()
-
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png", bbox_inches="tight")
-    buffer.seek(0)
-    plot_png = buffer.read()
-
-    return plot_png
 
 
 def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[float, float] = (13, 10)):
@@ -460,6 +450,7 @@ def plot_as_png_fxn(f, *args, **kwargs) -> bytes:
     f(*args, **kwargs)
     buffer = io.BytesIO()
     plt.savefig(buffer, format="png", bbox_inches="tight")
+    plt.close()
     buffer.seek(0)
     plot_png = buffer.read()
     return plot_png
