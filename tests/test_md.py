@@ -1016,6 +1016,6 @@ def test_context_with_threads(num_threads, local_md):
 
     with ThreadPool(num_threads) as pool:
         thread_started_times = pool.map(thread_sampling, ctxts)
-        # All of the the threads should have started within a tenth of a second of each other.
+        # Each thread should have start within a tenth of a second of the previous one.
         # Dependent on the amount of MD run and how long MD takes. As of Sept 2024 MD is taking ~5 seconds
         assert np.all(np.diff(thread_started_times) < 0.1), "Doesn't seem like GIL is released"
