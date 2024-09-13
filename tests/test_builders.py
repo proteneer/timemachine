@@ -6,7 +6,7 @@ import pytest
 from openmm import app, unit
 
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
-from timemachine.fe.utils import get_romol_conf, set_romol_conf
+from timemachine.fe.utils import get_romol_conf, read_sdf, set_romol_conf
 from timemachine.ff import sanitize_water_ff
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.barostat.utils import compute_box_volume
@@ -64,14 +64,25 @@ def test_build_water_system():
 
 @pytest.mark.nocuda
 def test_build_protein_system_returns_correct_water_count():
-    with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
-        protein_system, protein_coords, box, _, num_water_atoms = build_protein_system(
-            str(pdb_path), DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
-        )
-        # The builder should not modify the number of atoms in the protein at all
-        # Hard coded to the number of protein atoms in the PDB, refer to 6hvi_prepared.pdb for the actual
-        # number of atoms
-        assert protein_coords.shape[0] - num_water_atoms == 6748
+    with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as sdf_path:
+        mols = read_sdf(sdf_path)
+    # Pick two arbitrary mols
+    mol_a = mols[0]
+    mol_b = mols[1]
+    last_num_waters = None
+    # Verify that even adding different molecules produces the same number of waters in the system
+    for mols in (None, [mol_a], [mol_b], [mol_a, mol_b]):
+        with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
+            protein_system, protein_coords, box, _, num_water_atoms = build_protein_system(
+                str(pdb_path), DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, mols=mols
+            )
+            # The builder should not modify the number of atoms in the protein at all
+            # Hard coded to the number of protein atoms in the PDB, refer to 6hvi_prepared.pdb for the actual
+            # number of atoms
+            assert protein_coords.shape[0] - num_water_atoms == 6748
+            if last_num_waters is not None:
+                assert last_num_waters == num_water_atoms
+            last_num_waters = num_water_atoms
 
 
 @pytest.mark.nocuda
