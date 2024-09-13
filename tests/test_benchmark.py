@@ -96,6 +96,7 @@ def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], 
     axes[1].set_ylabel("Box Volume (nm^3)")
     fig.tight_layout()
     fig.savefig(f"{label}.png", dpi=150)
+    plt.clf()
 
 
 @pytest.fixture(scope="module")
