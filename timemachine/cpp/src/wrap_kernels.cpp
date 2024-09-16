@@ -188,8 +188,7 @@ void declare_hilbert_sort(py::module &m) {
                 verify_coords_and_box(coords, box);
 
                 std::vector<unsigned int> sort_perm = sorter.sort_host(N, coords.data(), box.data());
-                py::array_t<uint32_t, py::array::c_style> output_perm(sort_perm.size());
-                std::memcpy(output_perm.mutable_data(), sort_perm.data(), sort_perm.size() * sizeof(unsigned int));
+                py::array_t<uint32_t, py::array::c_style> output_perm(sort_perm.size(), sort_perm.data());
                 return output_perm;
             },
             py::arg("coords"),
@@ -350,20 +349,24 @@ void declare_context(py::module &m) {
         .def(
             "multiple_steps",
             [](Context &ctxt, const int n_steps, int store_x_interval) -> py::tuple {
+                if (store_x_interval < 0) {
+                    throw std::runtime_error("store_x_interval must be greater than or equal to zero");
+                }
                 // (ytz): I hate C++
-                int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
-                std::array<std::vector<double>, 2> result = ctxt.multiple_steps(n_steps, x_interval);
-
                 int N = ctxt.num_atoms();
                 int D = 3;
-                int F = result[0].size() / (N * D);
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
 
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
-
-                return py::make_tuple(out_x_buffer, box_buffer);
+                // If the store_x_interval is 0, collect the last frame by setting x_interval to n_steps
+                const int x_interval = (store_x_interval == 0) ? n_steps : store_x_interval;
+                // n_samples determines the number of frames that will be collected, computed to be able to allocate
+                // the buffers up front before releasing the GIL.
+                const int n_samples = n_steps / x_interval;
+                py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
+                py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
+                auto res = py::make_tuple(out_x_buffer, box_buffer);
+                py::gil_scoped_release release;
+                ctxt.multiple_steps(n_steps, n_samples, out_x_buffer.mutable_data(), box_buffer.mutable_data());
+                return res;
             },
             py::arg("n_steps"),
             py::arg("store_x_interval") = 0,
@@ -408,24 +411,37 @@ void declare_context(py::module &m) {
                 if (n_steps <= 0) {
                     throw std::runtime_error("local steps must be at least one");
                 }
+                if (store_x_interval < 0) {
+                    throw std::runtime_error("store_x_interval must be greater than or equal to zero");
+                }
                 verify_local_md_parameters(radius, k);
 
                 const int N = ctxt.num_atoms();
-                const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
+                const int D = 3;
 
                 std::vector<int> vec_local_idxs = py_array_to_vector(local_idxs);
                 verify_atom_idxs(N, vec_local_idxs);
 
-                std::array<std::vector<double>, 2> result =
-                    ctxt.multiple_steps_local(n_steps, vec_local_idxs, x_interval, radius, k, seed);
-                const int D = 3;
-                const int F = result[0].size() / (N * D);
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
+                // If the store_x_interval is 0, collect the last frame by setting x_interval to n_steps
+                const int x_interval = (store_x_interval == 0) ? n_steps : store_x_interval;
+                // n_samples determines the number of frames that will be collected, computed to be able to allocate
+                // the buffers up front before releasing the GIL.
+                const int n_samples = n_steps / x_interval;
+                py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
+                py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
+                auto res = py::make_tuple(out_x_buffer, box_buffer);
 
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
-                return py::make_tuple(out_x_buffer, box_buffer);
+                py::gil_scoped_release release;
+                ctxt.multiple_steps_local(
+                    n_steps,
+                    vec_local_idxs,
+                    n_samples,
+                    radius,
+                    k,
+                    seed,
+                    out_x_buffer.mutable_data(),
+                    box_buffer.mutable_data());
+                return res;
             },
             py::arg("n_steps"),
             py::arg("local_idxs"),
@@ -499,10 +515,13 @@ void declare_context(py::module &m) {
                 if (n_steps <= 0) {
                     throw std::runtime_error("local steps must be at least one");
                 }
+                if (store_x_interval < 0) {
+                    throw std::runtime_error("store_x_interval must be greater than or equal to zero");
+                }
                 verify_local_md_parameters(radius, k);
 
                 const int N = ctxt.num_atoms();
-                const int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
+                const int D = 3;
 
                 if (reference_idx < 0 || reference_idx >= N) {
                     throw std::runtime_error("reference idx must be at least 0 and less than " + std::to_string(N));
@@ -513,17 +532,26 @@ void declare_context(py::module &m) {
                 if (selection_set.find(reference_idx) != selection_set.end()) {
                     throw std::runtime_error("reference idx must not be in selection idxs");
                 }
+                // If the store_x_interval is 0, collect the last frame by setting x_interval to n_steps
+                const int x_interval = (store_x_interval == 0) ? n_steps : store_x_interval;
+                // n_samples determines the number of frames that will be collected, computed to be able to allocate
+                // the buffers up front before releasing the GIL.
+                const int n_samples = n_steps / x_interval;
+                py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
+                py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
+                auto res = py::make_tuple(out_x_buffer, box_buffer);
+                py::gil_scoped_release release; // Release the GIL
 
-                std::array<std::vector<double>, 2> result = ctxt.multiple_steps_local_selection(
-                    n_steps, reference_idx, vec_selection_idxs, x_interval, radius, k);
-                const int D = 3;
-                const int F = result[0].size() / (N * D);
-                py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
-                std::memcpy(out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(double));
-
-                py::array_t<double, py::array::c_style> box_buffer({F, D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(double));
-                return py::make_tuple(out_x_buffer, box_buffer);
+                ctxt.multiple_steps_local_selection(
+                    n_steps,
+                    reference_idx,
+                    vec_selection_idxs,
+                    n_samples,
+                    radius,
+                    k,
+                    out_x_buffer.mutable_data(),
+                    box_buffer.mutable_data());
+                return res;
             },
             py::arg("n_steps"),
             py::arg("reference_idx"),
@@ -639,6 +667,7 @@ void declare_context(py::module &m) {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({N, D});
+                py::gil_scoped_release release;
                 ctxt.get_x_t(buffer.mutable_data());
                 return buffer;
             })
@@ -648,6 +677,7 @@ void declare_context(py::module &m) {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({N, D});
+                py::gil_scoped_release release;
                 ctxt.get_v_t(buffer.mutable_data());
                 return buffer;
             })
@@ -656,6 +686,7 @@ void declare_context(py::module &m) {
             [](Context &ctxt) -> py::array_t<double, py::array::c_style> {
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({D, D});
+                py::gil_scoped_release release;
                 ctxt.get_box(buffer.mutable_data());
                 return buffer;
             })
@@ -728,6 +759,7 @@ void declare_potential(py::module &m) {
                 if (params.ndim() < 2) {
                     throw std::runtime_error("parameters must have at least 2 dimensions");
                 }
+
                 const long unsigned int coord_batches = coords.shape()[0];
                 const long unsigned int N = coords.shape()[1];
                 const long unsigned int D = coords.shape()[2];
@@ -1025,6 +1057,7 @@ void declare_potential(py::module &m) {
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
                 verify_coords_and_box(coords, box);
+
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx;
                 if (compute_du_dx) {
@@ -1134,6 +1167,7 @@ void declare_bound_potential(py::module &m) {
                 const long unsigned int N = coords.shape()[0];
                 const long unsigned int D = coords.shape()[1];
                 verify_coords_and_box(coords, box);
+
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx;
                 if (compute_du_dx) {
@@ -1182,6 +1216,7 @@ void declare_bound_potential(py::module &m) {
                 if (coords.shape()[0] != boxes.shape()[0]) {
                     throw std::runtime_error("number of batches of coords and boxes don't match");
                 }
+
                 const long unsigned int coord_batches = coords.shape()[0];
                 const long unsigned int N = coords.shape()[1];
                 const long unsigned int D = coords.shape()[2];
@@ -1594,13 +1629,9 @@ void declare_mover(py::module &m) {
 
                 std::array<std::vector<double>, 2> result = mover.move_host(N, coords.data(), box.data());
 
-                py::array_t<double, py::array::c_style> out_x_buffer({N, D});
-                std::memcpy(
-                    out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(*result[0].data()));
+                py::array_t<double, py::array::c_style> out_x_buffer({N, D}, result[0].data());
 
-                py::array_t<double, py::array::c_style> box_buffer({D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(*result[1].data()));
-
+                py::array_t<double, py::array::c_style> box_buffer({D, D}, result[1].data());
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
             py::arg("coords"),
@@ -1792,12 +1823,9 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
 
                 std::array<std::vector<double>, 2> result = mover.move_host(N, coords.data(), box.data());
 
-                py::array_t<double, py::array::c_style> out_x_buffer({N, D});
-                std::memcpy(
-                    out_x_buffer.mutable_data(), result[0].data(), result[0].size() * sizeof(*result[0].data()));
+                py::array_t<double, py::array::c_style> out_x_buffer({N, D}, result[0].data());
 
-                py::array_t<double, py::array::c_style> box_buffer({D, D});
-                std::memcpy(box_buffer.mutable_data(), result[1].data(), result[1].size() * sizeof(*result[1].data()));
+                py::array_t<double, py::array::c_style> box_buffer({D, D}, result[1].data());
 
                 return py::make_tuple(out_x_buffer, box_buffer);
             },
@@ -1863,9 +1891,7 @@ template <typename RealType> void declare_biased_deletion_exchange_move(py::modu
                 std::vector<double> flat_params = mover.get_params();
                 const int D = PARAMS_PER_ATOM;
                 const int N = flat_params.size() / D;
-                py::array_t<double, py::array::c_style> out_params({N, D});
-                std::memcpy(
-                    out_params.mutable_data(), flat_params.data(), flat_params.size() * sizeof(*flat_params.data()));
+                py::array_t<double, py::array::c_style> out_params({N, D}, flat_params.data());
                 return out_params;
             })
         .def(
