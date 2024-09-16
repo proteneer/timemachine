@@ -614,7 +614,6 @@ class EnvironmentBCCHandler(SerializableMixIn):
     def parameterize(self, params):
         # If there aren't any matched parameters (i.e. it's all water),
         # then there is nothing to do
-        return self.initial_charges
         if len(self.param_idxs) == 0:
             return self.initial_charges
 
