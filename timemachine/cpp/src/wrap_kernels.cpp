@@ -349,12 +349,18 @@ void declare_context(py::module &m) {
         .def(
             "multiple_steps",
             [](Context &ctxt, const int n_steps, int store_x_interval) -> py::tuple {
+                if (store_x_interval < 0) {
+                    throw std::runtime_error("store_x_interval must be greater than or equal to zero");
+                }
                 // (ytz): I hate C++
                 int N = ctxt.num_atoms();
                 int D = 3;
 
-                int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
-                int n_samples = store_x_interval > n_steps ? 0 : n_steps / x_interval;
+                // If the store_x_interval is 0, collect the last frame by setting x_interval to n_steps
+                const int x_interval = (store_x_interval == 0) ? n_steps : store_x_interval;
+                // n_samples determines the number of frames that will be collected, computed to be able to allocate
+                // the buffers up front before releasing the GIL.
+                const int n_samples = n_steps / x_interval;
                 py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
                 py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
@@ -405,6 +411,9 @@ void declare_context(py::module &m) {
                 if (n_steps <= 0) {
                     throw std::runtime_error("local steps must be at least one");
                 }
+                if (store_x_interval < 0) {
+                    throw std::runtime_error("store_x_interval must be greater than or equal to zero");
+                }
                 verify_local_md_parameters(radius, k);
 
                 const int N = ctxt.num_atoms();
@@ -413,8 +422,11 @@ void declare_context(py::module &m) {
                 std::vector<int> vec_local_idxs = py_array_to_vector(local_idxs);
                 verify_atom_idxs(N, vec_local_idxs);
 
-                int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
-                int n_samples = store_x_interval > n_steps ? 0 : n_steps / x_interval;
+                // If the store_x_interval is 0, collect the last frame by setting x_interval to n_steps
+                const int x_interval = (store_x_interval == 0) ? n_steps : store_x_interval;
+                // n_samples determines the number of frames that will be collected, computed to be able to allocate
+                // the buffers up front before releasing the GIL.
+                const int n_samples = n_steps / x_interval;
                 py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
                 py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
@@ -503,6 +515,9 @@ void declare_context(py::module &m) {
                 if (n_steps <= 0) {
                     throw std::runtime_error("local steps must be at least one");
                 }
+                if (store_x_interval < 0) {
+                    throw std::runtime_error("store_x_interval must be greater than or equal to zero");
+                }
                 verify_local_md_parameters(radius, k);
 
                 const int N = ctxt.num_atoms();
@@ -517,8 +532,11 @@ void declare_context(py::module &m) {
                 if (selection_set.find(reference_idx) != selection_set.end()) {
                     throw std::runtime_error("reference idx must not be in selection idxs");
                 }
-                int x_interval = (store_x_interval <= 0) ? n_steps : store_x_interval;
-                int n_samples = store_x_interval > n_steps ? 0 : n_steps / x_interval;
+                // If the store_x_interval is 0, collect the last frame by setting x_interval to n_steps
+                const int x_interval = (store_x_interval == 0) ? n_steps : store_x_interval;
+                // n_samples determines the number of frames that will be collected, computed to be able to allocate
+                // the buffers up front before releasing the GIL.
+                const int n_samples = n_steps / x_interval;
                 py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
                 py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
