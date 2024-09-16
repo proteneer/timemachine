@@ -358,7 +358,7 @@ void declare_context(py::module &m) {
                 py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
                 py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
-                py::gil_scoped_release release;
+                // py::gil_scoped_release release;
                 ctxt.multiple_steps(n_steps, n_samples, out_x_buffer.mutable_data(), box_buffer.mutable_data());
                 return res;
             },
