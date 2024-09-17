@@ -725,7 +725,7 @@ def get_ligand_ixn_pots_params(
     num_lig_atoms = len(lig_idxs)
     num_total_atoms = num_lig_atoms + len(env_idxs)
 
-    hg_ixn_pots = potentials.NonbondedInteractionGroup(
+    hg_ixn_pot = potentials.NonbondedInteractionGroup(
         num_total_atoms,
         lig_idxs,
         beta,
@@ -734,4 +734,4 @@ def get_ligand_ixn_pots_params(
     )
 
     hg_ixn_params = jnp.concatenate([host_nb_params, guest_params_ixn_env])
-    return hg_ixn_pots, hg_ixn_params
+    return hg_ixn_pot, hg_ixn_params
