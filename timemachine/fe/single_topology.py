@@ -8,6 +8,7 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+from jax.typing import ArrayLike
 from numpy.typing import NDArray
 from openmm import app
 from rdkit import Chem
@@ -346,9 +347,11 @@ def canonicalize_improper_idxs(idxs) -> Tuple[int, int, int, int]:
 
     assert key in ccw_items
 
+    idx = None
     for idx, cw_item in enumerate(ccw_items):
         if cw_item == key:
             break
+    assert idx is not None
 
     return (i, *cw_items[idx])
 
@@ -796,13 +799,13 @@ def find_dummy_groups_and_anchors(
 
 
 def handle_ring_opening_closing(
-    f: Callable[[float, float, float], float],
-    src_k: float,
-    dst_k: float,
+    f: Callable[[ArrayLike, ArrayLike, float], ArrayLike],
+    src_k: ArrayLike,
+    dst_k: ArrayLike,
     lamb: float,
     lambda_min: float,
     lambda_max: float,
-) -> float:
+) -> jax.Array:
     """
     In the typical case (src_k != 0 and dst_k != 0), use the specified interpolation function, f.
 
@@ -844,7 +847,9 @@ def handle_ring_opening_closing(
     )
 
 
-def interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, lambda_max):
+def interpolate_harmonic_force_constant(
+    src_k: ArrayLike, dst_k: ArrayLike, lamb: float, k_min: float, lambda_min: float, lambda_max: float
+) -> jax.Array:
     """
     Interpolate between force constants using a log-linear functional form.
 
@@ -1358,6 +1363,9 @@ class SingleTopology(AtomMapMixin):
         self.src_system = self._setup_end_state_src()
         self.dst_system = self._setup_end_state_dst()
 
+        assert self.src_system.chiral_atom
+        assert self.dst_system.chiral_atom
+
         assert_chiral_consistency_and_validity(
             self,
             self.src_system.chiral_atom.potential.idxs,
@@ -1403,7 +1411,7 @@ class SingleTopology(AtomMapMixin):
             elif indicator == 2:
                 mass = mol_b_masses[self.c_to_b[c_idx]]
             else:
-                assert 0
+                assert False
 
             mol_c_masses.append(mass)
 
@@ -1766,12 +1774,12 @@ class SingleTopology(AtomMapMixin):
                 atomic_num = mol_b_atomic_nums[self.c_to_b[c_idx]]
             else:
                 # in neither, assert
-                assert 0
+                assert False
             atom = Chem.Atom(atomic_num)
             mol.AddAtom(atom)
 
         # setup bonds
-        for (i, j), (k, b) in zip(vs.bond.potential.idxs, vs.bond.params):
+        for (i, j), (k, _) in zip(vs.bond.potential.idxs, vs.bond.params):
             if k > min_bond_k:
                 mol.AddBond(int(i), int(j), Chem.BondType.SINGLE)
 
@@ -1827,7 +1835,7 @@ class SingleTopology(AtomMapMixin):
                 # NOTE: this is only for host-guest nonbonded ixns (there is no clash between A and B at lambda = 0.5)
                 w = interpolate_w_coord(cutoff, 0.0, lamb)
             else:
-                assert 0
+                assert False
 
             guest_charges.append(q)
             guest_sigmas.append(sig)

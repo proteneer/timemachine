@@ -1,7 +1,9 @@
 from functools import partial
 from typing import Any, Callable, Iterable, Set, Tuple
 
+import jax
 import jax.numpy as jnp
+from jax.typing import ArrayLike
 
 
 class DuplicateAlignmentKeysError(RuntimeError):
@@ -166,7 +168,14 @@ def log_linear_interpolation(src_params, dst_params, lamb, min_value):
     return jnp.exp(linear_interpolation(jnp.log(src_params), jnp.log(dst_params), lamb))
 
 
-def pad(f, src_params, dst_params, lamb, lambda_min, lambda_max):
+def pad(
+    f: Callable[[ArrayLike, ArrayLike, float], ArrayLike],
+    src_params: ArrayLike,
+    dst_params: ArrayLike,
+    lamb: float,
+    lambda_min: float,
+    lambda_max: float,
+) -> jax.Array:
     """
     Use the specified interpolation function in the interval [lambda_min, lambda_max], otherwise pin to the end-state
     values.
