@@ -1989,16 +1989,16 @@ class SingleTopology(AtomMapMixin):
 
         assert guest_system.torsion
 
-        # complex proteins have torsions
         if host_system.torsion:
+            # complex proteins have torsions
             combined_torsion_idxs = np.concatenate(
                 [host_system.torsion.potential.idxs, guest_system.torsion.potential.idxs + num_host_atoms]
             )
             combined_torsion_params = jnp.concatenate([host_system.torsion.params, guest_system.torsion.params])
         else:
             # solvent waters don't have torsions
-            combined_torsion_idxs = np.array(guest_system.torsion.potential.idxs, dtype=np.int32) + num_host_atoms
-            combined_torsion_params = jnp.array(guest_system.torsion.params)
+            combined_torsion_idxs = guest_system.torsion.potential.idxs + num_host_atoms
+            combined_torsion_params = jnp.asarray(guest_system.torsion.params)
 
         combined_torsion = PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
 
