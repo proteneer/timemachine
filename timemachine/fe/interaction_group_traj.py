@@ -6,6 +6,9 @@ from jax import numpy as jnp
 from jax import vmap
 from numpy.typing import NDArray as Array
 
+from timemachine.potentials import nonbonded
+from timemachine.potentials.jax_utils import delta_r
+
 Position = Array
 Param = Array
 Box = Array
@@ -13,22 +16,34 @@ Energy = float
 PairFxn = Callable[[Position, Position, Param, Param, Box], Energy]
 
 
-# distances in axis-aligned periodic box
-def delta_r(ri, rj, box_diag):
-    diff = ri - rj
-    return diff - box_diag * jnp.floor(diff / box_diag + 0.5)
+def distance2(ri, rj, box_diag):
+    return jnp.sum(delta_r(ri, rj, box_diag) ** 2)
 
 
 def distance(ri, rj, box_diag):
-    return jnp.sqrt(jnp.sum(delta_r(ri, rj, box_diag) ** 2))
+    return jnp.sqrt(distance2(ri, rj, box_diag))
 
 
 # example pair function
-def coulomb_pair_fxn(x_a, x_b, param_a, param_b, box_diag):
-    r = distance(x_a, x_b, box_diag)
-    e = param_a * param_b / r
+def nb_pair_fxn(x_a, x_b, param_a, param_b, box_diag):
+    beta = 2.0
     cutoff = 1.2
-    return jnp.where(r < cutoff, e, 0.0)
+
+    # alchemical distance
+    r2 = distance2(x_a, x_b, box_diag)
+    w_offset = param_b[3] - param_a[3]
+    r = jnp.sqrt(r2 + w_offset**2)
+
+    # TM reaction field
+    q_prod = param_a[0] * param_b[0]
+    e_q = nonbonded.switched_direct_space_pme(r, q_prod, beta, cutoff)
+
+    # Lennard-Jones
+    sig = nonbonded.combining_rule_sigma(param_a[1], param_b[1])
+    eps = nonbonded.combining_rule_epsilon(param_a[2], param_b[2])
+    e_lj = nonbonded.lennard_jones(r, sig, eps)
+
+    return jnp.where(r < cutoff, e_q + e_lj, 0.0)
 
 
 # brute-force pre-computed neighborlist
