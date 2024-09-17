@@ -102,76 +102,74 @@ def test_combined_parameters_nonbonded(host_system_fixture, lamb, hif2a_ligand_p
 
     # 2) decoupling parameters for host-guest interactions
     # 2a) w offsets
-    assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 1  # ligand-env
+    potential = hgs.nonbonded_host_guest_ixn.potential
+    params = hgs.nonbonded_host_guest_ixn.params
 
-    for potential, params in zip(
-        hgs.nonbonded_host_guest_ixn.potential.potentials, hgs.nonbonded_host_guest_ixn.potential.params_init
-    ):
-        # NBIxnGroup has the ligand interaction parameters
-        assert isinstance(potential, potentials.NonbondedInteractionGroup)
-        w_coords = params[:, 3]
+    # NBIxnGroup has the ligand interaction parameters
+    assert isinstance(potential, potentials.NonbondedInteractionGroup)
+    w_coords = params[:, 3]
 
-        for a_idx, w in enumerate(w_coords):
-            if a_idx < num_host_atoms:
-                # host atom
-                assert w == 0.0
-            else:
-                # guest atom
-                guest_atom_idx = a_idx - num_host_atoms
-                indicator = st.c_flags[guest_atom_idx]
-                if indicator == 0:
-                    # core
-                    assert w == 0.0
-                elif indicator == 1:
-                    # mol_a dummy
-                    if lamb == 0.0:
-                        assert w == 0.0
-                    elif lamb == 1.0:
-                        assert w == potential.cutoff
-                elif indicator == 2:
-                    # mol_b dummy
-                    if lamb == 0.0:
-                        assert w == potential.cutoff
-                    elif lamb == 1.0:
-                        assert w == 0.0
-                else:
-                    assert 0
-
-        # 2b) nonbonded parameter interpolation checks
-        mol_a_charges = st.ff.q_handle.parameterize(st.mol_a)
-        mol_a_sig_eps = st.ff.lj_handle.parameterize(st.mol_a)
-
-        mol_b_charges = st.ff.q_handle.parameterize(st.mol_b)
-        mol_b_sig_eps = st.ff.lj_handle.parameterize(st.mol_b)
-
-        for a_idx, (test_q, test_sig, test_eps, _) in enumerate(params):
-            if a_idx < num_host_atoms:
-                continue
-
+    for a_idx, w in enumerate(w_coords):
+        if a_idx < num_host_atoms:
+            # host atom
+            assert w == 0.0
+        else:
+            # guest atom
             guest_atom_idx = a_idx - num_host_atoms
             indicator = st.c_flags[guest_atom_idx]
+            if indicator == 0:
+                # core
+                assert w == 0.0
+            elif indicator == 1:
+                # mol_a dummy
+                if lamb == 0.0:
+                    assert w == 0.0
+                elif lamb == 1.0:
+                    assert w == potential.cutoff
+            elif indicator == 2:
+                # mol_b dummy
+                if lamb == 0.0:
+                    assert w == potential.cutoff
+                elif lamb == 1.0:
+                    assert w == 0.0
+            else:
+                assert 0
 
-            # dummy atom qlj parameters are arbitrary (since they will be decoupled via lambda parameters)
-            if indicator != 0:
-                continue
+    # 2b) nonbonded parameter interpolation checks
+    mol_a_charges = st.ff.q_handle.parameterize(st.mol_a)
+    mol_a_sig_eps = st.ff.lj_handle.parameterize(st.mol_a)
 
-            if lamb == 0.0:
-                # should resemble mol_a at lambda=0
-                ref_q = mol_a_charges[st.c_to_a[guest_atom_idx]]
-                ref_sig, ref_eps = mol_a_sig_eps[st.c_to_a[guest_atom_idx]]
+    mol_b_charges = st.ff.q_handle.parameterize(st.mol_b)
+    mol_b_sig_eps = st.ff.lj_handle.parameterize(st.mol_b)
 
-                assert ref_q == test_q
-                assert test_sig == ref_sig
-                assert test_eps == ref_eps
+    for a_idx, (test_q, test_sig, test_eps, _) in enumerate(params):
+        if a_idx < num_host_atoms:
+            continue
 
-            elif lamb == 1.0:
-                # should resemble mol_b at lambda=1
-                ref_q = mol_b_charges[st.c_to_b[guest_atom_idx]]
-                ref_sig, ref_eps = mol_b_sig_eps[st.c_to_b[guest_atom_idx]]
+        guest_atom_idx = a_idx - num_host_atoms
+        indicator = st.c_flags[guest_atom_idx]
 
-                assert ref_q == test_q
-                assert test_sig == ref_sig
-                assert test_eps == ref_eps
+        # dummy atom qlj parameters are arbitrary (since they will be decoupled via lambda parameters)
+        if indicator != 0:
+            continue
+
+        if lamb == 0.0:
+            # should resemble mol_a at lambda=0
+            ref_q = mol_a_charges[st.c_to_a[guest_atom_idx]]
+            ref_sig, ref_eps = mol_a_sig_eps[st.c_to_a[guest_atom_idx]]
+
+            assert ref_q == test_q
+            assert test_sig == ref_sig
+            assert test_eps == ref_eps
+
+        elif lamb == 1.0:
+            # should resemble mol_b at lambda=1
+            ref_q = mol_b_charges[st.c_to_b[guest_atom_idx]]
+            ref_sig, ref_eps = mol_b_sig_eps[st.c_to_b[guest_atom_idx]]
+
+            assert ref_q == test_q
+            assert test_sig == ref_sig
+            assert test_eps == ref_eps
 
 
 @pytest.mark.parametrize("lamb", np.random.default_rng(2022).uniform(0.01, 0.99, (10,)))
@@ -185,34 +183,32 @@ def test_combined_parameters_nonbonded_intermediate(
 
     hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
 
-    assert len(hgs.nonbonded_host_guest_ixn.potential.potentials) == 1  # ligand-env
+    potential = hgs.nonbonded_host_guest_ixn.potential
+    params = hgs.nonbonded_host_guest_ixn.params
+    assert isinstance(potential, potentials.NonbondedInteractionGroup)
 
-    for potential, params in zip(
-        hgs.nonbonded_host_guest_ixn.potential.potentials, hgs.nonbonded_host_guest_ixn.potential.params_init
-    ):
-        assert isinstance(potential, potentials.NonbondedInteractionGroup)
-        guest_params = np.array(params[num_host_atoms:])
-        ws_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
-        ws_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]
-        ws_b = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 2]
+    guest_params = np.array(params[num_host_atoms:])
+    ws_core = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 0]
+    ws_a = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 1]
+    ws_b = [w for flag, (_, _, _, w) in zip(st.c_flags, guest_params) if flag == 2]
 
-        # core atoms fixed at w = 0
-        assert all(w == 0.0 for w in ws_core)
+    # core atoms fixed at w = 0
+    assert all(w == 0.0 for w in ws_core)
 
-        # dummy groups have consistent w coords
-        assert len(set(ws_a)) == 1
-        assert len(set(ws_b)) == 1
-        (w_a,) = set(ws_a)
-        (w_b,) = set(ws_b)
+    # dummy groups have consistent w coords
+    assert len(set(ws_a)) == 1
+    assert len(set(ws_b)) == 1
+    (w_a,) = set(ws_a)
+    (w_b,) = set(ws_b)
 
-        # w in [0, cutoff]
-        assert 0 < w_a < potential.cutoff
-        assert 0 < w_b < potential.cutoff
+    # w in [0, cutoff]
+    assert 0 < w_a < potential.cutoff
+    assert 0 < w_b < potential.cutoff
 
-        if lamb < 0.5:
-            assert w_a < w_b
-        else:
-            assert w_b < w_a
+    if lamb < 0.5:
+        assert w_a < w_b
+    else:
+        assert w_b < w_a
 
 
 @pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])
