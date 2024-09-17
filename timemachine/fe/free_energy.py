@@ -1197,6 +1197,7 @@ def run_sims_hrex(
     # Ensure that states differ only in their parameters so that we can safely instantiate potentials from the first
     # state and use set_params for efficiency
     for s in initial_states[1:]:
+        assert_ensembles_compatible(initial_states[0], s)
         assert_potentials_compatible(initial_states[0].potentials, s.potentials)
 
     if n_swap_attempts_per_iter is None:
