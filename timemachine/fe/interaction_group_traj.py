@@ -44,11 +44,11 @@ def env_mask_within_cutoff(x_env, x_lig, box, cutoff):
     """result[i] = True if any distance(x_env[i], y) < cutoff for y in x_lig"""
 
     def d2_others(x_i, x_others):
-        d_ij = vmap(distance2, (None, 0, None))(x_i, x_others, box)
-        return jnp.where(d_ij <= cutoff**2, d_ij, jnp.inf)
+        d2_ij = vmap(distance2, (None, 0, None))(x_i, x_others, box)
+        return jnp.where(d2_ij <= cutoff**2, d2_ij, jnp.inf)
 
     def within_cutoff(point):
-        return jnp.any(d2_others(point, x_lig, box) < cutoff)
+        return jnp.any(d2_others(point, x_lig, box) < cutoff**2)
 
     return vmap(within_cutoff)(x_env)
 
