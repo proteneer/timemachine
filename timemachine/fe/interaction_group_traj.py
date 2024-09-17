@@ -7,7 +7,7 @@ from jax import vmap
 from numpy.typing import NDArray as Array
 
 from timemachine.potentials import nonbonded
-from timemachine.potentials.jax_utils import delta_r
+from timemachine.potentials.jax_utils import distance2
 
 Position = Array
 Param = Array
@@ -16,21 +16,13 @@ Energy = float
 PairFxn = Callable[[Position, Position, Param, Param, Box], Energy]
 
 
-def distance2(ri, rj, box_diag):
-    return jnp.sum(delta_r(ri, rj, box_diag) ** 2)
-
-
-def distance(ri, rj, box_diag):
-    return jnp.sqrt(distance2(ri, rj, box_diag))
-
-
 # example pair function
-def nb_pair_fxn(x_a, x_b, param_a, param_b, box_diag):
+def nb_pair_fxn(x_a, x_b, param_a, param_b, box):
     beta = 2.0
     cutoff = 1.2
 
     # alchemical distance
-    r2 = distance2(x_a, x_b, box_diag)
+    r2 = distance2(x_a, x_b, box)
     w_offset = param_b[3] - param_a[3]
     r = jnp.sqrt(r2 + w_offset**2)
 
@@ -48,15 +40,15 @@ def nb_pair_fxn(x_a, x_b, param_a, param_b, box_diag):
 
 # brute-force pre-computed neighborlist
 @jit
-def env_mask_within_cutoff(x_env, x_lig, box_diag, cutoff):
+def env_mask_within_cutoff(x_env, x_lig, box, cutoff):
     """result[i] = True if any distance(x_env[i], y) < cutoff for y in x_lig"""
 
-    def distance_from_one_to_others(x_i, x_others):
-        d_ij = vmap(distance, (None, 0, None))(x_i, x_others, box_diag)
-        return jnp.where(d_ij <= cutoff, d_ij, jnp.inf)
+    def d2_others(x_i, x_others):
+        d_ij = vmap(distance2, (None, 0, None))(x_i, x_others, box)
+        return jnp.where(d_ij <= cutoff**2, d_ij, jnp.inf)
 
-    def within_cutoff(point):  # TODO[optimization] : (distance <= cutoff) -> (distance2 <= cutoff**2)
-        return jnp.any(distance_from_one_to_others(point, x_lig, box_diag) < cutoff)
+    def within_cutoff(point):
+        return jnp.any(d2_others(point, x_lig, box) < cutoff)
 
     return vmap(within_cutoff)(x_env)
 
@@ -93,7 +85,7 @@ class InteractionGroupTraj:
         def f(x_env, x_lig, box):
             return env_mask_within_cutoff(x_env, x_lig, box, cutoff)
 
-        mask = np.array([f(_xs_env[i], self.xs_lig[i], box_diags[i]) for i in range(self.n_frames)])
+        mask = np.array([f(_xs_env[i], self.xs_lig[i], np.diag(box_diags[i])) for i in range(self.n_frames)])
 
         padded_num_env_atoms = mask.sum(1).max()
         num_stored = padded_num_env_atoms + len(ligand_idxs)
@@ -114,7 +106,7 @@ class InteractionGroupTraj:
         @jit
         def U_snapshot(x_ligand, x_env, env_idxs, box_diag):
             env_params = nb_params[env_idxs]
-            return jnp.sum(self.all_pairs_fxn(x_ligand, x_env, lig_params, env_params, box_diag))
+            return jnp.sum(self.all_pairs_fxn(x_ligand, x_env, lig_params, env_params, jnp.diag(box_diag)))
 
         Us = vmap(U_snapshot, (0, 0, 0, 0))(self.xs_lig, self.xs_env, self.selected_env_idxs, self.box_diags)
         assert Us.shape == (self.n_frames,)
