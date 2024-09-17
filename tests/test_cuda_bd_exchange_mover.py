@@ -21,7 +21,7 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove as RefBDExchangeMove
 from timemachine.md.exchange.exchange_mover import get_water_idxs, translate_coordinates
 from timemachine.md.minimizer import check_force_norm
-from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup
 from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -932,15 +932,11 @@ def test_bd_moves_with_complex_and_ligand(
     box = initial_state.box0
 
     bps = initial_state.potentials
-    ligand_env_pot = get_bound_potential_by_type(bps, SummedPotential).potential
+    ligand_env_pot = get_bound_potential_by_type(bps, NonbondedInteractionGroup)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
-    ixn_group_idx = next(
-        i for i, pot in enumerate(ligand_env_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
-    )
-
-    water_params = ligand_env_pot.params_init[ixn_group_idx]
+    water_params = ligand_env_pot.params
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])

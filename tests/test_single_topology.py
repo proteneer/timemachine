@@ -791,7 +791,7 @@ def test_combine_with_host():
         potentials.PeriodicTorsion,
         potentials.NonbondedPairListPrecomputed,
         potentials.Nonbonded,
-        potentials.SummedPotential,  # P-L + L-W interactions
+        potentials.NonbondedInteractionGroup,  # P-L + L-W interactions
         potentials.ChiralAtomRestraint,
         # potentials.ChiralBondRestraint,
         # NOTE: chiral bond restraints excluded

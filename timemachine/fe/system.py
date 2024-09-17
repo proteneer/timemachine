@@ -16,6 +16,7 @@ from timemachine.potentials import (
     HarmonicAngleStable,
     HarmonicBond,
     Nonbonded,
+    NonbondedInteractionGroup,
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
     Potential,
@@ -167,7 +168,7 @@ class HostGuestSystem:
     chiral_bond: BoundPotential[ChiralBondRestraint]
     nonbonded_guest_pairs: BoundPotential[NonbondedPairListPrecomputed]
     nonbonded_host: BoundPotential[Nonbonded]
-    nonbonded_host_guest_ixn: BoundPotential[SummedPotential]
+    nonbonded_host_guest_ixn: BoundPotential[NonbondedInteractionGroup]
 
     def get_U_fns(self):
         return [

@@ -501,8 +501,8 @@ def test_targeted_insertion_brd4_rbfe_with_context(
     box = initial_state.box0
 
     bps = initial_state.potentials
-    summed_pot = get_bound_potential_by_type(initial_state.potentials, SummedPotential)
-    water_params = summed_pot.potential.params_init[0]
+    nb_ixn_pot = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup)
+    water_params = nb_ixn_pot.params
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -993,15 +993,11 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
 
     bps = initial_state.potentials
 
-    ligand_env_pot = get_bound_potential_by_type(bps, SummedPotential).potential
+    ligand_env_pot = get_bound_potential_by_type(bps, NonbondedInteractionGroup)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
-    ixn_group_idx = next(
-        i for i, pot in enumerate(ligand_env_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
-    )
-
-    water_params = ligand_env_pot.params_init[ixn_group_idx]
+    water_params = ligand_env_pot.params
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
