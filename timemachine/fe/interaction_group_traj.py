@@ -48,7 +48,7 @@ def env_mask_within_cutoff(x_env, x_lig, box, cutoff):
         return jnp.where(d2_ij <= cutoff**2, d2_ij, jnp.inf)
 
     def within_cutoff(point):
-        return jnp.any(d2_others(point, x_lig, box) < cutoff**2)
+        return jnp.any(d2_others(point, x_lig) < cutoff**2)
 
     return vmap(within_cutoff)(x_env)
 

@@ -25,8 +25,8 @@ def test_ig_traj():
 
     nb_params = np.random.rand(n_env + n_lig, 4)
     nb_params[:, 0] = 5 * np.random.randn(n_env + n_lig)  # q
-    nb_params[:, 1] += 1  # eps
-    nb_params[:, 2] = (5 * nb_params[:, 1]) + 1  # sig
+    nb_params[:, 1] += 1  # sig
+    nb_params[:, 2] = (5 * nb_params[:, 1]) + 1  # eps
     nb_params[:, 3] *= 1.2  # w_offset between 0 and cutoff
 
     U_0 = traj.compute_Us(nb_params)
