@@ -34,7 +34,7 @@ from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get
 from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, HarmonicBond, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials import BoundPotential, HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
 from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.utils import batches, pairwise_transform_and_combine
 
@@ -499,6 +499,17 @@ def get_water_sampler_params(initial_state: InitialState) -> NDArray:
     """
     nb_ixn_pot = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup)
     water_params = nb_ixn_pot.params
+
+    # If the protein is present, use the original protein parameters for the water sampler
+    if len(initial_state.protein_idxs):
+        prot_params = get_bound_potential_by_type(initial_state.potentials, Nonbonded).params[
+            initial_state.protein_idxs
+        ]
+        if isinstance(water_params, jax.Array):
+            water_params = water_params.at[initial_state.protein_idxs].set(prot_params)
+        else:
+            water_params[initial_state.protein_idxs] = prot_params
+
     assert water_params.shape[1] == 4
     water_params = np.asarray(water_params)
     return water_params

@@ -12,7 +12,14 @@ from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState, MDParams, sample
+from timemachine.fe.free_energy import (
+    AbsoluteFreeEnergy,
+    HostConfig,
+    InitialState,
+    MDParams,
+    get_water_sampler_params,
+    sample,
+)
 from timemachine.fe.model_utils import image_frame
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.topology import BaseTopology
@@ -501,8 +508,7 @@ def test_targeted_insertion_brd4_rbfe_with_context(
     box = initial_state.box0
 
     bps = initial_state.potentials
-    nb_ixn_pot = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup)
-    water_params = nb_ixn_pot.params
+    water_params = get_water_sampler_params(initial_state)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -993,11 +999,10 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
 
     bps = initial_state.potentials
 
-    ligand_env_pot = get_bound_potential_by_type(bps, NonbondedInteractionGroup)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
-    water_params = ligand_env_pot.params
+    water_params = get_water_sampler_params(initial_state)
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -1072,9 +1077,35 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
     assert False, f"No moves were made after {iterations}"
 
 
+def update_initial_state(initial_state):
+    # Here for review, will remove before merging
+    updated_potentials = []
+    for pot in initial_state.potentials:
+        if isinstance(pot.potential, SummedPotential):
+            lw_pot, lp_pot = pot.potential.potentials
+            lw_params, lp_params = pot.potential.params_init
+            lw_col_idxs, lp_col_idxs = lw_pot.col_atom_idxs, lp_pot.col_atom_idxs
+            col_idxs = np.array(list(sorted(list(lw_col_idxs) + list(lp_col_idxs))), dtype=np.int32)
+
+            ubp = NonbondedInteractionGroup(
+                lw_pot.num_atoms,
+                lw_pot.row_atom_idxs,
+                lw_pot.beta,
+                lw_pot.cutoff,
+                col_idxs,
+                lw_pot.disable_hilbert_sort,
+                lw_pot.nblist_padding,
+            )
+            pot = ubp.bind(lw_params)  # same params for both
+        updated_potentials.append(pot)
+    initial_state = replace(initial_state, potentials=updated_potentials)
+    return initial_state
+
+
 @pytest.mark.memcheck
 def test_targeted_insertion_invalid_sample_bug():
     with open(Path(__file__).parent / "data" / "water_sampling_bug.pkl", "rb") as ifs:
         state, md_params = pickle.load(ifs)
+
     md_params = replace(md_params, n_eq_steps=2_000, steps_per_frame=10)
     sample(state, md_params, 100)
