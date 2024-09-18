@@ -541,8 +541,9 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
         water_params = get_water_sampler_params(initial_state)
 
-        # Generate a new random seed based on the md params seed
-        rng = np.random.default_rng(md_params.seed)
+        # Generate a new random seed based on the integrator seed
+        # Don't use md_params seed as that would be the same for all states
+        rng = np.random.default_rng(initial_state.integrator.seed)
         water_sampler_seed = rng.integers(np.iinfo(np.int32).max)
 
         water_sampler = custom_ops.TIBDExchangeMove_f32(
@@ -1125,7 +1126,7 @@ def run_sims_hrex(
     md_params: MDParams,
     n_swap_attempts_per_iter: Optional[int] = None,
     print_diagnostics_interval: Optional[int] = 10,
-    n_threads: Optional[int] = 4,
+    n_threads: Optional[int] = 6,
 ) -> Tuple[PairBarResult, List[Trajectory], HREXDiagnostics]:
     r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
 
@@ -1222,6 +1223,9 @@ def run_sims_hrex(
         return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
 
     params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
+    water_params_by_state: Optional[NDArray] = None
+    if md_params.water_sampling_params is not None:
+        water_params_by_state = np.array([get_water_sampler_params(initial_state) for initial_state in initial_states])
 
     state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
     neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
@@ -1233,26 +1237,35 @@ def run_sims_hrex(
     equil_barostat_interval = 15
 
     def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
-        context = state_ctxts[state_idx]
-        state_barostat = initial_states[state_idx].barostat
-        if state_barostat is not None:
-            # Setup the barostat to run more often for equilibration
-            barostat = context.get_barostat()
-            assert barostat is not None
-            barostat.set_interval(equil_barostat_interval)
         if md_params.n_eq_steps > 0:
+            ctxt = state_ctxts[state_idx]
+            ctxt.set_x_t(xvb.coords)
+            ctxt.set_v_t(xvb.velocities)
+            ctxt.set_box(xvb.box)
+            ctxt.get_potentials()[0].set_params(params_by_state[state_idx])
+            for mover in ctxt.get_movers():
+                if isinstance(mover, WATER_SAMPLER_MOVERS):
+                    assert water_params_by_state is not None
+                    mover.set_params(water_params_by_state[state_idx])
+                mover.set_step(0)
+            state_barostat = initial_states[state_idx].barostat
+            if state_barostat is not None:
+                # Setup the barostat to run more often for equilibration
+                barostat = ctxt.get_barostat()
+                assert barostat is not None
+                barostat.set_interval(equil_barostat_interval)
             # Context will already be set up with the correct coords, vel, box no need to update
-            xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
+            xs, boxes = ctxt.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
             assert len(xs) == 1
             x0 = xs[0]
-            v0 = context.get_v_t()
+            v0 = ctxt.get_v_t()
             box0 = boxes[0]
             xvb = CoordsVelBox(x0, v0, box0)
-        # Reset the barostat interval
-        if state_barostat is not None:
-            barostat = context.get_barostat()
-            assert barostat is not None
-            barostat.set_interval(state_barostat.interval)
+            # Reset the barostat interval
+            if state_barostat is not None:
+                barostat = ctxt.get_barostat()
+                assert barostat is not None
+                barostat.set_interval(state_barostat.interval)
         return xvb
 
     initial_replicas = pool.starmap(
@@ -1261,8 +1274,7 @@ def run_sims_hrex(
     )
 
     # Set up energy potential using the first state's context
-    context = state_ctxts[0]
-    bound_potentials = context.get_potentials()
+    bound_potentials = state_ctxts[0].get_potentials()
     assert len(bound_potentials) == 1
     potential = bound_potentials[0].get_potential()
 
@@ -1284,28 +1296,33 @@ def run_sims_hrex(
     for current_frame in range(md_params.n_frames):
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
-            context = state_ctxts[state_idx]
-            context.set_x_t(xvb.coords)
-            context.set_v_t(xvb.velocities)
-            context.set_box(xvb.box)
+            ctxt = state_ctxts[state_idx]
+            ctxt.set_x_t(xvb.coords)
+            ctxt.set_v_t(xvb.velocities)
+            ctxt.set_box(xvb.box)
+            ctxt.get_potentials()[0].set_params(params_by_state[state_idx])
+            current_step = current_frame * md_params.steps_per_frame
+            for mover in ctxt.get_movers():
+                if isinstance(mover, WATER_SAMPLER_MOVERS):
+                    assert water_params_by_state is not None
+                    mover.set_params(water_params_by_state[state_idx])
+                mover.set_step(current_step)
 
             md_params_replica = replace(md_params, n_frames=1, n_eq_steps=0, seed=state_idx + current_frame)
 
             assert md_params_replica.n_frames == 1
             # Get the next set of frames from the iterator, which will be the only value returned
             frame, box, final_velos = next(
-                sample_with_context_iter(context, md_params_replica, temperature, ligand_idxs, batch_size=1)
+                sample_with_context_iter(ctxt, md_params_replica, temperature, ligand_idxs, batch_size=1)
             )
             assert frame.shape[0] == 1
 
-            barostat = context.get_barostat()
+            barostat = ctxt.get_barostat()
             final_barostat_volume_scale_factor = barostat.get_volume_scale_factor() if barostat is not None else None
 
             return frame[-1], box[-1], final_velos, final_barostat_volume_scale_factor
 
-        state_idx_to_replica = {state_idx: i for i, (state_idx, _) in enumerate(hrex.state_replica_pairs)}
-
-        replica_results = pool.starmap(
+        replica_samples_by_state = pool.starmap(
             sample_replica,
             [(replica, state_idx) for state_idx, replica in hrex.state_replica_pairs],
         )
@@ -1313,8 +1330,7 @@ def run_sims_hrex(
         def get_replica_samples(
             xvb: CoordsVelBox, state_idx: StateIdx
         ) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
-            replica_idx = state_idx_to_replica[state_idx]
-            return replica_results[replica_idx]
+            return replica_samples_by_state[state_idx]
 
         def replica_from_samples(last_sample: Tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
             frame, box, velos, _ = last_sample
