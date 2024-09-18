@@ -507,7 +507,7 @@ def get_water_sampler_params(initial_state: InitialState) -> NDArray:
         ]
         if isinstance(water_params, jax.Array):
             water_params = water_params.at[initial_state.protein_idxs].set(prot_params)
-        else:
+        else:  # NDArray
             water_params[initial_state.protein_idxs] = prot_params
 
     assert water_params.shape[1] == 4
