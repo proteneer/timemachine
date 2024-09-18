@@ -32,9 +32,9 @@ from timemachine.potentials import (
     HarmonicAngleStable,
     HarmonicBond,
     Nonbonded,
+    NonbondedInteractionGroup,
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
-    SummedPotential,
 )
 from timemachine.utils import fair_product_2
 
@@ -1863,7 +1863,7 @@ class SingleTopology(AtomMapMixin):
 
     def _parameterize_host_guest_nonbonded_ixn(
         self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
-    ) -> BoundPotential[SummedPotential]:
+    ) -> BoundPotential[NonbondedInteractionGroup]:
         """Parameterize nonbonded interactions between the host and guest"""
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
@@ -1886,7 +1886,7 @@ class SingleTopology(AtomMapMixin):
         def get_env_idxs():
             return np.array(list(get_other_idxs()) + list(get_water_idxs()), dtype=np.int32)
 
-        ixn_pots, ixn_params = get_ligand_ixn_pots_params(
+        ixn_pot, ixn_params = get_ligand_ixn_pots_params(
             get_lig_idxs(),
             get_env_idxs(),
             host_nonbonded.params,
@@ -1895,10 +1895,8 @@ class SingleTopology(AtomMapMixin):
             cutoff=cutoff,
         )
 
-        sum_pot = SummedPotential(ixn_pots, ixn_params)
-        bound_sum_pot = sum_pot.bind(jnp.concatenate(ixn_params).reshape((-1,)))
-
-        return bound_sum_pot
+        bound_ixn_pot = ixn_pot.bind(ixn_params)
+        return bound_ixn_pot
 
     def combine_with_host(self, host_system: VacuumSystem, lamb: float, num_water_atoms: int) -> HostGuestSystem:
         """

@@ -12,7 +12,14 @@ from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState, MDParams, sample
+from timemachine.fe.free_energy import (
+    AbsoluteFreeEnergy,
+    HostConfig,
+    InitialState,
+    MDParams,
+    get_water_sampler_params,
+    sample,
+)
 from timemachine.fe.model_utils import image_frame
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.topology import BaseTopology
@@ -30,7 +37,7 @@ from timemachine.md.exchange.exchange_mover import (
     get_water_idxs,
 )
 from timemachine.md.minimizer import check_force_norm
-from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 from timemachine.potentials.potential import get_bound_potential_by_type
 
 
@@ -501,8 +508,7 @@ def test_targeted_insertion_brd4_rbfe_with_context(
     box = initial_state.box0
 
     bps = initial_state.potentials
-    summed_pot = get_bound_potential_by_type(initial_state.potentials, SummedPotential)
-    water_params = summed_pot.potential.params_init[0]
+    water_params = get_water_sampler_params(initial_state)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -993,15 +999,10 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
 
     bps = initial_state.potentials
 
-    ligand_env_pot = get_bound_potential_by_type(bps, SummedPotential).potential
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
-    ixn_group_idx = next(
-        i for i, pot in enumerate(ligand_env_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
-    )
-
-    water_params = ligand_env_pot.params_init[ixn_group_idx]
+    water_params = get_water_sampler_params(initial_state)
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -1080,5 +1081,6 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
 def test_targeted_insertion_invalid_sample_bug():
     with open(Path(__file__).parent / "data" / "water_sampling_bug.pkl", "rb") as ifs:
         state, md_params = pickle.load(ifs)
+
     md_params = replace(md_params, n_eq_steps=2_000, steps_per_frame=10)
     sample(state, md_params, 100)

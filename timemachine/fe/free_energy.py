@@ -34,8 +34,8 @@ from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get
 from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, HarmonicBond, NonbondedInteractionGroup, SummedPotential
-from timemachine.potentials.potential import get_bound_potential_by_type, get_potential_by_type
+from timemachine.potentials import BoundPotential, HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.utils import batches, pairwise_transform_and_combine
 
 WATER_SAMPLER_MOVERS = (
@@ -494,20 +494,20 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
 
 def get_water_sampler_params(initial_state: InitialState) -> NDArray:
-    """Given an initial state, return the parameters that define the nonbonded parameters of water with respect to the
+    """Given an initial state, return a copy of the parameters that define the nonbonded parameters of water with respect to the
     entire system.
-
-    Since we split the different components of the NB into ligand-water, ligand-protein, we want to use the ligand-water parameter
-    to ensure that the ligand component is correctly configured for the specific lambda window.
     """
-    summed_pot = get_bound_potential_by_type(initial_state.potentials, SummedPotential).potential
-    # TBD Figure out a better way of handling the jankyness of having to select the IxnGroup that defines the Ligand-Water
-    # Currently this just hardcodes to the first ixn group potential which is the ligand-water ixn group as returned by HostTopology.parameterize_nonbonded
-    ixn_group_idx = next(i for i, pot in enumerate(summed_pot.potentials) if isinstance(pot, NonbondedInteractionGroup))
-    assert isinstance(summed_pot.potentials[ixn_group_idx], NonbondedInteractionGroup)
-    water_params = summed_pot.params_init[ixn_group_idx]
+    nb_ixn_pot = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup)
+    water_params = np.array(nb_ixn_pot.params)
+
+    # If the protein is present, use the original protein parameters for the water sampler
+    if len(initial_state.protein_idxs):
+        prot_params = get_bound_potential_by_type(initial_state.potentials, Nonbonded).params[
+            initial_state.protein_idxs
+        ]
+        water_params[initial_state.protein_idxs] = prot_params
+
     assert water_params.shape[1] == 4
-    water_params = np.asarray(water_params)
     return water_params
 
 
@@ -533,9 +533,8 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
         water_idxs = get_water_idxs(group_indices, ligand_idxs=initial_state.ligand_idxs)
 
-        summed_pot = get_bound_potential_by_type(initial_state.potentials, SummedPotential).potential
         # Select a Nonbonded Potential to get the the cutoff/beta, assumes all have same cutoff/beta.
-        nb = get_potential_by_type(summed_pot.potentials, NonbondedInteractionGroup)
+        nb = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup).potential
 
         water_params = get_water_sampler_params(initial_state)
 

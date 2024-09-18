@@ -46,6 +46,7 @@ from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import (
     HarmonicBond,
     Nonbonded,
+    NonbondedInteractionGroup,
     NonbondedPairListPrecomputed,
     SummedPotential,
     make_summed_potential,
@@ -371,6 +372,7 @@ def test_get_water_sampler_params(num_windows):
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
         3.0, forcefield.water_ff, mols=[mol_a, mol_b]
     )
+
     num_host_atoms = solvent_conf.shape[0]
     host_system, masses = convert_omm_system(solvent_sys)
     solvent_host = Host(host_system, masses, solvent_conf, solvent_box, num_host_atoms)
@@ -389,6 +391,47 @@ def test_get_water_sampler_params(num_windows):
             assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == 0.0)
 
         np.testing.assert_array_equal(water_sampler_nb_params[num_host_atoms:], ligand_water_params)
+
+
+@pytest.mark.nocuda
+def test_get_water_sampler_params_complex():
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    # Use the simple charges simply because it is faster
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+        host_sys, host_conf, box, _, num_water_atoms = builders.build_protein_system(
+            str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
+        )
+        box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    host_config = HostConfig(host_sys, host_conf, box, num_water_atoms)
+    system, masses = convert_omm_system(host_config.omm_system)
+    host = Host(system, masses, host_conf, box, host_config.num_water_atoms)
+
+    lamb = 0.5  # arbitrary
+
+    # original params
+    state = setup_initial_state(st, lamb, host, DEFAULT_TEMP, 2024)
+
+    water_sampler_nb_params = get_water_sampler_params(state)
+
+    nb_bp = get_bound_potential_by_type(state.potentials, NonbondedInteractionGroup)
+    orig_prot_nb_params = nb_bp.params[state.protein_idxs][:]
+
+    np.testing.assert_array_equal(orig_prot_nb_params, water_sampler_nb_params[state.protein_idxs])
+
+    # updated ixn params, should still give the same params for the water sampler
+    nb_bp.params = nb_bp.params.at[state.protein_idxs, 0].set(1.0)
+    water_sampler_nb_params_update = get_water_sampler_params(state)
+    np.testing.assert_array_equal(orig_prot_nb_params, water_sampler_nb_params_update[state.protein_idxs])
+    np.testing.assert_array_equal(water_sampler_nb_params, water_sampler_nb_params_update)
+
+    # should also work for numpy arrays
+    nb_bp.params = np.array(nb_bp.params)
+    water_sampler_nb_params_update = get_water_sampler_params(state)
+    np.testing.assert_array_equal(orig_prot_nb_params, water_sampler_nb_params_update[state.protein_idxs])
+    np.testing.assert_array_equal(water_sampler_nb_params, water_sampler_nb_params_update)
 
 
 def test_run_sims_bisection_early_stopping(hif2a_ligand_pair_single_topology_lam0_state):
