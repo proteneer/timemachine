@@ -419,9 +419,9 @@ def setup_hif2a_initial_state(host_name: str):
     return st, host, host_name, initial_state
 
 
-def compute_mean_tile_density(
+def compute_tile_densities(
     nblist, frame: NDArray, box: NDArray, cutoff: float, column_block: int = 32, row_block: int = 32
-) -> float:
+) -> NDArray:
     assert column_block == 32
     assert column_block == row_block
     N = frame.shape[0]
@@ -454,7 +454,13 @@ def compute_mean_tile_density(
             ixns = np.sum(dij < cutoff)
             tile_densities.append(ixns / ixns_per_tile)
         row_block_offset += row_block
-    return float(np.mean([tile_densities]))
+    return np.array(tile_densities)
+
+
+def compute_mean_tile_density(
+    nblist, frame: NDArray, box: NDArray, cutoff: float, column_block: int = 32, row_block: int = 32
+) -> float:
+    return np.mean(compute_tile_densities(nblist, frame, box, cutoff, column_block, row_block))
 
 
 @pytest.mark.memcheck
@@ -474,6 +480,13 @@ def test_nblist_density_dhfr(cutoff, precision):
     density = compute_mean_tile_density(nblist, coords, box, cutoff)
     print(f"DHFR NBList Occupancy with Cutoff {cutoff}: {density * 100.0:.3g}%")
     assert density > 0.10
+
+
+def ecdf(x: NDArray) -> Tuple[NDArray, NDArray]:
+    """empirical cdf, from https://stackoverflow.com/a/37660583"""
+    xs = np.sort(x)
+    ys = np.arange(1, len(xs) + 1) / float(len(xs))
+    return xs, ys
 
 
 @pytest.mark.parametrize("frames", [20])
@@ -504,7 +517,34 @@ def test_nblist_density(hif2a_single_topology_leg, frames, precision):
     # After equilibration the tile densities are about 20% for both solvent and complex
     assert densities[-1] >= 0.2
 
-    # import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt
+
+    densities = compute_tile_densities(nblist, frame[perm], box, cutoff)
+    plt.figure(figsize=(8, 4))
+    plt.subplot(1, 2, 1)
+    plt.hist(densities, bins=50)
+    plt.xlabel("tile density (mean(dij<cutoff))")
+    plt.ylabel("frequency")
+    num_tiles = len(densities)
+    num_empty_tiles = np.sum(densities == 0)
+    num_full_tiles = np.sum(densities == 1)
+    num_tiles_less_than_10pc = np.sum(densities < 0.1)
+    # TODO: maybe also read out on the number of empty timesteps
+    title = f"distribution of tile densities (# tiles = {num_tiles})\n(# empty tiles = {num_empty_tiles}, # tiles <10% full = {num_tiles_less_than_10pc}, # full tiles = {num_full_tiles})"
+    print(title)
+
+    plt.subplot(1, 2, 2)
+    _xs, _ys = ecdf(densities)
+    plt.plot(_xs, _ys, ".-")
+    plt.xlabel("tile_density")
+    plt.ylabel("ecdf(tile_density)")
+
+    plt.suptitle(title)
+    plt.tight_layout()
+    import time
+
+    plt.savefig(f"{host_name}_nblist_tile_densities_{precision.__name__}_{time.time()}.png", dpi=150)
+    plt.close()
 
     # steps = [i * md_params.steps_per_frame for i in range(len(densities))]
     # plt.plot(steps, np.array(densities) * 100.0)
