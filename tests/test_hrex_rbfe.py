@@ -12,12 +12,14 @@ import pytest
 from psutil import Process
 from scipy import stats
 
+from timemachine.constants import BOLTZ
 from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
     HREXSimulationResult,
     MDParams,
     WaterSamplingParams,
+    compute_potential_matrix,
     sample_with_context,
 )
 from timemachine.fe.plots import (
@@ -28,6 +30,9 @@ from timemachine.fe.plots import (
 from timemachine.fe.rbfe import estimate_relative_free_energy_bisection_hrex
 from timemachine.ff import Forcefield
 from timemachine.md import builders
+from timemachine.md.hrex import HREX
+from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import make_summed_potential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 DEBUG = False
@@ -133,6 +138,46 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
             n_windows=n_windows,
             min_cutoff=0.7 if host_name == "complex" else None,
         )
+
+    def get_flattened_params(initial_state):
+        return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
+
+    initial_states = result.final_result.initial_states
+    summed_pot = make_summed_potential(initial_states[0].potentials)
+    potential = summed_pot.to_gpu(np.float32).bound_impl.get_potential()
+    params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
+    hrex_diagnostics = result.hrex_diagnostics
+    for i in range(md_params.n_frames - 1):
+        xvbs = []
+        replica_idx_by_state = hrex_diagnostics.replica_idx_by_state_by_iter[i]
+        for state in replica_idx_by_state:
+            xvbs.append(
+                CoordsVelBox(
+                    coords=result.trajectories[state].frames[i],
+                    velocities=None,
+                    box=result.trajectories[state].boxes[i],
+                )
+            )
+        frame_hrex = HREX(xvbs, replica_idx_by_state)
+        U_kl = compute_potential_matrix(potential, frame_hrex, params_by_state, md_params.hrex_params.max_delta_states)
+        log_q_kl = -U_kl / (BOLTZ * initial_states[0].integrator.temperature)
+
+        next_replica_idx_by_state = hrex_diagnostics.replica_idx_by_state_by_iter[i + 1]
+        for state, replica in enumerate(replica_idx_by_state):
+            next_state = next_replica_idx_by_state.index(replica)
+            next_replica = next_replica_idx_by_state[state]
+
+            log_q_before = log_q_kl[replica, state] + log_q_kl[next_replica, next_state]
+            log_q_after = log_q_kl[replica, next_state] + log_q_kl[next_replica, state]
+            log_q_diff = log_q_after - log_q_before
+
+            log_acceptance_probability = np.minimum(log_q_diff, 0.0)
+            acceptance_probability = np.exp(log_acceptance_probability)
+
+            if state == next_state:
+                assert acceptance_probability == 1.0
+            else:
+                assert np.isfinite(acceptance_probability) and acceptance_probability > 0.0
 
     # Check that memory usage is not increasing
     rss_traj = rss_traj[10:]  # discard initial transients
