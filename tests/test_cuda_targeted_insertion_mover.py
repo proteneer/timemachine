@@ -37,7 +37,7 @@ from timemachine.md.exchange.exchange_mover import (
     get_water_idxs,
 )
 from timemachine.md.minimizer import check_force_norm
-from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
 from timemachine.potentials.potential import get_bound_potential_by_type
 
 
@@ -1075,31 +1075,6 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
             # If an unexpect error was raised, re-raise the error
             raise
     assert False, f"No moves were made after {iterations}"
-
-
-def update_initial_state(initial_state):
-    # Here for review, will remove before merging
-    updated_potentials = []
-    for pot in initial_state.potentials:
-        if isinstance(pot.potential, SummedPotential):
-            lw_pot, lp_pot = pot.potential.potentials
-            lw_params, lp_params = pot.potential.params_init
-            lw_col_idxs, lp_col_idxs = lw_pot.col_atom_idxs, lp_pot.col_atom_idxs
-            col_idxs = np.array(list(sorted(list(lw_col_idxs) + list(lp_col_idxs))), dtype=np.int32)
-
-            ubp = NonbondedInteractionGroup(
-                lw_pot.num_atoms,
-                lw_pot.row_atom_idxs,
-                lw_pot.beta,
-                lw_pot.cutoff,
-                col_idxs,
-                lw_pot.disable_hilbert_sort,
-                lw_pot.nblist_padding,
-            )
-            pot = ubp.bind(lw_params)  # same params for both
-        updated_potentials.append(pot)
-    initial_state = replace(initial_state, potentials=updated_potentials)
-    return initial_state
 
 
 @pytest.mark.memcheck

@@ -494,24 +494,20 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
 
 def get_water_sampler_params(initial_state: InitialState) -> NDArray:
-    """Given an initial state, return the parameters that define the nonbonded parameters of water with respect to the
+    """Given an initial state, return a copy of the parameters that define the nonbonded parameters of water with respect to the
     entire system.
     """
     nb_ixn_pot = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup)
-    water_params = nb_ixn_pot.params
+    water_params = np.array(nb_ixn_pot.params)
 
     # If the protein is present, use the original protein parameters for the water sampler
     if len(initial_state.protein_idxs):
         prot_params = get_bound_potential_by_type(initial_state.potentials, Nonbonded).params[
             initial_state.protein_idxs
         ]
-        if isinstance(water_params, jax.Array):
-            water_params = water_params.at[initial_state.protein_idxs].set(prot_params)
-        else:  # NDArray
-            water_params[initial_state.protein_idxs] = prot_params
+        water_params[initial_state.protein_idxs] = prot_params
 
     assert water_params.shape[1] == 4
-    water_params = np.asarray(water_params)
     return water_params
 
 
