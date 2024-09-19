@@ -1218,7 +1218,7 @@ def run_sims_hrex(
     # Don't use more threads than there are states
     n_threads = min(len(initial_states), n_threads)
 
-    pool = ThreadPool(n_threads)
+    # pool = ThreadPool(n_threads)
 
     temperature = initial_states[0].integrator.temperature
     ligand_idxs = initial_states[0].ligand_idxs
@@ -1290,21 +1290,21 @@ def run_sims_hrex(
 
             return frame[-1], box[-1], final_velos, final_barostat_volume_scale_factor
 
-        replica_samples_by_state = pool.starmap(
-            sample_replica,
-            [(replica, state_idx) for state_idx, replica in hrex.state_replica_pairs],
-        )
+        # replica_samples_by_state = [
+        #     sample_replica(replica, state_idx) for state_idx, replica in hrex.state_replica_pairs
+        # ]
+        # print([(i, state_idx) for i, (state_idx, _) in enumerate(hrex.state_replica_pairs)])
 
-        def get_replica_samples(
-            xvb: CoordsVelBox, state_idx: StateIdx
-        ) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
-            return replica_samples_by_state[state_idx]
+        # def get_replica_samples(
+        #     xvb: CoordsVelBox, state_idx: StateIdx
+        # ) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
+        #     return replica_samples_by_state[state_idx]
 
         def replica_from_samples(last_sample: Tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
             frame, box, velos, _ = last_sample
             return CoordsVelBox(frame, velos, box)
 
-        hrex, samples_by_state_iter = hrex.sample_replicas(get_replica_samples, replica_from_samples)
+        hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
         U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
         log_q_kl = -U_kl / (BOLTZ * temperature)
 
