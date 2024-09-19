@@ -334,12 +334,12 @@ def produce_target_number_of_equidistant_states(distance_fxn, target_num_states=
     except RuntimeError as e:
         print(f"bisection failed: {e}")
 
-    # scan the trial vals tested by bisection, to find the largest target_distance that produces <= target_num_states
-    largest_valid_dist_so_far = min_target_distance
+    # scan the trial vals tested by bisection, to find a target_distance that produces <= target_num_states
+    lowest_so_far = initial_target_distance
     for dist in protocols_by_target_dist.keys():
-        if (dist >= largest_valid_dist_so_far) and (len(protocols_by_target_dist[dist]) <= target_num_states):
-            largest_valid_dist_so_far = dist
-    best_target_dist = largest_valid_dist_so_far
+        if len(protocols_by_target_dist[dist] == target_num_states) and dist < lowest_so_far:
+            lowest_so_far = dist
+    best_target_dist = lowest_so_far
 
     prot = protocols_by_target_dist[best_target_dist]
     return prot
