@@ -54,7 +54,7 @@ def env_mask_within_cutoff(x_env, x_lig, box, cutoff):
 
 
 class InteractionGroupTraj:
-    def __init__(self, pair_fxn: PairFxn, xs: Array, box_diags: Array, ligand_idxs: Array, env_idxs: Array, cutoff=1.2):
+    def __init__(self, xs: Array, box_diags: Array, ligand_idxs: Array, env_idxs: Array, cutoff=1.2, verbose=True):
         r"""support [U_ig(x; params) for x in traj]
 
         where U_ig = \sum_i \sum_j pair_fxn(||x_j - x_j||; params_i, params_j)
@@ -63,13 +63,12 @@ class InteractionGroupTraj:
 
         Parameters
         ----------
-        pair_fxn : pair_fxn(x_i, x_j, param_i, param_j, box) -> energy
-            scalar-valued jax-transformable function of a pair of particles and their parameters
         xs : array of particle coordinates [T, N, 3]
         box_diags : positive float array of box diagonals [T, 3]
         ligand_idxs: int array (subset of arange(N))
         env_idxs : int array (subset of arange(N))
         cutoff : float
+        verbose: bool
 
         Notes
         -----
@@ -78,15 +77,9 @@ class InteractionGroupTraj:
         * Assumes pair_fxn(r) == 0 when r >= cutoff, but does not confirm or enforce this
         """
         self.n_frames = len(xs)
-        self.pair_fxn = pair_fxn
         self.ligand_idxs = ligand_idxs
         self.all_env_idxs = env_idxs
         num_lig, num_env = len(ligand_idxs), len(env_idxs)
-
-        # apply pair_fxn(x_i, x_j, param_i, param_j, box)
-        axes_a = (0, None, 0, None, None)
-        axes_b = (None, 0, None, 0, None)
-        self.all_pairs_fxn = vmap(vmap(pair_fxn, axes_a), axes_b)
 
         # TODO[symmetry]:
         #   maybe generalize so we select a subset of ligand atoms too...
@@ -94,7 +87,8 @@ class InteractionGroupTraj:
         self.xs_lig = xs[:, ligand_idxs]
         _xs_env = xs[:, env_idxs]  # will select subsets...
 
-        print(f"precomputing neighborlist on ({num_lig}, {num_env}) interaction group, at cutoff={cutoff}")
+        if verbose:
+            print(f"precomputing neighborlist on ({num_lig}, {num_env}) interaction group, at cutoff={cutoff}")
 
         # note: vmap here can consume excessive memory if len(env_idxs) * len(xs) is large -> python loop
         # mask = vmap(env_mask_within_cutoff, (0,0,0,None))(_xs_env, self.xs_lig, boxes, cutoff)
@@ -104,10 +98,14 @@ class InteractionGroupTraj:
         mask = np.array([f(_xs_env[i], self.xs_lig[i], np.diag(box_diags[i])) for i in range(self.n_frames)])
 
         padded_num_env_atoms = mask.sum(1).max()
-        num_stored = padded_num_env_atoms + len(ligand_idxs)
-        print(f"\tsaving {(xs.shape[1] / num_stored):.2f}x on storage\n\t(relative to storing all env atoms)")
-        max_nbrs, mean_nbrs = padded_num_env_atoms, mask.sum(1).mean()
-        print(f"\tpadding to max_nbrs = {max_nbrs}\n\t(~{max_nbrs/mean_nbrs:.2f}x larger than unpadded neighbor list)")
+
+        if verbose:
+            num_stored = padded_num_env_atoms + len(ligand_idxs)
+            print(f"\tsaving {(xs.shape[1] / num_stored):.2f}x on storage\n\t(relative to storing all env atoms)")
+            max_nbrs, mean_nbrs = padded_num_env_atoms, mask.sum(1).mean()
+            print(
+                f"\tpadding to max_nbrs = {max_nbrs}\n\t(~{max_nbrs/mean_nbrs:.2f}x larger than unpadded neighbor list)"
+            )
 
         idxs_within_env_block = np.argsort(mask, axis=1)[:, -padded_num_env_atoms:]
         self.selected_env_idxs = jnp.array(self.all_env_idxs[idxs_within_env_block], dtype=jnp.uint32)
@@ -115,25 +113,45 @@ class InteractionGroupTraj:
         self.xs_env = np.array([_x_env[idxs] for (_x_env, idxs) in zip(_xs_env, idxs_within_env_block)])
         self.box_diags = box_diags
 
-    def compute_Us(self, nb_params):
+    def make_U_fxn(self, pair_fxn: PairFxn):
         """
 
         Parameters
         ----------
-        nb_params : array of shape [N, P]
+        pair_fxn : pair_fxn(x_i, x_j, param_i, param_j, box) -> energy
+            scalar-valued jax-transformable function of a pair of particles and their parameters
 
         Returns
         -------
-        Us : [U_ig(x; nb_params) for x in traj]
+        vector-valued function of nb params
         """
-        nb_params = jnp.array(nb_params)
-        lig_params = nb_params[self.ligand_idxs]
 
-        @jit
-        def U_snapshot(x_ligand, x_env, env_idxs, box_diag):
-            env_params = nb_params[env_idxs]
-            return jnp.sum(self.all_pairs_fxn(x_ligand, x_env, lig_params, env_params, jnp.diag(box_diag)))
+        # apply pair_fxn(x_i, x_j, param_i, param_j, box)
+        axes_a = (0, None, 0, None, None)
+        axes_b = (None, 0, None, 0, None)
+        all_pairs_fxn = vmap(vmap(pair_fxn, axes_a), axes_b)
 
-        Us = vmap(U_snapshot, (0, 0, 0, 0))(self.xs_lig, self.xs_env, self.selected_env_idxs, self.box_diags)
-        assert Us.shape == (self.n_frames,)
-        return Us
+        def compute_Us(nb_params):
+            """
+
+            Parameters
+            ----------
+            nb_params : array of shape [N, P]
+
+            Returns
+            -------
+            Us : [U_ig(x; nb_params) for x in traj]
+            """
+            nb_params = jnp.array(nb_params)
+            lig_params = nb_params[self.ligand_idxs]
+
+            @jit
+            def U_snapshot(x_ligand, x_env, env_idxs, box_diag):
+                env_params = nb_params[env_idxs]
+                return jnp.sum(all_pairs_fxn(x_ligand, x_env, lig_params, env_params, jnp.diag(box_diag)))
+
+            Us = vmap(U_snapshot, (0, 0, 0, 0))(self.xs_lig, self.xs_env, self.selected_env_idxs, self.box_diags)
+            assert Us.shape == (self.n_frames,)
+            return Us
+
+        return compute_Us
