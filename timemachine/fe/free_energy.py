@@ -274,6 +274,38 @@ class SimulationResult:
     def boxes(self) -> List[NDArray]:
         return [np.array(traj.boxes) for traj in self.trajectories]
 
+    def compute_u_kn(self) -> Tuple[NDArray, NDArray]:
+        """get MBAR input matrices u_kn and N_k"""
+
+        # TODO: there's probably a much faster idiom for this -- shouldn't take a whole minute...
+        N_k = [len(traj.frames) for traj in self.trajectories]
+        N, K = sum(N_k), len(N_k)
+        assert len(self.final_result.initial_states) == K
+
+        kBTs = [BOLTZ * state.integrator.temperature for state in self.final_result.initial_states]
+
+        # TODO: validate assumption that all states are in compatible thermodynamic states
+        # pressures = [state.barostat.pressure for state in self.final_result.initial_states]
+
+        u_kn = np.zeros((K, N))
+        for k, initial_state in enumerate(self.final_result.initial_states):
+            kBT = kBTs[k]
+
+            bound_impl = initial_state.to_bound_impl()
+
+            def u(x, box):
+                # TODO: bound_impl.execute_batch
+                U = bound_impl.execute(x, box, compute_du_dx=False, compute_u=True)[1]
+                return U / kBT
+
+            n = 0
+            for traj in self.trajectories:
+                for x, box in zip(traj.frames, traj.boxes):
+                    u_kn[k, n] = u(x, box)
+                    n += 1
+            assert n == N
+        return u_kn, np.array(N_k)
+
 
 @dataclass
 class HREXSimulationResult(SimulationResult):
