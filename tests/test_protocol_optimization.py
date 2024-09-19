@@ -6,8 +6,11 @@ from scipy.special import logsumexp
 
 from timemachine.optimize.protocol import (
     construct_work_stddev_estimator,
+    greedily_optimize_protocol,
     linear_u_kn_interpolant,
     log_weights_from_mixture,
+    make_approx_overlap_distance_fxn,
+    produce_target_number_of_equidistant_states,
     rebalance_initial_protocol_by_work_stddev,
 )
 
@@ -118,3 +121,61 @@ def simulate_protocol(lambdas_k, n_samples_per_window=100, seed=None):
     xs, u_kn, N_k, s_n = testsystem.sample(N_k, seed=seed)
     mbar = MBAR(u_kn, N_k)
     return mbar
+
+
+def summarize_protocol(lambdas, dist_fxn):
+    K = len(lambdas)
+    neighbor_distances = []
+    for k in range(K - 1):
+        neighbor_distances.append(dist_fxn(lambdas[k], lambdas[k + 1]))
+    print(
+        f"\t# states = {K}, min(d(i,i+1)) = {min(neighbor_distances):.3f}, max(d(i,i+1)) = {max(neighbor_distances):.3f}"
+    )
+    return np.array(neighbor_distances)
+
+
+def test_overlap_rebalancing_on_gaussian():
+    # initial_lams = linspace(0,1), along a path where nonuniform lams are probably better
+    initial_num_states = 10
+
+    def initial_path(lam):
+        offset = lam * 4
+        force_constant = 2 ** (4 * lam)
+        return (offset, force_constant)
+
+    initial_lams = np.linspace(0, 1, initial_num_states)
+    initial_params = [initial_path(lam) for lam in initial_lams]
+
+    # make a pymbar test case
+    O_k = [offset for (offset, _) in initial_params]
+    K_k = [force_constant for (_, force_constant) in initial_params]
+    test_case = HarmonicOscillatorsTestCase(O_k=O_k, K_k=K_k)
+
+    # get samples, estimate free energies
+    _, u_kn, N_k, _ = test_case.sample(N_k=[100] * initial_num_states)
+    mbar = MBAR(u_kn, N_k)
+    f_k = mbar.f_k
+
+    # make a fast d(lam_i, lam_j) fxn
+    overlap_dist = make_approx_overlap_distance_fxn(initial_lams, u_kn, f_k, N_k)
+
+    print("initial protocol: ")
+    _ = summarize_protocol(initial_lams, overlap_dist)
+
+    # optimize for a target neighbor distance
+    target_dist = 0.5
+    print(f"optimized with target dist = {target_dist}:")
+    greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist)
+    greedy_nbr_dist = summarize_protocol(greedy_prot, overlap_dist)
+    assert np.max(greedy_nbr_dist) <= target_dist + 1e-5  # a little wiggle room
+
+    # optimize for a target num states
+    target_num_states = len(greedy_prot)
+    print(f"optimized with target num_states = {target_num_states}:")
+    optimized_protocol = produce_target_number_of_equidistant_states(
+        overlap_dist, target_num_states, max_num_states=len(greedy_prot)
+    )
+    optimized_nbr_dist = summarize_protocol(optimized_protocol, overlap_dist)
+
+    assert len(optimized_protocol) <= target_num_states
+    assert np.min(optimized_nbr_dist) >= np.min(greedy_nbr_dist)
