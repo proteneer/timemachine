@@ -8,7 +8,7 @@ from timemachine.optimize.protocol import (
     construct_work_stddev_estimator,
     linear_u_kn_interpolant,
     log_weights_from_mixture,
-    rebalance_initial_protocol,
+    rebalance_initial_protocol_by_work_stddev,
 )
 
 np.random.seed(2021)
@@ -20,7 +20,7 @@ def test_rebalance_initial_protocol():
     """Integration test: assert that protocol optimization improves run-to-run variance in free energy estimates"""
     initial_protocol = np.linspace(0, 1, 64)
     mbar = simulate_protocol(initial_protocol, seed=2021)
-    new_protocol = rebalance_initial_protocol(
+    new_protocol = rebalance_initial_protocol_by_work_stddev(
         initial_protocol,
         mbar.f_k,
         mbar.u_kn,
