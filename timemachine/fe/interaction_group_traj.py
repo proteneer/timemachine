@@ -60,6 +60,22 @@ class InteractionGroupTraj:
         where U_ig = \sum_i \sum_j pair_fxn(||x_j - x_j||; params_i, params_j)
 
         (with i summing over ligand_idxs, j summing over env_idxs, and pair_fxn(r) == 0 when r >= cutoff)
+
+        Parameters
+        ----------
+        pair_fxn : pair_fxn(x_i, x_j, param_i, param_j, box) -> energy
+            scalar-valued jax-transformable function of a pair of particles and their parameters
+        xs : array of particle coordinates [T, N, 3]
+        box_diags : positive float array of box diagonals [T, 3]
+        ligand_idxs: int array (subset of arange(N))
+        env_idxs : int array (subset of arange(N))
+        cutoff : float
+
+        Notes
+        -----
+        * Constructor precomputes neighborlist using a naive jax implementation, which is expensive, but done once
+            TODO: extract from GPU neighborlist
+        * Assumes pair_fxn(r) == 0 when r >= cutoff, but does not confirm or enforce this
         """
         self.n_frames = len(xs)
         self.pair_fxn = pair_fxn
@@ -100,6 +116,16 @@ class InteractionGroupTraj:
         self.box_diags = box_diags
 
     def compute_Us(self, nb_params):
+        """
+
+        Parameters
+        ----------
+        nb_params : array of shape [N, P]
+
+        Returns
+        -------
+        Us : [U_ig(x; nb_params) for x in traj]
+        """
         nb_params = jnp.array(nb_params)
         lig_params = nb_params[self.ligand_idxs]
 
