@@ -40,6 +40,7 @@
 #include "segmented_sumexp.hpp"
 #include "segmented_weighted_random_sampler.hpp"
 #include "set_utils.hpp"
+#include "smoothcore_nonbonded_interaction_group.hpp"
 #include "summed_potential.hpp"
 #include "tibd_exchange_move.hpp"
 #include "translations.hpp"
@@ -1547,6 +1548,95 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
             )pbdoc");
 }
 
+template <typename RealType> void declare_smoothcore_nonbonded_interaction_group(py::module &m, const char *typestr) {
+    using Class = SmoothcoreNonbondedInteractionGroup<RealType>;
+    std::string pyclass_name = std::string("SmoothcoreNonbondedInteractionGroup_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, Potential>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            "set_atom_idxs",
+            &SmoothcoreNonbondedInteractionGroup<RealType>::set_atom_idxs,
+            py::arg("row_atom_idxs"),
+            py::arg("col_atom_idxs"),
+            R"pbdoc(
+                    Set up the atom idxs for the SmoothcoreNonbondedInteractionGroup.
+                    The interaction is defined between two groups of atom idxs,
+                    `row_atom_idxs` and `col_atom_idxs`. These should be a disjoint
+                    list of idxs.
+
+                    Parameters
+                    ----------
+                    row_atom_idxs: NDArray
+                        First group of atoms in the interaction.
+
+                    col_atom_idxs: NDArray
+                        Second group of atoms in the interaction.
+
+            )pbdoc")
+        .def(
+            py::init([](const int N,
+                        const py::array_t<int, py::array::c_style> &row_atom_idxs_i,
+                        const py::array_t<int, py::array::c_style> &anchor_idxs_i,
+                        const double beta,
+                        const double cutoff,
+                        std::optional<py::array_t<int, py::array::c_style>> &col_atom_idxs_i,
+                        const bool disable_hilbert_sort,
+                        const double nblist_padding) {
+                std::vector<int> row_atom_idxs = py_array_to_vector(row_atom_idxs_i);
+                std::vector<int> anchor_idxs = py_array_to_vector(anchor_idxs_i);
+
+                std::vector<int> col_atom_idxs;
+                if (col_atom_idxs_i) {
+                    col_atom_idxs.resize(col_atom_idxs_i->size());
+                    std::memcpy(col_atom_idxs.data(), col_atom_idxs_i->data(), col_atom_idxs_i->size() * sizeof(int));
+                } else {
+                    std::set<int> unique_row_atom_idxs(unique_idxs(row_atom_idxs));
+                    col_atom_idxs = get_indices_difference(N, unique_row_atom_idxs);
+                }
+
+                return new SmoothcoreNonbondedInteractionGroup<RealType>(
+                    N, row_atom_idxs, col_atom_idxs, anchor_idxs, beta, cutoff, disable_hilbert_sort, nblist_padding);
+            }),
+            py::arg("num_atoms"),
+            py::arg("row_atom_idxs_i"),
+            py::arg("anchor_idxs_i"),
+            py::arg("beta"),
+            py::arg("cutoff"),
+            py::arg("col_atom_idxs_i") = py::none(),
+            py::arg("disable_hilbert_sort") = false,
+            py::arg("nblist_padding") = 0.1,
+            R"pbdoc(
+                    Set up the SmoothcoreNonbondedInteractionGroup.
+
+                    Parameters
+                    ----------
+                    num_atoms: int
+                        Number of atoms.
+
+                    row_atom_idxs: NDArray
+                        First group of atoms in the interaction.
+
+                    anchor_idxs: NDArray
+                        First group of atoms in the interaction.
+
+                    beta: float
+
+                    cutoff: float
+                        Ignore all interactions beyond this distance in nm.
+
+                    col_atom_idxs: Optional[NDArray]
+                        Second group of atoms in the interaction. If not specified,
+                        use all of the atoms not in the `row_atom_idxs`.
+
+                    disable_hilbert_sort: bool
+                        Set to True to disable the Hilbert sort.
+
+                    nblist_padding: float
+                        Margin for the neighborlist.
+
+            )pbdoc");
+}
+
 template <typename RealType, bool Negated> void declare_nonbonded_pair_list(py::module &m, const char *typestr) {
     using Class = NonbondedPairList<RealType, Negated>;
     std::string pyclass_name;
@@ -2208,6 +2298,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_nonbonded_interaction_group<double>(m, "f64");
     declare_nonbonded_interaction_group<float>(m, "f32");
+
+    declare_smoothcore_nonbonded_interaction_group<double>(m, "f64");
+    declare_smoothcore_nonbonded_interaction_group<float>(m, "f32");
 
     declare_nonbonded_precomputed<double>(m, "f64");
     declare_nonbonded_precomputed<float>(m, "f32");

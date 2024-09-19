@@ -892,6 +892,7 @@ def run_sims_sequential(
     for initial_state in initial_states:
         # run simulation
         traj = sample(initial_state, md_params, max_buffer_frames=100)
+
         print(f"completed simulation at lambda={initial_state.lamb}!")
 
         # keep samples from any requested states in memory
@@ -904,6 +905,7 @@ def run_sims_sequential(
         # analysis that depends on current and previous state
         if prev_state:
             state_pair = [prev_state, state]
+
             u_kln_by_component = compute_energy_decomposed_u_kln(state_pair)
             u_kln_by_component_by_lambda.append(u_kln_by_component)
 
@@ -992,6 +994,8 @@ def run_sims_bisection(
         assert_potentials_compatible(initial_state.potentials, potentials_0)
 
         traj = get_samples(lamb)
+
+        print(f"traj at lambda={initial_state.lamb} coords max {np.amax(traj.frames)}, min {np.min(traj.frames)}")
         batch_u_fns = get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature)
         return EnergyDecomposedState(traj.frames, traj.boxes, batch_u_fns)
 

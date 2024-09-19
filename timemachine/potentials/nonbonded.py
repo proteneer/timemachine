@@ -126,8 +126,8 @@ def nonbonded_block_unsummed(
 
     dij = delta_r(ri, rj, box)
     dij = jnp.concatenate([dij, (w_i - w_j).reshape(*dij.shape[:-1], 1)], axis=-1)
-
     dij = jnp.linalg.norm(dij, axis=-1)
+
     sig_i = jnp.expand_dims(params_i[:, 1], axis=1)
     sig_j = jnp.expand_dims(params_j[:, 1], axis=0)
     eps_i = jnp.expand_dims(params_i[:, 2], axis=1)
@@ -143,7 +143,7 @@ def nonbonded_block_unsummed(
 
     es = switched_direct_space_pme(dij, qij, beta, cutoff)
     lj = lennard_jones(dij, sig_ij, eps_ij)
-
+    lj = jnp.where(eps_ij != 0, lj, 0)  # needed for self consistent du_deps w.r.t. GPU
     nrgs = jnp.where(dij < cutoff, es + lj, 0)
     return cast(Array, nrgs)
 
@@ -153,6 +153,56 @@ def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     This is a summed version of nonbonded_block_unsummed, returning a scalar
     """
     return jnp.sum(nonbonded_block_unsummed(xi, xj, box, params_i, params_j, beta, cutoff))
+
+
+import itertools
+
+
+def nonbonded_block_rescaled(xi, xj, box, params_i, params_j, beta, cutoff, anchors_i, groups_i):
+    """
+
+    Soft-core variation where w_i is applied by means of rescaling dummy atoms relative to an
+    arbitrary choice of the anchoring atom. If w_i is 0, then atom i is fully interacting.
+    If w_i is 1, then atom_i is fully non-interacting. If 0 < w_i < 1 then atom_i is scaled
+    relative to the location of the anchoring atom for the group that atom_i belongs to. Atoms
+    that are not part of the groups_i ignore their w_i values.
+
+    Note that we assume that charges have *already* been balanced correctly in the upstream
+    interpolation code.
+
+    Example:
+
+    anchors_i = [0, 5, 9]
+    groups_i = [[3,4], [7], [6,8,2]]
+    w_i = [[0.2, 0.2], [0.8], [0.2, 0.2]]
+
+    """
+
+    xi = jnp.array(xi)
+    params_i = jnp.array(params_i)
+
+    assert len(anchors_i) == len(groups_i)
+
+    # transform xi
+    xi_a = xi[np.repeat(anchors_i, [len(x) for x in groups_i])]
+
+    group_idxs = jnp.array(list(itertools.chain(*groups_i)))
+
+    excluded_idxs = list(set(range(len(xi))).difference(group_idxs.tolist()))
+    excluded_idxs = jnp.array(excluded_idxs)
+
+    np.testing.assert_array_equal(params_i[excluded_idxs, -1], 0)
+
+    xi_g = xi[group_idxs]
+    scale_i = jnp.expand_dims(1 - params_i[:, -1], axis=-1)[group_idxs]
+    # compute the displacement vector
+    r_ga = scale_i * (xi_g - xi_a)
+    xi = xi.at[group_idxs].set(xi_g + r_ga)
+
+    # set q,s,e,w all to zero if scale_i is exactly zero.
+    params_i = params_i.at[jnp.argwhere(scale_i <= 0)].set(0)
+
+    return nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff)
 
 
 def convert_exclusions_to_rescale_masks(exclusion_idxs, scales, N):
@@ -881,3 +931,113 @@ def lj_interaction_group_energy(sig_ligand, eps_ligand, lj_prefactors):
 
     projection = vmap(basis_expand_lj_atom)(sig_ligand, eps_ligand)
     return jnp.sum(projection * lj_prefactors)
+
+
+def smoothcore_charge_interpolation(lamb, charges_src, charges_dst, mol_a_idxs, mol_b_idxs):
+    # absorb then shrink
+
+    net_charge_src = np.sum(charges_src)
+    net_charge_dst = np.sum(charges_dst)
+
+    np.testing.assert_almost_equal(net_charge_src, net_charge_dst, decimal=5)
+    charges_interpolated = np.zeros_like(charges_src)
+
+    charges_interpolated[mol_a_idxs] += (1 - lamb) * charges_src[mol_a_idxs]
+    charges_interpolated[mol_b_idxs] += lamb * charges_dst[mol_b_idxs]
+
+    np.testing.assert_almost_equal(np.sum(charges_interpolated), np.sum(net_charge_src), decimal=5)
+
+    return charges_interpolated
+
+
+# (ytz): guesstimate of the minimal numerically stable eps/sig pair that is 1-step removable
+# MIN_SMOOTHCORE_SIG_HALF = 0.05
+# MIN_SMOOTHCORE_EPS_SQRT = 0.10
+
+MIN_SMOOTHCORE_SIG_HALF = 0.0  # additive combining rule
+MIN_SMOOTHCORE_EPS_SQRT = 0.0  # multiplicate combining rule
+
+
+def smoothcore_lj_interpolation(lamb, lj_src, lj_dst, mol_a_idxs, mol_b_idxs):
+    MIN_SIG_EPS = np.where(lamb > 0 and lamb < 1, [MIN_SMOOTHCORE_SIG_HALF, MIN_SMOOTHCORE_EPS_SQRT], [0.0, 0.0])
+    # core atoms are interpolated linearly
+    # dummy atoms [sig,eps] are scaled down to [min(anchor_sig, dummy_sig), min(anchor_eps, dummy_eps)] except
+    # at the end-points, where they're both zero.
+    lj_src_stable = np.repeat([MIN_SIG_EPS], len(lj_src), axis=0)
+    lj_dst_stable = np.repeat([MIN_SIG_EPS], len(lj_dst), axis=0)
+
+    lj_src_stable[mol_a_idxs] = lj_src[mol_a_idxs]
+    lj_dst_stable[mol_b_idxs] = lj_dst[mol_b_idxs]
+    lj_interpolated = np.repeat([MIN_SIG_EPS], len(lj_src), axis=0)
+
+    # why are the core atoms also being scaled far more in the intermediate states?
+
+    core_idxs = np.array(list(set(mol_a_idxs).intersection(mol_b_idxs)), dtype=np.int32)
+    dummy_a_idxs = np.array(list(set(mol_a_idxs).difference(core_idxs)), dtype=np.int32)
+    dummy_b_idxs = np.array(list(set(mol_b_idxs).difference(core_idxs)), dtype=np.int32)
+
+    lj_interpolated[core_idxs] += np.clip((1 - lamb), 0, 1) * lj_src[core_idxs]
+    lj_interpolated[core_idxs] += np.clip(lamb, 0, 1) * lj_dst[core_idxs]
+
+    lj_interpolated[dummy_a_idxs] += np.clip((1 - lamb) * 10, 0, 1) * lj_src[dummy_a_idxs]
+    lj_interpolated[dummy_b_idxs] += np.clip(lamb * 10, 0, 1) * lj_dst[dummy_b_idxs]
+
+    return lj_interpolated
+
+
+def smoothcore_ligand_param_interpolation(lamb, charges_src, charges_dst, lj_src, lj_dst, amm):
+    # When turning the dummy atoms, first turn on the parameters to full strength while in a shrunken state
+    # Then expand out the dummy atoms slowly
+    q_lamb = lamb
+    s_lamb = lamb
+    w_lamb = lamb
+    # p_lamb = np.clip(2 * lamb, 0, 1)
+    # w_lamb = np.clip((lamb - 0.5)*2, 0, 1)
+
+    mol_a_idxs = amm.mol_a_idxs()
+    mol_b_idxs = amm.mol_b_idxs()
+    dummy_a_idxs = amm.dummy_a_idxs()
+    dummy_b_idxs = amm.dummy_b_idxs()
+
+    charges = smoothcore_charge_interpolation(q_lamb, charges_src, charges_dst, mol_a_idxs, mol_b_idxs)
+    charges = charges.reshape((-1, 1))
+    sig_eps = smoothcore_lj_interpolation(s_lamb, lj_src, lj_dst, mol_a_idxs, mol_b_idxs)
+    w_offsets = np.zeros(amm.get_num_atoms())
+    w_offsets[dummy_a_idxs] = w_lamb
+    w_offsets[dummy_b_idxs] = 1 - w_lamb
+    w_offsets = w_offsets.reshape((-1, 1))
+    ligand_params = np.hstack([charges, sig_eps, w_offsets])
+
+    return ligand_params
+
+
+def smoothcore_nonbonded_interaction_group(conf, params, box, row_atom_idxs, col_atom_idxs, anchor_idxs, beta, cutoff):
+    conf = jnp.array(conf)
+    params = jnp.array(params)
+
+    anchor_confs = conf[anchor_idxs]
+    rescale_factors = jnp.expand_dims(1 - params[:, -1], axis=-1)
+    conf = anchor_confs + rescale_factors * (conf - anchor_confs)
+
+    row_xs = conf[row_atom_idxs]
+    col_xs = conf[col_atom_idxs]
+
+    # reset w_coords
+    params = params.at[:, -1].set(0)
+    row_params = jnp.array(params[row_atom_idxs])
+    col_params = jnp.array(params[col_atom_idxs])
+
+    return nonbonded_block(row_xs, col_xs, box, row_params, col_params, beta, cutoff)
+
+
+def reference_nonbonded_interaction_group(conf, params, box, row_atom_idxs, col_atom_idxs, beta, cutoff):
+    conf = jnp.array(conf)
+    params = jnp.array(params)
+
+    row_params = jnp.array(params[row_atom_idxs])
+    col_params = jnp.array(params[col_atom_idxs])
+
+    row_xs = conf[row_atom_idxs]
+    col_xs = conf[col_atom_idxs]
+
+    return nonbonded_block(row_xs, col_xs, box, row_params, col_params, beta, cutoff)

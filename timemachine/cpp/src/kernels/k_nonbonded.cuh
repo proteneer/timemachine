@@ -55,6 +55,103 @@ void __global__ k_check_rebuild_coords_and_box_gather(
 }
 
 template <typename RealType, int COORDS_DIM, int PARAMS_DIM>
+void __global__ k_smoothcore_rescale_coords(
+    const int N,
+    const unsigned int *__restrict__ row_atom_idxs,
+    const unsigned int *__restrict__ row_anchor_idxs,
+    const double *__restrict__ coords,
+    const double *__restrict__ params,
+    double *__restrict__ coords_out) {
+    static_assert(COORDS_DIM == 3);
+    static_assert(PARAMS_DIM == 4);
+    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (atom_idx >= N) {
+        return;
+    }
+
+    unsigned int anchor_idx = row_anchor_idxs[atom_idx];
+    RealType rescale =
+        static_cast<RealType>(1.0) - static_cast<RealType>(params[atom_idx * PARAMS_DIM + 3]); // old w_coordinates
+
+    // Coords have 3 dimensions, params have 4
+#pragma unroll COORDS_DIM
+    for (int i = 0; i < COORDS_DIM; i++) {
+        RealType atom_pos = coords[atom_idx * COORDS_DIM + i];
+        RealType anchor_pos = coords[anchor_idx * COORDS_DIM + i];
+        coords_out[atom_idx * COORDS_DIM + i] = anchor_pos + rescale * (atom_pos - anchor_pos);
+    }
+}
+
+template <typename RealType, int COORDS_DIM, int PARAMS_DIM>
+void __global__ k_smoothcore_rescale_and_accum_du_dp(
+    const int N,
+    const unsigned int *__restrict__ anchor_idxs,
+    const double *__restrict__ coords,
+    const double *__restrict__ params,
+    const unsigned int *__restrict__ perm,
+    const unsigned long long *__restrict__ sorted_du_dp,
+    const unsigned long long *__restrict__ sorted_du_dx,
+    unsigned long long *__restrict__ du_dp) {
+    static_assert(COORDS_DIM == 3);
+    static_assert(PARAMS_DIM == 4);
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) {
+        return;
+    }
+
+    int atom_idx = perm[tid];
+    unsigned int anchor_idx = anchor_idxs[atom_idx];
+    RealType accum_w = 0;
+#pragma unroll COORDS_DIM
+    for (int i = 0; i < COORDS_DIM; i++) {
+        RealType atom_pos = coords[atom_idx * COORDS_DIM + i];
+        RealType anchor_pos = coords[anchor_idx * COORDS_DIM + i];
+        RealType d_du_dx_real = FIXED_TO_FLOAT<RealType>(sorted_du_dx[tid * COORDS_DIM + i]);
+        accum_w += -(atom_pos - anchor_pos) * d_du_dx_real;
+    }
+
+    atomicAdd(du_dp + atom_idx * PARAMS_DIM + 0, sorted_du_dp[tid * PARAMS_DIM + 0]);
+    atomicAdd(du_dp + atom_idx * PARAMS_DIM + 1, sorted_du_dp[tid * PARAMS_DIM + 1]);
+    atomicAdd(du_dp + atom_idx * PARAMS_DIM + 2, sorted_du_dp[tid * PARAMS_DIM + 2]);
+    atomicAdd(du_dp + atom_idx * PARAMS_DIM + 3, FLOAT_TO_FIXED_DU_DP<double, FIXED_EXPONENT_DU_DW>(accum_w));
+}
+
+template <typename RealType, int COORDS_DIM, int PARAMS_DIM>
+void __global__ k_smoothcore_rescale_and_accum_du_dx(
+    const int N,
+    const unsigned int *__restrict__ anchor_idxs,
+    const double *__restrict__ coords,
+    const double *__restrict__ params,
+    const unsigned int *__restrict__ perm,
+    const unsigned long long *__restrict__ sorted_du_dx,
+    unsigned long long *__restrict__ du_dx_out) {
+
+    static_assert(COORDS_DIM == 3);
+    static_assert(PARAMS_DIM == 4);
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) {
+        return;
+    }
+
+    int atom_idx = perm[tid];
+    unsigned int anchor_idx = anchor_idxs[atom_idx];
+#pragma unroll COORDS_DIM
+    for (int i = 0; i < COORDS_DIM; i++) {
+        RealType atom_pos = coords[atom_idx * COORDS_DIM + i];
+        RealType anchor_pos = coords[anchor_idx * COORDS_DIM + i];
+        RealType du_dx_hat = FIXED_TO_FLOAT<RealType>(sorted_du_dx[tid * COORDS_DIM + i]);
+        RealType w_i = params[atom_idx * PARAMS_DIM + 3];
+        RealType dxhat_danchor = w_i;
+        RealType dxhat_datom = 1 - w_i;
+        RealType du_danchor = du_dx_hat * dxhat_danchor;
+        RealType du_datom = du_dx_hat * dxhat_datom;
+
+        atomicAdd(du_dx_out + anchor_idx * COORDS_DIM + i, FLOAT_TO_FIXED_NONBONDED(du_danchor));
+        atomicAdd(du_dx_out + atom_idx * COORDS_DIM + i, FLOAT_TO_FIXED_NONBONDED(du_datom));
+    }
+}
+
+template <typename RealType, int COORDS_DIM, int PARAMS_DIM>
 void __global__ k_gather_coords_and_params(
     const int N,
     const unsigned int *__restrict__ idxs,
@@ -79,6 +176,38 @@ void __global__ k_gather_coords_and_params(
 #pragma unroll PARAMS_DIM
     for (int i = 0; i < PARAMS_DIM; i++) {
         gathered_params[idx * PARAMS_DIM + i] = params[atom_idx * PARAMS_DIM + i];
+    }
+}
+
+template <typename RealType, int COORDS_DIM, int PARAMS_DIM>
+void __global__ k_smoothcore_gather_coords_and_params_zero_w(
+    const int N,
+    const unsigned int *__restrict__ idxs,
+    const RealType *__restrict__ coords,
+    const RealType *__restrict__ params,
+    RealType *__restrict__ gathered_coords,
+    RealType *__restrict__ gathered_params) {
+    static_assert(COORDS_DIM == 3);
+    static_assert(PARAMS_DIM == PARAMS_PER_ATOM);
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= N) {
+        return;
+    }
+
+    const unsigned int atom_idx = idxs[idx];
+
+    // Coords have 3 dimensions, params have 4
+#pragma unroll COORDS_DIM
+    for (int i = 0; i < COORDS_DIM; i++) {
+        gathered_coords[idx * COORDS_DIM + i] = coords[atom_idx * COORDS_DIM + i];
+    }
+#pragma unroll PARAMS_DIM
+    for (int i = 0; i < PARAMS_DIM; i++) {
+        if (i == PARAMS_DIM - 1) {
+            gathered_params[idx * PARAMS_DIM + 3] = 0; // zero out w coords
+        } else {
+            gathered_params[idx * PARAMS_DIM + i] = params[atom_idx * PARAMS_DIM + i];
+        }
     }
 }
 
@@ -201,6 +330,7 @@ void __device__ v_nonbonded_unified(
         RealType d2ij = delta_x * delta_x + delta_y * delta_y + delta_z * delta_z;
         RealType delta_w;
 
+        // w coords seem messed up here  - i.e. they're being double computed somehow
         if (ALCHEMICAL) {
             // (ytz): we are guaranteed that delta_w is zero if ALCHEMICAL == false
             delta_w = w_i - w_j;
@@ -322,6 +452,10 @@ void __device__ v_nonbonded_unified(
             atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
             atomicAdd(du_dp + w_param_idx_j, g_wj);
         }
+
+        // if(atom_i_idx == 168 || atom_j_idx == 168) {
+        //     printf("inner debug %d %d | %f %f %f %f\n", atom_i_idx, atom_j_idx, FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(g_qi), FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(g_qj), FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(g_epsi), FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(g_epsj));
+        // }
     }
 }
 

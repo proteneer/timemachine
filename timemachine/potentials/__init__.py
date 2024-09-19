@@ -16,6 +16,7 @@ from .potentials import (
     NonbondedPairList,
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
+    SmoothcoreNonbondedInteractionGroup,
     SummedPotential,
     make_summed_potential,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "Nonbonded",
     "NonbondedAllPairs",
     "NonbondedInteractionGroup",
+    "SmoothcoreNonbondedInteractionGroup",
     "NonbondedPairList",
     "NonbondedExclusions",
     "NonbondedPairListPrecomputed",
