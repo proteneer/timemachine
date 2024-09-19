@@ -20,7 +20,7 @@ from timemachine.fe.free_energy import (
     MDParams,
     WaterSamplingParams,
     compute_potential_matrix,
-    sample_with_context,
+    sample_with_context_iter,
 )
 from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution_heatmap,
@@ -122,11 +122,11 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
     rss_traj = []
 
     def sample_and_record_rss(*args, **kwargs):
-        traj = sample_with_context(*args, **kwargs)
+        result = sample_with_context_iter(*args, **kwargs)
         rss_traj.append(Process().memory_info().rss)
-        return traj
+        return result
 
-    with patch("timemachine.fe.free_energy.sample_with_context", sample_and_record_rss):
+    with patch("timemachine.fe.free_energy.sample_with_context_iter", sample_and_record_rss):
         result = estimate_relative_free_energy_bisection_hrex(
             mol_a,
             mol_b,
