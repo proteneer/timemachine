@@ -178,4 +178,4 @@ def test_overlap_rebalancing_on_gaussian():
     optimized_nbr_dist = summarize_protocol(optimized_protocol, overlap_dist)
 
     assert len(optimized_protocol) <= target_num_states
-    assert np.min(optimized_nbr_dist) >= np.min(greedy_nbr_dist)
+    assert np.max(optimized_nbr_dist) <= np.max(greedy_nbr_dist)
