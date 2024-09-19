@@ -18,7 +18,7 @@ from timemachine.fe.free_energy import (
     HREXSimulationResult,
     MDParams,
     WaterSamplingParams,
-    sample_with_context,
+    sample_with_context_iter,
 )
 from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution_heatmap,
@@ -117,11 +117,11 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
     rss_traj = []
 
     def sample_and_record_rss(*args, **kwargs):
-        traj = sample_with_context(*args, **kwargs)
+        result = sample_with_context_iter(*args, **kwargs)
         rss_traj.append(Process().memory_info().rss)
-        return traj
+        return result
 
-    with patch("timemachine.fe.free_energy.sample_with_context", sample_and_record_rss):
+    with patch("timemachine.fe.free_energy.sample_with_context_iter", sample_and_record_rss):
         result = estimate_relative_free_energy_bisection_hrex(
             mol_a,
             mol_b,
@@ -134,8 +134,10 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
             min_cutoff=0.7 if host_name == "complex" else None,
         )
 
+    assert len(rss_traj) > n_windows * md_params.n_frames
     # Check that memory usage is not increasing
     rss_traj = rss_traj[10:]  # discard initial transients
+    assert len(rss_traj)
     rss_diff_count = np.sum(np.diff(rss_traj) != 0)
     rss_increase_count = np.sum(np.diff(rss_traj) > 0)
     assert stats.binom.pmf(rss_increase_count, n=rss_diff_count, p=0.5) >= 0.001
