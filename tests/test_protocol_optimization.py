@@ -182,3 +182,21 @@ def test_overlap_rebalancing_on_gaussian():
 
     assert len(optimized_protocol) <= target_num_states
     assert np.max(optimized_nbr_dist) <= np.max(greedy_nbr_dist)
+
+    # also, sanity-check the overlap_dist function: d(x,x)==0, d(x,y)==d(y,x), x<y<z => d(x,y)<d(x,z)
+    rng = np.random.default_rng(2024)
+    random_lams = rng.uniform(0, 1, 20)
+    self_distances = [overlap_dist(lam, lam) for lam in random_lams]
+    np.testing.assert_allclose(self_distances, 0.0)
+    for lam_i in random_lams:
+        # compare to some random lam_j between lam_i and 1
+        lams_above = sorted(set(rng.uniform(lam_i, 1, 5)))
+        distances_to_sorted_larger_lams = np.array([overlap_dist(lam_i, lam_j) for lam_j in lams_above])
+
+        # assert x < y < z implies d(x, y) <= d(x, z)
+        eps = 1e-3
+        np.testing.assert_array_less(distances_to_sorted_larger_lams[:-1], distances_to_sorted_larger_lams[1:] + eps)
+
+        # assert symmetric
+        _distances_flipped = np.array([overlap_dist(lam_j, lam_i) for lam_j in lams_above])
+        np.testing.assert_allclose(distances_to_sorted_larger_lams, _distances_flipped)
