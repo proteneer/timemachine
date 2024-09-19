@@ -142,7 +142,7 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Callable:
     return vec_u_interp
 
 
-# distance fxns: (1) max(work_stddev(a->b), work_stddev(b->a)), (2) overlap(a,b)
+# distance fxns: (1) max(work_stddev(a->b), work_stddev(b->a)), (2) 1 - overlap(a,b)
 
 
 # (1) work stddev
@@ -334,7 +334,7 @@ def produce_target_number_of_equidistant_states(distance_fxn, target_num_states=
     except RuntimeError as e:
         print(f"bisection failed: {e}")
 
-    # scan the trial vals tested by bisection, to find a target_distance that produces <= target_num_states
+    # find the smallest target_distance such that len(greedily_optimize_protocol(target_distance)) == target_num_states
     lowest_so_far = initial_target_distance
     for dist in protocols_by_target_dist.keys():
         if (len(protocols_by_target_dist[dist]) == target_num_states) and (dist < lowest_so_far):
