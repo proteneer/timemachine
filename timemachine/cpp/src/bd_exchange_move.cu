@@ -200,7 +200,7 @@ void BDExchangeMove<RealType>::move(
             // Run only after the first pass, to maintain meaningful `log_probability_host` values
             // Run a separate kernel to replace the before logsumexp values with the after if accepted a move
             // Could also recompute the logsumexp each round, but more expensive than probably necessary.
-            k_store_accepted_log_probability<RealType><<<1, 1, 0>>>(
+            k_store_accepted_log_probability<RealType><<<1, 1, 0, stream>>>(
                 num_target_mols_,
                 batch_size_,
                 d_selected_sample_.data,
