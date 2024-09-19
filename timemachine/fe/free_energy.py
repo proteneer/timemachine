@@ -1121,6 +1121,10 @@ def compute_potential_matrix(
     return U_kl
 
 
+def get_flattened_params(initial_state: InitialState) -> NDArray:
+    return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
+
+
 def run_sims_hrex(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
@@ -1219,9 +1223,6 @@ def run_sims_hrex(
     temperature = initial_states[0].integrator.temperature
     ligand_idxs = initial_states[0].ligand_idxs
 
-    def get_flattened_params(initial_state: InitialState) -> NDArray:
-        return np.concatenate([bp.params.flatten() for bp in initial_state.potentials])
-
     params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
     water_params_by_state: Optional[NDArray] = None
     if md_params.water_sampling_params is not None:
@@ -1234,51 +1235,12 @@ def run_sims_hrex(
         # Add an identity move to the mixture to ensure aperiodicity
         neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
-    equil_barostat_interval = 15
-
-    def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
-        if md_params.n_eq_steps > 0:
-            ctxt = state_ctxts[state_idx]
-            ctxt.set_x_t(xvb.coords)
-            ctxt.set_v_t(xvb.velocities)
-            ctxt.set_box(xvb.box)
-            ctxt.get_potentials()[0].set_params(params_by_state[state_idx])
-            for mover in ctxt.get_movers():
-                if isinstance(mover, WATER_SAMPLER_MOVERS):
-                    assert water_params_by_state is not None
-                    mover.set_params(water_params_by_state[state_idx])
-                mover.set_step(0)
-            state_barostat = initial_states[state_idx].barostat
-            if state_barostat is not None:
-                # Setup the barostat to run more often for equilibration
-                barostat = ctxt.get_barostat()
-                assert barostat is not None
-                barostat.set_interval(equil_barostat_interval)
-            # Context will already be set up with the correct coords, vel, box no need to update
-            xs, boxes = ctxt.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
-            assert len(xs) == 1
-            x0 = xs[0]
-            v0 = ctxt.get_v_t()
-            box0 = boxes[0]
-            xvb = CoordsVelBox(x0, v0, box0)
-            # Reset the barostat interval
-            if state_barostat is not None:
-                barostat = ctxt.get_barostat()
-                assert barostat is not None
-                barostat.set_interval(state_barostat.interval)
-        return xvb
-
-    initial_replicas = pool.starmap(
-        get_equilibrated_xvb,
-        [(CoordsVelBox(s.x0, s.v0, s.box0), StateIdx(i)) for i, s in enumerate(initial_states)],
-    )
-
     # Set up energy potential using the first state's context
     bound_potentials = state_ctxts[0].get_potentials()
     assert len(bound_potentials) == 1
     potential = bound_potentials[0].get_potential()
 
-    hrex = HREX.from_replicas(initial_replicas)
+    hrex = HREX.from_replicas([CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states])
 
     samples_by_state: List[Trajectory] = [Trajectory.empty() for _ in initial_states]
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
@@ -1308,7 +1270,13 @@ def run_sims_hrex(
                     mover.set_params(water_params_by_state[state_idx])
                 mover.set_step(current_step)
 
-            md_params_replica = replace(md_params, n_frames=1, n_eq_steps=0, seed=state_idx + current_frame)
+            md_params_replica = replace(
+                md_params,
+                n_frames=1,
+                # Do equilibration on the first frame, otherwise skip
+                n_eq_steps=md_params.n_eq_steps if current_frame == 0 else 0,
+                seed=state_idx + current_frame,
+            )
 
             assert md_params_replica.n_frames == 1
             # Get the next set of frames from the iterator, which will be the only value returned
