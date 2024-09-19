@@ -672,3 +672,22 @@ def test_assert_potentials_compatible(hif2a_ligand_pair_single_topology):
         [replace(sp, potential=replace(sp.potential, params_init=params_init_1))],
         r"shape mismatch in field \$\.\[\d\].params_init\.\[0\]",
     )
+
+
+def test_initial_state_to_bound_impl():
+    # get initial state : near-duplicate of pytest fixture
+    # initial_state = solvent_hif2a_ligand_pair_single_topology_lam0_state()
+    st, forcefield = hif2a_ligand_pair_single_topology
+    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
+        3.0, forcefield.water_ff, mols=[st.mol_a, st.mol_b]
+    )
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
+    solvent_host = setup_optimized_host(st, solvent_host_config)
+    initial_state = setup_initial_states(st, solvent_host, DEFAULT_TEMP, [0.5], 2023)[0]
+
+    # minimal test
+    bound_impl = initial_state.to_bound_impl()
+    x, box = initial_state.x0, initial_state.box0
+    du_dx, u = bound_impl.execute(x, box)
+    assert np.isfinite(u)
+    assert np.isfinite(du_dx).all()

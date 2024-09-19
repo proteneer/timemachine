@@ -162,6 +162,13 @@ class InitialState:
         assert self.ligand_idxs.dtype == np.int32 or self.ligand_idxs.dtype == np.int64
         assert self.protein_idxs.dtype == np.int32 or self.protein_idxs.dtype == np.int64
 
+    def to_bound_impl(self, precision=np.float32):
+        bps = self.potentials
+        summed_pot = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
+        params = np.concatenate([bp.params.reshape(-1) for bp in bps])
+        impl = summed_pot.to_gpu(precision).bind(params).bound_impl
+        return impl
+
 
 @dataclass
 class BarResult:
