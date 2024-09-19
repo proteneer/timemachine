@@ -337,7 +337,7 @@ def produce_target_number_of_equidistant_states(distance_fxn, target_num_states=
     # scan the trial vals tested by bisection, to find a target_distance that produces <= target_num_states
     lowest_so_far = initial_target_distance
     for dist in protocols_by_target_dist.keys():
-        if len(protocols_by_target_dist[dist] == target_num_states) and dist < lowest_so_far:
+        if (len(protocols_by_target_dist[dist]) == target_num_states) and (dist < lowest_so_far):
             lowest_so_far = dist
     best_target_dist = lowest_so_far
 
