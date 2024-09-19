@@ -128,15 +128,17 @@ def summarize_protocol(lambdas, dist_fxn):
     neighbor_distances = []
     for k in range(K - 1):
         neighbor_distances.append(dist_fxn(lambdas[k], lambdas[k + 1]))
-    print(
-        f"\t# states = {K}, min(d(i,i+1)) = {min(neighbor_distances):.3f}, max(d(i,i+1)) = {max(neighbor_distances):.3f}"
-    )
-    return np.array(neighbor_distances)
+    neighbor_distances = np.array(neighbor_distances)
+    min_dist, max_dist = np.min(neighbor_distances), np.max(neighbor_distances)
+    msg = f"\t# states = {K}, min(d(i,i+1)) = {min_dist:.3f}, max(d(i,i+1)) = {max_dist:.3f}"
+    msg += f"\t{str(neighbor_distances)}"
+    print(msg)
+    return neighbor_distances
 
 
 def test_overlap_rebalancing_on_gaussian():
     # initial_lams = linspace(0,1), along a path where nonuniform lams are probably better
-    initial_num_states = 10
+    initial_num_states = 20
 
     def initial_path(lam):
         offset = lam * 4
@@ -163,8 +165,9 @@ def test_overlap_rebalancing_on_gaussian():
     _ = summarize_protocol(initial_lams, overlap_dist)
 
     # optimize for a target neighbor distance
-    target_dist = 0.5
-    print(f"optimized with target dist = {target_dist}:")
+    target_overlap = 0.1
+    target_dist = 1 - target_overlap
+    print(f"optimized with target dist = {target_dist} (target overlap = {target_overlap}):")
     greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist)
     greedy_nbr_dist = summarize_protocol(greedy_prot, overlap_dist)
     assert np.max(greedy_nbr_dist) <= target_dist + 1e-5  # a little wiggle room
