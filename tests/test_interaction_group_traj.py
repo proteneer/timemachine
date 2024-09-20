@@ -1,11 +1,15 @@
 import numpy as np
+import pytest
 from jax import grad, jit
 from jax.scipy.special import logsumexp
 
 from timemachine.fe.interaction_group_traj import InteractionGroupTraj, nb_pair_fxn
 
+pytestmark = [pytest.mark.nocuda]
 
-def test_ig_traj():
+
+def test_ig_traj_jax_transformable():
+    """test jit(grad(f))(params), where f(params) is defined in terms of logsumexp(compute_Us(params))"""
     n_frames = 2000
     n_env = 10_000
     n_lig = 100
