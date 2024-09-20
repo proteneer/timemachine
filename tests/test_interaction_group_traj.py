@@ -21,7 +21,7 @@ def test_ig_traj():
 
     box_diags = np.ones((n_frames, 3)) * box_size
 
-    traj = InteractionGroupTraj(nb_pair_fxn, xs, box_diags, lig_idxs, env_idxs)
+    traj = InteractionGroupTraj(xs, box_diags, lig_idxs, env_idxs)
 
     nb_params = np.random.rand(n_env + n_lig, 4)
     nb_params[:, 0] = 5 * np.random.randn(n_env + n_lig)  # q
@@ -29,10 +29,11 @@ def test_ig_traj():
     nb_params[:, 2] = (5 * nb_params[:, 1]) + 1  # eps
     nb_params[:, 3] *= 1.2  # w_offset between 0 and cutoff
 
-    U_0 = traj.compute_Us(nb_params)
+    compute_Us = traj.make_U_fxn(nb_pair_fxn)
+    U_0 = compute_Us(nb_params)
 
     def f(params):
-        Us = traj.compute_Us(params)
+        Us = compute_Us(params)
         return -logsumexp(-(Us - U_0))
 
     grad_f = jit(grad(f))
