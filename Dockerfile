@@ -40,7 +40,8 @@ ARG ENV_NAME=timemachine
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda env create -n "${ENV_NAME}" --force -f environment.yml && \
     conda clean -a && \
-    conda activate ${ENV_NAME}
+    conda activate ${ENV_NAME} && \
+    conda list -n ${ENV_NAME}
 
 ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
 
@@ -49,9 +50,9 @@ ENV CONDA_DEFAULT_ENV ${ENV_NAME}
 # Install OpenMM
 ARG OPENMM_VERSION=8.1.2
 
-ARG DOXYGEN_VERSION=1.9.1
-ARG CYTHON_VERSION=0.29.26
-ARG SWIG_VERSION=3.0.12
+ARG DOXYGEN_VERSION=1.12.0
+ARG CYTHON_VERSION=3.0.11-1
+ARG SWIG_VERSION=4.2.1
 
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda install -y -c conda-forge swig=${SWIG_VERSION} doxygen=${DOXYGEN_VERSION} cython=${CYTHON_VERSION} && \
