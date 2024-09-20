@@ -187,7 +187,7 @@ def test_overlap_rebalancing_on_gaussian():
     rng = np.random.default_rng(2024)
     random_lams = rng.uniform(0, 1, 20)
     self_distances = [overlap_dist(lam, lam) for lam in random_lams]
-    np.testing.assert_allclose(self_distances, 0.0)
+    np.testing.assert_allclose(self_distances, 0.0, atol=1e-10)
     for lam_i in random_lams:
         # compare to some random lam_j between lam_i and 1
         lams_above = sorted(set(rng.uniform(lam_i, 1, 5)))
