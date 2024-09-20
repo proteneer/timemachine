@@ -26,27 +26,23 @@ public:
     void initialize();
     void finalize();
 
-    void multiple_steps(const int n_steps, const int n_samples, double *h_x, double *h_box);
+    std::array<std::vector<double>, 2> multiple_steps(const int n_steps, int store_x_interval);
 
-    void multiple_steps_local(
+    std::array<std::vector<double>, 2> multiple_steps_local(
         const int n_steps,
         const std::vector<int> &local_idxs,
-        const int n_samples,
+        const int store_x_interval,
         const double radius,
         const double k,
-        const int seed,
-        double *h_x,
-        double *h_box);
+        const int seed);
 
-    void multiple_steps_local_selection(
+    std::array<std::vector<double>, 2> multiple_steps_local_selection(
         const int n_steps,
         const int reference_idx,
         const std::vector<int> &selection_idxs,
-        const int n_samples,
+        const int store_x_interval,
         const double radius,
-        const double k,
-        double *h_x,
-        double *h_box);
+        const double k);
 
     int num_atoms() const;
 
@@ -83,15 +79,13 @@ private:
 
     void _ensure_local_md_intialized();
 
-    void _verify_box(const double *box_buffer, cudaStream_t stream);
+    void _verify_box(cudaStream_t stream);
 
     int step_;
 
     double *d_x_t_;   // coordinates
     double *d_v_t_;   // velocities
     double *d_box_t_; // box vectors
-
-    cudaStream_t stream_; // Stream work will be scheduled into
 
     std::shared_ptr<Integrator> intg_;
     std::vector<std::shared_ptr<BoundPotential>> bps_;
