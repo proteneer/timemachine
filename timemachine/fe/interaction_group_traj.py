@@ -76,9 +76,10 @@ class InteractionGroupTraj:
             TODO: extract from GPU neighborlist
         * Assumes pair_fxn(r) == 0 when r >= cutoff, but does not confirm or enforce this
         """
+        self.cutoff = cutoff
         self.n_frames = len(xs)
         self.ligand_idxs = ligand_idxs
-        self.all_env_idxs = env_idxs
+        all_env_idxs = env_idxs
         num_lig, num_env = len(ligand_idxs), len(env_idxs)
 
         # TODO[symmetry]:
@@ -101,17 +102,44 @@ class InteractionGroupTraj:
 
         if verbose:
             num_stored = padded_num_env_atoms + len(ligand_idxs)
-            print(f"\tsaving {(xs.shape[1] / num_stored):.2f}x on storage\n\t(relative to storing all env atoms)")
             max_nbrs, mean_nbrs = padded_num_env_atoms, mask.sum(1).mean()
-            print(
-                f"\tpadding to max_nbrs = {max_nbrs}\n\t(~{max_nbrs/mean_nbrs:.2f}x larger than unpadded neighbor list)"
-            )
+            msg = f"""
+                saving {(xs.shape[1] / num_stored):.2f}x on storage
+                (relative to storing all env atoms)
+                padding to max_nbrs = {max_nbrs}
+                (~{max_nbrs/mean_nbrs:.2f}x larger than unpadded neighbor list)
+            """
+            print(msg)
 
         idxs_within_env_block = np.argsort(mask, axis=1)[:, -padded_num_env_atoms:]
-        self.selected_env_idxs = jnp.array(self.all_env_idxs[idxs_within_env_block], dtype=jnp.uint32)
+        self.selected_env_idxs = jnp.array(all_env_idxs[idxs_within_env_block], dtype=jnp.uint32)
 
         self.xs_env = np.array([_x_env[idxs] for (_x_env, idxs) in zip(_xs_env, idxs_within_env_block)])
         self.box_diags = box_diags
+
+    def to_disk(self, fname):
+        np.savez_compressed(
+            fname,
+            xs_env=np.array(self.xs_env),
+            box_diags=np.array(self.box_diags),
+            cutoff=self.cutoff,
+            selected_env_idxs=np.array(self.selected_env_idxs),
+            ligand_idxs=np.array(self.ligand_idxs),
+        )
+
+    @classmethod
+    def from_disk(cls, fname):
+        npz_archive = np.load(fname, allow_pickle=False)
+
+        traj = cls.__new__(cls)
+        traj.xs_env = npz_archive["xs_env"]
+        traj.box_diags = npz_archive["box_diags"]
+        traj.cutoff = npz_archive["cutoff"]
+        traj.selected_env_idxs = jnp.array(npz_archive["selected_env_idxs"])  # TODO: gross
+        traj.ligand_idxs = npz_archive["ligand_idxs"]
+        traj.n_frames = len(traj.xs_env)
+
+        return traj
 
     def make_U_fxn(self, pair_fxn: PairFxn):
         """
