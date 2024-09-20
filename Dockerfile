@@ -59,6 +59,11 @@ RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda clean -a
 
 WORKDIR /code/
+
+# Copy the pip requirements to cache when possible
+COPY requirements.txt /code/timemachine/
+RUN pip install --no-cache-dir -r timemachine/requirements.txt
+
 RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" && \
     cd openmm/ && \
     mkdir build && \
@@ -83,10 +88,6 @@ RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" 
     make PythonInstall && \
     cd /code/ && \
     rm -rf openmm/
-
-# Copy the pip requirements to cache when possible
-COPY requirements.txt /code/timemachine/
-RUN pip install --no-cache-dir -r timemachine/requirements.txt
 
 # NOTE: timemachine_ci must come before timemachine in the Dockerfile;
 # otherwise, CI will try (and fail) to build timemachine to reach the
