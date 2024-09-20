@@ -133,6 +133,7 @@ class InteractionGroupTraj:
         npz_archive = np.load(fname, allow_pickle=False)
 
         traj = cls.__new__(cls)
+        traj.xs_lig = npz_archive["xs_lig"]
         traj.xs_env = npz_archive["xs_env"]
         traj.box_diags = npz_archive["box_diags"]
         traj.cutoff = npz_archive["cutoff"]
