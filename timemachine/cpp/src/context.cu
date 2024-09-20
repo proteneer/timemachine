@@ -35,7 +35,9 @@ Context::Context(
     get_nonbonded_all_pair_potentials(bps, nonbonded_pots_);
 
     // Construct a stream unique to the Context
-    gpuErrchk(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking));
+    // gpuErrchk(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking));
+    // // Construct a stream unique to the Context, that syncs to the default stream
+    gpuErrchk(cudaStreamCreateWithFlags(&stream_, cudaStreamDefault));
 };
 
 Context::~Context() {

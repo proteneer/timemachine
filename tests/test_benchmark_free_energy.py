@@ -58,36 +58,45 @@ def hif2a_single_topology_leg(request):
 
 
 def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpoints: Tuple[float, float]):
-    forcefield = Forcefield.load_default()
-    host_config: Optional[HostConfig] = None
-    assert len(lambda_endpoints) == 2
-    assert lambda_endpoints[0] < lambda_endpoints[1]
+    jank = f"{host_name}path{n_windows}.pkl"
+    import pickle
+    import os
+    if not os.path.isfile(jank):
+        print(jank)
+        forcefield = Forcefield.load_default()
+        host_config: Optional[HostConfig] = None
+        assert len(lambda_endpoints) == 2
+        assert lambda_endpoints[0] < lambda_endpoints[1]
 
-    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    if host_name == "complex":
-        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-            host_sys, host_conf, box, _, num_water_atoms = builders.build_protein_system(
-                str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
-            )
+        mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+        if host_name == "complex":
+            with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+                host_sys, host_conf, box, _, num_water_atoms = builders.build_protein_system(
+                    str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
+                )
+                box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+            host_config = HostConfig(host_sys, host_conf, box, num_water_atoms)
+        elif host_name == "solvent":
+            host_sys, host_conf, box, _ = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
             box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-        host_config = HostConfig(host_sys, host_conf, box, num_water_atoms)
-    elif host_name == "solvent":
-        host_sys, host_conf, box, _ = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
-        box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-        host_config = HostConfig(host_sys, host_conf, box, host_conf.shape[0])
+            host_config = HostConfig(host_sys, host_conf, box, host_conf.shape[0])
 
-    single_topology = SingleTopology(mol_a, mol_b, core, forcefield)
-    host = setup_optimized_host(single_topology, host_config) if host_config else None
+        single_topology = SingleTopology(mol_a, mol_b, core, forcefield)
+        host = setup_optimized_host(single_topology, host_config) if host_config else None
 
-    lambda_grid = np.linspace(*lambda_endpoints, n_windows)
+        lambda_grid = np.linspace(*lambda_endpoints, n_windows)
 
-    initial_states = setup_initial_states(
-        single_topology, host, DEFAULT_TEMP, lambda_grid, seed=2023, min_cutoff=0.7 if host_name == "complex" else None
-    )
+        initial_states = setup_initial_states(
+            single_topology, host, DEFAULT_TEMP, lambda_grid, seed=2023, min_cutoff=0.7 if host_name == "complex" else None
+        )
 
-    n_frames = 500 // n_windows
+        n_frames = 500 // n_windows
 
-    assert len(initial_states) == n_windows
+        assert len(initial_states) == n_windows
+        with open(jank, "wb") as ofs:
+            pickle.dump((single_topology, host, host_name, n_frames, n_windows, initial_states), ofs)
+    with open(jank, "rb") as ifs:
+        single_topology, host, host_name, n_frames, n_windows, initial_states = pickle.load(ifs)
 
     return single_topology, host, host_name, n_frames, n_windows, initial_states
 
@@ -198,26 +207,31 @@ if __name__ == "__main__":
                 (single_topology, host, host_name, args.n_frames, windows, initial_states), mode, args.water_sampling
             )
             timings[mode].append(ns_per_day)
-    with open(f"{args.leg}_{args.n_frames}_benchmarks.json", "w") as ofs:
-        json.dump(
-            {
-                "n_windows": args.n_windows,
-                "n_frames": args.n_frames,
-                "water_sampling": args.water_sampling,
-                "leg": args.leg,
-                "timings": timings,
-            },
-            ofs,
-        )
-    fig, axes = plt.subplots(ncols=len(args.modes), sharey=True)
-    if len(args.modes) == 1:
-        axes = [axes]
-    fig.suptitle(f"Leg: {args.leg}, Frames {args.n_frames}, Water Sampling {args.water_sampling}")
-    for i, (ax, mode) in enumerate(zip(axes, args.modes)):
-        ax.set_title(mode)
-        ax.plot(args.n_windows, timings[mode], marker="x")
-        ax.set_xlabel("windows")
-        if i == 0:
-            ax.set_ylabel("ns/day")
-    fig.tight_layout()
-    plt.savefig(f"{args.leg}_{args.n_frames}_benchmarks.png", dpi=150)
+    import gc
+    gc.collect()
+    from timemachine.lib import custom_ops
+    gc.collect()
+    custom_ops.cuda_device_reset()
+    # with open(f"{args.leg}_{args.n_frames}_benchmarks.json", "w") as ofs:
+    #     json.dump(
+    #         {
+    #             "n_windows": args.n_windows,
+    #             "n_frames": args.n_frames,
+    #             "water_sampling": args.water_sampling,
+    #             "leg": args.leg,
+    #             "timings": timings,
+    #         },
+    #         ofs,
+    #     )
+    # fig, axes = plt.subplots(ncols=len(args.modes), sharey=True)
+    # if len(args.modes) == 1:
+    #     axes = [axes]
+    # fig.suptitle(f"Leg: {args.leg}, Frames {args.n_frames}, Water Sampling {args.water_sampling}")
+    # for i, (ax, mode) in enumerate(zip(axes, args.modes)):
+    #     ax.set_title(mode)
+    #     ax.plot(args.n_windows, timings[mode], marker="x")
+    #     ax.set_xlabel("windows")
+    #     if i == 0:
+    #         ax.set_ylabel("ns/day")
+    # fig.tight_layout()
+    # plt.savefig(f"{args.leg}_{args.n_frames}_benchmarks.png", dpi=150)

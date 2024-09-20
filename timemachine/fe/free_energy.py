@@ -1208,8 +1208,40 @@ def run_sims_hrex(
     if n_swap_attempts_per_iter is None:
         n_swap_attempts_per_iter = get_swap_attempts_per_iter_heuristic(len(initial_states))
 
+    params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
+    water_params_by_state: Optional[NDArray] = None
+    if md_params.water_sampling_params is not None:
+        water_params_by_state = np.array([get_water_sampler_params(initial_state) for initial_state in initial_states])
+
     # Each state gets its own context to ensure deterministic results
     state_ctxts = [get_context(state, md_params=md_params) for state in initial_states]
+
+    state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
+    neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
+
+    if len(initial_states) == 2:
+        # Add an identity move to the mixture to ensure aperiodicity
+        neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
+
+    # Set up energy potential using the first state's context
+    bound_potentials = state_ctxts[0].get_potentials()
+    assert len(bound_potentials) == 1
+    potential = bound_potentials[0].get_potential()
+
+    hrex = HREX.from_replicas([CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states])
+
+    samples_by_state: List[Trajectory] = [Trajectory.empty() for _ in initial_states]
+    replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
+    fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
+
+    if (
+        md_params.water_sampling_params is not None
+        and md_params.steps_per_frame * md_params.n_frames < md_params.water_sampling_params.interval
+    ):
+        warn("Not running any water sampling, too few steps of MD per window for the water sampling interval")
+
+    temperature = initial_states[0].integrator.temperature
+    ligand_idxs = initial_states[0].ligand_idxs
 
     if n_threads is None:
         n_threads = os.cpu_count()
@@ -1218,46 +1250,16 @@ def run_sims_hrex(
     # Don't use more threads than there are states
     n_threads = min(len(initial_states), n_threads)
 
+    print("Threads", n_threads)
     with ThreadPool(n_threads) as pool:
-
-        temperature = initial_states[0].integrator.temperature
-        ligand_idxs = initial_states[0].ligand_idxs
-
-        params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
-        water_params_by_state: Optional[NDArray] = None
-        if md_params.water_sampling_params is not None:
-            water_params_by_state = np.array([get_water_sampler_params(initial_state) for initial_state in initial_states])
-
-        state_idxs = [StateIdx(i) for i, _ in enumerate(initial_states)]
-        neighbor_pairs = list(zip(state_idxs, state_idxs[1:]))
-
-        if len(initial_states) == 2:
-            # Add an identity move to the mixture to ensure aperiodicity
-            neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
-
-        # Set up energy potential using the first state's context
-        bound_potentials = state_ctxts[0].get_potentials()
-        assert len(bound_potentials) == 1
-        potential = bound_potentials[0].get_potential()
-
-        hrex = HREX.from_replicas([CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states])
-
-        samples_by_state: List[Trajectory] = [Trajectory.empty() for _ in initial_states]
-        replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
-        fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
-
-        if (
-            md_params.water_sampling_params is not None
-            and md_params.steps_per_frame * md_params.n_frames < md_params.water_sampling_params.interval
-        ):
-            warn("Not running any water sampling, too few steps of MD per window for the water sampling interval")
-
         begin_loop_time = time.perf_counter()
         last_update_time = begin_loop_time
 
         for current_frame in range(md_params.n_frames):
 
-            def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
+            def sample_replica(
+                xvb: CoordsVelBox, state_idx: StateIdx
+            ) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
                 ctxt = state_ctxts[state_idx]
                 ctxt.set_x_t(xvb.coords)
                 ctxt.set_v_t(xvb.velocities)
@@ -1286,16 +1288,18 @@ def run_sims_hrex(
                 assert frame.shape[0] == 1
 
                 barostat = ctxt.get_barostat()
-                final_barostat_volume_scale_factor = barostat.get_volume_scale_factor() if barostat is not None else None
+                final_barostat_volume_scale_factor = (
+                    barostat.get_volume_scale_factor() if barostat is not None else None
+                )
 
                 return frame[-1], box[-1], final_velos, final_barostat_volume_scale_factor
 
             replica_samples_by_state = pool.starmap(
-                sample_replica,
-                [(replica, state_idx) for state_idx, replica in hrex.state_replica_pairs],
+                sample_replica, [(replica, state_idx) for state_idx, replica in hrex.state_replica_pairs]
             )
+            # print([(i, state_idx) for i, (state_idx, _) in enumerate(hrex.state_replica_pairs)])
 
-            def get_replica_samples(
+            def get_state_samples(
                 xvb: CoordsVelBox, state_idx: StateIdx
             ) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
                 return replica_samples_by_state[state_idx]
@@ -1304,7 +1308,7 @@ def run_sims_hrex(
                 frame, box, velos, _ = last_sample
                 return CoordsVelBox(frame, velos, box)
 
-            hrex, samples_by_state_iter = hrex.sample_replicas(get_replica_samples, replica_from_samples)
+            hrex, samples_by_state_iter = hrex.sample_replicas(get_state_samples, replica_from_samples)
             U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
             log_q_kl = -U_kl / (BOLTZ * temperature)
 
@@ -1340,7 +1344,9 @@ def run_sims_hrex(
                     ]
 
                 instantaneous_swap_acceptance_rates = get_swap_acceptance_rates(fraction_accepted_by_pair)
-                average_swap_acceptance_rates = get_swap_acceptance_rates(np.sum(fraction_accepted_by_pair_by_iter, axis=0))
+                average_swap_acceptance_rates = get_swap_acceptance_rates(
+                    np.sum(fraction_accepted_by_pair_by_iter, axis=0)
+                )
 
                 wall_time_per_frame_current = (current_time - last_update_time) / print_diagnostics_interval
                 wall_time_per_frame_average = (current_time - begin_loop_time) / (current_frame + 1)
