@@ -8,8 +8,11 @@ from timemachine.fe.interaction_group_traj import InteractionGroupTraj, nb_pair_
 pytestmark = [pytest.mark.nocuda]
 
 
-def test_ig_traj_jax_transformable():
-    """test jit(grad(f))(params), where f(params) is defined in terms of logsumexp(compute_Us(params))"""
+def test_interaction_group_traj():
+    """test basic functionality of InteractionGroupTraj:
+    * jax transformations: jit(grad(f))(params), where f(params) is defined in terms of logsumexp(compute_Us(params))
+    * round-trip to/from npz
+    """
     n_frames = 2000
     n_env = 10_000
     n_lig = 100
@@ -43,3 +46,11 @@ def test_ig_traj_jax_transformable():
     grad_f = jit(grad(f))
     _ = f(nb_params * 1.1)
     _ = grad_f(nb_params * 1.1)
+
+    # also test to/from disk
+    fname = "test_ig_traj.npz"
+    traj.to_npz(fname)
+    traj_2 = InteractionGroupTraj.from_npz(fname)
+    compute_Us_2 = traj_2.make_U_fxn(nb_pair_fxn)
+    U_0_2 = compute_Us_2(nb_params)
+    np.testing.assert_allclose(U_0, U_0_2)
