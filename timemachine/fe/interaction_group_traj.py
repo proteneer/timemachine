@@ -135,7 +135,7 @@ class InteractionGroupTraj:
         traj.xs_env = archive["xs_env"]
         traj.box_diags = archive["box_diags"]
         traj.cutoff = archive["cutoff"]
-        traj.selected_env_idxs = jnp.array(archive["selected_env_idxs"])  # TODO: gross
+        traj.selected_env_idxs = archive["selected_env_idxs"]
         traj.ligand_idxs = archive["ligand_idxs"]
         traj.n_frames = len(traj.xs_env)
         return traj
@@ -179,13 +179,14 @@ class InteractionGroupTraj:
             """
             nb_params = jnp.array(nb_params)
             lig_params = nb_params[self.ligand_idxs]
+            selected_env_idxs = jnp.array(self.selected_env_idxs)
 
             @jit
             def U_snapshot(x_ligand, x_env, env_idxs, box_diag):
                 env_params = nb_params[env_idxs]
                 return jnp.sum(all_pairs_fxn(x_ligand, x_env, lig_params, env_params, jnp.diag(box_diag)))
 
-            Us = vmap(U_snapshot, (0, 0, 0, 0))(self.xs_lig, self.xs_env, self.selected_env_idxs, self.box_diags)
+            Us = vmap(U_snapshot, (0, 0, 0, 0))(self.xs_lig, self.xs_env, selected_env_idxs, self.box_diags)
             assert Us.shape == (self.n_frames,)
             return Us
 
