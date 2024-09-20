@@ -4,6 +4,8 @@ from pymbar import MBAR
 from pymbar.testsystems import HarmonicOscillatorsTestCase
 from scipy.special import logsumexp
 
+from timemachine.fe.rbfe import estimate_relative_free_energy_bisection
+from timemachine.ff import Forcefield
 from timemachine.optimize.protocol import (
     construct_work_stddev_estimator,
     greedily_optimize_protocol,
@@ -13,10 +15,11 @@ from timemachine.optimize.protocol import (
     produce_target_number_of_equidistant_states,
     rebalance_initial_protocol_by_work_stddev,
 )
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 np.random.seed(2021)
 
-pytestmark = [pytest.mark.nocuda]
+# pytestmark = [pytest.mark.nocuda]
 
 
 def test_rebalance_initial_protocol():
@@ -200,3 +203,39 @@ def test_overlap_rebalancing_on_gaussian():
         # assert symmetric
         _distances_flipped = np.array([overlap_dist(lam_j, lam_i) for lam_j in lams_above])
         np.testing.assert_allclose(distances_to_sorted_larger_lams, _distances_flipped)
+
+
+@pytest.mark.nightly(reason="Slow")
+def test_greedy_overlap_on_st_vacuum():
+    # get bisection result
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_default()
+    bisection_result = estimate_relative_free_energy_bisection(
+        mol_a, mol_b, core, ff, None, n_windows=48, min_overlap=2.0 / 3
+    )
+
+    # get MBAR inputs, lambdas
+    u_kn, N_k = bisection_result.compute_u_kn()
+    lambdas = np.array([s.lamb for s in bisection_result.final_result.initial_states])
+
+    # make approx overlap distance fxn
+    f_k = MBAR(u_kn, N_k).f_k
+    overlap_dist = make_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k)
+
+    # call protocol optimization, with various target values for neighbor overlap
+    print("initial protocol (from bisection): ")
+    _ = summarize_protocol(lambdas, overlap_dist)
+    target_overlap_levels = [0.05, 0.1, 0.2, 0.4, 0.666]
+    protocol_lengths = []
+    for target_overlap in target_overlap_levels:
+        target_dist = 1 - target_overlap
+        print(f"optimized with target dist = {target_dist} (target overlap = {target_overlap}):")
+        greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist)
+        greedy_nbr_dist = summarize_protocol(greedy_prot, overlap_dist)
+        protocol_length = len(greedy_prot)
+        assert protocol_length < len(lambdas), "surprise: optimized protocol is longer than initial protocol"
+        assert (
+            np.max(greedy_nbr_dist) <= target_dist + 1e-5
+        ), "failure: optimized protocol didn't satisfy overlap target"
+        protocol_lengths.append(protocol_length)
+    assert np.all(np.diff(protocol_lengths) >= 0), "surprise: more stringent overlap target -> fewer windows"
