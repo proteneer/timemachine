@@ -32,7 +32,6 @@ from timemachine.potentials import (
     HarmonicAngleStable,
     HarmonicBond,
     Nonbonded,
-    NonbondedInteractionGroup,
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
 )
@@ -1121,6 +1120,66 @@ class AtomMapMixin:
         self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
         self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
 
+    def mol_a_idxs(self):
+        """
+        Indices in the combined mol that correspond to an atom in mol_a
+        """
+        idxs = []
+        for c_idx, flag in enumerate(self.c_flags):
+            if flag == AtomMapFlags.CORE or flag == AtomMapFlags.MOL_A:
+                idxs.append(c_idx)
+        return np.array(idxs, dtype=np.int32)
+
+    def mol_b_idxs(self):
+        """
+        Indices in the combined mol that correspond to an atom in mol_b
+        """
+        idxs = []
+        for c_idx, flag in enumerate(self.c_flags):
+            if flag == AtomMapFlags.CORE or flag == AtomMapFlags.MOL_B:
+                idxs.append(c_idx)
+        return np.array(idxs, dtype=np.int32)
+
+    def core_idxs(self):
+        """
+        Indices corresponding to non-core atoms
+        """
+        idxs = []
+        for c_idx, flag in enumerate(self.c_flags):
+            if flag == AtomMapFlags.CORE:
+                idxs.append(c_idx)
+        return np.array(idxs, dtype=np.int32)
+
+    def dummy_idxs(self):
+        """
+        Indices corresponding to non-core atoms
+        """
+        idxs = []
+        for c_idx, flag in enumerate(self.c_flags):
+            if flag != AtomMapFlags.CORE:
+                idxs.append(c_idx)
+        return np.array(idxs, dtype=np.int32)
+
+    def dummy_a_idxs(self):
+        """
+        Indices corresponding to non-core atoms in mol_a
+        """
+        idxs = []
+        for c_idx, flag in enumerate(self.c_flags):
+            if flag == AtomMapFlags.MOL_A:
+                idxs.append(c_idx)
+        return np.array(idxs, dtype=np.int32)
+
+    def dummy_b_idxs(self):
+        """
+        Indices corresponding to non-core atoms in mol_b
+        """
+        idxs = []
+        for c_idx, flag in enumerate(self.c_flags):
+            if flag == AtomMapFlags.MOL_B:
+                idxs.append(c_idx)
+        return np.array(idxs, dtype=np.int32)
+
     def get_num_atoms(self):
         """
         Get the total number of atoms in the alchemical hybrid.
@@ -1142,6 +1201,65 @@ class AtomMapMixin:
             Total number of atoms.
         """
         return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core) - len(self.core)
+
+    def combine_confs(self, x_a, x_b, lamb=1.0):
+        """
+        Combine conformations of two molecules.
+
+        TODO: interpolate confs based on the lambda value?
+
+        Parameters
+        ----------
+        x_a: np.array of shape (N_A,3)
+            First conformation
+
+        x_b: np.array of shape (N_B,3)
+            Second conformation
+
+        lamb: optional float
+            if lamb > 0.5, map atoms from x_a first, then overwrite with x_b,
+            otherwise use opposite order
+
+        Returns
+        -------
+        np.array of shape (self.num_atoms,3)
+            Combined conformation
+
+        """
+        if lamb < 0.5:
+            return self.combine_confs_lhs(x_a, x_b)
+        else:
+            return self.combine_confs_rhs(x_a, x_b)
+
+    def combine_confs_rhs(self, x_a, x_b):
+        """
+        Combine x_a and x_b conformations for lambda=1
+        """
+        # place a first, then b overrides a
+        assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
+        assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
+        x0 = np.zeros((self.get_num_atoms(), 3))
+        for src, dst in enumerate(self.a_to_c):
+            x0[dst] = x_a[src]
+        for src, dst in enumerate(self.b_to_c):
+            x0[dst] = x_b[src]
+
+        return x0
+
+    def combine_confs_lhs(self, x_a, x_b):
+        """
+        Combine x_a and x_b conformations for lambda=0
+        """
+        # place b first, then a overrides b
+        assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
+        assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
+        x0 = np.zeros((self.get_num_atoms(), 3))
+        for src, dst in enumerate(self.b_to_c):
+            x0[dst] = x_b[src]
+        for src, dst in enumerate(self.a_to_c):
+            x0[dst] = x_a[src]
+
+        return x0
 
 
 _Bonded = TypeVar("_Bonded", bound=Union[ChiralAtomRestraint, HarmonicAngleStable, HarmonicBond, PeriodicTorsion])
@@ -1313,7 +1431,7 @@ def make_check_chiral_validity(
 
 
 class SingleTopology(AtomMapMixin):
-    def __init__(self, mol_a, mol_b, core, forcefield):
+    def __init__(self, mol_a, mol_b, core, forcefield, use_smoothcore=False):
         """
         SingleTopology combines two molecules through a common core. The combined mol has
         atom indices laid out such that mol_a is identically mapped to the combined mol indices.
@@ -1365,6 +1483,25 @@ class SingleTopology(AtomMapMixin):
             self.dst_system.bond.potential.idxs,
         )
 
+        self.use_smoothcore = use_smoothcore
+
+    def get_smoothcore_ligand_anchor_idxs(self):
+        ligand_anchor_idxs = np.zeros(self.get_num_atoms(), dtype=np.int32)
+
+        for c_idx, c_flag in enumerate(self.c_flags):
+            if c_flag == AtomMapFlags.CORE:
+                ligand_anchor_idxs[c_idx] = c_idx
+
+        for anchor, dummy_group in self.dummy_groups_ab.items():
+            for dummy_atom in dummy_group:
+                ligand_anchor_idxs[self.b_to_c[dummy_atom]] = self.b_to_c[anchor]
+
+        for anchor, dummy_group in self.dummy_groups_ba.items():
+            for dummy_atom in dummy_group:
+                ligand_anchor_idxs[self.a_to_c[dummy_atom]] = self.a_to_c[anchor]
+
+        return ligand_anchor_idxs
+
     def combine_masses(self, use_hmr=False):
         """
         Combine masses between two end-states by taking the heavier of the two core atoms.
@@ -1407,65 +1544,6 @@ class SingleTopology(AtomMapMixin):
             mol_c_masses.append(mass)
 
         return mol_c_masses
-
-    def combine_confs(self, x_a, x_b, lamb=1.0):
-        """
-        Combine conformations of two molecules.
-
-        TODO: interpolate confs based on the lambda value?
-
-        Parameters
-        ----------
-        x_a: np.array of shape (N_A,3)
-            First conformation
-
-        x_b: np.array of shape (N_B,3)
-            Second conformation
-
-        lamb: optional float
-            if lamb > 0.5, map atoms from x_a first, then overwrite with x_b,
-            otherwise use opposite order
-
-        Returns
-        -------
-        np.array of shape (self.num_atoms,3)
-            Combined conformation
-
-        """
-        if lamb < 0.5:
-            return self.combine_confs_lhs(x_a, x_b)
-        else:
-            return self.combine_confs_rhs(x_a, x_b)
-
-    def combine_confs_rhs(self, x_a, x_b):
-        """
-        Combine x_a and x_b conformations for lambda=1
-        """
-        # place a first, then b overrides a
-        assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
-        assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
-        x0 = np.zeros((self.get_num_atoms(), 3))
-        for src, dst in enumerate(self.a_to_c):
-            x0[dst] = x_a[src]
-        for src, dst in enumerate(self.b_to_c):
-            x0[dst] = x_b[src]
-
-        return x0
-
-    def combine_confs_lhs(self, x_a, x_b):
-        """
-        Combine x_a and x_b conformations for lambda=0
-        """
-        # place b first, then a overrides b
-        assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
-        assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
-        x0 = np.zeros((self.get_num_atoms(), 3))
-        for src, dst in enumerate(self.b_to_c):
-            x0[dst] = x_b[src]
-        for src, dst in enumerate(self.a_to_c):
-            x0[dst] = x_a[src]
-
-        return x0
 
     def _setup_end_state_src(self):
         """
@@ -1777,6 +1855,34 @@ class SingleTopology(AtomMapMixin):
         # make read-only
         return Chem.Mol(mol)
 
+    def _get_smoothcore_guest_params(self, q_handle, lj_handle, lamb: float):
+        mol_a_charges = q_handle.parameterize(self.mol_a)
+        mol_b_charges = q_handle.parameterize(self.mol_b)
+        mol_a_lj = lj_handle.parameterize(self.mol_a)
+        mol_b_lj = lj_handle.parameterize(self.mol_b)
+        mol_a_idxs = self.mol_a_idxs()
+        mol_b_idxs = self.mol_b_idxs()
+
+        charges_src = np.zeros(self.get_num_atoms())
+        charges_dst = np.zeros(self.get_num_atoms())
+        charges_src[mol_a_idxs] = mol_a_charges[np.array([self.c_to_a[x] for x in mol_a_idxs])]
+        charges_dst[mol_b_idxs] = mol_b_charges[np.array([self.c_to_b[x] for x in mol_b_idxs])]
+
+        lj_src = np.zeros((self.get_num_atoms(), 2))
+        lj_dst = np.zeros((self.get_num_atoms(), 2))
+        lj_src[mol_a_idxs] = mol_a_lj[np.array([self.c_to_a[x] for x in mol_a_idxs])]
+        lj_dst[mol_b_idxs] = mol_b_lj[np.array([self.c_to_b[x] for x in mol_b_idxs])]
+
+        from timemachine.potentials.nonbonded import smoothcore_ligand_param_interpolation
+
+        np.testing.assert_almost_equal(np.sum(charges_src), np.sum(charges_dst), decimal=5)
+
+        ligand_params = smoothcore_ligand_param_interpolation(lamb, charges_src, charges_dst, lj_src, lj_dst, self)
+
+        np.testing.assert_almost_equal(np.sum(charges_src), np.sum(ligand_params[:, 0]), decimal=5)
+
+        return ligand_params
+
     def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
         """
         Return an array containing the guest_charges, guest_sigmas, guest_epsilons, guest_w_coords
@@ -1861,15 +1967,13 @@ class SingleTopology(AtomMapMixin):
 
         return combined_nonbonded.bind(hg_nb_params)
 
-    def _parameterize_host_guest_nonbonded_ixn(
+    def _parameterize_unbound_host_guest_nonbonded_ixn(
         self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
-    ) -> BoundPotential[NonbondedInteractionGroup]:
+    ) -> tuple:
         """Parameterize nonbonded interactions between the host and guest"""
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
         cutoff = host_nonbonded.potential.cutoff
-
-        guest_ixn_env_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
 
         # L-W terms
         num_other_atoms = num_host_atoms - num_water_atoms
@@ -1886,17 +1990,39 @@ class SingleTopology(AtomMapMixin):
         def get_env_idxs():
             return np.array(list(get_other_idxs()) + list(get_water_idxs()), dtype=np.int32)
 
-        ixn_pot, ixn_params = get_ligand_ixn_pots_params(
-            get_lig_idxs(),
-            get_env_idxs(),
-            host_nonbonded.params,
-            guest_ixn_env_params,
-            beta=host_nonbonded.potential.beta,
-            cutoff=cutoff,
-        )
+        from timemachine.fe.topology import get_smoothcore_ligand_ixn_pots_params
 
-        bound_ixn_pot = ixn_pot.bind(ixn_params)
-        return bound_ixn_pot
+        if self.use_smoothcore:
+            print("WARNING: Using smoothcore nonbonded interactions...")
+            guest_ixn_env_params = self._get_smoothcore_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb)
+            ixn_pot, ixn_params = get_smoothcore_ligand_ixn_pots_params(
+                get_lig_idxs(),
+                self.get_smoothcore_ligand_anchor_idxs(),
+                get_env_idxs(),
+                host_nonbonded.params,
+                guest_ixn_env_params,
+                beta=host_nonbonded.potential.beta,
+                cutoff=cutoff,
+            )
+        else:
+            guest_ixn_env_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
+            ixn_pot, ixn_params = get_ligand_ixn_pots_params(
+                get_lig_idxs(),
+                get_env_idxs(),
+                host_nonbonded.params,
+                guest_ixn_env_params,
+                beta=host_nonbonded.potential.beta,
+                cutoff=cutoff,
+            )
+
+        return ixn_pot, ixn_params
+
+    def _parameterize_host_guest_nonbonded_ixn(
+        self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
+    ):
+        ixn_pot, ixn_params = self._parameterize_unbound_host_guest_nonbonded_ixn(lamb, host_nonbonded, num_water_atoms)
+
+        return ixn_pot.bind(ixn_params)
 
     def combine_with_host(self, host_system: VacuumSystem, lamb: float, num_water_atoms: int) -> HostGuestSystem:
         """
@@ -1915,7 +2041,7 @@ class SingleTopology(AtomMapMixin):
         Parameters
         ----------
         host_system: VacuumSystem
-            Parameterized system of the host
+            Parameterized host system.
 
         lamb: float
             Which lambda value we want to generate the combined system.

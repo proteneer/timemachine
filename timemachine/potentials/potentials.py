@@ -163,8 +163,6 @@ class NonbondedInteractionGroup(Potential):
     nblist_padding: float = 0.1
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
-        num_atoms, _ = jnp.array(conf).shape
-
         vdW, electrostatics = nonbonded.nonbonded_interaction_groups(
             conf,
             params,
@@ -175,6 +173,30 @@ class NonbondedInteractionGroup(Potential):
             self.cutoff,
         )
         return jnp.sum(vdW) + jnp.sum(electrostatics)
+
+
+@dataclass
+class SmoothcoreNonbondedInteractionGroup(Potential):
+    num_atoms: int
+    row_atom_idxs: NDArray[np.int32]
+    anchor_idxs: NDArray[np.int32]
+    beta: float
+    cutoff: float
+    col_atom_idxs: Optional[NDArray[np.int32]] = None
+    disable_hilbert_sort: bool = False
+    nblist_padding: float = 0.1
+
+    def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
+        return nonbonded.smoothcore_nonbonded_interaction_group(
+            conf,
+            params,
+            box,
+            self.row_atom_idxs,
+            self.col_atom_idxs,
+            self.anchor_idxs,
+            self.beta,
+            self.cutoff,
+        )
 
 
 @dataclass

@@ -696,7 +696,7 @@ def get_ligand_ixn_pots_params(
     guest_params_ixn_env: Params,
     beta=2.0,
     cutoff=1.2,
-) -> Tuple[potentials.NonbondedInteractionGroup, Params]:
+):
     """
     Return the interaction group potentials and corresponding parameters
     for the ligand-water and ligand-protein interaction terms.
@@ -725,7 +725,7 @@ def get_ligand_ixn_pots_params(
     num_lig_atoms = len(lig_idxs)
     num_total_atoms = num_lig_atoms + len(env_idxs)
 
-    hg_ixn_pot = potentials.NonbondedInteractionGroup(
+    ixn_pot = potentials.NonbondedInteractionGroup(
         num_total_atoms,
         lig_idxs,
         beta,
@@ -734,4 +734,63 @@ def get_ligand_ixn_pots_params(
     )
 
     hg_ixn_params = jnp.concatenate([host_nb_params, guest_params_ixn_env])
-    return hg_ixn_pot, hg_ixn_params
+
+    return ixn_pot, hg_ixn_params
+
+
+def get_smoothcore_ligand_ixn_pots_params(
+    lig_idxs: NDArray,
+    lig_anchor_idxs: NDArray,
+    env_idxs: Optional[NDArray],
+    host_nb_params: Params,
+    guest_params_ixn_env: Params,
+    beta=2.0,
+    cutoff=1.2,
+):
+    """
+    Return the interaction group potentials and corresponding parameters
+    for the ligand-water and ligand-protein interaction terms.
+
+    Parameters
+    ----------
+    lig_idxs:
+        List of ligand indexes (dtype, np.int32), one for each ligand.
+
+    lig_anchor_idxs:
+        List of ligand anchor indices denoting the origin for each atom.
+
+    env_idxs:
+        Indexes for the environment atoms including waters.
+        May be None if there are no other atoms.
+
+    host_nb_params:
+        Nonbonded parameters for the host (environment) atoms.
+
+    guest_params_ixn_env:
+        Parameters for the guest (ligand) NB interactions with the
+        environment atoms.
+    """
+
+    # Init
+    env_idxs = env_idxs if env_idxs is not None else np.array([])
+
+    # Ligand-Env terms
+    num_lig_atoms = len(lig_idxs)
+    num_host_atoms = len(env_idxs)
+    num_total_atoms = num_lig_atoms + len(env_idxs)
+
+    lig_anchor_idxs += num_host_atoms
+    anchor_idxs = np.concatenate([np.arange(num_host_atoms), lig_anchor_idxs])
+
+    ixn_pot = potentials.SmoothcoreNonbondedInteractionGroup(
+        num_total_atoms,
+        lig_idxs.astype(np.int32),
+        anchor_idxs.astype(np.int32),
+        beta,
+        cutoff,
+        col_atom_idxs=env_idxs.astype(np.int32),
+    )
+
+    hg_ixn_params = jnp.concatenate([host_nb_params, guest_params_ixn_env])
+
+    return ixn_pot, hg_ixn_params
