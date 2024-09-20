@@ -117,9 +117,10 @@ class InteractionGroupTraj:
         self.xs_env = np.array([_x_env[idxs] for (_x_env, idxs) in zip(_xs_env, idxs_within_env_block)])
         self.box_diags = box_diags
 
-    def to_disk(self, fname):
+    def to_npz(self, fname):
         np.savez_compressed(
             fname,
+            xs_lig=np.array(self.xs_lig),
             xs_env=np.array(self.xs_env),
             box_diags=np.array(self.box_diags),
             cutoff=self.cutoff,
@@ -128,7 +129,7 @@ class InteractionGroupTraj:
         )
 
     @classmethod
-    def from_disk(cls, fname):
+    def from_npz(cls, fname):
         npz_archive = np.load(fname, allow_pickle=False)
 
         traj = cls.__new__(cls)
