@@ -12,7 +12,6 @@ from timemachine.optimize.protocol import (
     linear_u_kn_interpolant,
     log_weights_from_mixture,
     make_approx_overlap_distance_fxn,
-    produce_target_number_of_equidistant_states,
     rebalance_initial_protocol_by_work_stddev,
 )
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -174,17 +173,6 @@ def test_overlap_rebalancing_on_gaussian():
     greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist)
     greedy_nbr_dist = summarize_protocol(greedy_prot, overlap_dist)
     assert np.max(greedy_nbr_dist) <= target_dist + 1e-5  # a little wiggle room
-
-    # optimize for a target num states
-    target_num_states = len(greedy_prot)
-    print(f"optimized with target num_states = {target_num_states}:")
-    optimized_protocol = produce_target_number_of_equidistant_states(
-        overlap_dist, target_num_states, max_num_states=len(greedy_prot)
-    )
-    optimized_nbr_dist = summarize_protocol(optimized_protocol, overlap_dist)
-
-    assert len(optimized_protocol) <= target_num_states
-    assert np.max(optimized_nbr_dist) <= np.max(greedy_nbr_dist)
 
     # also, sanity-check the overlap_dist function: d(x,x)==0, d(x,y)==d(y,x), x<y<z => d(x,y)<d(x,z)
     rng = np.random.default_rng(2024)

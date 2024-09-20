@@ -268,7 +268,7 @@ def make_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k):
     return approximate_overlap_distance
 
 
-# optimization approaches: specify [d(i,i+1) ~= target_distance], or specify len(lambdas) ~= target_num_states
+# optimization approach: specify [d(i,i+1) ~= target_distance]
 def greedily_optimize_protocol(distance_fxn: DistanceFxn, target_distance=0.5, max_iterations=1000) -> Array:
     """Optimize a lambda protocol from "left to right"
 
@@ -299,47 +299,3 @@ def greedily_optimize_protocol(distance_fxn: DistanceFxn, target_distance=0.5, m
         protocol.append(1.0)
 
     return jnp.array(protocol)
-
-
-def produce_target_number_of_equidistant_states(distance_fxn, target_num_states=10, max_num_states=64, max_iters=20):
-    """repeatedly invoke greedily_optimize_protocol (with different trial target_distances)
-    to produce a protocol with close to the target number of states"""
-
-    # TODO[interface]: could have this function accept a distance bracket, in addition to the num_states bracket
-    #   (currently hardcodes distance bracket as [1e-4, 1 - 1e-4], and defaults to num_states bracket [2, 64])
-    # TODO[robustness]: catch "RuntimeError: Failed to converge after 20 iterations."
-    # TODO[curiosity]: compare with a global optimization
-    #   (currently reduces the target_num_states problem to multiple instances of the target_distance problem)
-
-    eps = 1e-4
-    initial_target_distance = 1.0 - eps
-    min_target_distance = eps
-
-    protocols_by_target_dist = dict()
-
-    def score_target_distance(target_distance):
-        """test whether len(greedily_optimize_protocol(target_distance)) < target_num_states"""
-
-        prot = greedily_optimize_protocol(distance_fxn, target_distance=target_distance, max_iterations=max_num_states)
-        protocols_by_target_dist[target_distance] = prot
-        print(f"{target_distance} : {len(prot)}")
-        if len(prot) > target_num_states:
-            return -1
-        else:
-            return +1
-
-    # bisect to find a target_distance that produces ~= target_num_states
-    try:
-        _ = bisect(score_target_distance, initial_target_distance, min_target_distance, maxiter=max_iters)
-    except RuntimeError as e:
-        print(f"bisection failed: {e}")
-
-    # find the smallest target_distance such that len(greedily_optimize_protocol(target_distance)) == target_num_states
-    lowest_so_far = initial_target_distance
-    for dist in protocols_by_target_dist.keys():
-        if (len(protocols_by_target_dist[dist]) == target_num_states) and (dist < lowest_so_far):
-            lowest_so_far = dist
-    best_target_dist = lowest_so_far
-
-    prot = protocols_by_target_dist[best_target_dist]
-    return prot
