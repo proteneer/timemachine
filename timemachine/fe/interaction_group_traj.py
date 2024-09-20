@@ -117,9 +117,8 @@ class InteractionGroupTraj:
         self.xs_env = np.array([_x_env[idxs] for (_x_env, idxs) in zip(_xs_env, idxs_within_env_block)])
         self.box_diags = box_diags
 
-    def to_npz(self, fname):
-        np.savez_compressed(
-            fname,
+    def to_dict(self):
+        return dict(
             xs_lig=np.array(self.xs_lig),
             xs_env=np.array(self.xs_env),
             box_diags=np.array(self.box_diags),
@@ -129,19 +128,25 @@ class InteractionGroupTraj:
         )
 
     @classmethod
+    def from_dict(cls, dict_of_np_arrays):
+        archive = dict_of_np_arrays
+        traj = cls.__new__(cls)
+        traj.xs_lig = archive["xs_lig"]
+        traj.xs_env = archive["xs_env"]
+        traj.box_diags = archive["box_diags"]
+        traj.cutoff = archive["cutoff"]
+        traj.selected_env_idxs = jnp.array(archive["selected_env_idxs"])  # TODO: gross
+        traj.ligand_idxs = archive["ligand_idxs"]
+        traj.n_frames = len(traj.xs_env)
+        return traj
+
+    def to_npz(self, fname):
+        np.savez_compressed(fname, **self.to_dict())
+
+    @classmethod
     def from_npz(cls, fname):
         npz_archive = np.load(fname, allow_pickle=False)
-
-        traj = cls.__new__(cls)
-        traj.xs_lig = npz_archive["xs_lig"]
-        traj.xs_env = npz_archive["xs_env"]
-        traj.box_diags = npz_archive["box_diags"]
-        traj.cutoff = npz_archive["cutoff"]
-        traj.selected_env_idxs = jnp.array(npz_archive["selected_env_idxs"])  # TODO: gross
-        traj.ligand_idxs = npz_archive["ligand_idxs"]
-        traj.n_frames = len(traj.xs_env)
-
-        return traj
+        return cls.from_dict(npz_archive)
 
     def make_U_fxn(self, pair_fxn: PairFxn):
         """
