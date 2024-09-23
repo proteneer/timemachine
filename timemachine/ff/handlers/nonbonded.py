@@ -590,7 +590,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 dst_res_template_name = template_for_residue[dst_atom.residue.index].name
                 assert src_res_template_name == dst_res_template_name
                 if src_res_template_name == "HOH":
-                    # Don't fit waters
+                    # Skip waters
                     continue
                 bond_idxs.append((src_atom.index, dst_atom.index))
                 residue_bond_kv = self.res_to_bonds_to_param_idxs[src_res_template_name]
@@ -608,7 +608,6 @@ class EnvironmentBCCHandler(SerializableMixIn):
 
         self.bond_idxs = np.array(bond_idxs)
         self.param_idxs = np.array(param_idxs)
-        # print('ZZZ param_idxs', self.param_idxs.shape, self.param_idxs)
         self.signs = np.array(signs)
 
     def parameterize(self, params):
@@ -621,11 +620,6 @@ class EnvironmentBCCHandler(SerializableMixIn):
         final_charges = apply_bond_charge_corrections(
             self.initial_charges, self.bond_idxs, bond_deltas, runtime_validate=False
         )
-        # import jax
-        # print('FFNB initial_charges', self.initial_charges)
-        # jax.debug.print('FFNB params={p}', p=params)
-        # print('FFNB bond_deltas', bond_deltas)
-        # print('FFNB final_charges', final_charges)
         return final_charges
 
 
