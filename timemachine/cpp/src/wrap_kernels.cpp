@@ -366,6 +366,7 @@ void declare_context(py::module &m) {
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
                 py::gil_scoped_release release;
                 ctxt.multiple_steps(n_steps, n_samples, out_x_buffer.mutable_data(), box_buffer.mutable_data());
+                py::gil_scoped_acquire acquire;
                 return res;
             },
             py::arg("n_steps"),
@@ -441,6 +442,7 @@ void declare_context(py::module &m) {
                     seed,
                     out_x_buffer.mutable_data(),
                     box_buffer.mutable_data());
+                py::gil_scoped_acquire acquire;
                 return res;
             },
             py::arg("n_steps"),
@@ -551,6 +553,7 @@ void declare_context(py::module &m) {
                     k,
                     out_x_buffer.mutable_data(),
                     box_buffer.mutable_data());
+                py::gil_scoped_acquire acquire;
                 return res;
             },
             py::arg("n_steps"),

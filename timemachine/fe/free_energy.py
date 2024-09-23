@@ -1261,9 +1261,11 @@ def run_sims_hrex(
                 xvb: CoordsVelBox, state_idx: StateIdx
             ) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
                 ctxt = state_ctxts[state_idx]
-                ctxt.set_x_t(xvb.coords)
+                assert np.all(ctxt.get_x_t() == xvb.coords)
                 ctxt.set_v_t(xvb.velocities)
+                assert np.all(ctxt.get_v_t() == xvb.velocities)
                 ctxt.set_box(xvb.box)
+                assert np.all(ctxt.get_box() == xvb.box)
                 ctxt.get_potentials()[0].set_params(params_by_state[state_idx])
                 current_step = current_frame * md_params.steps_per_frame
                 for mover in ctxt.get_movers():
