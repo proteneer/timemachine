@@ -538,8 +538,8 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
         water_params = get_water_sampler_params(initial_state)
 
-        # Generate a new random seed based on the md params seed
-        rng = np.random.default_rng(md_params.seed)
+        # Generate a new random seed based on the integrator seed, MDParams seed is constant across states
+        rng = np.random.default_rng(initial_state.integrator.seed)
         water_sampler_seed = rng.integers(np.iinfo(np.int32).max)
 
         water_sampler = custom_ops.TIBDExchangeMove_f32(
