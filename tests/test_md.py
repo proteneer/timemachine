@@ -48,6 +48,9 @@ def test_multiple_steps_store_interval():
     bps = [bp]
 
     ctxt = custom_ops.Context(x0, v0, box, intg, bps)
+
+    with pytest.raises(RuntimeError, match="store_x_interval must be greater than or equal to zero"):
+        ctxt.multiple_steps(10, -1)
     test_xs, test_boxes = ctxt.multiple_steps(10, 10)
     assert len(test_xs) == 1
     assert len(test_xs) == len(test_boxes)
@@ -309,6 +312,9 @@ def test_multiple_steps_local_validation(freeze_reference):
     with pytest.raises(RuntimeError, match=re.escape("k must be less than than 1e+06")):
         ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), k=1e7)
 
+    with pytest.raises(RuntimeError, match="store_x_interval must be greater than or equal to zero"):
+        ctxt.multiple_steps_local(100, np.array([1], dtype=np.int32), store_x_interval=-1)
+
 
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_multiple_steps_local_selection_validation(freeze_reference):
@@ -376,6 +382,9 @@ def test_multiple_steps_local_selection_validation(freeze_reference):
 
     with pytest.raises(RuntimeError, match=f"reference idx must be at least 0 and less than {N}"):
         ctxt.multiple_steps_local_selection(100, -1, np.array([3], dtype=np.int32))
+
+    with pytest.raises(RuntimeError, match="store_x_interval must be greater than or equal to zero"):
+        ctxt.multiple_steps_local_selection(100, 1, np.array([2], dtype=np.int32), store_x_interval=-1)
 
 
 @pytest.mark.parametrize("freeze_reference", [True, False])
@@ -917,14 +926,11 @@ def test_context_invalid_boxes():
     ctxt.set_box(box * 0.01)
     err_msg = "cutoff with padding is more than half of the box width, neighborlist is no longer reliable"
     with pytest.raises(RuntimeError, match=err_msg):
-        _, boxes = ctxt.multiple_steps(steps)
-        assert len(boxes) == 1
+        ctxt.multiple_steps(steps)
     with pytest.raises(RuntimeError, match=err_msg):
-        _, boxes = ctxt.multiple_steps_local(steps, ligand_idxs)
-        assert len(boxes) == 1
+        ctxt.multiple_steps_local(steps, ligand_idxs)
     with pytest.raises(RuntimeError, match=err_msg):
-        _, boxes = ctxt.multiple_steps_local_selection(steps, reference_idx, selection)
-        assert len(boxes) == 1
+        ctxt.multiple_steps_local_selection(steps, reference_idx, selection)
 
     # Without returning boxes no check will be performed
     _, boxes = ctxt.multiple_steps(steps, store_x_interval=steps + 1)
@@ -961,7 +967,7 @@ def test_context_invalid_boxes_without_nonbonded_potentials():
 
     ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
 
-    # Make the box way too small, which should trigger the failure
+    # Make the box way too small, which would trigger the failure if the all pairs potential existed
     ctxt.set_box(box * 0.01)
     _, boxes = ctxt.multiple_steps(steps)
     assert len(boxes) == 1
