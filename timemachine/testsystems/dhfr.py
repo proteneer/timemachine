@@ -3,6 +3,7 @@ from importlib import resources
 import numpy as np
 from openmm import app
 
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.builders import strip_units
 
@@ -10,6 +11,9 @@ from timemachine.md.builders import strip_units
 def setup_dhfr():
     with resources.path("timemachine.testsystems.data", "5dfr_solv_equil.pdb") as pdb_path:
         host_pdb = app.PDBFile(str(pdb_path))
+
+    tm_ff = Forcefield.load_default()
+    modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
 
     protein_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
     host_system = protein_ff.createSystem(
@@ -19,7 +23,7 @@ def setup_dhfr():
     box = host_pdb.topology.getPeriodicBoxVectors()
     box = strip_units(box)
 
-    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
+    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, modeller.topology, tm_ff, cutoff=1.0)
 
     return host_fns, host_masses, np.array(host_coords), np.array(box)
 

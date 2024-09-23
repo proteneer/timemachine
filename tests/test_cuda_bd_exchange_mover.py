@@ -200,8 +200,8 @@ def test_bd_exchange_get_set_params(precision):
 def test_pair_of_waters_in_box(proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed):
     """Given two waters in a large box most moves should be accepted. This is a useful test for verifying memory doesn't leak"""
     ff = Forcefield.load_default()
-    system, host_conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, host_conf, _, top = builders.build_water_system(1.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -260,9 +260,9 @@ def test_sampling_single_water_in_bulk(
 ):
     """Sample a single water in a box of water. Useful to verify that we are hitting the tail end of buffers"""
     ff = Forcefield.load_default()
-    system, conf, box, _ = builders.build_water_system(2.5, ff.water_ff)
+    system, conf, box, top = builders.build_water_system(2.5, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -312,9 +312,9 @@ def test_sampling_single_water_in_bulk(
 @pytest.mark.parametrize("seed", [2023])
 def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
     ff = Forcefield.load_default()
-    system, conf, box, _ = builders.build_water_system(4.0, ff.water_ff)
+    system, conf, box, top = builders.build_water_system(4.0, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    bps, masses = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -402,8 +402,8 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     * When we attempt K proposals in a batch (each proposal is made up of K proposals) it produces the same as the serial version
     """
     ff = Forcefield.load_default()
-    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -461,8 +461,8 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
     increase the number of proposals per move in the constructor that the results should be identical
     """
     ff = Forcefield.load_default()
-    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -543,9 +543,9 @@ def test_moves_in_a_water_box(
 ):
     """Verify that the log acceptance probability between the reference and cuda implementation agree"""
     ff = Forcefield.load_default()
-    system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
+    system, conf, box, top = builders.build_water_system(box_size, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    bps, masses = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -712,8 +712,8 @@ def test_compute_incremental_log_weights(batch_size, samples, box_size, precisio
     """Verify that the incremental weights computed are valid for different collections of rotations/translations"""
     proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
     ff = Forcefield.load_default()
-    system, conf, box, _ = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, conf, box, top = builders.build_water_system(box_size, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -779,9 +779,11 @@ def hif2a_complex():
     seed = 2023
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, conf, box, _, _ = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
+        complex_system, conf, box, complex_top, _ = builders.build_protein_system(
+            str(path_to_pdb), ff.protein_ff, ff.water_ff
+        )
     box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
+    bps, masses = openmm_deserializer.deserialize_system(complex_system, complex_top, ff, cutoff=1.2)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     bond_list = get_bond_list(bond_pot)
@@ -826,7 +828,7 @@ def hif2a_complex():
     for bp in bound_impls:
         du_dx, _ = bp.execute(conf, box, True, False)
         check_force_norm(-du_dx)
-    return complex_system, conf, box
+    return complex_system, conf, box, complex_top
 
 
 @pytest.mark.parametrize(
@@ -840,8 +842,9 @@ def hif2a_complex():
 def test_moves_with_complex(
     hif2a_complex, num_proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed
 ):
-    complex_system, conf, box = hif2a_complex
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
+    ff = Forcefield.load_default()
+    complex_system, conf, box, complex_top = hif2a_complex
+    bps, masses = openmm_deserializer.deserialize_system(complex_system, complex_top, ff, cutoff=1.2)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -890,11 +893,11 @@ def hif2a_rbfe_state() -> InitialState:
     seed = 2023
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_conf, box, _, num_water_atoms = builders.build_protein_system(
+        complex_system, complex_conf, box, complex_top, num_water_atoms = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
     box += np.diag([0.1, 0.1, 0.1])
-    host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
+    host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms, complex_top)
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     st = SingleTopology(mol_a, mol_b, core, ff)
 

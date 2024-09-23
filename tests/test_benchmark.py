@@ -111,10 +111,10 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        host_system, host_coords, host_box, _, num_water_atoms = builders.build_protein_system(
+        host_system, host_coords, host_box, host_top, num_water_atoms = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )
-    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms)
+    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms, host_top)
     initial_state = prepare_single_topology_initial_state(st, host_config)
 
     ligand_idxs = np.arange(len(host_coords), len(initial_state.x0), dtype=np.int32)
@@ -471,7 +471,9 @@ def run_single_topology_benchmarks(
     initial_state = prepare_single_topology_initial_state(st, host_config)
     barostat_interval = 0
     if host_config is not None:
-        host_fns, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+        host_fns, host_masses = openmm_deserializer.deserialize_system(
+            host_config.omm_system, host_config.omm_topology, st.ff, cutoff=1.2
+        )
 
         # RBFE
         x0 = initial_state.x0[: len(host_config.conf)]
@@ -556,7 +558,7 @@ def benchmark_hif2a(config: BenchmarkConfig):
         )
 
     # resolve host clashes
-    host_config = HostConfig(host_system, host_coords, host_box, host_num_waters)
+    host_config = HostConfig(host_system, host_coords, host_box, host_num_waters, top)
 
     run_single_topology_benchmarks(config, "hif2a", st, host_config)
 
@@ -567,12 +569,14 @@ def benchmark_solvent(config: BenchmarkConfig):
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
-    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
+    host_system, host_coords, host_box, host_top = builders.build_water_system(
+        4.0, forcefield.water_ff, mols=[mol_a, mol_b]
+    )
 
     num_water_atoms = host_coords.shape[0]
 
     # resolve host clashes
-    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms)
+    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms, host_top)
     run_single_topology_benchmarks(config, "solvent", st, host_config)
 
 
@@ -591,12 +595,12 @@ def benchmark_ahfe(config: BenchmarkConfig):
     seed = 2024
     mol, _, _ = get_hif2a_ligand_pair_single_topology()
 
-    host_system, host_coords, host_box, _ = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol])
+    host_system, host_coords, host_box, host_top = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol])
 
     num_water_atoms = host_coords.shape[0]
 
     # resolve host clashes
-    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms)
+    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms, host_top)
 
     bt = BaseTopology(mol, forcefield)
     afe = AbsoluteFreeEnergy(mol, bt)

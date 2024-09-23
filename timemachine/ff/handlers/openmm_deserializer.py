@@ -3,7 +3,7 @@ from typing import DefaultDict, List, Tuple
 
 import numpy as np
 import openmm as mm
-from openmm import unit
+from openmm import app, unit
 
 from timemachine import constants, potentials
 from timemachine.ff import Forcefield
@@ -122,7 +122,7 @@ def deserialize_nonbonded_force(force, N):
 
 
 def deserialize_system(
-    system: mm.System, omm_topology, ff: Forcefield, cutoff: float
+    system: mm.System, omm_topology: app.topology.Topology, ff: Forcefield, cutoff: float
 ) -> Tuple[List[potentials.BoundPotential], List[float]]:
     """
     Deserialize an OpenMM XML file
@@ -131,6 +131,10 @@ def deserialize_system(
     ----------
     system: openmm.System
         A system object to be deserialized
+    omm_topology: app.topology.Topology
+        A corresponding topology object
+    ff: Forcefield
+        Forcefield used to potentially modify the environment parameters.
     cutoff: float
         Nonbonded cutoff, in nm
 
