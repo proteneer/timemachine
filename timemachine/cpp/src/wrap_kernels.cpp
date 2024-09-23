@@ -640,7 +640,6 @@ void declare_context(py::module &m) {
                 if (new_x_t.shape()[0] != ctxt.num_atoms()) {
                     throw std::runtime_error("number of new coords disagree with current coords");
                 }
-                py::gil_scoped_release release;
                 ctxt.set_x_t(new_x_t.data());
             },
             py::arg("coords"))
@@ -650,7 +649,6 @@ void declare_context(py::module &m) {
                 if (new_v_t.shape()[0] != ctxt.num_atoms()) {
                     throw std::runtime_error("number of new velocities disagree with current coords");
                 }
-                py::gil_scoped_release release;
                 ctxt.set_v_t(new_v_t.data());
             },
             py::arg("velocities"))
@@ -660,7 +658,6 @@ void declare_context(py::module &m) {
                 if (new_box_t.size() != 9 || new_box_t.shape()[0] != 3) {
                     throw std::runtime_error("box must be 3x3");
                 }
-                py::gil_scoped_release release;
                 ctxt.set_box(new_box_t.data());
             },
             py::arg("box"))
@@ -670,7 +667,6 @@ void declare_context(py::module &m) {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({N, D});
-                py::gil_scoped_release release;
                 ctxt.get_x_t(buffer.mutable_data());
                 return buffer;
             })
@@ -680,7 +676,6 @@ void declare_context(py::module &m) {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({N, D});
-                py::gil_scoped_release release;
                 ctxt.get_v_t(buffer.mutable_data());
                 return buffer;
             })
@@ -689,14 +684,13 @@ void declare_context(py::module &m) {
             [](Context &ctxt) -> py::array_t<double, py::array::c_style> {
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({D, D});
-                py::gil_scoped_release release;
                 ctxt.get_box(buffer.mutable_data());
                 return buffer;
             })
-        .def("get_integrator", &Context::get_integrator, py::call_guard<py::gil_scoped_release>())
-        .def("get_potentials", &Context::get_potentials, py::call_guard<py::gil_scoped_release>())
-        .def("get_barostat", &Context::get_barostat, py::call_guard<py::gil_scoped_release>())
-        .def("get_movers", &Context::get_movers, py::call_guard<py::gil_scoped_release>());
+        .def("get_integrator", &Context::get_integrator)
+        .def("get_potentials", &Context::get_potentials)
+        .def("get_barostat", &Context::get_barostat)
+        .def("get_movers", &Context::get_movers);
 }
 
 void declare_integrator(py::module &m) {
