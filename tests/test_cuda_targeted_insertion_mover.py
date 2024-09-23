@@ -440,7 +440,7 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
     bt = BaseTopology(mol, ff)
     afe = AbsoluteFreeEnergy(mol, bt)
     # Fully embed the ligand
-    potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, 0.0)
+    potentials, params, combined_masses = afe.prepare_host_edge(ff, host_config, 0.0)
     ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
 
     conf = afe.prepare_combined_coords(host_config.conf)
@@ -677,7 +677,7 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
     bt = BaseTopology(mol, ff)
     afe = AbsoluteFreeEnergy(mol, bt)
     # Fully embed the ligand
-    potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, 0.0)
+    potentials, params, combined_masses = afe.prepare_host_edge(ff, host_config, 0.0)
     ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
 
     conf = afe.prepare_combined_coords(host_config.conf)

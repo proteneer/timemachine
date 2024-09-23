@@ -189,12 +189,11 @@ def test_absolute_vacuum():
     mol = mols[0]
 
     ff = Forcefield.load_default()
-    ff_params = ff.get_params()
 
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
 
-    unbound_potentials, sys_params, masses = afe.prepare_vacuum_edge(ff_params)
+    unbound_potentials, sys_params, masses = afe.prepare_vacuum_edge(ff)
     assert np.all(masses == utils.get_mol_masses(mol))
     np.testing.assert_array_almost_equal(afe.prepare_combined_coords(), utils.get_romol_conf(mol))
 
@@ -209,14 +208,13 @@ def test_vacuum_and_solvent_edge_types():
     ff = Forcefield.load_default()
     solvent_system, solvent_coords, solvent_box, top = builders.build_water_system(3.0, ff.water_ff, mols=[mol])
     host_system = HostConfig(solvent_system, solvent_coords, solvent_box, solvent_coords.shape[0], top)
-    ff_params = ff.get_params()
 
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
 
-    vacuum_unbound_potentials, vacuum_sys_params, vacuum_masses = afe.prepare_vacuum_edge(ff_params)
+    vacuum_unbound_potentials, vacuum_sys_params, vacuum_masses = afe.prepare_vacuum_edge(ff)
 
-    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(ff_params, host_system, 0.0)
+    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(ff, host_system, 0.0)
 
     assert isinstance(vacuum_unbound_potentials, type(solvent_unbound_potentials))
     assert isinstance(vacuum_sys_params, type(solvent_sys_params))
@@ -313,7 +311,7 @@ def test_initial_state_interacting_ligand_atoms(host_name, seed):
 
     host_atoms = 0
     if host_config is not None:
-        # system, masses = convert_omm_system(host_config.omm_system)
+        # system, masses = convert_omm_system(host_config.omm_system, host_config.omm_topology, forcefield)
         host = setup_optimized_host(single_topology, host_config)
         host_atoms += len(host_conf)
 
@@ -406,7 +404,7 @@ def test_get_water_sampler_params_complex():
         )
         box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     host_config = HostConfig(host_sys, host_conf, box, num_water_atoms, top)
-    system, masses = convert_omm_system(host_config.omm_system)
+    system, masses = convert_omm_system(host_config.omm_system, host_config.omm_topology, forcefield)
     host = Host(system, masses, host_conf, box, host_config.num_water_atoms)
 
     lamb = 0.5  # arbitrary
