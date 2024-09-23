@@ -441,14 +441,14 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         combined_masses = self._combine(ligand_masses, host_masses)
         return final_potentials, final_params, combined_masses
 
-    def prepare_vacuum_edge(self, ff_params: ForcefieldParams):
+    def prepare_vacuum_edge(self, ff: Forcefield):
         """
         Prepares the vacuum system
 
         Parameters
         ----------
-        ff_params: ForcefieldParams
-            forcefield parameters
+        ff: Forcefield
+            forcefield to use
 
         Returns
         -------
@@ -456,6 +456,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             unbound_potentials, system_params, combined_masses
 
         """
+        ff_params = ff.get_params()
         ligand_masses = get_mol_masses(self.mol)
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top, 0.0)
         return final_potentials, final_params, ligand_masses

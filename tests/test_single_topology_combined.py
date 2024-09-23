@@ -24,10 +24,11 @@ def hif2a_ligand_pair_single_topology():
 
 @pytest.fixture(scope="module")
 def complex_host_system():
-    host_sys_omm = get_dhfr_system()
+    ff = Forcefield.load_default()
+    host_sys_omm, host_top = get_dhfr_system()
     # Hardcoded to match 5dfr_solv_equil.pdb file
     num_water_atoms = 21069
-    return convert_omm_system(host_sys_omm), num_water_atoms
+    return convert_omm_system(host_sys_omm, host_top, ff), num_water_atoms
 
 
 @pytest.fixture(scope="module")
