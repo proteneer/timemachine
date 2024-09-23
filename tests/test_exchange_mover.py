@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_KT, DEFAULT_WATER_FF
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.builders import build_water_system
@@ -19,8 +20,9 @@ pytestmark = [pytest.mark.nocuda]
 
 @pytest.mark.parametrize("num_lig_atoms", [1, 2, 3, 4, 10])
 def test_get_water_idxs(num_lig_atoms):
-    system, host_conf, _, _ = build_water_system(3.0, DEFAULT_WATER_FF)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    ff = Forcefield.load_default()
+    system, host_conf, _, top = build_water_system(3.0, DEFAULT_WATER_FF)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 

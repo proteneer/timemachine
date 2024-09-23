@@ -24,8 +24,13 @@ def test_serialization_of_ffs():
         ff = Forcefield.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
         assert ff.protein_ff == constants.DEFAULT_PROTEIN_FF
         assert ff.water_ff == constants.DEFAULT_WATER_FF
-        for handle in ff.get_ordered_handles():
-            assert handle is not None, f"{path} failed to deserialize correctly"
+        handles = ff.get_ordered_handles()
+        for i, handle in enumerate(handles):
+            if i == len(handles) - 1:
+                # ff.env_bcc_handle is None
+                assert handle is None
+            else:
+                assert handle is not None, f"{path} failed to deserialize correctly"
 
 
 def test_loading_forcefield_from_file():
@@ -86,6 +91,9 @@ def test_load_default():
     assert len(ref_handles) == len(test_handles)
 
     for ref_handle, test_handle in zip(ref.get_ordered_handles(), test.get_ordered_handles()):
+        if ref_handle is None:
+            assert test_handle is None
+            continue
         assert ref_handle.smirks == test_handle.smirks
         np.testing.assert_array_equal(ref_handle.params, test_handle.params)
 
@@ -113,6 +121,7 @@ def test_split():
             ff.q_handle_intra,
             ff.lj_handle,
             ff.lj_handle_intra,
+            ff.env_bcc_handle,  # None
         ]
 
         combined = combine_params(ff.get_params(), ff.get_params())
@@ -134,14 +143,18 @@ def test_split():
 def test_amber14_tip3p_matches_tip3p():
     """Verify that given a water box, the same parameters are produced for amber14/tip3p as tip3p, but with additional
     support for Ions"""
-    tip3p_ff = "tip3p"
+    tip3p_water_ff = "tip3p"
     cutoff = 1.2
-    assert constants.DEFAULT_WATER_FF != tip3p_ff
-    ref_system, _, _, _ = builders.build_water_system(4.0, constants.DEFAULT_WATER_FF)
-    tip3p_system, _, _, _ = builders.build_water_system(4.0, tip3p_ff)
+    assert constants.DEFAULT_WATER_FF != tip3p_water_ff
+    ref_system, _, _, ref_top = builders.build_water_system(4.0, constants.DEFAULT_WATER_FF)
+    tip3p_system, _, _, tip3p_top = builders.build_water_system(4.0, tip3p_water_ff)
 
-    ref_pots, ref_masses = openmm_deserializer.deserialize_system(ref_system, cutoff)
-    test_pots, test_masses = openmm_deserializer.deserialize_system(ref_system, cutoff)
+    ref_ff = Forcefield.load_default()
+    ref_ff = Forcefield.from_handlers(ref_ff.get_ordered_handles(), water_ff=constants.DEFAULT_WATER_FF)
+    tip3p_ff = Forcefield.from_handlers(ref_ff.get_ordered_handles(), water_ff=tip3p_water_ff)
+
+    ref_pots, ref_masses = openmm_deserializer.deserialize_system(ref_system, ref_top, ref_ff, cutoff)
+    test_pots, test_masses = openmm_deserializer.deserialize_system(tip3p_system, tip3p_top, tip3p_ff, cutoff)
     np.testing.assert_array_equal(ref_masses, test_masses)
 
     assert len(ref_pots) == len(test_pots)
@@ -153,7 +166,7 @@ def test_amber14_tip3p_matches_tip3p():
         Chem.MolToPDBFile(mol, temp.name)
         # tip3p will fail to handle ions
         with pytest.raises(ValueError, match="No template found for residue 1"):
-            builders.build_protein_system(temp.name, constants.DEFAULT_PROTEIN_FF, tip3p_ff)
+            builders.build_protein_system(temp.name, constants.DEFAULT_PROTEIN_FF, tip3p_water_ff)
 
         # Amber14/tip3p handles ions without issue
         builders.build_protein_system(temp.name, constants.DEFAULT_PROTEIN_FF, constants.DEFAULT_WATER_FF)

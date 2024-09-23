@@ -165,13 +165,13 @@ def sample_biphenyl_hrex(
 
     if solvent:
         # construct water box
-        water_system, water_coords, water_box, _ = builders.build_water_system(
+        water_system, water_coords, water_box, water_top = builders.build_water_system(
             box_width=3.0, water_ff=ff.water_ff, mols=[mol]
         )
         water_box += 0.5 * np.eye(3)  # add a small margin around the box for stability
         num_water_atoms = water_coords.shape[0]
-        host_config = HostConfig(water_system, water_coords, water_box, num_water_atoms)
-        host_bps, host_masses = openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
+        host_config = HostConfig(water_system, water_coords, water_box, num_water_atoms, water_top)
+        host_bps, host_masses = openmm_deserializer.deserialize_system(water_system, water_top, ff, cutoff=1.2)
 
         top = HostGuestTopology(host_bps, bt, num_water_atoms)
 

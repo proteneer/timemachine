@@ -780,8 +780,8 @@ def test_combine_with_host():
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    solvent_sys, solvent_conf, _, _ = build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
-    host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
+    solvent_sys, solvent_conf, _, top = build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
+    host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, top, ff, cutoff=1.2)
 
     st = SingleTopology(mol_a, mol_b, core, ff)
     host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5, solvent_conf.shape[0])
@@ -817,9 +817,9 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
     ffs = load_split_forcefields()
     solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ffs.ref.water_ff, mols=[mol_a, mol_b])
     solvent_conf = minimizer.fire_minimize_host(
-        [mol_a, mol_b], HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0]), ffs.ref
+        [mol_a, mol_b], HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top), ffs.ref
     )
-    solvent_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
+    solvent_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, solvent_top, ffs.ref, cutoff=1.2)
     solv_sys = convert_bps_into_system(solvent_bps)
 
     def get_vacuum_solvent_u_grads(ff, lamb):
@@ -911,12 +911,12 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
     ff = Forcefield.load_default()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, box, _, num_water_atoms = build_protein_system(
+        complex_system, complex_coords, box, complex_top, num_water_atoms = build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
         box += np.diag([0.1, 0.1, 0.1])
 
-    host_bps, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
+    host_bps, host_masses = openmm_deserializer.deserialize_system(complex_system, complex_top, ff, cutoff=1.2)
     host_system = convert_bps_into_system(host_bps)
     st_ref = SingleTopologyRef(mol_a, mol_b, core, ff)
 

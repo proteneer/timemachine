@@ -177,8 +177,8 @@ def verify_targeted_moves(
 def test_inner_and_outer_water_groups(seed, radius, precision):
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
-    system, coords, box, _ = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, coords, box, top = builders.build_water_system(4.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -217,8 +217,8 @@ def test_inner_and_outer_water_groups(seed, radius, precision):
 def test_translations_inside_and_outside_sphere(seed, n_translations, radius, precision):
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
-    system, coords, box, _ = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, coords, box, top = builders.build_water_system(4.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -388,13 +388,13 @@ def brd4_rbfe_state() -> InitialState:
     # BRD4 is a known target that has waters in the binding site, use the structure with the water stripped from
     # the binding pocket
     with resources.path("timemachine.datasets.water_exchange", "brd4_no_water.pdb") as pdb_path:
-        complex_system, complex_conf, box, _, num_water_atoms = builders.build_protein_system(
+        complex_system, complex_conf, box, complex_top, num_water_atoms = builders.build_protein_system(
             str(pdb_path), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b]
         )
     box += np.diag([0.1, 0.1, 0.1])
 
     core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
-    host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms)
+    host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms, complex_top)
     st = SingleTopology(mol_a, mol_b, core, ff)
 
     initial_state = prepare_single_topology_initial_state(st, host_config, lamb=lamb)
@@ -435,7 +435,7 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
         str(host_pdb), ff.protein_ff, ff.water_ff
     )
     host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)
+    host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms, host_topology)
 
     bt = BaseTopology(mol, ff)
     afe = AbsoluteFreeEnergy(mol, bt)
@@ -576,8 +576,8 @@ def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, bat
     """
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
-    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -672,7 +672,7 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
         str(host_pdb), ff.protein_ff, ff.water_ff
     )
     host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms)
+    host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms, host_topology)
 
     bt = BaseTopology(mol, ff)
     afe = AbsoluteFreeEnergy(mol, bt)
@@ -764,8 +764,8 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
     * When batch size is greater than one (each batch is made up of K proposals) it produces the same result as the serial version (batch size == 1)
     """
     ff = Forcefield.load_default()
-    system, conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -854,8 +854,8 @@ def test_targeted_moves_in_bulk_water(
 ):
     """Given bulk water molecules with one of them treated as the targeted region"""
     ff = Forcefield.load_default()
-    system, conf, ref_box, topo = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, conf, ref_box, top = builders.build_water_system(box_size, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential

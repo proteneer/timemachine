@@ -437,7 +437,7 @@ def check_split_ixns(
     ffs = load_split_forcefields()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, host_conf, box, _, num_water_atoms = build_protein_system(
+        complex_system, host_conf, box, complex_top, num_water_atoms = build_protein_system(
             str(path_to_pdb), ffs.ref.protein_ff, ffs.ref.water_ff
         )
         box += np.diag([0.1, 0.1, 0.1])
@@ -447,7 +447,7 @@ def check_split_ixns(
     protein_idxs = np.arange(num_protein_atoms, dtype=np.int32)
     water_idxs = np.arange(num_water_atoms, dtype=np.int32) + num_protein_atoms
     num_host_atoms = host_conf.shape[0]
-    host_bps, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
+    host_bps, host_masses = openmm_deserializer.deserialize_system(complex_system, complex_top, ffs.ref, cutoff=1.2)
     ligand_idxs += num_host_atoms  # shift for the host
 
     n_lambdas = 3

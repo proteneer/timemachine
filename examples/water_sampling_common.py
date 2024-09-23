@@ -80,12 +80,12 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
 
     assert num_water_atoms == len(solvent_conf)
 
-    host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, num_water_atoms)
+    host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, num_water_atoms, solvent_topology)
     if mol is not None:
         # Assumes the mol is a buckyball
         bt = BaseTopology(mol, ff)
         afe = AbsoluteFreeEnergy(mol, bt)
-        potentials, params, combined_masses = afe.prepare_host_edge(ff.get_params(), host_config, lamb)
+        potentials, params, combined_masses = afe.prepare_host_edge(ff, host_config, lamb)
         ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms(), dtype=np.int32)
         summed_pot_idx = next(i for i, pot in enumerate(potentials) if isinstance(pot, SummedPotential))
         nb_params = np.array(params[summed_pot_idx])
@@ -108,7 +108,9 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
         ligand_water_params[fully_coupled_ligand_atoms, -1] = 0
         nb_params[ligand_water_flat_idxs] = ligand_water_params.reshape(-1)
     else:
-        host_fns, combined_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=nb_cutoff)
+        host_fns, combined_masses = openmm_deserializer.deserialize_system(
+            host_config.omm_system, host_config.omm_topology, ff, cutoff=nb_cutoff
+        )
         potentials = [bp.potential for bp in host_fns]
         params = [bp.params for bp in host_fns]
         final_conf = solvent_conf
