@@ -40,8 +40,7 @@ ARG ENV_NAME=timemachine
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda env create -n "${ENV_NAME}" --force -f environment.yml && \
     conda clean -a && \
-    conda activate ${ENV_NAME} && \
-    conda list -n ${ENV_NAME}
+    conda activate ${ENV_NAME}
 
 ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
 
