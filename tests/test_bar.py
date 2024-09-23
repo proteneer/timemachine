@@ -207,7 +207,9 @@ def test_compute_fwd_and_reverse_df_over_time(frames_per_step):
 
     rng = np.random.default_rng(seed)
 
-    _, u_kln, _ = ExponentialTestCase(rates=[1, 2]).sample(N_k=(5, 10), mode="u_kln", seed=seed)
+    # Patch for numpy 1.24.0 and PyMBAR 3.1.0
+    with patch("numpy.int", int):
+        _, u_kln, _ = ExponentialTestCase(rates=[1, 2]).sample(N_k=(5, 10), mode="u_kln", seed=seed)
     assert u_kln.shape == (2, 2, 10)
     u_kln_by_lambda = np.stack([u_kln] * pair_u_klns)
 
