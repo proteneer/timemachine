@@ -128,8 +128,7 @@ class InteractionGroupTraj:
         )
 
     @classmethod
-    def from_dict(cls, dict_of_np_arrays):
-        archive = dict_of_np_arrays
+    def from_dict(cls, archive):
         traj = cls.__new__(cls)
         traj.xs_lig = archive["xs_lig"]
         traj.xs_env = archive["xs_env"]
