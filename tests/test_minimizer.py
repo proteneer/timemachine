@@ -202,6 +202,7 @@ def test_local_minimize_water_box():
     np.testing.assert_array_equal(g_init, g_init_test)
 
 
+@pytest.mark.nocuda
 def test_local_minimize_strained_ligand():
     """
     Test that we can minimize a ligand in vacuum using local_minimize when the ligand is strained.
