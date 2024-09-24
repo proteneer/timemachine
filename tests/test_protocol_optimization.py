@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 from pymbar import MBAR
@@ -113,8 +115,9 @@ def poorly_spaced_path(lam):
 def simulate_protocol(lambdas_k, n_samples_per_window=100, seed=None):
     """Generate samples from each lambda window, plug into MBAR"""
     O_k, K_k = poorly_spaced_path(lambdas_k)
-    testsystem = HarmonicOscillatorsTestCase(O_k, K_k)
-    N_k = [n_samples_per_window] * len(O_k)
-    xs, u_kn, N_k, s_n = testsystem.sample(N_k, seed=seed)
+    with patch("numpy.int", int):
+        testsystem = HarmonicOscillatorsTestCase(O_k, K_k)
+        N_k = [n_samples_per_window] * len(O_k)
+        xs, u_kn, N_k, s_n = testsystem.sample(N_k, seed=seed)
     mbar = MBAR(u_kn, N_k)
     return mbar
