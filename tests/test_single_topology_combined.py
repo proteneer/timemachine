@@ -33,9 +33,9 @@ def complex_host_system():
 
 @pytest.fixture(scope="module")
 def solvent_host_system():
-    forcefield = Forcefield.load_default()
-    host_sys_omm, conf, _, _ = builders.build_water_system(3.0, forcefield.water_ff)
-    return convert_omm_system(host_sys_omm), conf.shape[0]
+    ff = Forcefield.load_default()
+    host_sys_omm, conf, _, top = builders.build_water_system(3.0, ff.water_ff)
+    return convert_omm_system(host_sys_omm, top, ff), conf.shape[0]
 
 
 @pytest.mark.parametrize("lamb", [0.0, 1.0])

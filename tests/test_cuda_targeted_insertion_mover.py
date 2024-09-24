@@ -921,8 +921,8 @@ def test_moves_with_three_waters(
 ):
     """Given three water molecules with one of them treated as the targeted region."""
     ff = Forcefield.load_default()
-    system, host_conf, _, _ = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, host_conf, _, top = builders.build_water_system(1.0, ff.water_ff)
+    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
