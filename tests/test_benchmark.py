@@ -471,9 +471,7 @@ def run_single_topology_benchmarks(
     initial_state = prepare_single_topology_initial_state(st, host_config)
     barostat_interval = 0
     if host_config is not None:
-        host_fns, host_masses = openmm_deserializer.deserialize_system(
-            host_config.omm_system, host_config.omm_topology, st.ff, cutoff=1.2
-        )
+        host_fns, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
 
         # RBFE
         x0 = initial_state.x0[: len(host_config.conf)]

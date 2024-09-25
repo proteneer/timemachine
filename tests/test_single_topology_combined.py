@@ -28,14 +28,14 @@ def complex_host_system():
     host_sys_omm, host_top = get_dhfr_system()
     # Hardcoded to match 5dfr_solv_equil.pdb file
     num_water_atoms = 21069
-    return convert_omm_system(host_sys_omm, host_top, ff), num_water_atoms
+    return convert_omm_system(host_sys_omm, host_top, ff), num_water_atoms, host_top
 
 
 @pytest.fixture(scope="module")
 def solvent_host_system():
     ff = Forcefield.load_default()
     host_sys_omm, conf, _, top = builders.build_water_system(3.0, ff.water_ff)
-    return convert_omm_system(host_sys_omm, top, ff), conf.shape[0]
+    return convert_omm_system(host_sys_omm, top, ff), conf.shape[0], top
 
 
 @pytest.mark.parametrize("lamb", [0.0, 1.0])
@@ -47,7 +47,7 @@ def test_combined_parameters_bonded(host_system_fixture, lamb, hif2a_ligand_pair
     # 3) we expected nonbonded parameters on the core to be linearly interpolated
 
     st = hif2a_ligand_pair_single_topology
-    (host_sys, host_masses), num_water_atoms = request.getfixturevalue(host_system_fixture)
+    (host_sys, host_masses), num_water_atoms, omm_topology = request.getfixturevalue(host_system_fixture)
     num_host_atoms = len(host_masses)
 
     def check_bonded_idxs_consistency(bonded_idxs, num_host_idxs):
@@ -58,7 +58,7 @@ def test_combined_parameters_bonded(host_system_fixture, lamb, hif2a_ligand_pair
                 assert np.all(atom_idxs >= num_host_atoms)
 
     # generate host guest system
-    hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
+    hgs = st.combine_with_host(host_sys, lamb, num_water_atoms, st.ff, omm_topology)
 
     # check bonds
     check_bonded_idxs_consistency(hgs.bond.potential.idxs, len(host_sys.bond.potential.idxs))
@@ -91,10 +91,10 @@ def test_combined_parameters_nonbonded(host_system_fixture, lamb, hif2a_ligand_p
     # 3) we expected nonbonded parameters on the core to be linearly interpolated
 
     st = hif2a_ligand_pair_single_topology
-    (host_sys, host_masses), num_water_atoms = request.getfixturevalue(host_system_fixture)
+    (host_sys, host_masses), num_water_atoms, omm_topology = request.getfixturevalue(host_system_fixture)
     num_host_atoms = len(host_masses)
 
-    hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
+    hgs = st.combine_with_host(host_sys, lamb, num_water_atoms, st.ff, omm_topology)
     # check nonbonded terms
     # 1) ligand ixns should be omitted in hgs.nonbonded_host
     assert isinstance(hgs.nonbonded_host.potential, potentials.Nonbonded)
@@ -179,10 +179,10 @@ def test_combined_parameters_nonbonded_intermediate(
     host_system_fixture, lamb, hif2a_ligand_pair_single_topology: SingleTopology, request
 ):
     st = hif2a_ligand_pair_single_topology
-    (host_sys, host_masses), num_water_atoms = request.getfixturevalue(host_system_fixture)
+    (host_sys, host_masses), num_water_atoms, omm_topology = request.getfixturevalue(host_system_fixture)
     num_host_atoms = len(host_masses)
 
-    hgs = st.combine_with_host(host_sys, lamb, num_water_atoms)
+    hgs = st.combine_with_host(host_sys, lamb, num_water_atoms, st.ff, omm_topology)
 
     potential = hgs.nonbonded_host_guest_ixn.potential
     params = hgs.nonbonded_host_guest_ixn.params
@@ -217,11 +217,11 @@ def test_nonbonded_host_params_independent_of_lambda(
     host_system_fixture, hif2a_ligand_pair_single_topology: SingleTopology, request
 ):
     st = hif2a_ligand_pair_single_topology
-    (host_sys, _), num_water_atoms = request.getfixturevalue(host_system_fixture)
+    (host_sys, _), num_water_atoms, omm_topology = request.getfixturevalue(host_system_fixture)
 
     @jax.jit
     def get_nonbonded_host_params(lamb):
-        return st.combine_with_host(host_sys, lamb, num_water_atoms).nonbonded_host.params
+        return st.combine_with_host(host_sys, lamb, num_water_atoms, st.ff, omm_topology).nonbonded_host.params
 
     params0 = get_nonbonded_host_params(0.0)
     for lamb in np.linspace(0.1, 1, 10):

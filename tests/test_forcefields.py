@@ -149,12 +149,8 @@ def test_amber14_tip3p_matches_tip3p():
     ref_system, _, _, ref_top = builders.build_water_system(4.0, constants.DEFAULT_WATER_FF)
     tip3p_system, _, _, tip3p_top = builders.build_water_system(4.0, tip3p_water_ff)
 
-    ref_ff = Forcefield.load_default()
-    ref_ff = Forcefield.from_handlers(ref_ff.get_ordered_handles(), water_ff=constants.DEFAULT_WATER_FF)
-    tip3p_ff = Forcefield.from_handlers(ref_ff.get_ordered_handles(), water_ff=tip3p_water_ff)
-
-    ref_pots, ref_masses = openmm_deserializer.deserialize_system(ref_system, ref_top, ref_ff, cutoff)
-    test_pots, test_masses = openmm_deserializer.deserialize_system(tip3p_system, tip3p_top, tip3p_ff, cutoff)
+    ref_pots, ref_masses = openmm_deserializer.deserialize_system(ref_system, cutoff)
+    test_pots, test_masses = openmm_deserializer.deserialize_system(tip3p_system, cutoff)
     np.testing.assert_array_equal(ref_masses, test_masses)
 
     assert len(ref_pots) == len(test_pots)

@@ -71,7 +71,7 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(5.0, ff.water_ff)
     box += np.eye(3) * 0.1
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -123,7 +123,7 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
     ff = Forcefield.load_default()
 
     system, conf, _, top = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -206,7 +206,7 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         complex_system, conf, box, top, _ = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, top, ff, cutoff=1.2)
+    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 

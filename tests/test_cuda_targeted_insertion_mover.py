@@ -178,7 +178,7 @@ def test_inner_and_outer_water_groups(seed, radius, precision):
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
     system, coords, box, top = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -218,7 +218,7 @@ def test_translations_inside_and_outside_sphere(seed, n_translations, radius, pr
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
     system, coords, box, top = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -577,7 +577,7 @@ def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, bat
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
     system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -765,7 +765,7 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
     """
     ff = Forcefield.load_default()
     system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -855,7 +855,7 @@ def test_targeted_moves_in_bulk_water(
     """Given bulk water molecules with one of them treated as the targeted region"""
     ff = Forcefield.load_default()
     system, conf, ref_box, top = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -922,7 +922,7 @@ def test_moves_with_three_waters(
     """Given three water molecules with one of them treated as the targeted region."""
     ff = Forcefield.load_default()
     system, host_conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential

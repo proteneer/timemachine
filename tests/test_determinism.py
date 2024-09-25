@@ -43,7 +43,7 @@ def test_deterministic_energies(precision, rtol, atol):
         complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
-    host_fns, host_masses = openmm_deserializer.deserialize_system(complex_system, complex_top, ff, cutoff=1.2)
+    host_fns, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
 
     # resolve host clashes
     host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)

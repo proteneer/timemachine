@@ -275,9 +275,7 @@ def setup_initial_states(
         Returns an initial state for each value of lambda.
 
     """
-    host_bps, host_masses = openmm_deserializer.deserialize_system(
-        host_config.omm_system, host_config.omm_topology, ff, cutoff=1.2
-    )
+    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
     host_conf = minimizer.fire_minimize_host(
         [afe.mol],
         host_config,

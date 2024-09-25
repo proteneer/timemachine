@@ -7,7 +7,6 @@ import numpy as np
 import scipy
 
 from timemachine import potentials
-from timemachine.ff import Forcefield
 from timemachine.integrator import simulate
 from timemachine.potentials import (
     BoundPotential,
@@ -113,11 +112,11 @@ def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
     return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
 
-def convert_omm_system(omm_system, omm_topology, ff: Forcefield) -> Tuple["VacuumSystem", List[float]]:
+def convert_omm_system(omm_system) -> Tuple["VacuumSystem", List[float]]:
     """Convert an openmm.System to a VacuumSystem object, also returning the masses"""
     from timemachine.ff.handlers import openmm_deserializer
 
-    bps, masses = openmm_deserializer.deserialize_system(omm_system, omm_topology, ff, cutoff=1.2)
+    bps, masses = openmm_deserializer.deserialize_system(omm_system, cutoff=1.2)
     system = convert_bps_into_system(bps)
     return system, masses
 

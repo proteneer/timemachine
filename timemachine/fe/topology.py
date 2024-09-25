@@ -3,12 +3,14 @@ from typing import List, Optional, Tuple
 import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
+from openmm import app
 
 from timemachine import potentials
-from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
+from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, Q_IDX
 from timemachine.fe import chiral_utils
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers import nonbonded
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 from timemachine.potentials.types import Params
@@ -29,7 +31,9 @@ class UnsupportedPotential(Exception):
 
 
 class HostGuestTopology:
-    def __init__(self, host_potentials, guest_topology, num_water_atoms: int):
+    def __init__(
+        self, host_potentials, guest_topology, num_water_atoms: int, ff: Forcefield, omm_topology: app.topology.Topology
+    ):
         """
         Utility tool for combining host with a guest, in that order. host_potentials must be comprised
         exclusively of supported potentials (currently: bonds, angles, torsions, nonbonded).
@@ -42,6 +46,12 @@ class HostGuestTopology:
         guest_topology:
             Guest's Topology {Base, Dual, Single}Topology.
 
+        ff:
+            Forcefield object
+
+        omm_topology:
+            Openmm topology for the host.
+
         """
         self.guest_topology = guest_topology
 
@@ -49,6 +59,8 @@ class HostGuestTopology:
         self.host_harmonic_bond = None
         self.host_harmonic_angle = None
         self.host_periodic_torsion = None
+        self.ff = ff
+        self.omm_topology = omm_topology
 
         # (ytz): extra assertions inside are to ensure we don't have duplicate terms
         for bp in host_potentials:
@@ -71,6 +83,12 @@ class HostGuestTopology:
         self.num_host_atoms = self.host_nonbonded.potential.num_atoms
         self.num_water_atoms = num_water_atoms
         self.num_other_atoms = self.num_host_atoms - num_water_atoms
+
+        # create a copy to not modify the original parameters
+        self.hg_nb_ixn_params = self.host_nonbonded.params.copy()
+        if self.ff.env_bcc_handle is not None:
+            env_bcc_h = self.ff.env_bcc_handle.get_env_handle(self.omm_topology, self.ff)
+            self.hg_nb_ixn_params[:, Q_IDX] = env_bcc_h.parameterize(self.ff.env_bcc_handle.params)
 
     def get_water_idxs(self) -> NDArray:
         return np.arange(self.num_water_atoms, dtype=np.int32) + self.num_other_atoms
@@ -193,16 +211,16 @@ class HostGuestTopology:
             beta,
             cutoff,
             atom_idxs=np.arange(self.num_host_atoms, dtype=np.int32),
-        )
+        )  # P-P P-W W-W
 
         ixn_pot, ixn_params = get_ligand_ixn_pots_params(
             self.get_lig_idxs(),
             self.get_env_idxs(),
-            self.host_nonbonded.params,
+            self.hg_nb_ixn_params,
             guest_ixn_env_params,
             beta=beta,
             cutoff=cutoff,
-        )
+        )  # L-E ixns
 
         hg_total_pot = [host_guest_pot, ixn_pot]
         hg_total_params = [hg_nb_params, ixn_params]
