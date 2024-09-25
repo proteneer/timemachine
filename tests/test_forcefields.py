@@ -1,3 +1,4 @@
+import dataclasses
 import os
 from glob import glob
 from pathlib import Path
@@ -24,15 +25,11 @@ def test_serialization_of_ffs():
         ff = Forcefield.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
         assert ff.protein_ff == constants.DEFAULT_PROTEIN_FF
         assert ff.water_ff == constants.DEFAULT_WATER_FF
-        assert ff.hb_handle is not None
-        assert ff.ha_handle is not None
-        assert ff.pt_handle is not None
-        assert ff.it_handle is not None
-        assert ff.q_handle is not None
-        assert ff.q_handle_intra is not None
-        assert ff.lj_handle is not None
-        assert ff.lj_handle_intra is not None
-        assert ff.env_bcc_handle is None
+        for handler_name, handler in dataclasses.asdict(ff).items():
+            if handler_name == "env_bcc_handle":
+                assert handler is None
+            else:
+                assert handler is not None
 
 
 def test_loading_forcefield_from_file():
