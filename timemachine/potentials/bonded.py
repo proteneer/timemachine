@@ -254,6 +254,8 @@ def harmonic_positional_restraint(x_init: Array, x_new: Array, box: Array, k: fl
     This implements a harmonic bond potential, while being PBC aware:
         V(x_init, x_init, k) = \sum k * sum((x_new - x_init)^2)
     """
+    assert x_init.shape == x_new.shape
+
     d2ij = jnp.sum(delta_r(x_new, x_init, box=box) ** 2, axis=-1)
     d2ij = jnp.where(d2ij == 0, 0, d2ij)  # stabilize derivative
     return jnp.sum(k * d2ij)
