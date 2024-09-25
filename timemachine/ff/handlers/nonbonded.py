@@ -509,7 +509,7 @@ class AM1BCCSolventHandler(AM1BCCHandler):
 
 class EnvironmentBCCHandler(SerializableMixIn):
     """
-    Applies BCCs to residues in a forcefield. Needs a concrete openmm topology to use.
+    Applies BCCs to residues in a protein. Needs a concrete openmm topology to use.
     """
 
     def __init__(self, patterns, params, protein_ff_name, water_ff_name, topology):
@@ -624,13 +624,35 @@ class EnvironmentBCCHandler(SerializableMixIn):
 
 
 class EnvironmentBCCPartialHandler(SerializableMixIn):
-    # stored in the ff.py file
+    """
+    This class is used to represent the environment BCC terms
+    that modify the charges used for the environment-ligand
+    interaction potential.
+
+    The current implementation skips water molecules, so only the
+    protein charges are modified.
+
+    This class is a serializable version of `EnvironmentBCCHandler`,
+    so it can be stored in the forcefield python file in the normal way.
+    """
+
     def __init__(self, smirks, params, props):
         self.smirks = smirks
         self.params = np.array(params)
         self.props = props
 
     def get_env_handle(self, omm_topology, ff) -> EnvironmentBCCHandler:
+        """
+        Return an initialized `EnvironmentBCCHandler` which can be used to
+        get the (possibly updated) environment charges.
+
+        Parameters
+        ----------
+        omm_topology:
+            Openmm topology object for the environment.
+
+        ff: Forcefield
+        """
         return EnvironmentBCCHandler(self.smirks, self.params, ff.protein_ff, ff.water_ff, omm_topology)
 
 
