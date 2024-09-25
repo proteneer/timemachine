@@ -376,7 +376,7 @@ def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[ND
         free_idxs = get_free_idxs(initial_state)
         try:
             x_opt = optimize_coords_state(
-                initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=False
+                initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0
             )
         except (AssertionError, minimizer.MinimizationError) as e:
             raise minimizer.MinimizationError(f"Failed to optimized state at λ={initial_state.lamb}") from e
