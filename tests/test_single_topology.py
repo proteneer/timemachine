@@ -45,12 +45,13 @@ from timemachine.fe.single_topology import (
     setup_dummy_interactions_from_ff,
     verify_chiral_validity_of_core,
 )
-from timemachine.fe.system import convert_bps_into_system
+from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, set_mol_name
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import minimizer
 from timemachine.md.builders import build_protein_system, build_water_system
+from timemachine.potentials.jax_utils import pairwise_distances
 
 setup_chiral_dummy_interactions_from_ff = functools.partial(
     setup_dummy_interactions_from_ff,
@@ -418,65 +419,65 @@ def chiral_atom_idxs_are_canonical(all_idxs):
     return np.all((all_idxs[:, 1] < all_idxs[:, 2]) & (all_idxs[:, 1] < all_idxs[:, 3]))
 
 
-# @pytest.mark.nogpu
-# @pytest.mark.nightly(reason="Takes awhile to run")
-# def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=5):
-#     """
-#     Pick some random pairs from the hif2a set and ensure that they're numerically stable at the
-#     end-states under a distance based atom-mapping protocol. For a subset of them, we will also run
-#     simulations.
-#     """
+@pytest.mark.nogpu
+@pytest.mark.nightly(reason="Takes awhile to run")
+def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=5):
+    """
+    Pick some random pairs from the hif2a set and ensure that they're numerically stable at the
+    end-states under a distance based atom-mapping protocol. For a subset of them, we will also run
+    simulations.
+    """
 
-#     seed = 2024
+    seed = 2024
 
-#     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-#         mols = read_sdf(path_to_ligand)
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
 
-#     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
+    pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
 
-#     np.random.seed(seed)
-#     np.random.shuffle(pairs)
-#     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    np.random.seed(seed)
+    np.random.shuffle(pairs)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-#     compute_distance_matrix = functools.partial(pairwise_distances, box=None)
+    compute_distance_matrix = functools.partial(pairwise_distances, box=None)
 
-#     def get_max_distance(x0):
-#         dij = compute_distance_matrix(x0)
-#         return jnp.amax(dij)
+    def get_max_distance(x0):
+        dij = compute_distance_matrix(x0)
+        return jnp.amax(dij)
 
-#     batch_distance_check = jax.vmap(get_max_distance)
+    batch_distance_check = jax.vmap(get_max_distance)
 
-#     # this has been tested for up to 50 random pairs
-#     for pair_idx, (mol_a, mol_b) in enumerate(pairs[:num_pairs_to_setup]):
-#         print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
-#         core = _get_core_by_mcs(mol_a, mol_b)
-#         st = SingleTopology(mol_a, mol_b, core, ff)
-#         x0 = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
-#         systems = [st.src_system, st.dst_system]
+    # this has been tested for up to 50 random pairs
+    for pair_idx, (mol_a, mol_b) in enumerate(pairs[:num_pairs_to_setup]):
+        print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
+        core = _get_core_by_mcs(mol_a, mol_b)
+        st = SingleTopology(mol_a, mol_b, core, ff)
+        x0 = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
+        systems = [st.src_system, st.dst_system]
 
-#         for system in systems:
-#             # assert that the idxs are canonicalized.
-#             assert bond_idxs_are_canonical(system.bond.potential.idxs)
-#             assert bond_idxs_are_canonical(system.angle.potential.idxs)
-#             assert bond_idxs_are_canonical(system.torsion.potential.idxs)
-#             assert bond_idxs_are_canonical(system.nonbonded.potential.idxs)
-#             assert bond_idxs_are_canonical(system.chiral_bond.potential.idxs)
-#             assert chiral_atom_idxs_are_canonical(system.chiral_atom.potential.idxs)
-#             U_fn = jax.jit(system.get_U_fn())
-#             assert np.isfinite(U_fn(x0))
-#             x_min = minimize_scipy(U_fn, x0, seed=seed)
-#             assert np.all(np.isfinite(x_min))
-#             distance_cutoff = 2.5  # in nanometers
-#             assert get_max_distance(x_min) < distance_cutoff
+        for system in systems:
+            # assert that the idxs are canonicalized.
+            assert bond_idxs_are_canonical(system.bond.potential.idxs)
+            assert bond_idxs_are_canonical(system.angle.potential.idxs)
+            assert bond_idxs_are_canonical(system.torsion.potential.idxs)
+            assert bond_idxs_are_canonical(system.nonbonded.potential.idxs)
+            assert bond_idxs_are_canonical(system.chiral_bond.potential.idxs)
+            assert chiral_atom_idxs_are_canonical(system.chiral_atom.potential.idxs)
+            U_fn = jax.jit(system.get_U_fn())
+            assert np.isfinite(U_fn(x0))
+            x_min = minimize_scipy(U_fn, x0, seed=seed)
+            assert np.all(np.isfinite(x_min))
+            distance_cutoff = 2.5  # in nanometers
+            assert get_max_distance(x_min) < distance_cutoff
 
-#             # test running simulations on the first 5 pairs
-#             if pair_idx < num_pairs_to_simulate:
-#                 batch_U_fn = jax.vmap(U_fn)
-#                 frames = simulate_system(system.get_U_fn(), x0, num_samples=1000)
-#                 nrgs = batch_U_fn(frames)
-#                 assert np.all(np.isfinite(nrgs))
-#                 assert np.all(np.isfinite(frames))
-#                 assert np.all(batch_distance_check(frames) < distance_cutoff)
+            # test running simulations on the first 5 pairs
+            if pair_idx < num_pairs_to_simulate:
+                batch_U_fn = jax.vmap(U_fn)
+                frames = simulate_system(system.get_U_fn(), x0, num_samples=1000)
+                nrgs = batch_U_fn(frames)
+                assert np.all(np.isfinite(nrgs))
+                assert np.all(np.isfinite(frames))
+                assert np.all(batch_distance_check(frames) < distance_cutoff)
 
 
 atom_idxs = st.integers(0, 100)
@@ -1414,23 +1415,23 @@ def test_hif2a_plot_force_constants():
         plt.show()
 
 
-# @pytest.mark.nightly(reason="Test setting up hif2a pairs for single topology.")
-# @pytest.mark.nocuda
-# def test_hif2a_pairs_setup_st():
-#     """
-#     Test that we can setup all-pairs single topology objects in hif2a.
-#     """
-#     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-#         mols = read_sdf(path_to_ligand)
+@pytest.mark.nightly(reason="Test setting up hif2a pairs for single topology.")
+@pytest.mark.nocuda
+def test_hif2a_pairs_setup_st():
+    """
+    Test that we can setup all-pairs single topology objects in hif2a.
+    """
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
 
-#     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
-#     np.random.seed(2023)
-#     np.random.shuffle(pairs)
-#     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-#     for mol_a, mol_b in pairs:
-#         print(mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
-#         core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
-#         SingleTopology(mol_a, mol_b, core, ff)  # Test that this doesn't not throw assertion
+    pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
+    np.random.seed(2023)
+    np.random.shuffle(pairs)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    for mol_a, mol_b in pairs:
+        print(mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
+        core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+        SingleTopology(mol_a, mol_b, core, ff)  # Test that this doesn't not throw assertion
 
 
 @pytest.mark.nocuda
