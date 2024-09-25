@@ -24,6 +24,7 @@ from timemachine.potentials.chiral_restraints import (
 )
 
 
+@pytest.mark.nocuda
 def test_chiral_restraints_pyramidal():
     """For ammonium, assert that:
     * without chiral restraints, up and down states are ~ equally sampled
@@ -147,6 +148,7 @@ class BaseTopologyRescaledCharges(topology.BaseTopology):
         return new_params, nb
 
 
+@pytest.mark.nocuda
 def test_chiral_restraints_torsion():
     """For a charge-scaled version of hydrogen peroxide, assert that:
     * without chiral bond restraints, cis/trans states are sampled ~ 25%/75%
@@ -237,6 +239,7 @@ $$$$""",
         assert ks < 0.05 or pv > 0.10
 
 
+@pytest.mark.nocuda
 def test_chiral_restraints_tetrahedral():
     # test that we can restrain the chirality of a tetrahedral molecule
     # to its inverted state
@@ -321,6 +324,7 @@ $$$$""",
     assert ks < 0.05 or pv > 0.10
 
 
+@pytest.mark.nocuda
 def test_chiral_spiro_cyclopentane():
     # fused spiro cyclopentane
     mol = Chem.MolFromMolBlock(
