@@ -342,7 +342,7 @@ def optimize_coords_state(
     box: NDArray,
     free_idxs: List[int],
     assert_energy_decreased: bool,
-    k: Optional[float] = 2000.0,
+    k: Optional[float] = 4_000.0,
 ) -> NDArray:
     val_and_grad_fn = minimizer.get_val_and_grad_fn(potentials, box)
     assert np.all(np.isfinite(x0)), "Initial coordinates contain nan or inf"
