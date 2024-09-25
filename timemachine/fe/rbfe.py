@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union, cast
 
+import jax
 import numpy as np
 from numpy.typing import NDArray
 from openmm import app
@@ -43,6 +44,7 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import BoundPotential, jax_utils
+from timemachine.potentials.bonded import harmonic_positional_restraint
 
 DEFAULT_NUM_WINDOWS = 48
 
@@ -313,15 +315,41 @@ def setup_optimized_initial_state(
         return initial_state
 
 
+def wrap_val_and_grad_with_positional_restraint(
+    val_and_grad_fn: Callable[[NDArray], Tuple[float, NDArray]],
+    x0: NDArray,
+    box0: NDArray,
+    free_idxs: List[int],
+    k: float,
+) -> Callable[[NDArray], Tuple[float, NDArray]]:
+    restraint_val_and_grad = jax.value_and_grad(harmonic_positional_restraint, argnums=1)
+
+    starting_free = np.array(x0[free_idxs])
+
+    def local_minimization_function(x):
+        u, grad = val_and_grad_fn(x)
+        restraint_u, restraint_grad = restraint_val_and_grad(starting_free, x[free_idxs], box0, k=k)
+        u += restraint_u
+        grad[free_idxs] += restraint_grad
+        return u, grad
+
+    return local_minimization_function
+
+
 def optimize_coords_state(
     potentials: Iterable[BoundPotential],
     x0: NDArray,
     box: NDArray,
     free_idxs: List[int],
     assert_energy_decreased: bool,
+    k: Optional[float] = 2000.0,
 ) -> NDArray:
     val_and_grad_fn = minimizer.get_val_and_grad_fn(potentials, box)
     assert np.all(np.isfinite(x0)), "Initial coordinates contain nan or inf"
+
+    if k is not None:
+        val_and_grad_fn = wrap_val_and_grad_with_positional_restraint(val_and_grad_fn, x0, box, free_idxs, k)
+
     x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs, assert_energy_decreased=assert_energy_decreased)
     assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
     return x_opt
@@ -339,6 +367,7 @@ def get_free_idxs(initial_state: InitialState, cutoff: float = 0.5) -> List[int]
 def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[NDArray]:
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
+
     x_opt = end_state.x0
 
     x_traj = []
@@ -347,7 +376,7 @@ def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[ND
         free_idxs = get_free_idxs(initial_state)
         try:
             x_opt = optimize_coords_state(
-                initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0
+                initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=False
             )
         except (AssertionError, minimizer.MinimizationError) as e:
             raise minimizer.MinimizationError(f"Failed to optimized state at λ={initial_state.lamb}") from e

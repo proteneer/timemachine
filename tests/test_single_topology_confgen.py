@@ -2,14 +2,23 @@ from importlib import resources
 
 import numpy as np
 import pytest
+from rdkit import Chem
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, cif_writer, utils
-from timemachine.fe.rbfe import HostConfig, setup_initial_states, setup_optimized_host
+from timemachine.fe.rbfe import (
+    HostConfig,
+    get_free_idxs,
+    optimize_coords_state,
+    setup_initial_state,
+    setup_initial_states,
+    setup_optimized_host,
+)
 from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
 from timemachine.fe.utils import get_mol_name, read_sdf
 from timemachine.ff import Forcefield
 from timemachine.md import builders
+from timemachine.potentials.jax_utils import distance_on_pairs
 
 SAVE_FRAMES = False
 
@@ -191,3 +200,86 @@ def test_min_cutoff_failure(pair, seed, n_windows):
     with pytest.raises(AssertionError) as res:
         setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_grid, seed, min_cutoff=min_cutoff)
     assert f"moved atoms {expected_moved.tolist()} >" in str(res.value)
+
+
+def test_optimize_coords_with_positional_restraint():
+    mol = Chem.MolFromMolBlock(
+        """Cyclohexane with clashy methyls
+RDKit          3D
+
+ 24 24  0  0  1  0            999 V2000
+    9.9445  -15.4797  197.9278 C   0  0  0  0  0  0
+   10.4220  -14.4752  196.8506 C   0  0  2  0  0  0
+   11.9342  -14.2011  197.0256 C   0  0  0  0  0  0
+   12.7498  -15.5057  197.0172 C   0  0  0  0  0  0
+   12.3085  -16.4450  198.1504 C   0  0  0  0  0  0
+   10.8012  -16.7661  198.0776 C   0  0  1  0  0  0
+   10.0655  -14.8776  195.4099 C   0  0  0  0  0  0
+   10.4814  -17.8631  197.0485 C   0  0  0  0  0  0
+    8.9099  -15.7577  197.7270 H   0  0  0  0  0  0
+    9.8847  -14.9730  198.8910 H   0  0  0  0  0  0
+    9.9081  -13.5348  197.0495 H   0  0  0  0  0  0
+   12.1011  -13.6750  197.9656 H   0  0  0  0  0  0
+   12.2805  -13.5516  196.2216 H   0  0  0  0  0  0
+   13.8085  -15.2725  197.1309 H   0  0  0  0  0  0
+   12.6208  -16.0081  196.0585 H   0  0  0  0  0  0
+   12.5351  -15.9846  199.1120 H   0  0  0  0  0  0
+   12.8796  -17.3718  198.0963 H   0  0  0  0  0  0
+   10.5398  -17.1853  199.0492 H   0  0  0  0  0  0
+   10.4359  -14.1208  194.7184 H   0  0  0  0  0  0
+   10.5245  -15.8382  195.1762 H   0  0  0  0  0  0
+    8.9829  -14.9595  195.3123 H   0  0  0  0  0  0
+   11.1242  -18.7256  197.2243 H   0  0  0  0  0  0
+    9.4379  -18.1620  197.1478 H   0  0  0  0  0  0
+   10.6549  -17.4802  196.0428 H   0  0  0  0  0  0
+  1  2  1  0  0  0
+  1  6  1  0  0  0
+  1  9  1  0  0  0
+  1 10  1  0  0  0
+  2  3  1  0  0  0
+  2  7  1  0  0  0
+  2 11  1  0  0  0
+  3  4  1  0  0  0
+  3 12  1  0  0  0
+  3 13  1  0  0  0
+  4  5  1  0  0  0
+  4 14  1  0  0  0
+  4 15  1  0  0  0
+  5  6  1  0  0  0
+  5 16  1  0  0  0
+  5 17  1  0  0  0
+  6  8  1  0  0  0
+  6 18  1  0  0  0
+  7 19  1  0  0  0
+  7 20  1  0  0  0
+  7 21  1  0  0  0
+  8 22  1  0  0  0
+  8 23  1  0  0  0
+  8 24  1  0  0  0
+M  END
+$$$$
+""",
+        removeHs=False,
+    )
+
+    ff = Forcefield.load_default()
+    # Core doesn't matter here
+    core = np.array([[0, 0]])
+    st = SingleTopology(mol, mol, core, ff)
+
+    lambda_grid = np.linspace(0.0, 1.0, 2)
+
+    for lamb in lambda_grid:
+        state = setup_initial_state(st, lamb, None, DEFAULT_TEMP, 2024)
+
+        free_idxs = get_free_idxs(state)
+        x_opt_unrestrained = optimize_coords_state(state.potentials, state.x0, state.box0, free_idxs, False, k=None)
+        x_opt_restrained = optimize_coords_state(state.potentials, state.x0, state.box0, free_idxs, False, k=2000.0)
+        interacting_atoms = state.interacting_atoms
+        displacement_distances_unrestrained = distance_on_pairs(
+            state.x0[interacting_atoms], x_opt_unrestrained[interacting_atoms], box=state.box0
+        )
+        displacement_distances_restrained = distance_on_pairs(
+            state.x0[interacting_atoms], x_opt_restrained[interacting_atoms], box=state.box0
+        )
+        assert np.max(displacement_distances_unrestrained) > np.max(displacement_distances_restrained)

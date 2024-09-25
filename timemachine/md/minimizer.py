@@ -525,8 +525,8 @@ def local_minimize(
     x_local_final_flat = res.x
     x_local_final = x_local_final_flat.reshape(x_local_shape)
 
-    U_final, grad_final = val_and_grad_fn_bfgs(x_local_final_flat)
-    forces = -grad_final.reshape(x_local_shape)
+    U_final, grad_final = val_and_grad_fn_local(x_local_final)
+    forces = -grad_final
     per_atom_force_norms = np.linalg.norm(forces, axis=1)
 
     if verbose:
