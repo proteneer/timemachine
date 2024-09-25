@@ -32,7 +32,7 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
-from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
+from timemachine.fe.single_topology import AtomMapFlags, InterpolationConfig, SingleTopology
 from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
@@ -446,6 +446,7 @@ def estimate_relative_free_energy(
     n_windows: Optional[int] = None,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     min_cutoff: Optional[float] = 0.7,
+    interp_config: InterpolationConfig = InterpolationConfig(),
 ) -> SimulationResult:
     """
     Estimate relative free energy between mol_a and mol_b via independent simulations with a predetermined lambda
@@ -495,7 +496,7 @@ def estimate_relative_free_energy(
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+    single_topology = SingleTopology(mol_a, mol_b, core, ff, interp_config)
 
     lambda_min, lambda_max = lambda_interval or (0.0, 1.0)
     lambda_schedule = np.linspace(lambda_min, lambda_max, n_windows or DEFAULT_NUM_WINDOWS)
@@ -549,6 +550,7 @@ def estimate_relative_free_energy_bisection(
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
+    interp_config: InterpolationConfig = InterpolationConfig(),
 ) -> SimulationResult:
     r"""Estimate relative free energy between mol_a and mol_b via independent simulations with a dynamic lambda schedule
     determined by successively bisecting the lambda interval between the pair of states with the greatest BAR
@@ -603,7 +605,7 @@ def estimate_relative_free_energy_bisection(
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+    single_topology = SingleTopology(mol_a, mol_b, core, ff, interp_config)
 
     lambda_interval = lambda_interval or (0.0, 1.0)
     lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
@@ -670,8 +672,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
     combined_prefix: str,
     min_overlap: Optional[float] = None,
 ) -> HREXSimulationResult:
-    if n_windows is None:
-        n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
     try:
@@ -766,6 +766,7 @@ def estimate_relative_free_energy_bisection_hrex(
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
+    interp_config: InterpolationConfig = InterpolationConfig(),
 ) -> HREXSimulationResult:
     """
     Estimate relative free energy between mol_a and mol_b using Hamiltonian Replica EXchange (HREX) sampling of a
@@ -820,7 +821,7 @@ def estimate_relative_free_energy_bisection_hrex(
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+    single_topology = SingleTopology(mol_a, mol_b, core, ff, interp_config)
 
     lambda_interval = lambda_interval or (0.0, 1.0)
     lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
@@ -868,6 +869,7 @@ def run_vacuum(
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = None,
+    interp_config: InterpolationConfig = InterpolationConfig(),
 ):
     if md_params is not None and md_params.local_steps > 0:
         md_params = replace(md_params, local_steps=0)
@@ -887,6 +889,7 @@ def run_vacuum(
         n_windows=n_windows,
         min_overlap=min_overlap,
         min_cutoff=min_cutoff,
+        interp_config=interp_config,
     )
 
 
@@ -900,6 +903,7 @@ def run_solvent(
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = None,
+    interp_config: InterpolationConfig = InterpolationConfig(),
 ):
     if md_params is not None and md_params.water_sampling_params is not None:
         md_params = replace(md_params, water_sampling_params=None)
@@ -923,6 +927,7 @@ def run_solvent(
         n_windows=n_windows,
         min_overlap=min_overlap,
         min_cutoff=min_cutoff,
+        interp_config=interp_config,
     )
     return solvent_res, solvent_top, solvent_host_config
 
@@ -937,6 +942,7 @@ def run_complex(
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
+    interp_config: InterpolationConfig = InterpolationConfig(),
 ):
     complex_sys, complex_conf, complex_box, complex_top, nwa = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
@@ -954,5 +960,6 @@ def run_complex(
         n_windows=n_windows,
         min_overlap=min_overlap,
         min_cutoff=min_cutoff,
+        interp_config=interp_config,
     )
     return complex_res, complex_top, complex_host_config

@@ -1,5 +1,6 @@
 import warnings
 from collections import defaultdict
+from dataclasses import dataclass
 from enum import IntEnum
 from functools import partial
 from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple, TypeVar, Union, cast
@@ -1313,8 +1314,25 @@ def make_check_chiral_validity(
     return check_chiral_validity
 
 
+@dataclass(frozen=True)
+class InterpolationRange:
+    lambda_min: float
+    lambda_max: float
+
+    def __post_init__(self):
+        assert 0.0 <= self.lambda_min < self.lambda_max <= 1.0
+
+
+@dataclass(frozen=True)
+class InterpolationConfig:
+    bonds: InterpolationRange = InterpolationRange(0.0, 0.7)
+    angles: InterpolationRange = InterpolationRange(0.0, 0.7)
+    torsions: InterpolationRange = InterpolationRange(0.7, 1.0)
+    chiral_atom: InterpolationRange = InterpolationRange(0.7, 1.0)
+
+
 class SingleTopology(AtomMapMixin):
-    def __init__(self, mol_a, mol_b, core, forcefield):
+    def __init__(self, mol_a, mol_b, core, forcefield, interp_config: InterpolationConfig = InterpolationConfig()):
         """
         SingleTopology combines two molecules through a common core. The combined mol has
         atom indices laid out such that mol_a is identically mapped to the combined mol indices.
@@ -1339,6 +1357,8 @@ class SingleTopology(AtomMapMixin):
 
         # store the forcefield
         self.ff = forcefield
+
+        self.interp_config = interp_config
 
         a_charge = Chem.GetFormalCharge(mol_a)
         b_charge = Chem.GetFormalCharge(mol_b)
@@ -1640,12 +1660,6 @@ class SingleTopology(AtomMapMixin):
         src_system = self.src_system
         dst_system = self.dst_system
 
-        # stagger the lambda schedule
-        bonds_min, bonds_max = [0.0, 0.7]
-        angles_min, angles_max = [0.0, 0.7]
-        torsions_min, torsions_max = [0.7, 1.0]
-        chiral_atoms_min, chiral_atoms_max = [0.7, 1.0]
-
         bond = self._setup_intermediate_bonded_term(
             src_system.bond,
             dst_system.bond,
@@ -1654,8 +1668,8 @@ class SingleTopology(AtomMapMixin):
             partial(
                 interpolate_harmonic_bond_params,
                 k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
-                lambda_min=bonds_min,
-                lambda_max=bonds_max,
+                lambda_min=self.interp_config.bonds.lambda_min,
+                lambda_max=self.interp_config.bonds.lambda_max,
             ),
         )
 
@@ -1667,8 +1681,8 @@ class SingleTopology(AtomMapMixin):
             partial(
                 interpolate_harmonic_angle_params,
                 k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
-                lambda_min=angles_min,
-                lambda_max=angles_max,
+                lambda_min=self.interp_config.angles.lambda_min,
+                lambda_max=self.interp_config.angles.lambda_max,
             ),
         )
 
@@ -1679,7 +1693,11 @@ class SingleTopology(AtomMapMixin):
             dst_system.torsion,
             lamb,
             interpolate.align_torsion_idxs_and_params,
-            partial(interpolate_periodic_torsion_params, lambda_min=torsions_min, lambda_max=torsions_max),
+            partial(
+                interpolate_periodic_torsion_params,
+                lambda_min=self.interp_config.torsions.lambda_min,
+                lambda_max=self.interp_config.torsions.lambda_max,
+            ),
         )
 
         nonbonded = self._setup_intermediate_nonbonded_term(
@@ -1708,8 +1726,8 @@ class SingleTopology(AtomMapMixin):
             partial(
                 interpolate_harmonic_force_constant,
                 k_min=0.025,
-                lambda_min=chiral_atoms_min,
-                lambda_max=chiral_atoms_max,
+                lambda_min=self.interp_config.chiral_atom.lambda_min,
+                lambda_max=self.interp_config.chiral_atom.lambda_max,
             ),
         )
 
