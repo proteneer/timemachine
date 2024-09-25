@@ -24,13 +24,15 @@ def test_serialization_of_ffs():
         ff = Forcefield.from_handlers(handlers, protein_ff=protein_ff, water_ff=water_ff)
         assert ff.protein_ff == constants.DEFAULT_PROTEIN_FF
         assert ff.water_ff == constants.DEFAULT_WATER_FF
-        handles = ff.get_ordered_handles()
-        for i, handle in enumerate(handles):
-            if i == len(handles) - 1:
-                # ff.env_bcc_handle is None
-                assert handle is None
-            else:
-                assert handle is not None, f"{path} failed to deserialize correctly"
+        assert ff.hb_handle is not None
+        assert ff.ha_handle is not None
+        assert ff.pt_handle is not None
+        assert ff.it_handle is not None
+        assert ff.q_handle is not None
+        assert ff.q_handle_intra is not None
+        assert ff.lj_handle is not None
+        assert ff.lj_handle_intra is not None
+        assert ff.env_bcc_handle is None
 
 
 def test_loading_forcefield_from_file():
