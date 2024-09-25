@@ -304,7 +304,7 @@ def test_barostat_varying_pressure():
     pressure = 1013.0
     host_system, coords, box, host_top = build_water_system(3.0, ff.water_ff)
     box += np.eye(3) * 0.1
-    bps, masses_ = openmm_deserializer.deserialize_system(host_system, host_top, ff, cutoff=1.2)
+    bps, masses_ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
     masses = np.array(masses_)
 

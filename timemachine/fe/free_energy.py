@@ -432,10 +432,8 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         ligand_masses = get_mol_masses(self.mol)
         ff_params = ff.get_params()
 
-        host_bps, host_masses = openmm_deserializer.deserialize_system(
-            host_config.omm_system, host_config.omm_topology, ff, cutoff=1.2
-        )
-        hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms)
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+        hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms, ff, host_config.omm_topology)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
         combined_masses = self._combine(ligand_masses, host_masses)

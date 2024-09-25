@@ -108,9 +108,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
         ligand_water_params[fully_coupled_ligand_atoms, -1] = 0
         nb_params[ligand_water_flat_idxs] = ligand_water_params.reshape(-1)
     else:
-        host_fns, combined_masses = openmm_deserializer.deserialize_system(
-            host_config.omm_system, host_config.omm_topology, ff, cutoff=nb_cutoff
-        )
+        host_fns, combined_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=nb_cutoff)
         potentials = [bp.potential for bp in host_fns]
         params = [bp.params for bp in host_fns]
         final_conf = solvent_conf

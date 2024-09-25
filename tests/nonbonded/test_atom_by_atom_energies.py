@@ -24,7 +24,7 @@ def test_nonbonded_atom_by_atom_energies_match(num_mols, adjustments, precision,
     rng = np.random.default_rng(2023)
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 

@@ -45,3 +45,8 @@ DEFAULT_ATOM_MAPPING_KWARGS: Dict[str, Any] = {
     "initial_mapping": None,
     "enforce_chirally_valid_dummy_groups": False,
 }
+
+# NB parameter idxs
+Q_IDX = 0
+LJ_SIG_IDX = 1
+LJ_EPS_IDX = 2

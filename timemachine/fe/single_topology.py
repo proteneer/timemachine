@@ -9,9 +9,10 @@ import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
+from openmm import app
 from rdkit import Chem
 
-from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
+from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, Q_IDX
 from timemachine.fe import chiral_utils, interpolate, model_utils, topology, utils
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import (
@@ -1862,7 +1863,12 @@ class SingleTopology(AtomMapMixin):
         return combined_nonbonded.bind(hg_nb_params)
 
     def _parameterize_host_guest_nonbonded_ixn(
-        self, lamb, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms: int
+        self,
+        lamb,
+        host_nonbonded: BoundPotential[Nonbonded],
+        num_water_atoms: int,
+        ff: Forcefield,
+        omm_topology: app.topology.Topology,
     ) -> BoundPotential[NonbondedInteractionGroup]:
         """Parameterize nonbonded interactions between the host and guest"""
         num_host_atoms = host_nonbonded.params.shape[0]
@@ -1886,10 +1892,15 @@ class SingleTopology(AtomMapMixin):
         def get_env_idxs():
             return np.array(list(get_other_idxs()) + list(get_water_idxs()), dtype=np.int32)
 
+        hg_nb_ixn_params = host_nonbonded.params.copy()
+        if ff.env_bcc_handle is not None:
+            env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
+            hg_nb_ixn_params[:, Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
+
         ixn_pot, ixn_params = get_ligand_ixn_pots_params(
             get_lig_idxs(),
             get_env_idxs(),
-            host_nonbonded.params,
+            hg_nb_ixn_params,
             guest_ixn_env_params,
             beta=host_nonbonded.potential.beta,
             cutoff=cutoff,
@@ -1898,7 +1909,14 @@ class SingleTopology(AtomMapMixin):
         bound_ixn_pot = ixn_pot.bind(ixn_params)
         return bound_ixn_pot
 
-    def combine_with_host(self, host_system: VacuumSystem, lamb: float, num_water_atoms: int) -> HostGuestSystem:
+    def combine_with_host(
+        self,
+        host_system: VacuumSystem,
+        lamb: float,
+        num_water_atoms: int,
+        ff: Forcefield,
+        omm_topology: app.topology.Topology,
+    ) -> HostGuestSystem:
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
         combined. In particular:
@@ -1922,6 +1940,12 @@ class SingleTopology(AtomMapMixin):
 
         num_water_atoms: int
             Number of water atoms as part of the host.
+
+        ff:
+            Forcefield object
+
+        omm_topology:
+            Openmm topology for the host.
 
         Returns
         -------
@@ -1980,7 +2004,11 @@ class SingleTopology(AtomMapMixin):
 
         host_nonbonded = self._parameterize_host_nonbonded(host_system.nonbonded)
         host_guest_nonbonded_ixn = self._parameterize_host_guest_nonbonded_ixn(
-            lamb, host_system.nonbonded, num_water_atoms
+            lamb,
+            host_system.nonbonded,
+            num_water_atoms,
+            ff,
+            omm_topology,
         )
 
         return HostGuestSystem(

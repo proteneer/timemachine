@@ -171,7 +171,7 @@ def test_nblist_box_resize(precision, rtol, atol, du_dp_rtol, du_dp_atol):
 
     host_system, host_conf, box, top = builders.build_water_system(3.0, ff.water_ff)
 
-    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, top, ff, cutoff=1.2)
+    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
     test_bp = get_bound_potential_by_type(host_fns, potentials.Nonbonded)
     assert test_bp.params is not None

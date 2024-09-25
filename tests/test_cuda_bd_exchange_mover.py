@@ -201,7 +201,7 @@ def test_pair_of_waters_in_box(proposals_per_move, total_num_proposals, batch_si
     """Given two waters in a large box most moves should be accepted. This is a useful test for verifying memory doesn't leak"""
     ff = Forcefield.load_default()
     system, host_conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -262,7 +262,7 @@ def test_sampling_single_water_in_bulk(
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(2.5, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -314,7 +314,7 @@ def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(4.0, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
@@ -403,7 +403,7 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     """
     ff = Forcefield.load_default()
     system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -462,7 +462,7 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
     """
     ff = Forcefield.load_default()
     system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -545,7 +545,7 @@ def test_moves_in_a_water_box(
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(box_size, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -713,7 +713,7 @@ def test_compute_incremental_log_weights(batch_size, samples, box_size, precisio
     proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, top, ff, cutoff=1.2)
+    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
@@ -783,7 +783,7 @@ def hif2a_complex():
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
     box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, complex_top, ff, cutoff=1.2)
+    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     bond_list = get_bond_list(bond_pot)
@@ -842,9 +842,8 @@ def hif2a_complex():
 def test_moves_with_complex(
     hif2a_complex, num_proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed
 ):
-    ff = Forcefield.load_default()
     complex_system, conf, box, complex_top = hif2a_complex
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, complex_top, ff, cutoff=1.2)
+    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
