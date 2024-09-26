@@ -373,7 +373,7 @@ def test_get_water_sampler_params(num_windows):
 
     num_host_atoms = solvent_conf.shape[0]
     host_system, masses = convert_omm_system(solvent_sys)
-    solvent_host = Host(host_system, masses, solvent_conf, solvent_box, num_host_atoms)
+    solvent_host = Host(host_system, masses, solvent_conf, solvent_box, num_host_atoms, solvent_top)
     mol_a_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 1])
     mol_b_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 2])
     for lamb in np.linspace(0.0, 1.0, num_windows, endpoint=True):
@@ -405,7 +405,7 @@ def test_get_water_sampler_params_complex():
         box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     host_config = HostConfig(host_sys, host_conf, box, num_water_atoms, top)
     system, masses = convert_omm_system(host_config.omm_system)
-    host = Host(system, masses, host_conf, box, host_config.num_water_atoms)
+    host = Host(system, masses, host_conf, box, host_config.num_water_atoms, host_config.omm_topology)
 
     lamb = 0.5  # arbitrary
 
