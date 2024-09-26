@@ -63,7 +63,7 @@ WORKDIR /code/
 COPY requirements.txt /code/timemachine/
 RUN pip install --no-cache-dir -r timemachine/requirements.txt
 
-RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" && \
+RUN git clone --depth 1 https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" && \
     cd openmm/ && \
     mkdir build && \
     cd build && \
