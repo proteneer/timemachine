@@ -171,15 +171,16 @@ class HostGuestSystem:
     nonbonded_host_guest_ixn: BoundPotential[NonbondedInteractionGroup]
 
     def get_U_fns(self):
+        # Ordering here has performance impacts. Prefer slower kernels without syncs first, kernels with syncs last.
         return [
-            self.bond,
-            self.angle,
-            self.torsion,
+            self.nonbonded_guest_pairs,
             # Chiral bond restraints are disabled until checks are added
             # for consistency.
             self.chiral_atom,
             # self.chiral_bond,
-            self.nonbonded_guest_pairs,
-            self.nonbonded_host,
+            self.torsion,
+            self.angle,
+            self.bond,
             self.nonbonded_host_guest_ixn,
+            self.nonbonded_host,
         ]

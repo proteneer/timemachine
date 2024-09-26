@@ -48,9 +48,9 @@ def parameterize_system(topo, ff: Forcefield, lamb: float) -> Tuple[List[Potenti
     # setup the parameter handlers for the ligand
     ff_params = ff.get_params()
     params_potential_pairs = [
-        topo.parameterize_harmonic_bond(ff_params.hb_params),
-        topo.parameterize_harmonic_angle(ff_params.ha_params),
         topo.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
+        topo.parameterize_harmonic_angle(ff_params.ha_params),
+        topo.parameterize_harmonic_bond(ff_params.hb_params),
         topo.parameterize_nonbonded(
             ff_params.q_params,
             ff_params.q_params_intra,
