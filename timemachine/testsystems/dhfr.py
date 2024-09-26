@@ -28,9 +28,8 @@ def get_dhfr_system():
     with resources.path("timemachine.testsystems.data", "5dfr_solv_equil.pdb") as pdb_path:
         host_pdb = app.PDBFile(str(pdb_path))
 
-    modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
     protein_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
     host_system = protein_ff.createSystem(
         host_pdb.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
     )
-    return host_system, modeller.topology
+    return host_system, host_pdb.topology
