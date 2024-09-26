@@ -78,6 +78,7 @@ RUN git clone --depth 1 https://github.com/openmm/openmm.git --branch "${OPENMM_
       -DOPENMM_BUILD_DRUDE_OPENCL_LIB=OFF \
       -DOPENMM_BUILD_EXAMPLES=OFF \
       -DOPENMM_BUILD_OPENCL_LIB=OFF \
+      -DOPENMM_BUILD_PME_PLUGIN=OFF \
       -DOPENMM_BUILD_RPMD_CUDA_LIB=OFF \
       -DOPENMM_BUILD_RPMD_OPENCL_LIB=OFF \
       -DCMAKE_INSTALL_PREFIX=/opt/openmm_install \
