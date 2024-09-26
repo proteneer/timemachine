@@ -18,7 +18,7 @@ from timemachine.fe.chiral_utils import (
     make_chiral_restr_fxns,
     setup_all_chiral_atom_restr_idxs,
 )
-from timemachine.fe.free_energy import HREXParams, MDParams
+from timemachine.fe.free_energy import HREXParams
 from timemachine.fe.rbfe import DEFAULT_HREX_PARAMS, run_solvent, run_vacuum
 from timemachine.fe.single_topology import AtomMapMixin
 from timemachine.fe.system import simulate_system
@@ -745,10 +745,6 @@ def test_chiral_inversion_in_single_topology(well_aligned):
 @pytest.mark.nocuda
 def test_chiral_restraint_energies_with_no_restraints():
     """VWhen the number of chiral restraints were zero could result in an exception"""
-
-    seed = 2024
-    ff = Forcefield.load_default()
-
     mol_a = Chem.MolFromMolBlock(
         """
      RDKit          3D
