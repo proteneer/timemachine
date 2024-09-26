@@ -63,7 +63,7 @@ WORKDIR /code/
 COPY requirements.txt /code/timemachine/
 RUN pip install --no-cache-dir -r timemachine/requirements.txt
 
-RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" && \
+RUN git clone --depth 1 https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" && \
     cd openmm/ && \
     mkdir build && \
     cd build && \
@@ -78,6 +78,7 @@ RUN git clone https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" 
       -DOPENMM_BUILD_DRUDE_OPENCL_LIB=OFF \
       -DOPENMM_BUILD_EXAMPLES=OFF \
       -DOPENMM_BUILD_OPENCL_LIB=OFF \
+      -DOPENMM_BUILD_PME_PLUGIN=OFF \
       -DOPENMM_BUILD_RPMD_CUDA_LIB=OFF \
       -DOPENMM_BUILD_RPMD_OPENCL_LIB=OFF \
       -DCMAKE_INSTALL_PREFIX=/opt/openmm_install \
