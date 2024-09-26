@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 from openmm import app
 from rdkit import Chem
 
-from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, Q_IDX
+from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, NBParamIdx
 from timemachine.fe import chiral_utils, interpolate, model_utils, topology, utils
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import (
@@ -1895,7 +1895,7 @@ class SingleTopology(AtomMapMixin):
         hg_nb_ixn_params = host_nonbonded.params.copy()
         if ff.env_bcc_handle is not None:
             env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
-            hg_nb_ixn_params[:, Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
+            hg_nb_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
 
         ixn_pot, ixn_params = get_ligand_ixn_pots_params(
             get_lig_idxs(),

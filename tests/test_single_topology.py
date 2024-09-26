@@ -18,7 +18,7 @@ from timemachine.constants import (
     DEFAULT_ATOM_MAPPING_KWARGS,
     DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
     DEFAULT_CHIRAL_BOND_RESTRAINT_K,
-    Q_IDX,
+    NBParamIdx,
 )
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.dummy import MultipleAnchorWarning
@@ -1035,7 +1035,7 @@ def test_combine_with_host_split(precision, rtol, atol):
         host_ixn_params = host_system.nonbonded.params.copy()
         if not is_solvent and ff.env_bcc_handle is not None:  # protein
             env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
-            host_ixn_params[:, Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
+            host_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
 
         combined_nonbonded_params = np.concatenate([host_ixn_params, guest_params])
         u_impl = u.bind(combined_nonbonded_params).to_gpu(precision=precision).bound_impl

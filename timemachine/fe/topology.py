@@ -6,7 +6,7 @@ from numpy.typing import NDArray
 from openmm import app
 
 from timemachine import potentials
-from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, Q_IDX
+from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, NBParamIdx
 from timemachine.fe import chiral_utils
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
@@ -88,7 +88,7 @@ class HostGuestTopology:
         self.hg_nb_ixn_params = self.host_nonbonded.params.copy()
         if self.ff.env_bcc_handle is not None:
             env_bcc_h = self.ff.env_bcc_handle.get_env_handle(self.omm_topology, self.ff)
-            self.hg_nb_ixn_params[:, Q_IDX] = env_bcc_h.parameterize(self.ff.env_bcc_handle.params)
+            self.hg_nb_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(self.ff.env_bcc_handle.params)
 
     def get_water_idxs(self) -> NDArray:
         return np.arange(self.num_water_atoms, dtype=np.int32) + self.num_other_atoms

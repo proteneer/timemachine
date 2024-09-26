@@ -10,7 +10,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine import potentials
-from timemachine.constants import Q_IDX
+from timemachine.constants import NBParamIdx
 from timemachine.fe import topology
 from timemachine.fe.topology import BaseTopology, DualTopology, DualTopologyMinimization
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, set_romol_conf
@@ -168,7 +168,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         host_ixn_params = hgt.host_nonbonded.params.copy()
         if not is_solvent and ff.env_bcc_handle is not None:  # protein
             env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
-            host_ixn_params[:, Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
+            host_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
 
         ixn_params = np.concatenate([host_ixn_params, lig_params])
         u_impl = u.bind(ixn_params).to_gpu(precision=precision).bound_impl

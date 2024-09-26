@@ -105,8 +105,8 @@ def deserialize_nonbonded_force(force, N):
     )
 
     # optimizations
-    nb_params[:, constants.LJ_SIG_IDX] = nb_params[:, 1] / 2
-    nb_params[:, constants.LJ_EPS_IDX] = np.sqrt(nb_params[:, 2])
+    nb_params[:, constants.NBParamIdx.LJ_SIG_IDX] = nb_params[:, 1] / 2
+    nb_params[:, constants.NBParamIdx.LJ_EPS_IDX] = np.sqrt(nb_params[:, 2])
 
     beta = 2.0  # erfc correction
 
