@@ -510,6 +510,7 @@ class AM1BCCSolventHandler(AM1BCCHandler):
 class EnvironmentBCCHandler(SerializableMixIn):
     """
     Applies BCCs to residues in a protein. Needs a concrete openmm topology to use.
+    NOTE: Currently, this only supports the amber99sbildn protein forcefield.
     """
 
     def __init__(self, patterns, params, protein_ff_name, water_ff_name, topology):
@@ -520,6 +521,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
 
         from timemachine.ff.handlers import openmm_deserializer
 
+        assert protein_ff_name == "amber99sbildn", f"{protein_ff_name} is not currently supported"
         self.patterns = patterns
         self.params = np.array(params)
         self.env_ff = ForceField(f"{protein_ff_name}.xml", f"{water_ff_name}.xml")
@@ -634,6 +636,8 @@ class EnvironmentBCCPartialHandler(SerializableMixIn):
 
     This class is a serializable version of `EnvironmentBCCHandler`,
     so it can be stored in the forcefield python file in the normal way.
+
+    NOTE: Currently, this only supports the amber99sbildn protein forcefield.
     """
 
     def __init__(self, smirks, params, props):
