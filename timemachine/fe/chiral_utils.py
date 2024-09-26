@@ -409,11 +409,11 @@ def make_chiral_restr_fxns(mol_a, mol_b, chiral_k: float = DEFAULT_CHIRAL_ATOM_R
 
     @jit
     def U_a(x_a):
-        return U_chiral_atom_batch(x_a, restr_idxs_a, chiral_k).sum()
+        return 0.0 if restr_idxs_a.size == 0 else U_chiral_atom_batch(x_a, restr_idxs_a, chiral_k).sum()
 
     @jit
     def U_b(x_b):
-        return U_chiral_atom_batch(x_b, restr_idxs_b, chiral_k).sum()
+        return 0.0 if restr_idxs_b.size == 0 else U_chiral_atom_batch(x_b, restr_idxs_b, chiral_k).sum()
 
     return U_a, U_b
 
