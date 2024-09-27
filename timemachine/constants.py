@@ -1,3 +1,4 @@
+from enum import IntEnum
 from typing import Any, Dict
 
 # physical constants
@@ -45,3 +46,11 @@ DEFAULT_ATOM_MAPPING_KWARGS: Dict[str, Any] = {
     "initial_mapping": None,
     "enforce_chirally_valid_dummy_groups": False,
 }
+
+
+class NBParamIdx(IntEnum):
+    # Enum for the index into the NB parameters
+    Q_IDX = 0  # scaled charges
+    LJ_SIG_IDX = 1  # LJ sigma / 2
+    LJ_EPS_IDX = 2  # sqrt(LJ eps)
+    W_IDX = 3  # 4d coord

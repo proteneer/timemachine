@@ -26,7 +26,7 @@ from timemachine.fe.plots import (
 from timemachine.fe.protocol_refinement import greedy_bisection_step
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
-from timemachine.ff import ForcefieldParams
+from timemachine.ff import Forcefield, ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.custom_ops import Context
@@ -45,11 +45,12 @@ WATER_SAMPLER_MOVERS = (
 
 
 class HostConfig:
-    def __init__(self, omm_system, conf, box, num_water_atoms):
+    def __init__(self, omm_system, conf, box, num_water_atoms, omm_topology):
         self.omm_system = omm_system
         self.conf = conf
         self.box = box
         self.num_water_atoms = num_water_atoms
+        self.omm_topology = omm_topology
 
 
 @dataclass(frozen=True)
@@ -407,14 +408,14 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.top = top
 
-    def prepare_host_edge(self, ff_params: ForcefieldParams, host_config: HostConfig, lamb: float):
+    def prepare_host_edge(self, ff: Forcefield, host_config: HostConfig, lamb: float):
         """
         Prepares the host-guest system
 
         Parameters
         ----------
-        ff_params: ForcefieldParams
-            forcefield parameters
+        ff: Forcefield
+            forcefield to use
 
         host_config: HostConfig
             HostConfig containing openmm System object to be deserialized.
@@ -429,22 +430,23 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
         """
         ligand_masses = get_mol_masses(self.mol)
+        ff_params = ff.get_params()
 
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
-        hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms)
+        hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms, ff, host_config.omm_topology)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
         combined_masses = self._combine(ligand_masses, host_masses)
         return final_potentials, final_params, combined_masses
 
-    def prepare_vacuum_edge(self, ff_params: ForcefieldParams):
+    def prepare_vacuum_edge(self, ff: Forcefield):
         """
         Prepares the vacuum system
 
         Parameters
         ----------
-        ff_params: ForcefieldParams
-            forcefield parameters
+        ff: Forcefield
+            forcefield to use
 
         Returns
         -------
@@ -452,6 +454,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             unbound_potentials, system_params, combined_masses
 
         """
+        ff_params = ff.get_params()
         ligand_masses = get_mol_masses(self.mol)
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top, 0.0)
         return final_potentials, final_params, ligand_masses

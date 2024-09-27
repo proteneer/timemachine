@@ -52,6 +52,7 @@ placeholder_ff = Forcefield(
     lj_handle_intra=placeholder_lj_handle_intra,
     protein_ff="amber99sbildn",
     water_ff="amber14/tip3p",
+    env_bcc_handle=None,
 )
 
 # serialize

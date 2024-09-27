@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.nocuda]
 
 @pytest.mark.parametrize("num_lig_atoms", [1, 2, 3, 4, 10])
 def test_get_water_idxs(num_lig_atoms):
-    system, host_conf, _, _ = build_water_system(3.0, DEFAULT_WATER_FF)
+    system, host_conf, _, top = build_water_system(3.0, DEFAULT_WATER_FF)
     bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
