@@ -35,7 +35,7 @@ def get_rotatable_bonds(mol_a, mol_b, core):
     return rotatable_bonds_c
 
 
-def get_ring_bonds(mol_a, mol_b, core):
+def get_non_aromatic_ring_bonds(mol_a, mol_b, core):
     def get_ring_bonds_mol(mol):
         return [
             (
@@ -43,6 +43,7 @@ def get_ring_bonds(mol_a, mol_b, core):
                 mol.GetBondWithIdx(idx).GetEndAtomIdx(),
             )
             for ring in mol.GetRingInfo().BondRings()
+            if not any(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring)
             for idx in ring
         ]
 
@@ -87,7 +88,7 @@ class SingleTopologyREST(SingleTopology):
 
     def _get_rest_torsions(self) -> NDArray:
         rotatable_bonds = get_rotatable_bonds(self.mol_a, self.mol_b, self.core)
-        ring_bonds = get_ring_bonds(self.mol_a, self.mol_b, self.core)
+        ring_bonds = get_non_aromatic_ring_bonds(self.mol_a, self.mol_b, self.core)
         target_bonds = rotatable_bonds | ring_bonds
 
         assert self.src_system.torsion
