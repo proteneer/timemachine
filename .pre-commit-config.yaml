@@ -30,8 +30,8 @@ repos:
         # include dependencies that export types (i.e. have a py.typed file in the root module) so that they can be used
         # by mypy in pre-commit
         additional_dependencies:
-          - "jax==0.4.14"
-          - "numpy==1.23.5"
+          - "jax==0.4.28"
+          - "numpy==1.24.1"
           - "scipy==1.10.1"
           - "matplotlib==3.7.1"
 

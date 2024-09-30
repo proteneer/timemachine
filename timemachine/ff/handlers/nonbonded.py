@@ -509,7 +509,8 @@ class AM1BCCSolventHandler(AM1BCCHandler):
 
 class EnvironmentBCCHandler(SerializableMixIn):
     """
-    Applies BCCs to residues in a forcefield.
+    Applies BCCs to residues in a protein. Needs a concrete openmm topology to use.
+    NOTE: Currently, this only supports the amber99sbildn protein forcefield.
     """
 
     def __init__(self, patterns, params, protein_ff_name, water_ff_name, topology):
@@ -520,9 +521,10 @@ class EnvironmentBCCHandler(SerializableMixIn):
 
         from timemachine.ff.handlers import openmm_deserializer
 
+        assert protein_ff_name == "amber99sbildn", f"{protein_ff_name} is not currently supported"
         self.patterns = patterns
         self.params = np.array(params)
-        self.env_ff = ForceField(protein_ff_name, water_ff_name)
+        self.env_ff = ForceField(f"{protein_ff_name}.xml", f"{water_ff_name}.xml")
 
         # nested map of residue names to bonds to param_idxs:
         # kv = {
@@ -586,10 +588,13 @@ class EnvironmentBCCHandler(SerializableMixIn):
             # don't compare name, ASP-ASP would break this when processing the amide C-N bond since
             # those are not part of the type definitions.
             if src_atom.residue.index == dst_atom.residue.index:
-                bond_idxs.append((src_atom.index, dst_atom.index))
                 src_res_template_name = template_for_residue[src_atom.residue.index].name
                 dst_res_template_name = template_for_residue[dst_atom.residue.index].name
                 assert src_res_template_name == dst_res_template_name
+                if src_res_template_name == "HOH":
+                    # Skip waters
+                    continue
+                bond_idxs.append((src_atom.index, dst_atom.index))
                 residue_bond_kv = self.res_to_bonds_to_param_idxs[src_res_template_name]
                 # we have to do one extra level of indirection where by we want the src_atom, dst_atom to be matched
                 # to the corresponding src_template_atom, dst_template_atom in the template definitions themselves.
@@ -608,12 +613,51 @@ class EnvironmentBCCHandler(SerializableMixIn):
         self.signs = np.array(signs)
 
     def parameterize(self, params):
+        # If there aren't any matched parameters (i.e. it's all water),
+        # then there is nothing to do
+        if len(self.param_idxs) == 0:
+            return self.initial_charges
+
         bond_deltas = params[self.param_idxs] * self.signs
         final_charges = apply_bond_charge_corrections(
             self.initial_charges, self.bond_idxs, bond_deltas, runtime_validate=False
         )
-
         return final_charges
+
+
+class EnvironmentBCCPartialHandler(SerializableMixIn):
+    """
+    This class is used to represent the environment BCC terms
+    that modify the charges used for the environment-ligand
+    interaction potential.
+
+    The current implementation skips water molecules, so only the
+    protein charges are modified.
+
+    This class is a serializable version of `EnvironmentBCCHandler`,
+    so it can be stored in the forcefield python file in the normal way.
+
+    NOTE: Currently, this only supports the amber99sbildn protein forcefield.
+    """
+
+    def __init__(self, smirks, params, props):
+        self.smirks = smirks
+        self.params = np.array(params)
+        self.props = props
+
+    def get_env_handle(self, omm_topology, ff) -> EnvironmentBCCHandler:
+        """
+        Return an initialized `EnvironmentBCCHandler` which can be used to
+        get the (possibly updated) environment charges.
+
+        Parameters
+        ----------
+        omm_topology:
+            Openmm topology object for the environment.
+
+        ff: Forcefield
+        """
+        return EnvironmentBCCHandler(self.smirks, self.params, ff.protein_ff, ff.water_ff, omm_topology)
 
 
 class AM1CCCHandler(SerializableMixIn):

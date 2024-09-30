@@ -6,9 +6,18 @@ import scipy
 from jax import numpy as jnp
 from rdkit import Chem
 
-from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
+from timemachine.constants import (
+    DEFAULT_ATOM_MAPPING_KWARGS,
+    DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
+    DEFAULT_CHIRAL_BOND_RESTRAINT_K,
+)
 from timemachine.fe import topology, utils
-from timemachine.fe.chiral_utils import make_chiral_flip_heatmaps
+from timemachine.fe.atom_mapping import get_cores
+from timemachine.fe.chiral_utils import (
+    make_chiral_flip_heatmaps,
+    make_chiral_restr_fxns,
+    setup_all_chiral_atom_restr_idxs,
+)
 from timemachine.fe.free_energy import HREXParams
 from timemachine.fe.rbfe import DEFAULT_HREX_PARAMS, run_solvent, run_vacuum
 from timemachine.fe.single_topology import AtomMapMixin
@@ -24,6 +33,7 @@ from timemachine.potentials.chiral_restraints import (
 )
 
 
+@pytest.mark.nocuda
 def test_chiral_restraints_pyramidal():
     """For ammonium, assert that:
     * without chiral restraints, up and down states are ~ equally sampled
@@ -147,6 +157,7 @@ class BaseTopologyRescaledCharges(topology.BaseTopology):
         return new_params, nb
 
 
+@pytest.mark.nocuda
 def test_chiral_restraints_torsion():
     """For a charge-scaled version of hydrogen peroxide, assert that:
     * without chiral bond restraints, cis/trans states are sampled ~ 25%/75%
@@ -237,6 +248,7 @@ $$$$""",
         assert ks < 0.05 or pv > 0.10
 
 
+@pytest.mark.nocuda
 def test_chiral_restraints_tetrahedral():
     # test that we can restrain the chirality of a tetrahedral molecule
     # to its inverted state
@@ -321,6 +333,7 @@ $$$$""",
     assert ks < 0.05 or pv > 0.10
 
 
+@pytest.mark.nocuda
 def test_chiral_spiro_cyclopentane():
     # fused spiro cyclopentane
     mol = Chem.MolFromMolBlock(
@@ -727,6 +740,91 @@ def test_chiral_inversion_in_single_topology(well_aligned):
     # with open(f"vacuum_chiral_energies_aligned_{well_aligned}_b.png", "wb") as ofs:
     #     data_b = plot_as_png_fxn(plot_chiral_restraint_energies, heatmap_b)
     #     ofs.write(data_b)
+
+
+@pytest.mark.nocuda
+def test_chiral_restraint_energies_with_no_restraints():
+    """VWhen the number of chiral restraints were zero could result in an exception"""
+    mol_a = Chem.MolFromMolBlock(
+        """
+     RDKit          3D
+
+ 12 12  0  0  0  0  0  0  0  0999 V2000
+    0.9820    1.0014    0.0105 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3692    1.3257   -0.0095 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.3213    0.3320   -0.0196 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.9782   -0.9962   -0.0105 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.3622   -1.3280    0.0094 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3301   -0.3374    0.0197 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.7618    1.7512    0.0190 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.6369    2.3883   -0.0167 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -2.3674    0.6147   -0.0351 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.7688   -1.7441   -0.0191 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6281   -2.3740    0.0165 H   0  0  0  0  0  0  0  0  0  0  0  0
+    2.3775   -0.6335    0.0353 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0
+  2  3  1  0
+  3  4  2  0
+  4  5  1  0
+  5  6  2  0
+  6  1  1  0
+  1  7  1  0
+  2  8  1  0
+  3  9  1  0
+  4 10  1  0
+  5 11  1  0
+  6 12  1  0
+M  END""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """
+     RDKit          3D
+
+ 13 14  0  0  0  0  0  0  0  0999 V2000
+    0.6509    0.6640    0.0070 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0474   -0.0518    1.1787 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.7335    0.7273   -0.5626 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7357   -0.7070   -0.6174 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.6472   -0.6589   -0.0069 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3555    1.3705    0.0097 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5448    0.5192    1.8798 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7823   -0.7798    1.5901 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.7595    0.6979   -1.6679 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.4509    1.3947   -0.0683 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7983   -0.7612   -1.6975 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3850   -1.3532   -0.0133 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.3319   -1.3827   -0.0161 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0
+  1  3  1  0
+  1  4  1  0
+  4  5  1  0
+  5  2  1  0
+  5  3  1  0
+  1  6  1  0
+  2  7  1  0
+  2  8  1  0
+  3  9  1  0
+  3 10  1  0
+  4 11  1  0
+  4 12  1  0
+  5 13  1  0
+M  END""",
+        removeHs=False,
+    )
+
+    atom_mappng_kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
+    atom_mappng_kwargs["enforce_chirally_valid_dummy_groups"] = True
+    core = get_cores(mol_a, mol_b, **atom_mappng_kwargs)[0]
+
+    atom_map = AtomMapMixin(mol_a, mol_b, core)
+
+    assert len(setup_all_chiral_atom_restr_idxs(mol_a, utils.get_romol_conf(mol_a))) == 0
+    assert len(setup_all_chiral_atom_restr_idxs(mol_b, utils.get_romol_conf(mol_b))) == 20
+    U_a, U_b = make_chiral_restr_fxns(atom_map.mol_a, atom_map.mol_b)
+    assert U_a(utils.get_romol_conf(mol_a)) == 0.0
+    assert U_b(utils.get_romol_conf(mol_b)) == 0.0
 
 
 @pytest.mark.nightly(reason="slow")

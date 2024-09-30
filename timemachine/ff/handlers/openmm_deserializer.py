@@ -105,8 +105,8 @@ def deserialize_nonbonded_force(force, N):
     )
 
     # optimizations
-    nb_params[:, 1] = nb_params[:, 1] / 2
-    nb_params[:, 2] = np.sqrt(nb_params[:, 2])
+    nb_params[:, constants.NBParamIdx.LJ_SIG_IDX] = nb_params[:, 1] / 2
+    nb_params[:, constants.NBParamIdx.LJ_EPS_IDX] = np.sqrt(nb_params[:, 2])
 
     beta = 2.0  # erfc correction
 
@@ -201,6 +201,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
         if isinstance(force, mm.NonbondedForce):
             nb_params, exclusion_idxs, beta, scale_factors = deserialize_nonbonded_force(force, N)
+
             bps_dict["Nonbonded"].append(
                 potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff).bind(nb_params)
             )
