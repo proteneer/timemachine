@@ -1,3 +1,4 @@
+import numpy as np
 from rdkit import Chem
 
 
@@ -67,3 +68,7 @@ def match_smirks(mol, smirks):
         matches.append(tuple(mas))
 
     return matches
+
+
+def canonicalize_atom_ordering(mol):
+    return np.array([int(i) for i in Chem.CanonicalRankAtoms(mol, includeIsotopes=False)])

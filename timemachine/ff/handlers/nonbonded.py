@@ -2,6 +2,7 @@ import ast
 import base64
 import pickle
 from collections import Counter
+from copy import deepcopy
 
 import jax.numpy as jnp
 import networkx as nx
@@ -12,7 +13,7 @@ from timemachine import constants
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
-from timemachine.ff.handlers.utils import canonicalize_bond
+from timemachine.ff.handlers.utils import canonicalize_atom_ordering, canonicalize_bond
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.graph_utils import convert_to_nx
 
@@ -83,6 +84,12 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
     """assign partial charges, then premultiply by sqrt(ONE_4PI_EPS0)
     as an optimization"""
 
+    # ensure omega only ever sees molecules with canonical atom orders
+    mol = deepcopy(mol)
+    canon_perm = canonicalize_atom_ordering(mol)
+    inv_perm = np.argsort(canon_perm)
+    permuted_mol = Chem.RenumberAtoms(mol, list(int(idx) for idx in canon_perm))
+
     # imported here for optional dependency
     from openeye import oequacpac
 
@@ -94,7 +101,7 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
     }
     charge_engine = charge_engines[charge_model]
 
-    oemol = convert_to_oe(mol)
+    oemol = convert_to_oe(permuted_mol)
     if charge_model in ELF10_MODELS:
         oe_generate_conformations(oemol)
 
@@ -121,7 +128,8 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
     # "The charges have been multiplied by sqrt(ONE_4PI_EPS0) as an optimization."
     inlined_constant = np.sqrt(constants.ONE_4PI_EPS0)
 
-    return inlined_constant * partial_charges
+    # returned charges are in TM units, in original atom ordering
+    return inlined_constant * partial_charges[inv_perm]
 
 
 def generate_exclusion_idxs(mol, scale12, scale13, scale14):
