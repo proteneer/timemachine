@@ -169,7 +169,7 @@ def test_nblist_box_resize(precision, rtol, atol, du_dp_rtol, du_dp_atol):
     # since we should be rebuilding the nblist when the box sizes change.
     ff = Forcefield.load_default()
 
-    host_system, host_conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
+    host_system, host_conf, box, top = builders.build_water_system(3.0, ff.water_ff)
 
     host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 

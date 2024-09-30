@@ -433,13 +433,12 @@ def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, mi
         box_width, ff.water_ff, mols=[mol]
     )
     water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
-    host_config = HostConfig(water_system, water_coords, water_box, water_coords.shape[0])
+    host_config = HostConfig(water_system, water_coords, water_box, water_coords.shape[0], water_topology)
 
     # construct alchemical system
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
-    ff_params = ff.get_params()
-    potentials, params, masses = afe.prepare_host_edge(ff_params, host_config, lamb)
+    potentials, params, masses = afe.prepare_host_edge(ff, host_config, lamb)
 
     # concatenate (optionally minimized) water_coords and ligand_coords
     ligand_coords = get_romol_conf(mol)

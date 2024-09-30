@@ -32,4 +32,4 @@ def get_dhfr_system():
     host_system = protein_ff.createSystem(
         host_pdb.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
     )
-    return host_system
+    return host_system, host_pdb.topology

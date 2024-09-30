@@ -65,7 +65,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
         box_width, ff.water_ff, mols=[mol_a, mol_b]
     )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
     solvent_host = setup_optimized_host(st, solvent_host_config)
     initial_states = setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_schedule, seed)
 
@@ -85,7 +85,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
         protein_path, ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b]
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, num_water_atoms)
+    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, num_water_atoms, complex_top)
     complex_host = setup_optimized_host(st, complex_host_config)
     initial_states = setup_initial_states(st, complex_host, DEFAULT_TEMP, lambda_schedule, seed, min_cutoff=0.7)
 
@@ -193,7 +193,7 @@ def test_min_cutoff_failure(pair, seed, n_windows):
         box_width, ff.water_ff, mols=[mol_a, mol_b]
     )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
     solvent_host = setup_optimized_host(st, solvent_host_config)
     ligand_idxs = np.arange(st.get_num_atoms()) + solvent_host.conf.shape[0]
     expected_moved = ligand_idxs[st.c_flags != 2]

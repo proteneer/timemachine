@@ -1128,9 +1128,7 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries):
         host_pdb = app.PDBFile(str(path_to_pdb))
         topology = host_pdb.topology
 
-    pbcc = nonbonded.EnvironmentBCCHandler(
-        smirks, params, DEFAULT_PROTEIN_FF + ".xml", DEFAULT_WATER_FF + ".xml", topology
-    )
+    pbcc = nonbonded.EnvironmentBCCHandler(smirks, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
 
     # raw charges are correct are in the order of atoms in the topology
     raw_charges = np.array(pbcc.parameterize(np.zeros_like(params)))
@@ -1175,9 +1173,7 @@ def test_environment_bcc_full_protein(protein_path):
         host_pdb = app.PDBFile(str(path_to_pdb))
         _, _, _, topology, _ = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
 
-    pbcc = nonbonded.EnvironmentBCCHandler(
-        smirks, params, DEFAULT_PROTEIN_FF + ".xml", DEFAULT_WATER_FF + ".xml", topology
-    )
+    pbcc = nonbonded.EnvironmentBCCHandler(smirks, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
 
     # test that we can mechanically parameterize everything
     pbcc.parameterize(params)
@@ -1191,3 +1187,18 @@ def test_environment_bcc_full_protein(protein_path):
     print(loss_fn(params))  # fast
     print(grad_fn(params))  # a few seconds
     print(jax.jit(grad_fn)(params))  # also a few seconds
+
+    # test that the partial handler gives the same results
+    ff = Forcefield.load_default()
+    partial_cc = nonbonded.EnvironmentBCCPartialHandler(smirks, params, None)
+    pbcc2 = partial_cc.get_env_handle(topology, ff)
+    np.testing.assert_array_equal(pbcc.parameterize(params), pbcc2.parameterize(params))
+
+    def loss_fn2(bcc_params):
+        res = pbcc.parameterize(bcc_params)
+        return jnp.sum(res)
+
+    grad_fn2 = jax.grad(loss_fn2)
+
+    assert loss_fn(params) == loss_fn2(params)
+    np.testing.assert_array_equal(grad_fn(params), grad_fn2(params))

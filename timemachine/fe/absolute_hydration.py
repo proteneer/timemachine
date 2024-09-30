@@ -290,7 +290,7 @@ def setup_initial_states(
     for lamb_idx, lamb in enumerate(lambda_schedule):
         ligand_conf = get_romol_conf(afe.mol)
 
-        ubps, params, masses = afe.prepare_host_edge(ff.get_params(), host_config, lamb)
+        ubps, params, masses = afe.prepare_host_edge(ff, host_config, lamb)
         x0 = afe.prepare_combined_coords(host_coords=host_conf)
         bps = []
         for ubp, param in zip(ubps, params):
@@ -326,7 +326,7 @@ def run_solvent(
         box_width, forcefield.water_ff, mols=[mol]
     )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
     solvent_res = estimate_absolute_free_energy(
         mol,
         forcefield,

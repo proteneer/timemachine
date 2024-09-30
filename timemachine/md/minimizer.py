@@ -214,7 +214,7 @@ def pre_equilibrate_host(
     combined_masses = np.concatenate(mass_list)
     combined_coords = np.concatenate(conf_list)
 
-    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
+    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms, ff, host_config.omm_topology)
 
     dt = 1.5e-3
     friction = 1.0
@@ -344,7 +344,7 @@ def make_host_du_dx_fxn(
     else:
         raise ValueError("mols must be length 1 or 2")
 
-    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms)
+    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms, ff, host_config.omm_topology)
 
     # read conformers from mol_coords if given, or each mol's conf0 otherwise
     conf_list = [np.asarray(host_config.conf)]

@@ -18,9 +18,11 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 def test_build_water_system():
     mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
 
-    water_system, water_coords, box, _ = build_water_system(4.0, DEFAULT_WATER_FF)
+    water_system, water_coords, box, water_top = build_water_system(4.0, DEFAULT_WATER_FF)
 
-    water_with_mols, mol_water_coords, box_with_mols, _ = build_water_system(4.0, DEFAULT_WATER_FF, mols=[mol_a, mol_b])
+    water_with_mols, mol_water_coords, box_with_mols, water_with_mols_top = build_water_system(
+        4.0, DEFAULT_WATER_FF, mols=[mol_a, mol_b]
+    )
 
     # No waters should be deleted, but the box will be slightly larger
     assert len(water_coords) == len(mol_water_coords)
@@ -116,14 +118,18 @@ def test_build_protein_system():
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
         host_pdbfile = str(pdb_path)
-    protein_system, protein_coords, box, _, num_water_atoms = build_protein_system(
+    protein_system, protein_coords, box, protein_top, num_water_atoms = build_protein_system(
         host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
     )
     num_host_atoms = protein_coords.shape[0] - num_water_atoms
 
-    protein_with_mols, mol_protein_coords, box_with_mols, _, num_water_atoms_with_mols = build_protein_system(
-        host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, mols=[mol_a, mol_b]
-    )
+    (
+        protein_with_mols,
+        mol_protein_coords,
+        box_with_mols,
+        protein_with_mols_top,
+        num_water_atoms_with_mols,
+    ) = build_protein_system(host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, mols=[mol_a, mol_b])
     num_host_atoms_with_mol = mol_protein_coords.shape[0] - num_water_atoms_with_mols
 
     assert num_host_atoms == num_host_atoms_with_mol

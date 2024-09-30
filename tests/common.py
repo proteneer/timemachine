@@ -3,7 +3,7 @@ import itertools
 import os
 import unittest
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib import resources
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -18,12 +18,13 @@ from timemachine.fe import rbfe
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff.handlers import nonbonded, openmm_deserializer
 from timemachine.lib import custom_ops
 from timemachine.md.builders import build_protein_system
 from timemachine.potentials import Nonbonded
 from timemachine.potentials.potential import GpuImplWrapper
 from timemachine.potentials.types import PotentialFxn
+from timemachine.testsystems.data.ildn_params import get_amber99ildn_patterns
 
 HILBERT_GRID_DIM = 128
 
@@ -393,6 +394,10 @@ def load_split_forcefields() -> SplitForcefield:
     SIG_SCALE = 0.5  # smaller change to prevent overflow
     EPS_SCALE = 2.0
 
+    patterns = get_amber99ildn_patterns()
+    protein_smirks = [x[0] for x in patterns]
+    protein_params = np.ones((len(protein_smirks),)) * 0.5
+
     ff_ref = Forcefield.load_default()
 
     ff_intra = Forcefield.load_default()
@@ -408,6 +413,9 @@ def load_split_forcefields() -> SplitForcefield:
     ff_env.q_handle.params *= Q_SCALE
     ff_env.lj_handle.params[:, SIG_IDX] *= SIG_SCALE
     ff_env.lj_handle.params[:, EPS_IDX] *= EPS_SCALE
+    env_bcc_handle = nonbonded.EnvironmentBCCPartialHandler(protein_smirks, protein_params, None)
+    ff_env = replace(ff_env, env_bcc_handle=env_bcc_handle)
+    assert ff_env.env_bcc_handle is not None
 
     ff_scaled = Forcefield.load_default()
     assert ff_scaled.q_handle is not None
@@ -420,6 +428,9 @@ def load_split_forcefields() -> SplitForcefield:
     ff_scaled.lj_handle.params[:, EPS_IDX] *= EPS_SCALE
     ff_scaled.lj_handle_intra.params[:, SIG_IDX] *= SIG_SCALE
     ff_scaled.lj_handle_intra.params[:, EPS_IDX] *= EPS_SCALE
+    env_bcc_handle = nonbonded.EnvironmentBCCPartialHandler(protein_smirks, protein_params, None)
+    ff_scaled = replace(ff_scaled, env_bcc_handle=env_bcc_handle)
+    assert ff_scaled.env_bcc_handle is not None
     return SplitForcefield(ff_ref, ff_intra, ff_env, ff_scaled)
 
 
@@ -437,7 +448,7 @@ def check_split_ixns(
     ffs = load_split_forcefields()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, host_conf, box, _, num_water_atoms = build_protein_system(
+        complex_system, host_conf, box, complex_top, num_water_atoms = build_protein_system(
             str(path_to_pdb), ffs.ref.protein_ff, ffs.ref.water_ff
         )
         box += np.diag([0.1, 0.1, 0.1])
@@ -471,7 +482,9 @@ def check_split_ixns(
         LL_grad_ref, LL_u_ref = compute_intra_grad_u(
             ffs.ref, precision, ligand_conf, box, lamb, num_water_atoms, num_host_atoms
         )
-        sum_grad_ref, sum_u_ref = compute_ref_grad_u(ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_bps)
+        sum_grad_ref, sum_u_ref = compute_ref_grad_u(
+            ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_bps, complex_top
+        )
         PL_grad_ref, PL_u_ref = compute_ixn_grad_u(
             ffs.ref,
             precision,
@@ -483,6 +496,7 @@ def check_split_ixns(
             water_idxs,
             ligand_idxs,
             protein_idxs,
+            complex_top,
             is_solvent=False,
         )
         WL_grad_ref, WL_u_ref = compute_ixn_grad_u(
@@ -496,18 +510,21 @@ def check_split_ixns(
             water_idxs,
             ligand_idxs,
             protein_idxs,
+            complex_top,
             is_solvent=True,
         )
 
         # Should be the same as the new code with the orig ff
-        sum_grad_new, sum_u_new = compute_new_grad_u(ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_bps)
+        sum_grad_new, sum_u_new = compute_new_grad_u(
+            ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_bps, complex_top
+        )
 
         np.testing.assert_allclose(sum_u_ref, sum_u_new, rtol=rtol, atol=atol)
         np.testing.assert_allclose(sum_grad_ref, sum_grad_new, rtol=rtol, atol=atol)
 
         # Compute the grads, potential with the intramolecular terms scaled
         sum_grad_intra, sum_u_intra = compute_new_grad_u(
-            ffs.intra, precision, coords0, box, lamb, num_water_atoms, host_bps
+            ffs.intra, precision, coords0, box, lamb, num_water_atoms, host_bps, complex_top
         )
         LL_grad_intra, LL_u_intra = compute_intra_grad_u(
             ffs.intra, precision, ligand_conf, box, lamb, num_water_atoms, num_host_atoms
@@ -522,7 +539,7 @@ def check_split_ixns(
 
         # Compute the grads, potential with the ligand-env terms scaled
         sum_grad_prot, sum_u_prot = compute_new_grad_u(
-            ffs.env, precision, coords0, box, lamb, num_water_atoms, host_bps
+            ffs.env, precision, coords0, box, lamb, num_water_atoms, host_bps, complex_top
         )
         PL_grad_env, PL_u_env = compute_ixn_grad_u(
             ffs.env,
@@ -535,6 +552,7 @@ def check_split_ixns(
             water_idxs,
             ligand_idxs,
             protein_idxs,
+            complex_top,
             is_solvent=False,
         )
         WL_grad_env, WL_u_env = compute_ixn_grad_u(
@@ -548,6 +566,7 @@ def check_split_ixns(
             water_idxs,
             ligand_idxs,
             protein_idxs,
+            complex_top,
             is_solvent=True,
         )
 

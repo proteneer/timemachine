@@ -18,6 +18,7 @@ from timemachine.constants import (
     DEFAULT_ATOM_MAPPING_KWARGS,
     DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
     DEFAULT_CHIRAL_BOND_RESTRAINT_K,
+    NBParamIdx,
 )
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.dummy import MultipleAnchorWarning
@@ -780,11 +781,11 @@ def test_combine_with_host():
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    solvent_sys, solvent_conf, _, _ = build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
+    solvent_sys, solvent_conf, _, top = build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
     host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
 
     st = SingleTopology(mol_a, mol_b, core, ff)
-    host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5, solvent_conf.shape[0])
+    host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5, solvent_conf.shape[0], ff, top)
     assert set(type(bp.potential) for bp in host_system.get_U_fns()) == {
         potentials.HarmonicBond,
         potentials.HarmonicAngleStable,
@@ -817,7 +818,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
     ffs = load_split_forcefields()
     solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ffs.ref.water_ff, mols=[mol_a, mol_b])
     solvent_conf = minimizer.fire_minimize_host(
-        [mol_a, mol_b], HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0]), ffs.ref
+        [mol_a, mol_b], HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top), ffs.ref
     )
     solvent_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
     solv_sys = convert_bps_into_system(solvent_bps)
@@ -832,7 +833,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
         val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_potentials, solvent_box, precision=precision)
         vacuum_u, vacuum_grad = val_and_grad_fn(ligand_conf)
 
-        solvent_system = st.combine_with_host(solv_sys, lamb, solvent_conf.shape[0])
+        solvent_system = st.combine_with_host(solv_sys, lamb, solvent_conf.shape[0], ff, solvent_top)
         solvent_potentials = solvent_system.get_U_fns()
         solv_val_and_grad_fn = minimizer.get_val_and_grad_fn(solvent_potentials, solvent_box, precision=precision)
         solvent_u, solvent_grad = solv_val_and_grad_fn(combined_conf)
@@ -878,7 +879,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
 
 
 class SingleTopologyRef(SingleTopology):
-    def _parameterize_host_guest_nonbonded_ixn(self, lamb, host_nonbonded, _):
+    def _parameterize_host_guest_nonbonded_ixn(self, lamb, host_nonbonded, *_):
         # Parameterize nonbonded potential for the host guest interaction
         num_host_atoms = host_nonbonded.params.shape[0]
         num_guest_atoms = self.get_num_atoms()
@@ -911,7 +912,7 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
     ff = Forcefield.load_default()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, box, _, num_water_atoms = build_protein_system(
+        complex_system, complex_coords, box, complex_top, num_water_atoms = build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
         box += np.diag([0.1, 0.1, 0.1])
@@ -920,7 +921,7 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
     host_system = convert_bps_into_system(host_bps)
     st_ref = SingleTopologyRef(mol_a, mol_b, core, ff)
 
-    combined_ref = st_ref.combine_with_host(host_system, lamb, num_water_atoms)
+    combined_ref = st_ref.combine_with_host(host_system, lamb, num_water_atoms, ff, complex_top)
     ref_potentials = combined_ref.get_U_fns()
     ref_summed = potentials.SummedPotential(
         [bp.potential for bp in ref_potentials], [bp.params for bp in ref_potentials]
@@ -928,7 +929,7 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
     flattened_ref_params = np.concatenate([bp.params.reshape(-1) for bp in ref_potentials])
 
     st_split = SingleTopology(mol_a, mol_b, core, ff)
-    combined_split = st_split.combine_with_host(host_system, lamb, num_water_atoms)
+    combined_split = st_split.combine_with_host(host_system, lamb, num_water_atoms, ff, complex_top)
     split_potentials = combined_split.get_U_fns()
     split_summed = potentials.SummedPotential(
         [bp.potential for bp in split_potentials], [bp.params for bp in split_potentials]
@@ -959,7 +960,7 @@ def test_combine_with_host_split(precision, rtol, atol):
     mol_b = mols["43"]
     core = _get_core_by_mcs(mol_a, mol_b)
 
-    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps):
+    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
         # Use the original code to compute the nb grads and potential
         host_system = convert_bps_into_system(host_bps)
         st = SingleTopologyRef(mol_a, mol_b, core, ff)
@@ -967,19 +968,19 @@ def test_combine_with_host_split(precision, rtol, atol):
         num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
         combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
 
-        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms)
+        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
         potentials = combined_system.get_U_fns()
         u, grad = minimizer.get_val_and_grad_fn(potentials, box, precision=precision)(combined_conf)
         return grad, u
 
-    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps):
+    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
         host_system = convert_bps_into_system(host_bps)
         st = SingleTopology(mol_a, mol_b, core, ff)
         ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
         num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
         combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
 
-        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms)
+        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
         potentials = combined_system.get_U_fns()
         u, grad = minimizer.get_val_and_grad_fn(potentials, box, precision=precision)(combined_conf)
         return grad, u
@@ -1007,6 +1008,7 @@ def test_combine_with_host_split(precision, rtol, atol):
         water_idxs,
         ligand_idxs,
         protein_idxs,
+        omm_topology,
         is_solvent=False,
     ):
         assert num_water_atoms == len(water_idxs)
@@ -1030,8 +1032,12 @@ def test_combine_with_host_split(precision, rtol, atol):
         lj_handle = ff.lj_handle
         guest_params = st._get_guest_params(q_handle, lj_handle, lamb, cutoff)
 
-        host_params = host_system.nonbonded.params
-        combined_nonbonded_params = np.concatenate([host_params, guest_params])
+        host_ixn_params = host_system.nonbonded.params.copy()
+        if not is_solvent and ff.env_bcc_handle is not None:  # protein
+            env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
+            host_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
+
+        combined_nonbonded_params = np.concatenate([host_ixn_params, guest_params])
         u_impl = u.bind(combined_nonbonded_params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(combined_conf, box)
 

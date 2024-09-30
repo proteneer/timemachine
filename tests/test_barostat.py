@@ -89,8 +89,8 @@ def test_barostat_with_clashes():
     box -= np.eye(3) * 0.1
     bt = BaseTopology(mol_a, ff)
     afe = AbsoluteFreeEnergy(mol_a, bt)
-    host_config = HostConfig(host_system, host_coords, box, host_coords.shape[0])
-    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff.get_params(), host_config, 0.0)
+    host_config = HostConfig(host_system, host_coords, box, host_coords.shape[0], host_top)
+    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff, host_config, 0.0)
     coords = afe.prepare_combined_coords(host_coords=host_coords)
 
     # get list of molecules for barostat by looking at bond table
@@ -302,7 +302,7 @@ def test_barostat_varying_pressure():
 
     # Start out with a very large pressure
     pressure = 1013.0
-    host_system, coords, box, _ = build_water_system(3.0, ff.water_ff)
+    host_system, coords, box, host_top = build_water_system(3.0, ff.water_ff)
     box += np.eye(3) * 0.1
     bps, masses_ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
