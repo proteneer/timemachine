@@ -194,7 +194,7 @@ def test_local_minimize_water_box():
 
     u_init, g_init = val_and_grad_fn(x0)
 
-    x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs)
+    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs)
 
     np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
     assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.01
@@ -207,7 +207,8 @@ def test_local_minimize_water_box():
 
 
 @pytest.mark.nocuda
-def test_local_minimize_strained_ligand():
+@pytest.mark.parametrize("restraint_k", [None, 3_000.0])
+def test_local_minimize_strained_ligand(restraint_k):
     """
     Test that we can minimize a ligand in vacuum using local_minimize when the ligand is strained.
     """
@@ -268,13 +269,14 @@ $$$$
     val_and_grad_fn = get_vacuum_val_and_grad_fn(mol, ff)
 
     x0 = get_romol_conf(mol)
+    box0 = np.eye(3) * 100.0
 
     # All atoms will be free
     free_idxs = np.arange(mol.GetNumAtoms())
 
     u_init, g_init = val_and_grad_fn(x0)
 
-    x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs)
+    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, restraint_k=restraint_k)
 
     assert np.linalg.norm(x0 - x_opt) > 0.01
 

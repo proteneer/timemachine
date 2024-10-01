@@ -5,7 +5,6 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union, cast
 
-import jax
 import numpy as np
 from numpy.typing import NDArray
 from openmm import app
@@ -44,7 +43,6 @@ from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import BoundPotential, jax_utils
-from timemachine.potentials.bonded import harmonic_positional_restraint
 
 DEFAULT_NUM_WINDOWS = 48
 
@@ -55,6 +53,8 @@ MAX_SEED_VALUE = 10000
 DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023, hrex_params=None)
 
 DEFAULT_HREX_PARAMS = replace(DEFAULT_MD_PARAMS, hrex_params=HREXParams(n_frames_bisection=100))
+
+DEFAULT_POSITIONAL_RESTRAINT_K = 2000.0
 
 
 @dataclass
@@ -278,6 +278,7 @@ def setup_optimized_initial_state(
     optimized_initial_states: Sequence[InitialState],
     temperature: float,
     seed: int,
+    k: Optional[float] = DEFAULT_POSITIONAL_RESTRAINT_K,
 ) -> InitialState:
     """Setup an InitialState for the specified lambda and optimize the coordinates given a list of pre-optimized IntialStates.
     If the specified lambda exists within the list of optimized_initial_states list, return the existing InitialState.
@@ -312,29 +313,9 @@ def setup_optimized_initial_state(
             free_idxs,
             # assertion can lead to spurious errors when new state is close to an existing one
             assert_energy_decreased=False,
+            k=k,
         )
         return initial_state
-
-
-def wrap_val_and_grad_with_positional_restraint(
-    val_and_grad_fn: Callable[[NDArray], Tuple[float, NDArray]],
-    x0: NDArray,
-    box0: NDArray,
-    free_idxs: List[int],
-    k: float,
-) -> Callable[[NDArray], Tuple[float, NDArray]]:
-    restraint_val_and_grad = jax.value_and_grad(harmonic_positional_restraint, argnums=1)
-
-    starting_free = np.array(x0[free_idxs])
-
-    def local_minimization_function(x):
-        u, grad = val_and_grad_fn(x)
-        restraint_u, restraint_grad = restraint_val_and_grad(starting_free, x[free_idxs], box0, k=k)
-        u += restraint_u
-        grad[free_idxs] += restraint_grad
-        return u, grad
-
-    return local_minimization_function
 
 
 def optimize_coords_state(
@@ -343,15 +324,14 @@ def optimize_coords_state(
     box: NDArray,
     free_idxs: List[int],
     assert_energy_decreased: bool,
-    k: Optional[float] = 4_000.0,
+    k: Optional[float],
 ) -> NDArray:
     val_and_grad_fn = minimizer.get_val_and_grad_fn(potentials, box)
     assert np.all(np.isfinite(x0)), "Initial coordinates contain nan or inf"
 
-    if k is not None:
-        val_and_grad_fn = wrap_val_and_grad_with_positional_restraint(val_and_grad_fn, x0, box, free_idxs, k)
-
-    x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs, assert_energy_decreased=assert_energy_decreased)
+    x_opt = minimizer.local_minimize(
+        x0, box, val_and_grad_fn, free_idxs, assert_energy_decreased=assert_energy_decreased, restraint_k=k
+    )
     assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
     return x_opt
 
@@ -365,7 +345,7 @@ def get_free_idxs(initial_state: InitialState, cutoff: float = 0.5) -> List[int]
     return free_idxs
 
 
-def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[NDArray]:
+def _optimize_coords_along_states(initial_states: List[InitialState], k: Optional[float]) -> List[NDArray]:
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
 
@@ -377,7 +357,7 @@ def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[ND
         free_idxs = get_free_idxs(initial_state)
         try:
             x_opt = optimize_coords_state(
-                initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0
+                initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0, k=k
             )
         except (AssertionError, minimizer.MinimizationError) as e:
             raise minimizer.MinimizationError(f"Failed to optimized state at λ={initial_state.lamb}") from e
@@ -386,7 +366,11 @@ def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[ND
     return x_traj
 
 
-def optimize_coordinates(initial_states: List[InitialState], min_cutoff: Optional[float] = 0.7) -> List[NDArray]:
+def optimize_coordinates(
+    initial_states: List[InitialState],
+    min_cutoff: Optional[float] = 0.7,
+    k: Optional[float] = DEFAULT_POSITIONAL_RESTRAINT_K,
+) -> List[NDArray]:
     """
     Optimize geometries of the initial states.
 
@@ -396,6 +380,11 @@ def optimize_coordinates(initial_states: List[InitialState], min_cutoff: Optiona
 
     min_cutoff: float, optional
         Throw error if any atom moves more than this distance (nm) after minimization
+
+    k: float, optional
+        force constant for a positional harmonic restraint potential to apply to the initial positions.
+        If None, minimize with no positional restraint. Refer to `timemachine.potentials.bonded.harmonic_positional_restraint`
+        for implementation.
 
     Returns
     -------
@@ -420,13 +409,13 @@ def optimize_coordinates(initial_states: List[InitialState], min_cutoff: Optiona
 
     # go from lambda 0 -> 0.5
     if len(lhs_initial_states) > 0:
-        lhs_xs = _optimize_coords_along_states(lhs_initial_states)
+        lhs_xs = _optimize_coords_along_states(lhs_initial_states, k)
         for xs in lhs_xs:
             all_xs.append(xs)
 
     # go from lambda 1 -> 0.5 and reverse the coordinate trajectory and lambda schedule
     if len(rhs_initial_states) > 0:
-        rhs_xs = _optimize_coords_along_states(rhs_initial_states[::-1])[::-1]
+        rhs_xs = _optimize_coords_along_states(rhs_initial_states[::-1], k)[::-1]
         for xs in rhs_xs:
             all_xs.append(xs)
 
