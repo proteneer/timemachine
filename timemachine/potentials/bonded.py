@@ -252,7 +252,7 @@ def harmonic_positional_restraint(x_init: Array, x_new: Array, box: Array, k: fl
     from changing too much.
 
     This implements a harmonic bond potential, while being PBC aware:
-        V(x_init, x_init, k) = \sum k / 2 * sum((x_new - x_init)^2)
+        V(x_new, x_init, k) = \sum k / 2 * sum((x_new - x_init)^2)
     """
     assert x_init.shape == x_new.shape
 
