@@ -40,7 +40,7 @@ def test_base_topology_14_exclusions():
     sigmas = ljs[:, 0]
     epsilons = ljs[:, 1]
 
-    # 27-28 correspond to an H-O-C-H torsion, we expect:
+    # atoms 27-0-1-28 correspond to a H-O-C-H torsion (respectively), we expect:
     # q_ij to be rescaled by (1-SCALE_14_Q)
     # sigma_ij to be unscaled
     # eps_ij to be rescaled by (1-SCALE_14_LJ)
@@ -50,7 +50,7 @@ def test_base_topology_14_exclusions():
         kvs[(27, 28)][2], combining_rule_epsilon(epsilons[27], epsilons[28]) * (1 - _SCALE_14_LJ)
     )
 
-    # 0-28 correspond to an O-C-H angle, we expect it to be missing
+    # 0-1-28 correspond to an O-C-H angle, we expect it to be missing
     assert (0, 28) not in kvs
     assert (28, 0) not in kvs
 
