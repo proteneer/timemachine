@@ -464,14 +464,14 @@ def wrap_val_and_grad_with_positional_restraint(
 
     starting_free = np.array(x0[free_idxs])
 
-    def wrapped_minimization(x):
+    def wrapped_val_and_grad(x):
         u, grad = val_and_grad_fn(x)
         restraint_u, restraint_grad = restraint_val_and_grad(starting_free, x[free_idxs], box0, k=k)
         u += restraint_u
         grad = jnp.asarray(grad).at[free_idxs].add(restraint_grad)
         return u, grad
 
-    return wrapped_minimization
+    return wrapped_val_and_grad
 
 
 def local_minimize(
