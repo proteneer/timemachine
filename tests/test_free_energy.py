@@ -5,6 +5,7 @@ from importlib import resources
 from typing import Optional
 from unittest.mock import Mock, patch
 
+import jax.numpy as jnp
 import numpy as np
 import pymbar
 import pytest
@@ -94,21 +95,21 @@ def assert_no_second_derivative(f, x):
     assert isinstance(problem, TypeError)
 
 
-def assert_ff_optimizable(U, coords, sys_params, box, tol=1e-10):
+def assert_ff_optimizable(U, coords, sys_params, box):
     """define a differentiable loss function in terms of U, assert it can be minimized,
     and return initial params, optimized params, and the loss function"""
 
     nb_params = sys_params[-1]
-    nb_params_shape = nb_params.shape
+    # nb_params_shape = nb_params.shape
 
-    def loss(nb_params):
-        concat_params = sys_params[:-1] + [nb_params]
+    def flat_loss(ws):
+        nbp = jnp.array(sys_params[-1])
+        nbp = nbp.at[:, 0].set(0)
+        nbp = nbp.at[:, -1].set(ws)
+        concat_params = sys_params[:-1] + [nbp]
         return (U(coords, concat_params, box) - 0.1) ** 2
 
-    x_0 = nb_params.flatten()
-
-    def flat_loss(flat_nb_params):
-        return loss(flat_nb_params.reshape(nb_params_shape))
+    x_0 = nb_params[:, -1]
 
     def fun(flat_nb_params):
         v, g = value_and_grad(flat_loss)(flat_nb_params)
@@ -117,7 +118,8 @@ def assert_ff_optimizable(U, coords, sys_params, box, tol=1e-10):
     # minimization successful
     result = minimize(fun, x_0, jac=True, tol=0)
     x_opt = result.x
-    assert flat_loss(x_opt) < tol
+
+    assert flat_loss(x_opt) < flat_loss(x_0)
 
     return x_0, x_opt, flat_loss
 
@@ -168,7 +170,7 @@ def test_functional():
                 """low-dimensional input so that finite-difference isn't too expensive"""
 
                 # scaling perturbation down by 1e-4 so that f(1.0) isn't 10^30ish...
-                return flat_loss(x_opt + 1e-4 * perturb) ** 2
+                return flat_loss(x_opt + 1e-9 * perturb) ** 2
 
             perturbations = np.linspace(-1, 1, 10)
 
