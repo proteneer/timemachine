@@ -557,7 +557,7 @@ def local_minimize(
     if verbose:
         print("-" * 70)
         print(f"performing {method} minimization on {n_local} atoms\n(holding the other {n_frozen} atoms frozen)")
-        U_0, grad_0 = val_and_grad_fn_local(x_local_0)
+        U_0, grad_0 = val_and_grad_fn(x0)
         print(f"U(x_0) = {U_0:.3f}")
 
     res = scipy.optimize.minimize(
