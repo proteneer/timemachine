@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from openmm import app
 from rdkit import Chem
 
-from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.constants import DEFAULT_POSITIONAL_RESTRAINT_K, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.free_energy import (
     HostConfig,
@@ -51,8 +51,6 @@ MAX_SEED_VALUE = 10000
 DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023, hrex_params=None)
 
 DEFAULT_HREX_PARAMS = replace(DEFAULT_MD_PARAMS, hrex_params=HREXParams(n_frames_bisection=100))
-
-DEFAULT_POSITIONAL_RESTRAINT_K = 2000.0
 
 
 @dataclass

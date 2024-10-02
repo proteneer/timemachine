@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 
+from timemachine.constants import DEFAULT_POSITIONAL_RESTRAINT_K
 from timemachine.potentials.jax_utils import delta_r
 from timemachine.potentials.types import Array
 
@@ -247,7 +248,9 @@ def log_flat_bottom_bond(conf, params, box, bond_idxs, beta):
     return jnp.sum(log_nrgs) / beta
 
 
-def harmonic_positional_restraint(x_init: Array, x_new: Array, box: Array, k: float = 4_000) -> Array:
+def harmonic_positional_restraint(
+    x_init: Array, x_new: Array, box: Array, k: float = DEFAULT_POSITIONAL_RESTRAINT_K
+) -> Array:
     r"""Harmonic positional restraint useful for performing minimization to prevent initial conformations
     from changing too much.
 
