@@ -1,4 +1,5 @@
 from dataclasses import replace
+from typing import Literal
 
 import jax.numpy as jnp
 import numpy as np
@@ -11,9 +12,17 @@ from timemachine.ff import Forcefield
 from timemachine.md.enhanced import identify_rotatable_bonds
 
 
-def get_rest_temperature_factor(lamb: ArrayLike, max_value: float = 2.0) -> NDArray:
+def get_rest_temperature_factor(
+    lamb: ArrayLike, max_value: float, schedule: Literal["linear", "quadratic", "exponential"]
+) -> NDArray:
     def f(x):
-        return (1.0 - x) + x * max_value
+        match schedule:
+            case "linear":
+                return (1.0 - x) + x * max_value
+            case "quadratic":
+                return 1.0 + (max_value - 1.0) * x**2
+            case "exponential":
+                return np.exp(np.log(max_value) * x)
 
     lamb = np.asarray(lamb)
     return np.where(
@@ -80,10 +89,20 @@ def scale_nonbonded_host_guest_ixn(nonbonded_host_guest_ixn, num_atoms_host, sca
     )
 
 
+TemperatureSchedule = Literal["linear", "quadratic", "exponential"]
+
+
 class SingleTopologyREST(SingleTopology):
-    def __init__(self, *args, max_temperature_factor: float = 2.0, **kwargs):
+    def __init__(
+        self,
+        *args,
+        max_temperature_factor: float,
+        temperature_schedule: TemperatureSchedule,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self._max_temperature_factor = max_temperature_factor
+        self._temperature_schedule: TemperatureSchedule = temperature_schedule
         self._rest_torsions = self._get_rest_torsions()
 
     def _get_rest_torsions(self) -> NDArray:
@@ -97,7 +116,7 @@ class SingleTopologyREST(SingleTopology):
         return np.array(target_torsions)
 
     def get_rest_energy_scale_factor(self, lamb: float):
-        temperature_factor = get_rest_temperature_factor(lamb, self._max_temperature_factor)
+        temperature_factor = get_rest_temperature_factor(lamb, self._max_temperature_factor, self._temperature_schedule)
         return 1.0 / temperature_factor
 
     def setup_intermediate_state(self, lamb: float) -> VacuumSystem:

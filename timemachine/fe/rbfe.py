@@ -33,7 +33,7 @@ from timemachine.fe.plots import (
     plot_hrex_transition_matrix,
 )
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
-from timemachine.fe.single_topology_rest import SingleTopologyREST
+from timemachine.fe.single_topology_rest import SingleTopologyREST, TemperatureSchedule
 from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
@@ -756,6 +756,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
 @dataclass
 class RESTParams:
     max_temperature_factor: float = 2.0
+    temperature_schedule: TemperatureSchedule = "linear"
 
 
 def estimate_relative_free_energy_bisection_hrex(
@@ -830,7 +831,14 @@ def estimate_relative_free_energy_bisection_hrex(
     assert n_windows >= 2
 
     single_topology = (
-        SingleTopologyREST(mol_a, mol_b, core, ff, max_temperature_factor=rest_params.max_temperature_factor)
+        SingleTopologyREST(
+            mol_a,
+            mol_b,
+            core,
+            ff,
+            max_temperature_factor=rest_params.max_temperature_factor,
+            temperature_schedule=rest_params.temperature_schedule,
+        )
         if rest_params
         else SingleTopology(mol_a, mol_b, core, ff)
     )
