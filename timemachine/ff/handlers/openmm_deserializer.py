@@ -61,6 +61,7 @@ def deserialize_nonbonded_force(force, N):
     for a_idx in range(force.getNumExceptions()):
         # tbd charge scale factors
         src, dst, new_cp, new_sig, new_eps = force.getExceptionParameters(a_idx)
+        new_q = value(new_cp) * constants.ONE_4PI_EPS0
         new_sig = value(new_sig)
         new_eps = value(new_eps)
 
@@ -71,6 +72,11 @@ def deserialize_nonbonded_force(force, N):
         dst_eps = all_eps[dst]
         expected_sig = (src_sig + dst_sig) / 2
         expected_eps = np.sqrt(src_eps * dst_eps)
+
+        src_q = charge_params[src]
+        dst_q = charge_params[dst]
+
+        expected_q = src_q * dst_q
 
         exclusion_idxs_.append([src, dst])
 
@@ -85,9 +91,17 @@ def deserialize_nonbonded_force(force, N):
         else:
             lj_scale_factor = 1 - new_eps / expected_eps
 
-        scale_factors_.append(lj_scale_factor)
+        if expected_q == 0:
+            if new_q == 0:
+                q_scale_factor = 1
+            else:
+                raise RuntimeError("Divide by zero in charge calculation")
+        else:
+            q_scale_factor = 1 - new_q / expected_q
 
-        # tbd fix charge_scale_factors using new_cp
+        scale_factors_.append((q_scale_factor, lj_scale_factor))
+
+        # tbd fix charge_scale_factors using new_q
         if new_eps != 0:
             np.testing.assert_almost_equal(expected_sig, new_sig)
 
@@ -111,7 +125,7 @@ def deserialize_nonbonded_force(force, N):
     beta = 2.0  # erfc correction
 
     # use the same scale factors for electrostatics and lj
-    scale_factors = np.stack([scale_factors_, scale_factors_], axis=1)
+    scale_factors = np.array(scale_factors_)
 
     return nb_params, exclusion_idxs, beta, scale_factors
 
