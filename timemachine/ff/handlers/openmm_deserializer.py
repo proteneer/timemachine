@@ -101,7 +101,7 @@ def deserialize_nonbonded_force(force, N):
 
         scale_factors_.append((q_scale_factor, lj_scale_factor))
 
-        # tbd fix charge_scale_factors using new_q
+        # check combining rules for sigmas are consistent
         if new_eps != 0:
             np.testing.assert_almost_equal(expected_sig, new_sig)
 
