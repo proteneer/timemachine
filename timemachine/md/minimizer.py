@@ -2,6 +2,7 @@ import warnings
 from typing import Callable, Iterable, List, Optional, Tuple
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import scipy.optimize
 from numpy.typing import NDArray
@@ -18,6 +19,7 @@ from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 from timemachine.potentials import BoundPotential, HarmonicBond, Potential, SummedPotential
+from timemachine.potentials.bonded import harmonic_positional_restraint
 from timemachine.potentials.potential import get_potential_by_type
 
 
@@ -451,8 +453,35 @@ def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=n
     return val_and_grad_fn
 
 
+def wrap_val_and_grad_with_positional_restraint(
+    val_and_grad_fn: Callable[[NDArray], Tuple[float, NDArray]],
+    x0: NDArray,
+    box0: NDArray,
+    free_idxs: NDArray,
+    k: float,
+) -> Callable[[NDArray], Tuple[float, NDArray]]:
+    restraint_val_and_grad = jax.value_and_grad(harmonic_positional_restraint, argnums=1)
+
+    starting_free = np.array(x0[free_idxs])
+
+    def wrapped_val_and_grad(x):
+        u, grad = val_and_grad_fn(x)
+        restraint_u, restraint_grad = restraint_val_and_grad(starting_free, x[free_idxs], box0, k=k)
+        u += restraint_u
+        grad = jnp.asarray(grad).at[free_idxs].add(restraint_grad)
+        return u, grad
+
+    return wrapped_val_and_grad
+
+
 def local_minimize(
-    x0: NDArray, val_and_grad_fn, local_idxs, verbose: bool = True, assert_energy_decreased: bool = True
+    x0: NDArray,
+    box0: NDArray,
+    val_and_grad_fn: Callable[[NDArray], Tuple[float, NDArray]],
+    local_idxs: List[int] | NDArray,
+    verbose: bool = True,
+    assert_energy_decreased: bool = True,
+    restraint_k: Optional[float] = None,
 ):
     """
     Minimize a local region given selected idxs.
@@ -461,6 +490,9 @@ def local_minimize(
     -----------
     x0: np.array (N,3)
         Coordinates
+
+    box0: np.array (3,3)
+        Box
 
     val_and_grad_fn: f: R^(Nx3) -> (R^1, R^Nx3)
         Energy function
@@ -474,6 +506,10 @@ def local_minimize(
     assert_energy_decreased: bool
         Throw an assertion if the energy does not decrease
 
+    restraint_k float, optional
+        Restraint k to wrap val_and_grad_fn in a positional harmonic restraint to the input positions of the local_idxs.
+        If None, minimize with no positional restraint. Refer to `timemachine.potentials.bonded.harmonic_positional_restraint`
+        for implementation.
     Returns
     -------
     Optimized set of coordinates (N,3)
@@ -484,18 +520,28 @@ def local_minimize(
     n_local = len(local_idxs)
     n_frozen = len(x0) - n_local
 
+    free_idxs = np.asarray(local_idxs)
+
     x_local_shape = (n_local, 3)
     u_0, _ = val_and_grad_fn(x0)
 
+    # Only use the restrained function when minimizing, don't otherwise use to compute energy/forces
+    minimizer_val_and_grad = val_and_grad_fn
+    if restraint_k is not None:
+        assert restraint_k > 0.0
+        minimizer_val_and_grad = wrap_val_and_grad_with_positional_restraint(
+            minimizer_val_and_grad, x0, box0, free_idxs, restraint_k
+        )
+
     def val_and_grad_fn_local(x_local):
         x_prime = x0.copy()
-        x_prime[local_idxs] = x_local
-        u_full, grad_full = val_and_grad_fn(x_prime)
+        x_prime[free_idxs] = x_local
+        u_full, grad_full = minimizer_val_and_grad(x_prime)
         # The GPU Potentials can return NaN if value would have overflowed in uint64
         if np.isnan(u_full):
             u_full = np.inf
             grad_full = np.nan * grad_full
-        return u_full, grad_full[local_idxs]
+        return u_full, grad_full[free_idxs]
 
     # deals with reshaping from (L,3) -> (Lx3,)
     def val_and_grad_fn_bfgs(x_local_flattened):
@@ -503,7 +549,7 @@ def local_minimize(
         u, grad_full = val_and_grad_fn_local(x_local)
         return u, grad_full.reshape(-1)
 
-    x_local_0 = x0[local_idxs]
+    x_local_0 = x0[free_idxs]
     x_local_0_flat = x_local_0.reshape(-1)
 
     method = "BFGS"
@@ -511,7 +557,7 @@ def local_minimize(
     if verbose:
         print("-" * 70)
         print(f"performing {method} minimization on {n_local} atoms\n(holding the other {n_frozen} atoms frozen)")
-        U_0, grad_0 = val_and_grad_fn_bfgs(x_local_0_flat)
+        U_0, grad_0 = val_and_grad_fn(x0)
         print(f"U(x_0) = {U_0:.3f}")
 
     res = scipy.optimize.minimize(
@@ -524,25 +570,24 @@ def local_minimize(
 
     x_local_final_flat = res.x
     x_local_final = x_local_final_flat.reshape(x_local_shape)
+    x_final = x0.copy()
+    x_final[free_idxs] = x_local_final
 
-    U_final, grad_final = val_and_grad_fn_bfgs(x_local_final_flat)
-    forces = -grad_final.reshape(x_local_shape)
-    per_atom_force_norms = np.linalg.norm(forces, axis=1)
+    U_final, grad_final = val_and_grad_fn(x_final)
+    forces = -grad_final
 
     if verbose:
+        per_atom_force_norms = np.linalg.norm(forces[free_idxs], axis=1)
         print(f"U(x_final) = {U_final:.3f}")
         # diagnose worst atom
         argmax_local = np.argmax(per_atom_force_norms)
-        worst_atom_idx = local_idxs[argmax_local]
+        worst_atom_idx = free_idxs[argmax_local]
         print(f"atom with highest force norm after minimization: {worst_atom_idx}")
         print(f"force(x_final)[{worst_atom_idx}] = {forces[argmax_local]}")
         print("-" * 70)
 
     # note that this over the local atoms only, as this function is not concerned
     check_force_norm(forces)
-
-    x_final = x0.copy()
-    x_final[local_idxs] = x_local_final
 
     if assert_energy_decreased:
         assert U_final < u_0, f"u_0: {u_0:.3f}, u_f: {U_final:.3f}"
@@ -567,6 +612,7 @@ def replace_conformer_with_minimized(mol: Chem.rdchem.Mol, ff: Forcefield):
     system = top.setup_end_state()
     val_and_grad_fn = jax.value_and_grad(system.get_U_fn())
     xs = get_romol_conf(mol)
+    box = np.eye(3) * 100.0
     all_idxs = np.arange(mol.GetNumAtoms())
-    xs_opt = local_minimize(xs, val_and_grad_fn, all_idxs, verbose=False)
+    xs_opt = local_minimize(xs, box, val_and_grad_fn, all_idxs, verbose=False)
     set_romol_conf(mol, xs_opt)

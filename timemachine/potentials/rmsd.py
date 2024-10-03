@@ -144,7 +144,7 @@ def rmsd_restraint(conf, params, box, group_a_idxs, group_b_idxs, k):
     the rotation matrix. For relative binding free energy calculations, this restraint
     does not need to be turned off.
 
-    Note that you should add a center of mass restraint as well to accomodate for the translational
+    Note that you should add a center of mass restraint as well to accommodate for the translational
     component.
 
     Parameters

@@ -1,6 +1,8 @@
 import jax.numpy as jnp
 
+from timemachine.constants import DEFAULT_POSITIONAL_RESTRAINT_K
 from timemachine.potentials.jax_utils import delta_r
+from timemachine.potentials.types import Array
 
 
 def centroid_restraint(conf, params, box, group_a_idxs, group_b_idxs, kb, b0):
@@ -244,3 +246,19 @@ def log_flat_bottom_bond(conf, params, box, bond_idxs, beta):
     # note the extra 1/beta is to be consistent with other potentials
     # so that energies have units of kJ/mol
     return jnp.sum(log_nrgs) / beta
+
+
+def harmonic_positional_restraint(
+    x_init: Array, x_new: Array, box: Array, k: float = DEFAULT_POSITIONAL_RESTRAINT_K
+) -> Array:
+    r"""Harmonic positional restraint useful for performing minimization to prevent initial conformations
+    from changing too much.
+
+    This implements a harmonic bond potential, while being PBC aware:
+        V(x_new, x_init, k) = \sum k / 2 * sum((x_new - x_init)^2)
+    """
+    assert x_init.shape == x_new.shape
+
+    d2ij = jnp.sum(delta_r(x_new, x_init, box=box) ** 2, axis=-1)
+    d2ij = jnp.where(d2ij == 0, 0, d2ij)  # stabilize derivative
+    return jnp.sum((k / 2) * d2ij)
