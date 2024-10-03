@@ -753,10 +753,11 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         raise err
 
 
-@dataclass
+@dataclass(frozen=True)
 class RESTParams:
     max_temperature_factor: float = 2.0
     temperature_schedule: TemperatureSchedule = "linear"
+    scale_angles: bool = False
 
 
 def estimate_relative_free_energy_bisection_hrex(
@@ -838,6 +839,7 @@ def estimate_relative_free_energy_bisection_hrex(
             ff,
             max_temperature_factor=rest_params.max_temperature_factor,
             temperature_schedule=rest_params.temperature_schedule,
+            scale_angles=rest_params.scale_angles,
         )
         if rest_params
         else SingleTopology(mol_a, mol_b, core, ff)
