@@ -160,7 +160,7 @@ class BaseTopologyRescaledCharges(topology.BaseTopology):
 @pytest.mark.nocuda
 def test_chiral_restraints_torsion():
     """For a charge-scaled version of hydrogen peroxide, assert that:
-    * without chiral bond restraints, cis/trans states are sampled ~ 25%/75%
+    * without chiral bond restraints, cis/trans states are sampled ~ 17%/83%
     * with chiral bond restraints, ~ only specified state is sampled"""
     mol = Chem.MolFromMolBlock(
         """
@@ -198,15 +198,16 @@ $$$$""",
         vols_orig.append(torsion_volume(*f[torsion_idxs]))
     vols_orig = np.array(vols_orig)
 
-    # the 25/75 ratio is dependent on the scale defined above, which affects the repulsive
+    # the 17/83 ratio is dependent on the scale defined above, which affects the repulsive
     # strength of the hydrogens.)
-    assert np.abs(np.mean(vols_orig > 0) - 0.25) < 0.05
+
+    assert np.abs(np.mean(vols_orig > 0) - 0.168) < 0.05
 
     all_signs = [1, -1]  # [trans, cis]
     for sign in all_signs:
 
         def U_total(x):
-            return U_fn(x) + U_chiral_bond(x, torsion_idxs, 1000.0, sign)
+            return U_fn(x) + U_chiral_bond(x, torsion_idxs, 2000.0, sign)
 
         vols_chiral = []
         frames = simulate_system(U_total, x0)
