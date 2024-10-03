@@ -1,17 +1,16 @@
 import pickle
-import traceback
 import warnings
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union, cast
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 from numpy.typing import NDArray
 from openmm import app
 from rdkit import Chem
 
-from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_PRESSURE, DEFAULT_TEMP
-from timemachine.fe import atom_mapping, model_utils
+from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.fe import model_utils
 from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
@@ -41,7 +40,6 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.thermostat.utils import sample_velocities
-from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import BoundPotential, jax_utils
 
 DEFAULT_NUM_WINDOWS = 48
@@ -62,6 +60,7 @@ class Host:
     conf: NDArray
     box: NDArray
     num_water_atoms: int
+    omm_topology: app.topology.Topology
 
 
 def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
@@ -89,7 +88,7 @@ def setup_in_env(
 ):
     """Prepare potentials, concatenate environment and ligand coords, apply HMR, and construct barostat"""
     barostat_interval = 25
-    system = st.combine_with_host(host.system, lamb, host.num_water_atoms)
+    system = st.combine_with_host(host.system, lamb, host.num_water_atoms, st.ff, host.omm_topology)
     host_hmr_masses = model_utils.apply_hmr(host.physical_masses, host.system.bond.potential.idxs)
     hmr_masses = np.concatenate([host_hmr_masses, st.combine_masses(use_hmr=True)])
 
@@ -204,7 +203,7 @@ def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
     """
     system, masses = convert_omm_system(config.omm_system)
     conf, box = minimizer.pre_equilibrate_host([st.mol_a, st.mol_b], config, st.ff)
-    return Host(system, masses, conf, box, config.num_water_atoms)
+    return Host(system, masses, conf, box, config.num_water_atoms, config.omm_topology)
 
 
 def setup_initial_states(
@@ -894,7 +893,7 @@ def run_solvent(
         box_width, forcefield.water_ff, mols=[mol_a, mol_b]
     )
     solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
     # min_cutoff defaults to None since the original poses tend to come from posing in a complex and
     # in solvent the molecules may adopt significantly different poses
     solvent_res = estimate_relative_free_energy_bisection_or_hrex(
@@ -927,7 +926,7 @@ def run_complex(
         protein, forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
     )
     complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa)
+    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa, complex_top)
     complex_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
@@ -941,194 +940,3 @@ def run_complex(
         min_cutoff=min_cutoff,
     )
     return complex_res, complex_top, complex_host_config
-
-
-class Edge(NamedTuple):
-    mol_a_name: str
-    mol_b_name: str
-    metadata: Dict[str, Any]
-
-
-def get_failure_result_path(mol_a_name: str, mol_b_name: str):
-    return f"failure_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
-
-
-def get_success_result_path(mol_a_name: str, mol_b_name: str):
-    return f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
-
-
-def run_edge_and_save_results(
-    edge: Edge,
-    mols: Dict[str, Chem.rdchem.Mol],
-    forcefield: Forcefield,
-    protein: app.PDBFile,
-    file_client: AbstractFileClient,
-    n_windows: Optional[int],
-    md_params: MDParams = DEFAULT_MD_PARAMS,
-):
-    # Ensure that all mol props (e.g. _Name) are included in pickles
-    # Without this get_mol_name(mol) will fail on roundtripped mol
-    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
-
-    edge_prefix = f"{edge.mol_a_name}_{edge.mol_b_name}"
-
-    try:
-        mol_a = mols[edge.mol_a_name]
-        mol_b = mols[edge.mol_b_name]
-
-        all_cores = atom_mapping.get_cores(
-            mol_a,
-            mol_b,
-            **DEFAULT_ATOM_MAPPING_KWARGS,
-        )
-        core = all_cores[0]
-
-        complex_res, complex_top, _ = run_complex(
-            mol_a,
-            mol_b,
-            core,
-            forcefield,
-            protein,
-            md_params,
-            n_windows=n_windows,
-        )
-
-        if isinstance(complex_res, HREXSimulationResult):
-            file_client.store(
-                f"{edge_prefix}_complex_hrex_transition_matrix.png", complex_res.hrex_plots.transition_matrix_png
-            )
-            file_client.store(
-                f"{edge_prefix}_complex_hrex_swap_acceptance_rates_convergence.png",
-                complex_res.hrex_plots.swap_acceptance_rates_convergence_png,
-            )
-            file_client.store(
-                f"{edge_prefix}_complex_hrex_replica_state_distribution_heatmap.png",
-                complex_res.hrex_plots.replica_state_distribution_heatmap_png,
-            )
-
-        solvent_res, solvent_top, _ = run_solvent(
-            mol_a,
-            mol_b,
-            core,
-            forcefield,
-            protein,
-            md_params,
-            n_windows=n_windows,
-        )
-        if isinstance(solvent_res, HREXSimulationResult):
-            file_client.store(
-                f"{edge_prefix}_solvent_hrex_transition_matrix.png", solvent_res.hrex_plots.transition_matrix_png
-            )
-            file_client.store(
-                f"{edge_prefix}_solvent_hrex_swap_acceptance_rates_convergence.png",
-                solvent_res.hrex_plots.swap_acceptance_rates_convergence_png,
-            )
-            file_client.store(
-                f"{edge_prefix}_solvent_hrex_replica_state_distribution_heatmap.png",
-                solvent_res.hrex_plots.replica_state_distribution_heatmap_png,
-            )
-
-    except Exception as err:
-        print(
-            "failed:",
-            " | ".join(
-                [
-                    f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
-                    f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
-                    (
-                        f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
-                        if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
-                        else ""
-                    ),
-                ]
-            ),
-        )
-
-        path = get_failure_result_path(edge.mol_a_name, edge.mol_b_name)
-        tb = traceback.format_exception(None, err, err.__traceback__)
-        file_client.store(path, pickle.dumps((edge, err, tb)))
-
-        print(err)
-        traceback.print_exc()
-
-        return file_client.full_path(path)
-
-    path = get_success_result_path(edge.mol_a_name, edge.mol_b_name)
-    pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
-    file_client.store(path, pickle.dumps(pkl_obj))
-
-    solvent_ddg = sum(solvent_res.final_result.dGs)
-    solvent_ddg_err = np.linalg.norm(solvent_res.final_result.dG_errs)
-    complex_ddg = sum(complex_res.final_result.dGs)
-    complex_ddg_err = np.linalg.norm(complex_res.final_result.dG_errs)
-
-    tm_ddg = complex_ddg - solvent_ddg
-    tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
-
-    print(
-        "finished:",
-        " | ".join(
-            [
-                f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
-                f"complex {complex_ddg:.2f} +- {complex_ddg_err:.2f}",
-                f"solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f}",
-                f"tm_pred {tm_ddg:.2f} +- {tm_err:.2f}",
-                f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
-                (
-                    f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
-                    if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
-                    else ""
-                ),
-            ]
-        ),
-    )
-
-    return file_client.full_path(path)
-
-
-def run_edges_parallel(
-    ligands: Sequence[Chem.rdchem.Mol],
-    edges: Sequence[Edge],
-    ff: Forcefield,
-    protein: app.PDBFile,
-    n_gpus: int,
-    pool_client: Optional[AbstractClient] = None,
-    file_client: Optional[AbstractFileClient] = None,
-    md_params: MDParams = DEFAULT_MD_PARAMS,
-    n_windows: Optional[int] = None,
-):
-    mols = {get_mol_name(mol): mol for mol in ligands}
-
-    pool_client = pool_client or CUDAPoolClient(n_gpus)
-    pool_client.verify()
-
-    file_client = file_client or FileClient()
-
-    # Ensure that all mol props (e.g. _Name) are included in pickles
-    # Without this get_mol_name(mol) will fail on roundtripped mol
-    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
-
-    jobs = [
-        pool_client.submit(
-            run_edge_and_save_results,
-            edge,
-            mols,
-            ff,
-            protein,
-            file_client,
-            n_windows,
-            md_params,
-        )
-        for edge in edges
-    ]
-
-    # Remove references to completed jobs to allow garbage collection.
-    # TODO: The current approach uses O(edges) memory in the worst case (e.g. if the first job gets stuck). Ideally we
-    #   should process and remove references to jobs in the order they complete, but this would require an interface
-    #   presently not implemented in our custom future classes.
-    paths = []
-    while jobs:
-        job = jobs.pop(0)
-        paths.append(job.result())
-
-    return paths

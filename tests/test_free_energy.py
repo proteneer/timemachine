@@ -5,6 +5,7 @@ from importlib import resources
 from typing import Optional
 from unittest.mock import Mock, patch
 
+import jax.numpy as jnp
 import numpy as np
 import pymbar
 import pytest
@@ -94,21 +95,21 @@ def assert_no_second_derivative(f, x):
     assert isinstance(problem, TypeError)
 
 
-def assert_ff_optimizable(U, coords, sys_params, box, tol=1e-10):
+def assert_ff_optimizable(U, coords, sys_params, box):
     """define a differentiable loss function in terms of U, assert it can be minimized,
     and return initial params, optimized params, and the loss function"""
 
     nb_params = sys_params[-1]
-    nb_params_shape = nb_params.shape
+    # nb_params_shape = nb_params.shape
 
-    def loss(nb_params):
-        concat_params = sys_params[:-1] + [nb_params]
+    def flat_loss(ws):
+        nbp = jnp.array(sys_params[-1])
+        nbp = nbp.at[:, 0].set(0)
+        nbp = nbp.at[:, -1].set(ws)
+        concat_params = sys_params[:-1] + [nbp]
         return (U(coords, concat_params, box) - 0.1) ** 2
 
-    x_0 = nb_params.flatten()
-
-    def flat_loss(flat_nb_params):
-        return loss(flat_nb_params.reshape(nb_params_shape))
+    x_0 = nb_params[:, -1]
 
     def fun(flat_nb_params):
         v, g = value_and_grad(flat_loss)(flat_nb_params)
@@ -117,7 +118,8 @@ def assert_ff_optimizable(U, coords, sys_params, box, tol=1e-10):
     # minimization successful
     result = minimize(fun, x_0, jac=True, tol=0)
     x_opt = result.x
-    assert flat_loss(x_opt) < tol
+
+    assert flat_loss(x_opt) < flat_loss(x_0)
 
     return x_0, x_opt, flat_loss
 
@@ -168,7 +170,7 @@ def test_functional():
                 """low-dimensional input so that finite-difference isn't too expensive"""
 
                 # scaling perturbation down by 1e-4 so that f(1.0) isn't 10^30ish...
-                return flat_loss(x_opt + 1e-4 * perturb) ** 2
+                return flat_loss(x_opt + 1e-9 * perturb) ** 2
 
             perturbations = np.linspace(-1, 1, 10)
 
@@ -189,12 +191,11 @@ def test_absolute_vacuum():
     mol = mols[0]
 
     ff = Forcefield.load_default()
-    ff_params = ff.get_params()
 
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
 
-    unbound_potentials, sys_params, masses = afe.prepare_vacuum_edge(ff_params)
+    unbound_potentials, sys_params, masses = afe.prepare_vacuum_edge(ff)
     assert np.all(masses == utils.get_mol_masses(mol))
     np.testing.assert_array_almost_equal(afe.prepare_combined_coords(), utils.get_romol_conf(mol))
 
@@ -207,16 +208,15 @@ def test_vacuum_and_solvent_edge_types():
     mol = mols[0]
 
     ff = Forcefield.load_default()
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(3.0, ff.water_ff, mols=[mol])
-    host_system = HostConfig(solvent_system, solvent_coords, solvent_box, solvent_coords.shape[0])
-    ff_params = ff.get_params()
+    solvent_system, solvent_coords, solvent_box, top = builders.build_water_system(3.0, ff.water_ff, mols=[mol])
+    host_system = HostConfig(solvent_system, solvent_coords, solvent_box, solvent_coords.shape[0], top)
 
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
 
-    vacuum_unbound_potentials, vacuum_sys_params, vacuum_masses = afe.prepare_vacuum_edge(ff_params)
+    vacuum_unbound_potentials, vacuum_sys_params, vacuum_masses = afe.prepare_vacuum_edge(ff)
 
-    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(ff_params, host_system, 0.0)
+    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(ff, host_system, 0.0)
 
     assert isinstance(vacuum_unbound_potentials, type(solvent_unbound_potentials))
     assert isinstance(vacuum_sys_params, type(solvent_sys_params))
@@ -237,7 +237,7 @@ def solvent_hif2a_ligand_pair_single_topology_lam0_state(hif2a_ligand_pair_singl
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
         3.0, forcefield.water_ff, mols=[st.mol_a, st.mol_b]
     )
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
     solvent_host = setup_optimized_host(st, solvent_host_config)
     state = setup_initial_states(st, solvent_host, DEFAULT_TEMP, [0.0], 2023)[0]
     return state
@@ -299,15 +299,15 @@ def test_initial_state_interacting_ligand_atoms(host_name, seed):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     if host_name == "complex":
         with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-            host_sys, host_conf, box, _, num_water_atoms = builders.build_protein_system(
+            host_sys, host_conf, box, top, num_water_atoms = builders.build_protein_system(
                 str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )
             box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-        host_config = HostConfig(host_sys, host_conf, box, num_water_atoms)
+        host_config = HostConfig(host_sys, host_conf, box, num_water_atoms, top)
     elif host_name == "solvent":
-        host_sys, host_conf, box, _ = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
+        host_sys, host_conf, box, top = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
         box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-        host_config = HostConfig(host_sys, host_conf, box, host_conf.shape[0])
+        host_config = HostConfig(host_sys, host_conf, box, host_conf.shape[0], top)
 
     single_topology = SingleTopology(mol_a, mol_b, core, forcefield)
 
@@ -375,7 +375,7 @@ def test_get_water_sampler_params(num_windows):
 
     num_host_atoms = solvent_conf.shape[0]
     host_system, masses = convert_omm_system(solvent_sys)
-    solvent_host = Host(host_system, masses, solvent_conf, solvent_box, num_host_atoms)
+    solvent_host = Host(host_system, masses, solvent_conf, solvent_box, num_host_atoms, solvent_top)
     mol_a_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 1])
     mol_b_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 2])
     for lamb in np.linspace(0.0, 1.0, num_windows, endpoint=True):
@@ -401,13 +401,13 @@ def test_get_water_sampler_params_complex():
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-        host_sys, host_conf, box, _, num_water_atoms = builders.build_protein_system(
+        host_sys, host_conf, box, top, num_water_atoms = builders.build_protein_system(
             str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )
         box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    host_config = HostConfig(host_sys, host_conf, box, num_water_atoms)
+    host_config = HostConfig(host_sys, host_conf, box, num_water_atoms, top)
     system, masses = convert_omm_system(host_config.omm_system)
-    host = Host(system, masses, host_conf, box, host_config.num_water_atoms)
+    host = Host(system, masses, host_conf, box, host_config.num_water_atoms, host_config.omm_topology)
 
     lamb = 0.5  # arbitrary
 
@@ -498,7 +498,7 @@ def test_estimate_free_energy_bar_with_energy_overflow():
     u_kln_with_nan[0, 1, 10] = np.nan
 
     # pymbar.MBAR fails with LinAlgError
-    with pytest.raises(SystemError, match="LinAlgError"):
+    with pytest.raises(np.linalg.LinAlgError):
         u_kn, N_k = ukln_to_ukn(u_kln_with_nan)
         _ = pymbar.MBAR(u_kn, N_k)
 

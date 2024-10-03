@@ -359,12 +359,11 @@ void declare_context(py::module &m) {
                 // If the store_x_interval is 0, collect the last frame by setting x_interval to n_steps
                 const int x_interval = (store_x_interval == 0) ? n_steps : store_x_interval;
                 // n_samples determines the number of frames that will be collected, computed to be able to allocate
-                // the buffers up front before releasing the GIL.
+                // the buffers up front to avoid allocating memory twice
                 const int n_samples = n_steps / x_interval;
                 py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
                 py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
-                py::gil_scoped_release release;
                 ctxt.multiple_steps(n_steps, n_samples, out_x_buffer.mutable_data(), box_buffer.mutable_data());
                 return res;
             },
@@ -425,13 +424,12 @@ void declare_context(py::module &m) {
                 // If the store_x_interval is 0, collect the last frame by setting x_interval to n_steps
                 const int x_interval = (store_x_interval == 0) ? n_steps : store_x_interval;
                 // n_samples determines the number of frames that will be collected, computed to be able to allocate
-                // the buffers up front before releasing the GIL.
+                // the buffers up front to avoid allocating memory twice
                 const int n_samples = n_steps / x_interval;
                 py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
                 py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
 
-                py::gil_scoped_release release;
                 ctxt.multiple_steps_local(
                     n_steps,
                     vec_local_idxs,
@@ -535,12 +533,11 @@ void declare_context(py::module &m) {
                 // If the store_x_interval is 0, collect the last frame by setting x_interval to n_steps
                 const int x_interval = (store_x_interval == 0) ? n_steps : store_x_interval;
                 // n_samples determines the number of frames that will be collected, computed to be able to allocate
-                // the buffers up front before releasing the GIL.
+                // the buffers up front to avoid allocating memory twice
                 const int n_samples = n_steps / x_interval;
                 py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
                 py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
-                py::gil_scoped_release release; // Release the GIL
 
                 ctxt.multiple_steps_local_selection(
                     n_steps,
@@ -667,7 +664,6 @@ void declare_context(py::module &m) {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({N, D});
-                py::gil_scoped_release release;
                 ctxt.get_x_t(buffer.mutable_data());
                 return buffer;
             })
@@ -677,7 +673,6 @@ void declare_context(py::module &m) {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({N, D});
-                py::gil_scoped_release release;
                 ctxt.get_v_t(buffer.mutable_data());
                 return buffer;
             })
@@ -686,7 +681,6 @@ void declare_context(py::module &m) {
             [](Context &ctxt) -> py::array_t<double, py::array::c_style> {
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({D, D});
-                py::gil_scoped_release release;
                 ctxt.get_box(buffer.mutable_data());
                 return buffer;
             })

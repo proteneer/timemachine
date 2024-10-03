@@ -60,10 +60,10 @@ def test_fire_minimize_host_protein(pdb_path, sdf_path, mol_a_name, mol_b_name):
     mol_b = next(m for m in all_mols if get_mol_name(m) == mol_b_name)
 
     for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
-        complex_system, complex_coords, complex_box, _, num_water_atoms = builders.build_protein_system(
+        complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
             str(pdb_path), ff.protein_ff, ff.water_ff, mols=mols
         )
-        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
+        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
         x_host = minimizer.fire_minimize_host(mols, host_config, ff)
         assert x_host.shape == complex_coords.shape
 
@@ -76,8 +76,10 @@ def test_fire_minimize_host_solvent():
     mol_b = all_mols[4]
 
     for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
-        solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, ff.water_ff, mols=mols)
-        host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords))
+        solvent_system, solvent_coords, solvent_box, solvent_top = builders.build_water_system(
+            4.0, ff.water_ff, mols=mols
+        )
+        host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords), solvent_top)
         x_host = minimizer.fire_minimize_host(mols, host_config, ff)
         assert x_host.shape == solvent_coords.shape
 
@@ -93,14 +95,16 @@ def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
     mol_b = next(m for m in all_mols if get_mol_name(m) == mol_b_name)
     mols = [mol_a, mol_b]
     if host_name == "solvent":
-        solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, ff.water_ff, mols=mols)
-        host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords))
+        solvent_system, solvent_coords, solvent_box, solvent_top = builders.build_water_system(
+            4.0, ff.water_ff, mols=mols
+        )
+        host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords), solvent_top)
     else:
         with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
-            complex_system, complex_coords, complex_box, _, num_water_atoms = builders.build_protein_system(
+            complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
                 str(pdb_path), ff.protein_ff, ff.water_ff, mols=mols
             )
-        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
+        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
     x_host, x_box = minimizer.pre_equilibrate_host(mols, host_config, ff)
     assert x_host.shape == host_config.conf.shape
     assert compute_box_volume(x_box) < compute_box_volume(host_config.box)
@@ -113,8 +117,8 @@ def test_fire_minimize_host_adamantane():
     mol = Chem.AddHs(Chem.MolFromSmiles("C1C3CC2CC(CC1C2)C3"))
     AllChem.EmbedMolecule(mol, randomSeed=2024)
     # If don't delete the relevant water this minimization fails
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0, ff.water_ff, mols=[mol])
-    host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords))
+    solvent_system, solvent_coords, solvent_box, solvent_top = builders.build_water_system(4.0, ff.water_ff, mols=[mol])
+    host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords), solvent_top)
     x_host = minimizer.fire_minimize_host([mol], host_config, ff)
     assert x_host.shape == solvent_coords.shape
 
@@ -128,10 +132,10 @@ def test_equilibrate_host_barker():
     mol_b = all_mols[4]
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, complex_box, _, num_water_atoms = builders.build_protein_system(
+        complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b]
         )
-        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms)
+        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
 
     # TODO[requirements-gathering]:
     #   do we really want to minimize here ("equilibrate to temperature ~= 0"),
@@ -178,7 +182,7 @@ def test_local_minimize_water_box():
     """
     ff = Forcefield.load_default()
 
-    system, x0, box0, _ = builders.build_water_system(4.0, ff.water_ff)
+    system, x0, box0, top = builders.build_water_system(4.0, ff.water_ff)
     host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
     box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
 

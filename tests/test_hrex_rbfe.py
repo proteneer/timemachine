@@ -18,7 +18,7 @@ from timemachine.fe.free_energy import (
     HREXSimulationResult,
     MDParams,
     WaterSamplingParams,
-    sample_with_context,
+    sample_with_context_iter,
 )
 from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution_heatmap,
@@ -40,15 +40,17 @@ def get_hif2a_single_topology_leg(host_name: str | None):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     if host_name == "complex":
         with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-            host_sys, host_conf, box, _, num_water_atoms = builders.build_protein_system(
+            host_sys, host_conf, box, host_top, num_water_atoms = builders.build_protein_system(
                 str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )
             box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-        host_config = HostConfig(host_sys, host_conf, box, num_water_atoms)
+        host_config = HostConfig(host_sys, host_conf, box, num_water_atoms, host_top)
     elif host_name == "solvent":
-        host_sys, host_conf, box, _ = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
+        solvent_sys, solvent_conf, box, solvent_top = builders.build_water_system(
+            4.0, forcefield.water_ff, mols=[mol_a, mol_b]
+        )
         box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-        host_config = HostConfig(host_sys, host_conf, box, host_conf.shape[0])
+        host_config = HostConfig(solvent_sys, solvent_conf, box, solvent_conf.shape[0], solvent_top)
 
     return mol_a, mol_b, core, forcefield, host_config
 
@@ -117,11 +119,11 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
     rss_traj = []
 
     def sample_and_record_rss(*args, **kwargs):
-        traj = sample_with_context(*args, **kwargs)
+        result = sample_with_context_iter(*args, **kwargs)
         rss_traj.append(Process().memory_info().rss)
-        return traj
+        return result
 
-    with patch("timemachine.fe.free_energy.sample_with_context", sample_and_record_rss):
+    with patch("timemachine.fe.free_energy.sample_with_context_iter", sample_and_record_rss):
         result = estimate_relative_free_energy_bisection_hrex(
             mol_a,
             mol_b,
@@ -134,8 +136,10 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
             min_cutoff=0.7 if host_name == "complex" else None,
         )
 
+    assert len(rss_traj) > n_windows * md_params.n_frames
     # Check that memory usage is not increasing
     rss_traj = rss_traj[10:]  # discard initial transients
+    assert len(rss_traj)
     rss_diff_count = np.sum(np.diff(rss_traj) != 0)
     rss_increase_count = np.sum(np.diff(rss_traj) > 0)
     assert stats.binom.pmf(rss_increase_count, n=rss_diff_count, p=0.5) >= 0.001

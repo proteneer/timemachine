@@ -10,10 +10,49 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine import potentials
+from timemachine.constants import NBParamIdx
 from timemachine.fe import topology
-from timemachine.fe.topology import BaseTopology, DualTopology, DualTopologyMinimization
+from timemachine.fe.topology import _SCALE_14_LJ, _SCALE_14_Q, BaseTopology, DualTopology, DualTopologyMinimization
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, set_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
+
+
+def test_base_topology_14_exclusions():
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        all_mols = read_sdf(path_to_ligand)
+
+    mol = all_mols[0]
+
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    bt = topology.BaseTopology(mol, ff)
+    nb_params, nb = bt.parameterize_nonbonded_pairlist(
+        ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, ff.lj_handle_intra.params, True
+    )
+
+    kvs = dict()
+    for (i, j), qljw in zip(nb.idxs, nb_params):
+        kvs[(i, j)] = qljw
+
+    qs = ff.q_handle.parameterize(mol)
+    ljs = ff.lj_handle.parameterize(mol)
+
+    sigmas = ljs[:, 0]
+    epsilons = ljs[:, 1]
+
+    # atoms 27-0-1-28 correspond to a H-O-C-H torsion (respectively), we expect:
+    # q_ij to be rescaled by (1-SCALE_14_Q)
+    # sigma_ij to be unscaled
+    # eps_ij to be rescaled by (1-SCALE_14_LJ)
+    np.testing.assert_almost_equal(kvs[(27, 28)][0], qs[27] * qs[28] * (1 - _SCALE_14_Q))
+    np.testing.assert_almost_equal(kvs[(27, 28)][1], combining_rule_sigma(sigmas[27], sigmas[28]))
+    np.testing.assert_almost_equal(
+        kvs[(27, 28)][2], combining_rule_epsilon(epsilons[27], epsilons[28]) * (1 - _SCALE_14_LJ)
+    )
+
+    # 0-1-28 correspond to an O-C-H angle, we expect it to be missing
+    assert (0, 28) not in kvs
+    assert (28, 0) not in kvs
 
 
 def test_dual_topology_nonbonded_pairlist():
@@ -85,10 +124,10 @@ def parameterize_nonbonded_full(
 @pytest.mark.parametrize("ctor", [BaseTopology, DualTopology, DualTopologyMinimization])
 @pytest.mark.parametrize("use_tiny_mol", [True, False])
 def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
-    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps):
+    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
         # Use the original code to compute the nb grads and potential
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
+        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms, ff, omm_topology)
         params, us = parameterize_nonbonded_full(
             hgt,
             ff.q_handle.params,
@@ -100,10 +139,10 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(x0, box)
 
-    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps):
+    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
         # Use the updated topology code to compute the nb grads and potential
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
+        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms, ff, omm_topology)
         params, us = hgt.parameterize_nonbonded(
             ff.q_handle.params,
             ff.q_handle_intra.params,
@@ -142,12 +181,13 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         water_idxs,
         ligand_idxs,
         protein_idxs,
+        omm_topology,
         is_solvent=False,
     ):
         assert num_water_atoms == len(water_idxs)
         num_total_atoms = len(ligand_idxs) + len(protein_idxs) + num_water_atoms
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms)
+        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms, ff, omm_topology)
         u = potentials.NonbondedInteractionGroup(
             num_total_atoms,
             ligand_idxs,
@@ -163,7 +203,12 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
             lamb=lamb,
             intramol_params=False,
         )
-        ixn_params = np.concatenate([hgt.host_nonbonded.params, lig_params])
+        host_ixn_params = hgt.host_nonbonded.params.copy()
+        if not is_solvent and ff.env_bcc_handle is not None:  # protein
+            env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
+            host_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
+
+        ixn_params = np.concatenate([host_ixn_params, lig_params])
         u_impl = u.bind(ixn_params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(x0, box)
 

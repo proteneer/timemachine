@@ -18,9 +18,11 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 def test_build_water_system():
     mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
 
-    water_system, water_coords, box, _ = build_water_system(4.0, DEFAULT_WATER_FF)
+    water_system, water_coords, box, water_top = build_water_system(4.0, DEFAULT_WATER_FF)
 
-    water_with_mols, mol_water_coords, box_with_mols, _ = build_water_system(4.0, DEFAULT_WATER_FF, mols=[mol_a, mol_b])
+    water_with_mols, mol_water_coords, box_with_mols, water_with_mols_top = build_water_system(
+        4.0, DEFAULT_WATER_FF, mols=[mol_a, mol_b]
+    )
 
     # No waters should be deleted, but the box will be slightly larger
     assert len(water_coords) == len(mol_water_coords)
@@ -86,6 +88,37 @@ def test_build_protein_system_returns_correct_water_count():
 
 
 @pytest.mark.nocuda
+def test_deserialize_protein_system_1_4_exclusions():
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+        host_pdbfile = str(pdb_path)
+    protein_system, _, box, _, _ = build_protein_system(host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
+
+    protein_system_bps, _ = openmm_deserializer.deserialize_system(protein_system, cutoff=1.2)
+    exclusion_idxs = protein_system_bps[-1].potential.exclusion_idxs
+    scale_factors = protein_system_bps[-1].potential.scale_factors
+
+    kvs = dict()
+    for (src, dst), (q_sf, lj_sf) in zip(exclusion_idxs, scale_factors):
+        kvs[(src, dst)] = (q_sf, lj_sf)
+
+    # 1-4 torsion between H-ACE and carbonyl=O, expected behavior:
+    # we should remove 1/6th of the electrostatic strength
+    # we should remove 1/2 of the lennard jones strength
+    np.testing.assert_almost_equal(kvs[(2, 3)][0], 1 / 6, decimal=4)
+    np.testing.assert_almost_equal(kvs[(2, 3)][1], 0.5, decimal=4)
+
+    np.testing.assert_almost_equal(kvs[(2, 4)][0], 1 / 6, decimal=4)
+    np.testing.assert_almost_equal(kvs[(2, 4)][1], 0.5, decimal=4)
+
+    np.testing.assert_almost_equal(kvs[(2, 5)][0], 1 / 6, decimal=4)
+    np.testing.assert_almost_equal(kvs[(2, 5)][1], 0.5, decimal=4)
+
+    # 1-3 angle term should be completely removed
+    np.testing.assert_almost_equal(kvs[(3, 4)][0], 1.0, decimal=4)
+    np.testing.assert_almost_equal(kvs[(3, 4)][1], 1.0, decimal=4)
+
+
+@pytest.mark.nocuda
 def test_build_protein_system_waters_before_protein():
     num_waters = 100
     # Construct a PDB file with the waters before the protein, should raise an exception
@@ -116,14 +149,18 @@ def test_build_protein_system():
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
         host_pdbfile = str(pdb_path)
-    protein_system, protein_coords, box, _, num_water_atoms = build_protein_system(
+    protein_system, protein_coords, box, protein_top, num_water_atoms = build_protein_system(
         host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
     )
     num_host_atoms = protein_coords.shape[0] - num_water_atoms
 
-    protein_with_mols, mol_protein_coords, box_with_mols, _, num_water_atoms_with_mols = build_protein_system(
-        host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, mols=[mol_a, mol_b]
-    )
+    (
+        protein_with_mols,
+        mol_protein_coords,
+        box_with_mols,
+        protein_with_mols_top,
+        num_water_atoms_with_mols,
+    ) = build_protein_system(host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, mols=[mol_a, mol_b])
     num_host_atoms_with_mol = mol_protein_coords.shape[0] - num_water_atoms_with_mols
 
     assert num_host_atoms == num_host_atoms_with_mol

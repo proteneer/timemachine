@@ -3,19 +3,22 @@ from typing import List, Optional, Tuple
 import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
+from openmm import app
 
 from timemachine import potentials
-from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
+from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, NBParamIdx
 from timemachine.fe import chiral_utils
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
 from timemachine.ff.handlers import nonbonded
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 from timemachine.potentials.types import Params
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
-_SCALE_14 = 0.5
+_SCALE_14_LJ = 0.5
+_SCALE_14_Q = 1 / 6
 _BETA = 2.0
 _CUTOFF = 1.2
 
@@ -29,7 +32,9 @@ class UnsupportedPotential(Exception):
 
 
 class HostGuestTopology:
-    def __init__(self, host_potentials, guest_topology, num_water_atoms: int):
+    def __init__(
+        self, host_potentials, guest_topology, num_water_atoms: int, ff: Forcefield, omm_topology: app.topology.Topology
+    ):
         """
         Utility tool for combining host with a guest, in that order. host_potentials must be comprised
         exclusively of supported potentials (currently: bonds, angles, torsions, nonbonded).
@@ -42,6 +47,12 @@ class HostGuestTopology:
         guest_topology:
             Guest's Topology {Base, Dual, Single}Topology.
 
+        ff:
+            Forcefield object
+
+        omm_topology:
+            Openmm topology for the host.
+
         """
         self.guest_topology = guest_topology
 
@@ -49,6 +60,8 @@ class HostGuestTopology:
         self.host_harmonic_bond = None
         self.host_harmonic_angle = None
         self.host_periodic_torsion = None
+        self.ff = ff
+        self.omm_topology = omm_topology
 
         # (ytz): extra assertions inside are to ensure we don't have duplicate terms
         for bp in host_potentials:
@@ -71,6 +84,12 @@ class HostGuestTopology:
         self.num_host_atoms = self.host_nonbonded.potential.num_atoms
         self.num_water_atoms = num_water_atoms
         self.num_other_atoms = self.num_host_atoms - num_water_atoms
+
+        # create a copy to not modify the original parameters
+        self.hg_nb_ixn_params = self.host_nonbonded.params.copy()
+        if self.ff.env_bcc_handle is not None:
+            env_bcc_h = self.ff.env_bcc_handle.get_env_handle(self.omm_topology, self.ff)
+            self.hg_nb_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(self.ff.env_bcc_handle.params)
 
     def get_water_idxs(self) -> NDArray:
         return np.arange(self.num_water_atoms, dtype=np.int32) + self.num_other_atoms
@@ -193,16 +212,16 @@ class HostGuestTopology:
             beta,
             cutoff,
             atom_idxs=np.arange(self.num_host_atoms, dtype=np.int32),
-        )
+        )  # P-P P-W W-W
 
         ixn_pot, ixn_params = get_ligand_ixn_pots_params(
             self.get_lig_idxs(),
             self.get_env_idxs(),
-            self.host_nonbonded.params,
+            self.hg_nb_ixn_params,
             guest_ixn_env_params,
             beta=beta,
             cutoff=cutoff,
-        )
+        )  # L-E ixns
 
         hg_total_pot = [host_guest_pot, ixn_pot]
         hg_total_params = [hg_nb_params, ixn_params]
@@ -265,10 +284,8 @@ class BaseTopology:
             lj_params = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol)
 
         exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
-            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14_q=_SCALE_14_Q, scale14_lj=_SCALE_14_LJ
         )
-
-        scale_factors = np.stack([scale_factors, scale_factors], axis=1)
 
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
@@ -291,25 +308,25 @@ class BaseTopology:
         """
         # use same scale factors for electrostatics and vdWs
         exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
-            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14_q=_SCALE_14_Q, scale14_lj=_SCALE_14_LJ
         )
 
         # note: use same scale factor for electrostatics and vdw
         # typically in protein ffs, gaff, the 1-4 ixns use different scale factors between vdw and electrostatics
         exclusions_kv = dict()
-        for (i, j), sf in zip(exclusion_idxs, scale_factors):
+        for (i, j), sf_qlj in zip(exclusion_idxs, scale_factors):
             assert i < j
-            exclusions_kv[(i, j)] = sf
+            exclusions_kv[(i, j)] = sf_qlj
 
         # loop over all pairs
         inclusion_idxs, rescale_mask = [], []
         for i in range(self.mol.GetNumAtoms()):
             for j in range(i + 1, self.mol.GetNumAtoms()):
-                scale_factor = exclusions_kv.get((i, j), 0.0)
-                rescale_factor = 1 - scale_factor
-                # keep this ixn
-                if rescale_factor > 0:
-                    rescale_mask.append([rescale_factor, rescale_factor])
+                scale_factor = exclusions_kv.get((i, j), (0.0, 0.0))  # how much to remove
+                rescale_factor = 1 - np.array(scale_factor)  # how much to keep
+                # keep this ixn if either lj or coulombic interaction is present
+                if np.any(rescale_factor) > 0:
+                    rescale_mask.append(rescale_factor)
                     inclusion_idxs.append([i, j])
 
         inclusion_idxs = np.array(inclusion_idxs).reshape(-1, 2).astype(np.int32)
@@ -530,11 +547,11 @@ class DualTopology(BaseTopology):
         lj_params = jnp.concatenate([lj_params_a, lj_params_b])
 
         exclusion_idxs_a, scale_factors_a = nonbonded.generate_exclusion_idxs(
-            self.mol_a, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+            self.mol_a, scale12=_SCALE_12, scale13=_SCALE_13, scale14_q=_SCALE_14_Q, scale14_lj=_SCALE_14_LJ
         )
 
         exclusion_idxs_b, scale_factors_b = nonbonded.generate_exclusion_idxs(
-            self.mol_b, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+            self.mol_b, scale12=_SCALE_12, scale13=_SCALE_13, scale14_q=_SCALE_14_Q, scale14_lj=_SCALE_14_LJ
         )
 
         mutual_exclusions_ = []
@@ -557,8 +574,8 @@ class DualTopology(BaseTopology):
 
         combined_scale_factors = np.concatenate(
             [
-                np.stack([scale_factors_a, scale_factors_a], axis=1),
-                np.stack([scale_factors_b, scale_factors_b], axis=1),
+                scale_factors_a,
+                scale_factors_b,
                 mutual_scale_factors,
             ]
         ).astype(np.float64)

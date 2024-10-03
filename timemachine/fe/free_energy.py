@@ -26,7 +26,7 @@ from timemachine.fe.plots import (
 from timemachine.fe.protocol_refinement import greedy_bisection_step
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
-from timemachine.ff import ForcefieldParams
+from timemachine.ff import Forcefield, ForcefieldParams
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.custom_ops import Context
@@ -45,11 +45,12 @@ WATER_SAMPLER_MOVERS = (
 
 
 class HostConfig:
-    def __init__(self, omm_system, conf, box, num_water_atoms):
+    def __init__(self, omm_system, conf, box, num_water_atoms, omm_topology):
         self.omm_system = omm_system
         self.conf = conf
         self.box = box
         self.num_water_atoms = num_water_atoms
+        self.omm_topology = omm_topology
 
 
 @dataclass(frozen=True)
@@ -446,14 +447,14 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.top = top
 
-    def prepare_host_edge(self, ff_params: ForcefieldParams, host_config: HostConfig, lamb: float):
+    def prepare_host_edge(self, ff: Forcefield, host_config: HostConfig, lamb: float):
         """
         Prepares the host-guest system
 
         Parameters
         ----------
-        ff_params: ForcefieldParams
-            forcefield parameters
+        ff: Forcefield
+            forcefield to use
 
         host_config: HostConfig
             HostConfig containing openmm System object to be deserialized.
@@ -468,22 +469,23 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
         """
         ligand_masses = get_mol_masses(self.mol)
+        ff_params = ff.get_params()
 
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
-        hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms)
+        hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms, ff, host_config.omm_topology)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
         combined_masses = self._combine(ligand_masses, host_masses)
         return final_potentials, final_params, combined_masses
 
-    def prepare_vacuum_edge(self, ff_params: ForcefieldParams):
+    def prepare_vacuum_edge(self, ff: Forcefield):
         """
         Prepares the vacuum system
 
         Parameters
         ----------
-        ff_params: ForcefieldParams
-            forcefield parameters
+        ff: Forcefield
+            forcefield to use
 
         Returns
         -------
@@ -491,6 +493,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             unbound_potentials, system_params, combined_masses
 
         """
+        ff_params = ff.get_params()
         ligand_masses = get_mol_masses(self.mol)
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top, 0.0)
         return final_potentials, final_params, ligand_masses
@@ -577,8 +580,8 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
         water_params = get_water_sampler_params(initial_state)
 
-        # Generate a new random seed based on the md params seed
-        rng = np.random.default_rng(md_params.seed)
+        # Generate a new random seed based on the integrator seed, MDParams seed is constant across states
+        rng = np.random.default_rng(initial_state.integrator.seed)
         water_sampler_seed = rng.integers(np.iinfo(np.int32).max)
 
         water_sampler = custom_ops.TIBDExchangeMove_f32(
@@ -1260,54 +1263,13 @@ def run_sims_hrex(
         # Add an identity move to the mixture to ensure aperiodicity
         neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
-    # Setup the barostat to run more often for equilibration
-    equil_barostat_interval = 15
     barostat = context.get_barostat()
-    if barostat is not None:
-        barostat.set_interval(equil_barostat_interval)
 
-    def get_equilibrated_xvb(xvb: CoordsVelBox, state_idx: StateIdx) -> CoordsVelBox:
-        # Set up parameters of the water sampler movers
-        if md_params.water_sampling_params is not None:
-            for mover in context.get_movers():
-                if isinstance(mover, WATER_SAMPLER_MOVERS):
-                    assert water_params_by_state is not None
-                    mover.set_params(water_params_by_state[state_idx])
-        if md_params.n_eq_steps > 0:
-            # Set the movers to 0 to ensure they all equilibrate the same way
-            # Ensure initial mover state is consistent across replicas
-            for mover in context.get_movers():
-                mover.set_step(0)
-
-            params = params_by_state[state_idx]
-            bound_potentials[0].set_params(params)
-
-            context.set_x_t(xvb.coords)
-            context.set_v_t(xvb.velocities)
-            context.set_box(xvb.box)
-
-            xs, boxes = context.multiple_steps(md_params.n_eq_steps, store_x_interval=0)
-            assert len(xs) == 1
-            x0 = xs[0]
-            v0 = context.get_v_t()
-            box0 = boxes[0]
-            xvb = CoordsVelBox(x0, v0, box0)
-        return xvb
-
-    initial_replicas = [
-        get_equilibrated_xvb(CoordsVelBox(s.x0, s.v0, s.box0), StateIdx(i)) for i, s in enumerate(initial_states)
-    ]
-
-    hrex = HREX.from_replicas(initial_replicas)
+    hrex = HREX.from_replicas([CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states])
 
     samples_by_state: List[Trajectory] = [Trajectory.empty() for _ in initial_states]
     replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
     fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
-
-    # Reset the barostat from the equilibration interval to the production interval
-    state = initial_states[0]
-    if barostat is not None and state.barostat is not None:
-        barostat.set_interval(state.barostat.interval)
 
     if (
         md_params.water_sampling_params is not None
@@ -1337,7 +1299,13 @@ def run_sims_hrex(
                 # Set the step so that all windows have the movers be called the same number of times.
                 mover.set_step(current_step)
 
-            md_params_replica = replace(md_params, n_frames=1, n_eq_steps=0, seed=state_idx + current_frame)
+            md_params_replica = replace(
+                md_params,
+                n_frames=1,
+                # Run equilibration as part of the first frame
+                n_eq_steps=md_params.n_eq_steps if current_frame == 0 else 0,
+                seed=state_idx + current_frame,
+            )
 
             assert md_params_replica.n_frames == 1
             # Get the next set of frames from the iterator, which will be the only value returned

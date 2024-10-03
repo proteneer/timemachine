@@ -44,6 +44,14 @@ def delta_r(ri, rj, box=None):
     return diff
 
 
+def distance2(ri, rj, box):
+    return jnp.sum(delta_r(ri, rj, box) ** 2)
+
+
+def distance(ri, rj, box):
+    return jnp.sqrt(distance2(ri, rj, box))
+
+
 def idxs_within_cutoff(x, x_lig, box, cutoff=0.5):
     """Indices of particles in x that are within
         cutoff of at least one particle in x_lig
