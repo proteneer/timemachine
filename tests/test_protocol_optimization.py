@@ -20,9 +20,8 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 
 np.random.seed(2021)
 
-# pytestmark = [pytest.mark.nocuda]
 
-
+@pytest.mark.nocuda
 def test_rebalance_initial_protocol():
     """Integration test: assert that protocol optimization improves run-to-run variance in free energy estimates"""
     initial_protocol = np.linspace(0, 1, 64)
@@ -57,6 +56,7 @@ def test_rebalance_initial_protocol():
     assert new_stddev < old_stddev
 
 
+@pytest.mark.nocuda
 def test_log_weights_from_mixture():
     """Assert self-consistency between
     (1) delta_f from mbar.f_k[-1] - mbar.f_k[0] and
@@ -77,6 +77,7 @@ def test_log_weights_from_mixture():
     np.testing.assert_almost_equal(source_delta_f, recons_delta_f)
 
 
+@pytest.mark.nocuda
 def test_linear_u_kn_interpolant():
     """Assert self-consistency with input"""
     lambdas = np.linspace(0, 1, 64)
@@ -88,6 +89,7 @@ def test_linear_u_kn_interpolant():
         np.testing.assert_allclose(mbar.u_kn[k], vec_u_interp(lambdas[k]))
 
 
+@pytest.mark.nocuda
 def test_work_stddev_estimator():
     """Assert nonegative, assert bigger estimates for more distant pairs"""
     lambdas = np.linspace(0, 1, 64)
@@ -141,6 +143,7 @@ def summarize_protocol(lambdas, dist_fxn):
     return neighbor_distances
 
 
+@pytest.mark.nocuda
 def test_overlap_rebalancing_on_gaussian():
     # initial_lams = linspace(0,1), along a path where nonuniform lams are probably better
     initial_num_states = 20
@@ -196,7 +199,7 @@ def test_overlap_rebalancing_on_gaussian():
         np.testing.assert_allclose(distances_to_sorted_larger_lams, _distances_flipped)
 
 
-@pytest.mark.nightly(reason="Slow")
+# @pytest.mark.nightly(reason="Slow")  # TODO: restore pytest.mark.nightly before merging
 def test_greedy_overlap_on_st_vacuum():
     # get bisection result
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
