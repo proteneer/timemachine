@@ -17,7 +17,8 @@ from timemachine.potentials.types import Params
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
-_SCALE_14 = 0.5
+_SCALE_14_LJ = 0.5
+_SCALE_14_Q = 1 / 6
 _BETA = 2.0
 _CUTOFF = 1.2
 
@@ -283,10 +284,8 @@ class BaseTopology:
             lj_params = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol)
 
         exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
-            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14_q=_SCALE_14_Q, scale14_lj=_SCALE_14_LJ
         )
-
-        scale_factors = np.stack([scale_factors, scale_factors], axis=1)
 
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
@@ -309,25 +308,25 @@ class BaseTopology:
         """
         # use same scale factors for electrostatics and vdWs
         exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
-            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+            self.mol, scale12=_SCALE_12, scale13=_SCALE_13, scale14_q=_SCALE_14_Q, scale14_lj=_SCALE_14_LJ
         )
 
         # note: use same scale factor for electrostatics and vdw
         # typically in protein ffs, gaff, the 1-4 ixns use different scale factors between vdw and electrostatics
         exclusions_kv = dict()
-        for (i, j), sf in zip(exclusion_idxs, scale_factors):
+        for (i, j), sf_qlj in zip(exclusion_idxs, scale_factors):
             assert i < j
-            exclusions_kv[(i, j)] = sf
+            exclusions_kv[(i, j)] = sf_qlj
 
         # loop over all pairs
         inclusion_idxs, rescale_mask = [], []
         for i in range(self.mol.GetNumAtoms()):
             for j in range(i + 1, self.mol.GetNumAtoms()):
-                scale_factor = exclusions_kv.get((i, j), 0.0)
-                rescale_factor = 1 - scale_factor
-                # keep this ixn
-                if rescale_factor > 0:
-                    rescale_mask.append([rescale_factor, rescale_factor])
+                scale_factor = exclusions_kv.get((i, j), (0.0, 0.0))  # how much to remove
+                rescale_factor = 1 - np.array(scale_factor)  # how much to keep
+                # keep this ixn if either lj or coulombic interaction is present
+                if np.any(rescale_factor) > 0:
+                    rescale_mask.append(rescale_factor)
                     inclusion_idxs.append([i, j])
 
         inclusion_idxs = np.array(inclusion_idxs).reshape(-1, 2).astype(np.int32)
@@ -548,11 +547,11 @@ class DualTopology(BaseTopology):
         lj_params = jnp.concatenate([lj_params_a, lj_params_b])
 
         exclusion_idxs_a, scale_factors_a = nonbonded.generate_exclusion_idxs(
-            self.mol_a, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+            self.mol_a, scale12=_SCALE_12, scale13=_SCALE_13, scale14_q=_SCALE_14_Q, scale14_lj=_SCALE_14_LJ
         )
 
         exclusion_idxs_b, scale_factors_b = nonbonded.generate_exclusion_idxs(
-            self.mol_b, scale12=_SCALE_12, scale13=_SCALE_13, scale14=_SCALE_14
+            self.mol_b, scale12=_SCALE_12, scale13=_SCALE_13, scale14_q=_SCALE_14_Q, scale14_lj=_SCALE_14_LJ
         )
 
         mutual_exclusions_ = []
@@ -575,8 +574,8 @@ class DualTopology(BaseTopology):
 
         combined_scale_factors = np.concatenate(
             [
-                np.stack([scale_factors_a, scale_factors_a], axis=1),
-                np.stack([scale_factors_b, scale_factors_b], axis=1),
+                scale_factors_a,
+                scale_factors_b,
                 mutual_scale_factors,
             ]
         ).astype(np.float64)
