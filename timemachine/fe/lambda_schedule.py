@@ -1,7 +1,9 @@
-from typing import Optional, Tuple
+from typing import Optional, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
+
+from timemachine.fe.protocol_refinement import greedy_bisection_step
 
 
 def validate_lambda_schedule(lambda_schedule: NDArray, num_windows: int):
@@ -22,22 +24,29 @@ def interpolate_pre_optimized_protocol(pre_optimized_protocol: NDArray, num_wind
     return lambda_schedule
 
 
-def bisection_lambda_schedule(
-    num_windows: int, lambda_interval: Tuple[float, float] = (0.0, 1.0)
-) -> NDArray[np.float64]:
+def bisection_lambda_schedule(num_windows: int, initial_lambdas: Sequence[float] = (0.0, 1.0)) -> NDArray[np.float64]:
     """
     Construct a lambda schedule for setting up initial states that will be used for the basis of `run_sims_bisection`.
     The lambda schedule will contain lambda values where bisection would mostly likely run simulations, reducing the total
     amount of computation to prepare each initial state.
-
-
-    Constructs a lambda schedule with 2^N + 1 windows such that 2^N is the closest value to num_windows less than num_windows.
-    The number of windows will be less than or equal to num_windows.
     """
-    assert num_windows >= 2
-    min_lamb, max_lamb = lambda_interval
-    schedule_windows = int(2 ** np.floor(np.log2(num_windows))) + 1
-    return np.linspace(min_lamb, max_lamb, schedule_windows)
+
+    assert 2 <= len(initial_lambdas) <= num_windows
+
+    lambdas = list(initial_lambdas)
+
+    def local_cost(x1, x2):
+        return abs(x1 - x2)
+
+    def make_intermediate(x1, x2):
+        return 0.5 * (x1 + x2)
+
+    num_bisections = num_windows - len(initial_lambdas)
+
+    for _ in range(num_bisections):
+        lambdas, _ = greedy_bisection_step(lambdas, local_cost, make_intermediate)
+
+    return np.asarray(lambdas)
 
 
 def construct_pre_optimized_absolute_lambda_schedule_solvent(num_windows: int, nonbonded_cutoff: float = 1.2):
