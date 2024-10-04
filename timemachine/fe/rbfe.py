@@ -546,7 +546,7 @@ def estimate_relative_free_energy_bisection(
     host_config: Optional[HostConfig],
     md_params: MDParams = DEFAULT_MD_PARAMS,
     prefix: str = "",
-    lambda_interval: Optional[Tuple[float, float]] = None,
+    initial_lambdas: Optional[Sequence[float]] = None,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
@@ -578,9 +578,10 @@ def estimate_relative_free_energy_bisection(
     prefix: str, optional
         A prefix to append to figures
 
-    lambda_interval: (float, float) or None, optional
-        Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
-        other values for testing.
+    initial_lambdas: sequence of float None, optional
+        Initial lambda values to seed bisection. Must have length >= 2. The first and last elements determine the
+        minimum and maximum lambda values for the transformation (typically 0, 1) respectively, but sometimes useful to
+        choose other values for testing.
 
     n_windows: int or None, optional
         Number of windows used for interpolating the lambda schedule with additional windows. Additionally controls the
@@ -606,14 +607,13 @@ def estimate_relative_free_energy_bisection(
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
-    lambda_interval = lambda_interval or (0.0, 1.0)
-    lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
+    if initial_lambdas is None:
+        initial_lambdas = [0.0, 1.0]
+    lambda_grid = bisection_lambda_schedule(n_windows, initial_lambdas)
 
     temperature = DEFAULT_TEMP
 
     host = setup_optimized_host(single_topology, host_config) if host_config else None
-
-    lambda_grid = bisection_lambda_schedule(n_windows, lambda_interval=lambda_interval)
 
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
@@ -633,7 +633,7 @@ def estimate_relative_free_energy_bisection(
 
     try:
         results, trajectories = run_sims_bisection(
-            [lambda_min, lambda_max],
+            initial_lambdas,
             make_optimized_initial_state,
             md_params,
             n_bisections=n_windows - 2,
@@ -663,8 +663,7 @@ def estimate_relative_free_energy_bisection(
 
 def estimate_relative_free_energy_bisection_hrex_impl(
     temperature: float,
-    lambda_min: float,
-    lambda_max: float,
+    initial_lambdas: Sequence[float],
     md_params: MDParams,
     n_windows: int,
     make_optimized_initial_state_fn: Callable[[float], InitialState],
@@ -678,7 +677,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         assert md_params.hrex_params is not None, "hrex_params must be set to use HREX"
         md_params_bisection = replace(md_params, n_frames=md_params.hrex_params.n_frames_bisection)
         results, trajectories_by_state = run_sims_bisection(
-            [lambda_min, lambda_max],
+            initial_lambdas,
             make_optimized_initial_state_fn,
             md_params_bisection,
             n_bisections=n_windows - 2,
@@ -768,7 +767,7 @@ def estimate_relative_free_energy_bisection_hrex(
     host_config: Optional[HostConfig],
     md_params: MDParams = DEFAULT_HREX_PARAMS,
     prefix: str = "",
-    lambda_interval: Optional[Tuple[float, float]] = None,
+    initial_lambdas: Optional[Sequence[float]] = None,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
@@ -802,9 +801,10 @@ def estimate_relative_free_energy_bisection_hrex(
     prefix: str, optional
         A prefix to append to figures
 
-    lambda_interval: (float, float) or None, optional
-        Minimum and maximum value of lambda for the transformation; typically (0, 1), but sometimes useful to choose
-        other values for testing.
+    initial_lambdas: sequence of float None, optional
+        Initial lambda values to seed bisection. Must have length >= 2. The first and last elements determine the
+        minimum and maximum lambda values for the transformation (typically 0, 1) respectively, but sometimes useful to
+        choose other values for testing.
 
     n_windows: int or None, optional
         Number of windows used for interpolating the lambda schedule with additional windows. Defaults to
@@ -845,14 +845,14 @@ def estimate_relative_free_energy_bisection_hrex(
         else SingleTopology(mol_a, mol_b, core, ff)
     )
 
-    lambda_interval = lambda_interval or (0.0, 1.0)
-    lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
+    if initial_lambdas is None:
+        initial_lambdas = [0.0, 1.0]
 
     temperature = DEFAULT_TEMP
 
     host = setup_optimized_host(single_topology, host_config) if host_config else None
 
-    lambda_grid = bisection_lambda_schedule(n_windows, lambda_interval=lambda_interval)
+    lambda_grid = bisection_lambda_schedule(n_windows, initial_lambdas)
     initial_states = setup_initial_states(
         single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
     )
@@ -871,8 +871,7 @@ def estimate_relative_free_energy_bisection_hrex(
 
     return estimate_relative_free_energy_bisection_hrex_impl(
         temperature,
-        lambda_min,
-        lambda_max,
+        initial_lambdas,
         md_params,
         n_windows,
         make_optimized_initial_state_fn,
@@ -888,6 +887,7 @@ def run_vacuum(
     forcefield: Forcefield,
     _,
     md_params: MDParams = DEFAULT_HREX_PARAMS,
+    initial_lambdas: Optional[Sequence[float]] = None,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = None,
@@ -908,6 +908,7 @@ def run_vacuum(
         md_params=md_params,
         host_config=None,
         prefix="vacuum",
+        initial_lambdas=initial_lambdas,
         n_windows=n_windows,
         min_overlap=min_overlap,
         min_cutoff=min_cutoff,
@@ -922,6 +923,7 @@ def run_solvent(
     forcefield: Forcefield,
     _,
     md_params: MDParams = DEFAULT_HREX_PARAMS,
+    initial_lambdas: Optional[Sequence[float]] = None,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = None,
@@ -946,6 +948,7 @@ def run_solvent(
         solvent_host_config,
         md_params=md_params,
         prefix="solvent",
+        initial_lambdas=initial_lambdas,
         n_windows=n_windows,
         min_overlap=min_overlap,
         min_cutoff=min_cutoff,
@@ -961,6 +964,7 @@ def run_complex(
     forcefield: Forcefield,
     protein: Union[app.PDBFile, str],
     md_params: MDParams = DEFAULT_HREX_PARAMS,
+    initial_lambdas: Optional[Sequence[float]] = None,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
@@ -978,6 +982,7 @@ def run_complex(
         forcefield,
         complex_host_config,
         prefix="complex",
+        initial_lambdas=initial_lambdas,
         md_params=md_params,
         n_windows=n_windows,
         min_overlap=min_overlap,
