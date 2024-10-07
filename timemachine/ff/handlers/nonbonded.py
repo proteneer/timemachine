@@ -157,7 +157,7 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
     return inlined_constant * partial_charges[inv_perm]
 
 
-def generate_exclusion_idxs(mol, scale12, scale13, scale14):
+def generate_exclusion_idxs(mol, scale12, scale13, scale14_lj, scale14_q):
     """
     Generate exclusions for a mol based on the all pairs shortest path.
     We always take the convention that exclusions for smaller distances
@@ -180,7 +180,7 @@ def generate_exclusion_idxs(mol, scale12, scale13, scale14):
     Returns
     -------
     idxs : int array
-    scales: float array
+    scales: float, 2 array
     """
 
     exclusions = {}
@@ -193,11 +193,11 @@ def generate_exclusion_idxs(mol, scale12, scale13, scale14):
                 continue
             else:
                 if length == 1:
-                    scale = scale12
+                    scale = (scale12, scale12)
                 elif length == 2:
-                    scale = scale13
+                    scale = (scale13, scale13)
                 elif length == 3:
-                    scale = scale14
+                    scale = (scale14_q, scale14_lj)
                 else:
                     assert 0
 

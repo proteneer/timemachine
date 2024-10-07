@@ -16,7 +16,6 @@ from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_FF, DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
-from timemachine.fe import rbfe
 from timemachine.fe.free_energy import PairBarResult, SimulationResult
 from timemachine.fe.utils import get_mol_name
 
@@ -146,6 +145,10 @@ def test_smc_freesolv(smc_free_solv_path):
     assert mean_abs_err_kcalmol <= 2
 
 
+def get_success_result_path(mol_a_name: str, mol_b_name: str):
+    return f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
+
+
 @contextmanager
 def get_rbfe_edge_list_hif2a_path(seed):
     with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_data:
@@ -161,7 +164,7 @@ def get_rbfe_edge_list_hif2a_path(seed):
         )
 
         def run(results_csv, temp_dir):
-            output_path = str(Path(temp_dir) / rbfe.get_success_result_path("*", "*"))
+            output_path = str(Path(temp_dir) / get_success_result_path("*", "*"))
             assert len(glob(output_path)) == 0
             config = dict(results_csv=results_csv, **base_config)
             _ = run_example("rbfe_edge_list.py", get_cli_args(config), cwd=temp_dir)
@@ -241,7 +244,7 @@ def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
                     assert frame.shape == (N, 3)
 
     for mol_a_name, mol_b_name in edges:
-        check_results(path / rbfe.get_success_result_path(mol_a_name, mol_b_name))
+        check_results(path / get_success_result_path(mol_a_name, mol_b_name))
 
 
 def assert_simulation_results_equal(r1: SimulationResult, r2: SimulationResult):
@@ -267,7 +270,7 @@ def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
             for mol_a_name, mol_b_name in edges:
 
                 def load_results(dir):
-                    path = dir / rbfe.get_success_result_path(mol_a_name, mol_b_name)
+                    path = dir / get_success_result_path(mol_a_name, mol_b_name)
                     assert path.exists()
                     return load_simulation_results(path)
 
@@ -308,8 +311,8 @@ def test_water_sampling_mc_bulk_water(insertion_type):
         # expect running this script to write summary_result_result_{mol_name}_*.pkl files
         proc = run_example("water_sampling_mc.py", get_cli_args(config), cwd=temp_dir)
         assert proc.returncode == 0
-        assert (Path(temp_dir) / config["out_cif"]).is_file()
-        last_frame = Path(temp_dir) / config["save_last_frame"]
+        assert (Path(temp_dir) / str(config["out_cif"])).is_file()
+        last_frame = Path(temp_dir) / str(config["save_last_frame"])
         assert last_frame.is_file()
 
         test_data = np.load(last_frame)
@@ -342,8 +345,8 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
         # expect running this script to write summary_result_result_{mol_name}_*.pkl files
         proc = run_example("water_sampling_mc.py", get_cli_args(config), cwd=temp_dir)
         assert proc.returncode == 0
-        assert (Path(temp_dir) / config["out_cif"]).is_file()
-        last_frame = Path(temp_dir) / config["save_last_frame"]
+        assert (Path(temp_dir) / str(config["out_cif"])).is_file()
+        last_frame = Path(temp_dir) / str(config["save_last_frame"])
         assert last_frame.is_file()
 
         test_data = np.load(last_frame)

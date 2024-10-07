@@ -1,17 +1,16 @@
 import pickle
-import traceback
 import warnings
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple, Union, cast
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 from numpy.typing import NDArray
 from openmm import app
 from rdkit import Chem
 
-from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_PRESSURE, DEFAULT_TEMP
-from timemachine.fe import atom_mapping, model_utils
+from timemachine.constants import DEFAULT_POSITIONAL_RESTRAINT_K, DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.fe import model_utils
 from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
@@ -41,7 +40,6 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.thermostat.utils import sample_velocities
-from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.potentials import BoundPotential, jax_utils
 
 DEFAULT_NUM_WINDOWS = 48
@@ -276,6 +274,7 @@ def setup_optimized_initial_state(
     optimized_initial_states: Sequence[InitialState],
     temperature: float,
     seed: int,
+    k: Optional[float] = DEFAULT_POSITIONAL_RESTRAINT_K,
 ) -> InitialState:
     """Setup an InitialState for the specified lambda and optimize the coordinates given a list of pre-optimized IntialStates.
     If the specified lambda exists within the list of optimized_initial_states list, return the existing InitialState.
@@ -310,6 +309,7 @@ def setup_optimized_initial_state(
             free_idxs,
             # assertion can lead to spurious errors when new state is close to an existing one
             assert_energy_decreased=False,
+            k=k,
         )
         return initial_state
 
@@ -320,10 +320,14 @@ def optimize_coords_state(
     box: NDArray,
     free_idxs: List[int],
     assert_energy_decreased: bool,
+    k: Optional[float],
 ) -> NDArray:
     val_and_grad_fn = minimizer.get_val_and_grad_fn(potentials, box)
     assert np.all(np.isfinite(x0)), "Initial coordinates contain nan or inf"
-    x_opt = minimizer.local_minimize(x0, val_and_grad_fn, free_idxs, assert_energy_decreased=assert_energy_decreased)
+
+    x_opt = minimizer.local_minimize(
+        x0, box, val_and_grad_fn, free_idxs, assert_energy_decreased=assert_energy_decreased, restraint_k=k
+    )
     assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
     return x_opt
 
@@ -337,9 +341,10 @@ def get_free_idxs(initial_state: InitialState, cutoff: float = 0.5) -> List[int]
     return free_idxs
 
 
-def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[NDArray]:
+def _optimize_coords_along_states(initial_states: List[InitialState], k: Optional[float]) -> List[NDArray]:
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
+
     x_opt = end_state.x0
 
     x_traj = []
@@ -348,7 +353,7 @@ def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[ND
         free_idxs = get_free_idxs(initial_state)
         try:
             x_opt = optimize_coords_state(
-                initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0
+                initial_state.potentials, x_opt, initial_state.box0, free_idxs, assert_energy_decreased=idx == 0, k=k
             )
         except (AssertionError, minimizer.MinimizationError) as e:
             raise minimizer.MinimizationError(f"Failed to optimized state at λ={initial_state.lamb}") from e
@@ -357,7 +362,11 @@ def _optimize_coords_along_states(initial_states: List[InitialState]) -> List[ND
     return x_traj
 
 
-def optimize_coordinates(initial_states: List[InitialState], min_cutoff: Optional[float] = 0.7) -> List[NDArray]:
+def optimize_coordinates(
+    initial_states: List[InitialState],
+    min_cutoff: Optional[float] = 0.7,
+    k: Optional[float] = DEFAULT_POSITIONAL_RESTRAINT_K,
+) -> List[NDArray]:
     """
     Optimize geometries of the initial states.
 
@@ -367,6 +376,11 @@ def optimize_coordinates(initial_states: List[InitialState], min_cutoff: Optiona
 
     min_cutoff: float, optional
         Throw error if any atom moves more than this distance (nm) after minimization
+
+    k: float, optional
+        force constant for a positional harmonic restraint potential to apply to the initial positions.
+        If None, minimize with no positional restraint. Refer to `timemachine.potentials.bonded.harmonic_positional_restraint`
+        for implementation.
 
     Returns
     -------
@@ -391,13 +405,13 @@ def optimize_coordinates(initial_states: List[InitialState], min_cutoff: Optiona
 
     # go from lambda 0 -> 0.5
     if len(lhs_initial_states) > 0:
-        lhs_xs = _optimize_coords_along_states(lhs_initial_states)
+        lhs_xs = _optimize_coords_along_states(lhs_initial_states, k)
         for xs in lhs_xs:
             all_xs.append(xs)
 
     # go from lambda 1 -> 0.5 and reverse the coordinate trajectory and lambda schedule
     if len(rhs_initial_states) > 0:
-        rhs_xs = _optimize_coords_along_states(rhs_initial_states[::-1])[::-1]
+        rhs_xs = _optimize_coords_along_states(rhs_initial_states[::-1], k)[::-1]
         for xs in rhs_xs:
             all_xs.append(xs)
 
@@ -942,194 +956,3 @@ def run_complex(
         min_cutoff=min_cutoff,
     )
     return complex_res, complex_top, complex_host_config
-
-
-class Edge(NamedTuple):
-    mol_a_name: str
-    mol_b_name: str
-    metadata: Dict[str, Any]
-
-
-def get_failure_result_path(mol_a_name: str, mol_b_name: str):
-    return f"failure_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
-
-
-def get_success_result_path(mol_a_name: str, mol_b_name: str):
-    return f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
-
-
-def run_edge_and_save_results(
-    edge: Edge,
-    mols: Dict[str, Chem.rdchem.Mol],
-    forcefield: Forcefield,
-    protein: app.PDBFile,
-    file_client: AbstractFileClient,
-    n_windows: Optional[int],
-    md_params: MDParams = DEFAULT_MD_PARAMS,
-):
-    # Ensure that all mol props (e.g. _Name) are included in pickles
-    # Without this get_mol_name(mol) will fail on roundtripped mol
-    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
-
-    edge_prefix = f"{edge.mol_a_name}_{edge.mol_b_name}"
-
-    try:
-        mol_a = mols[edge.mol_a_name]
-        mol_b = mols[edge.mol_b_name]
-
-        all_cores = atom_mapping.get_cores(
-            mol_a,
-            mol_b,
-            **DEFAULT_ATOM_MAPPING_KWARGS,
-        )
-        core = all_cores[0]
-
-        complex_res, complex_top, _ = run_complex(
-            mol_a,
-            mol_b,
-            core,
-            forcefield,
-            protein,
-            md_params,
-            n_windows=n_windows,
-        )
-
-        if isinstance(complex_res, HREXSimulationResult):
-            file_client.store(
-                f"{edge_prefix}_complex_hrex_transition_matrix.png", complex_res.hrex_plots.transition_matrix_png
-            )
-            file_client.store(
-                f"{edge_prefix}_complex_hrex_swap_acceptance_rates_convergence.png",
-                complex_res.hrex_plots.swap_acceptance_rates_convergence_png,
-            )
-            file_client.store(
-                f"{edge_prefix}_complex_hrex_replica_state_distribution_heatmap.png",
-                complex_res.hrex_plots.replica_state_distribution_heatmap_png,
-            )
-
-        solvent_res, solvent_top, _ = run_solvent(
-            mol_a,
-            mol_b,
-            core,
-            forcefield,
-            protein,
-            md_params,
-            n_windows=n_windows,
-        )
-        if isinstance(solvent_res, HREXSimulationResult):
-            file_client.store(
-                f"{edge_prefix}_solvent_hrex_transition_matrix.png", solvent_res.hrex_plots.transition_matrix_png
-            )
-            file_client.store(
-                f"{edge_prefix}_solvent_hrex_swap_acceptance_rates_convergence.png",
-                solvent_res.hrex_plots.swap_acceptance_rates_convergence_png,
-            )
-            file_client.store(
-                f"{edge_prefix}_solvent_hrex_replica_state_distribution_heatmap.png",
-                solvent_res.hrex_plots.replica_state_distribution_heatmap_png,
-            )
-
-    except Exception as err:
-        print(
-            "failed:",
-            " | ".join(
-                [
-                    f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
-                    f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
-                    (
-                        f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
-                        if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
-                        else ""
-                    ),
-                ]
-            ),
-        )
-
-        path = get_failure_result_path(edge.mol_a_name, edge.mol_b_name)
-        tb = traceback.format_exception(None, err, err.__traceback__)
-        file_client.store(path, pickle.dumps((edge, err, tb)))
-
-        print(err)
-        traceback.print_exc()
-
-        return file_client.full_path(path)
-
-    path = get_success_result_path(edge.mol_a_name, edge.mol_b_name)
-    pkl_obj = (mol_a, mol_b, edge.metadata, core, solvent_res, solvent_top, complex_res, complex_top)
-    file_client.store(path, pickle.dumps(pkl_obj))
-
-    solvent_ddg = sum(solvent_res.final_result.dGs)
-    solvent_ddg_err = np.linalg.norm(solvent_res.final_result.dG_errs)
-    complex_ddg = sum(complex_res.final_result.dGs)
-    complex_ddg_err = np.linalg.norm(complex_res.final_result.dG_errs)
-
-    tm_ddg = complex_ddg - solvent_ddg
-    tm_err = np.linalg.norm([complex_ddg_err, solvent_ddg_err])
-
-    print(
-        "finished:",
-        " | ".join(
-            [
-                f"{edge.mol_a_name} -> {edge.mol_b_name} (kJ/mol)",
-                f"complex {complex_ddg:.2f} +- {complex_ddg_err:.2f}",
-                f"solvent {solvent_ddg:.2f} +- {solvent_ddg_err:.2f}",
-                f"tm_pred {tm_ddg:.2f} +- {tm_err:.2f}",
-                f"exp_ddg {edge.metadata['exp_ddg']:.2f}" if "exp_ddg" in edge.metadata else "",
-                (
-                    f"fep_ddg {edge.metadata['fep_ddg']:.2f} +- {edge.metadata['fep_ddg_err']:.2f}"
-                    if "fep_ddg" in edge.metadata and "fep_ddg_err" in edge.metadata
-                    else ""
-                ),
-            ]
-        ),
-    )
-
-    return file_client.full_path(path)
-
-
-def run_edges_parallel(
-    ligands: Sequence[Chem.rdchem.Mol],
-    edges: Sequence[Edge],
-    ff: Forcefield,
-    protein: app.PDBFile,
-    n_gpus: int,
-    pool_client: Optional[AbstractClient] = None,
-    file_client: Optional[AbstractFileClient] = None,
-    md_params: MDParams = DEFAULT_MD_PARAMS,
-    n_windows: Optional[int] = None,
-):
-    mols = {get_mol_name(mol): mol for mol in ligands}
-
-    pool_client = pool_client or CUDAPoolClient(n_gpus)
-    pool_client.verify()
-
-    file_client = file_client or FileClient()
-
-    # Ensure that all mol props (e.g. _Name) are included in pickles
-    # Without this get_mol_name(mol) will fail on roundtripped mol
-    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
-
-    jobs = [
-        pool_client.submit(
-            run_edge_and_save_results,
-            edge,
-            mols,
-            ff,
-            protein,
-            file_client,
-            n_windows,
-            md_params,
-        )
-        for edge in edges
-    ]
-
-    # Remove references to completed jobs to allow garbage collection.
-    # TODO: The current approach uses O(edges) memory in the worst case (e.g. if the first job gets stuck). Ideally we
-    #   should process and remove references to jobs in the order they complete, but this would require an interface
-    #   presently not implemented in our custom future classes.
-    paths = []
-    while jobs:
-        job = jobs.pop(0)
-        paths.append(job.result())
-
-    return paths
