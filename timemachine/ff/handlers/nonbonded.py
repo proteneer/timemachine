@@ -55,7 +55,7 @@ def oe_canon_smiles(oemol):
     oechem.OEAssignAromaticFlags(oemol, oechem.OEAroModel_OpenEye)
 
     smiflag = oechem.OESMILESFlag_Canonical
-    smiflag |= oechem.OESMILESFLAG_Hydrogens
+    smiflag |= oechem.OESMILESFlag_Hydrogens
     smiflag |= oechem.OESMILESFlag_ISOMERIC
 
     smi = oechem.OECreateSmiString(oemol, smiflag)
