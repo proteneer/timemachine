@@ -45,24 +45,6 @@ def convert_to_oe(mol):
     return oemol
 
 
-def oe_canon_smiles(oemol):
-    """adapted from oe example, hydrogen-aware
-    https://docs.eyesopen.com/toolkits/python/oechemtk/oechem_examples/oechem_example_cansmi.html
-    """
-    from openeye import oechem
-
-    oechem.OEFindRingAtomsAndBonds(oemol)
-    oechem.OEAssignAromaticFlags(oemol, oechem.OEAroModel_OpenEye)
-
-    smiflag = oechem.OESMILESFlag_Canonical
-    smiflag |= oechem.OESMILESFlag_Hydrogens
-    smiflag |= oechem.OESMILESFlag_ISOMERIC
-
-    smi = oechem.OECreateSmiString(oemol, smiflag)
-
-    return smi
-
-
 def oe_generate_conformations(oemol, sample_hydrogens=True):
     """Generate conformations for the input molecule.
     The molecule is modified in place.
@@ -78,8 +60,6 @@ def oe_generate_conformations(oemol, sample_hydrogens=True):
     ----------
     [1] https://docs.eyesopen.com/toolkits/cookbook/python/modeling/am1-bcc.html
     """
-
-    canon_smi_before = oe_canon_smiles(oemol)
 
     from openeye import oeomega
 
@@ -99,10 +79,6 @@ def oe_generate_conformations(oemol, sample_hydrogens=True):
     has_confs = omega(oemol)
     if not has_confs:
         raise Exception(f"Unable to generate conformations for charge assignment for '{oemol.GetTitle()}'")
-
-    canon_smi_after = oe_canon_smiles(oemol)
-    if canon_smi_before != canon_smi_after:
-        raise Exception("canon smiles modified unexpectedly")
 
 
 def oe_assign_charges(mol, charge_model=AM1BCCELF10):
