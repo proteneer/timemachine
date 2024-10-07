@@ -1,4 +1,5 @@
 import functools
+from copy import deepcopy
 from importlib import resources
 
 import jax
@@ -736,6 +737,31 @@ def test_am1_platform_dependence(mol_with_precomputed_charges):
     local_am1_charges = nonbonded.compute_or_load_am1_charges(mol)
     allowable_charges = mol_with_precomputed_charges["precomputed_charges"].values()
     assert any(np.isclose(local_am1_charges, expected_charges).all() for expected_charges in allowable_charges)
+
+
+def assert_permutation_equivariance(mol, fxn, perm):
+    mol = deepcopy(mol)
+    qs = fxn(mol)
+
+    permuted_mol = Chem.RenumberAtoms(mol, list(int(idx) for idx in perm))
+    qs_perm = fxn(permuted_mol)
+
+    np.testing.assert_allclose(qs_perm, qs[perm])
+
+
+@pytest.mark.parametrize("mol_idx", [0, 1, 2, 3, 4, 5])
+def test_partial_charge_equivariance_on_freesolv(mol_idx):
+    ff = Forcefield.load_default()
+
+    seed = 2024
+    rng = np.random.default_rng(seed)
+
+    from timemachine.datasets import fetch_freesolv
+
+    mol = fetch_freesolv()[mol_idx]
+    perm = rng.permutation(mol.GetNumAtoms())
+
+    assert_permutation_equivariance(mol, ff.q_handle.parameterize, perm)
 
 
 def test_charging_compounds_with_non_zero_charge():
