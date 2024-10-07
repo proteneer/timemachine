@@ -683,7 +683,7 @@ def test_initial_state_to_bound_impl():
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
         3.0, forcefield.water_ff, mols=[st.mol_a, st.mol_b]
     )
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0])
+    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
     solvent_host = setup_optimized_host(st, solvent_host_config)
     initial_state = setup_initial_states(st, solvent_host, DEFAULT_TEMP, [0.5], 2024)[0]
 
