@@ -156,15 +156,16 @@ def test_overlap_rebalancing_on_gaussian():
     initial_lams = np.linspace(0, 1, initial_num_states)
     initial_params = [initial_path(lam) for lam in initial_lams]
 
-    # make a pymbar test case
-    O_k = [offset for (offset, _) in initial_params]
-    K_k = [force_constant for (_, force_constant) in initial_params]
-    test_case = HarmonicOscillatorsTestCase(O_k=O_k, K_k=K_k)
+    with patch("numpy.int", int):
+        # make a pymbar test case
+        O_k = [offset for (offset, _) in initial_params]
+        K_k = [force_constant for (_, force_constant) in initial_params]
+        test_case = HarmonicOscillatorsTestCase(O_k=O_k, K_k=K_k)
 
-    # get samples, estimate free energies
-    _, u_kn, N_k, _ = test_case.sample(N_k=[100] * initial_num_states)
-    mbar = MBAR(u_kn, N_k)
-    f_k = mbar.f_k
+        # get samples, estimate free energies
+        _, u_kn, N_k, _ = test_case.sample(N_k=[100] * initial_num_states)
+        mbar = MBAR(u_kn, N_k)
+        f_k = mbar.f_k
 
     # make a fast d(lam_i, lam_j) fxn
     overlap_dist = make_approx_overlap_distance_fxn(initial_lams, u_kn, f_k, N_k)
