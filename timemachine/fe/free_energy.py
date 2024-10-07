@@ -34,7 +34,14 @@ from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get
 from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials import (
+    BoundPotential,
+    HarmonicBond,
+    Nonbonded,
+    NonbondedInteractionGroup,
+    SummedPotential,
+    make_summed_potential,
+)
 from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.utils import batches, pairwise_transform_and_combine
 
@@ -164,11 +171,7 @@ class InitialState:
         assert self.protein_idxs.dtype == np.int32 or self.protein_idxs.dtype == np.int64
 
     def to_bound_impl(self, precision=np.float32):
-        bps = self.potentials
-        summed_pot = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
-        params = np.concatenate([bp.params.reshape(-1) for bp in bps])
-        impl = summed_pot.to_gpu(precision).bind(params).bound_impl
-        return impl
+        return make_summed_potential(self.potentials).bound_impl
 
 
 @dataclass
