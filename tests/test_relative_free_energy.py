@@ -275,6 +275,23 @@ def test_md_params_validation():
         MDParams(seed=2023, n_frames=frames, n_eq_steps=10, k=1.0e7, steps_per_frame=steps_per_frame)
 
 
+def test_am1bcc_vacuum():
+    """Verify that AM1BCC forcefields can be used to run a relative vacuum simulation"""
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file("smirnoff_2_2_0_am1bcc.py")
+    seed = 2024
+    frames = 5
+    windows = 2
+    steps_per_frame = 5
+
+    md_params = MDParams(n_frames=frames, n_eq_steps=10, seed=seed, steps_per_frame=steps_per_frame)
+
+    res = run_vacuum(mol_a, mol_b, core, forcefield, None, md_params=md_params, n_windows=windows)
+
+    assert len(res.frames[0]) == frames
+    assert res.md_params == md_params
+
+
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_local_md_parameters(freeze_reference):
     """Run RBFE methods with local steps mixed in"""
