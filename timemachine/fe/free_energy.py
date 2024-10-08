@@ -171,7 +171,7 @@ class InitialState:
         assert self.protein_idxs.dtype == np.int32 or self.protein_idxs.dtype == np.int64
 
     def to_bound_impl(self, precision=np.float32):
-        return make_summed_potential(self.potentials).bound_impl
+        return make_summed_potential(self.potentials).to_gpu(precision).bound_impl
 
 
 @dataclass
