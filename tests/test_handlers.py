@@ -338,7 +338,7 @@ def test_am1_bcc():
 
     assert len(charges) == mol.GetNumAtoms()
 
-    new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, mol=mol))
+    new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, None, mol))
 
     # charges_adjoints = np.random.randn(*charges.shape)
 
