@@ -67,11 +67,13 @@ void Context::_verify_coords_and_box(const double *coords_buffer, const double *
     }
 
     const double max_box_dim = *std::max_element(box_buffer, box_buffer + 3 * 3);
-    const double largest_magnitude_coord = *std::max_element(
-        coords_buffer, coords_buffer + N_ * 3, [](const double &a, const double &b) { return abs(a) < abs(b); });
-    if (max_box_dim * 100.0 < abs(largest_magnitude_coord)) {
+    const auto [min_coord, max_coord] = std::minmax_element(coords_buffer, coords_buffer + N_ * 3);
+    // Look at the largest different in a single dimension, since coordinates are not imaged into the home box
+    // per say, rather into the nearest periodic box
+    const double max_coord_delta = *max_coord - *min_coord;
+    if (max_box_dim * 100.0 < max_coord_delta) {
         throw std::runtime_error(
-            "simulation unstable: coordinates two orders of magnitude larger than max box dimension");
+            "simulation unstable: dimensions of coordinates two orders of magnitude larger than max box dimension");
     }
 }
 

@@ -1000,6 +1000,7 @@ def test_unstable_simulation_failure():
 
     ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
     with pytest.raises(
-        RuntimeError, match="simulation unstable: coordinates two orders of magnitude larger than max box dimension"
+        RuntimeError,
+        match="simulation unstable: dimensions of coordinates two orders of magnitude larger than max box dimension",
     ):
         ctxt.multiple_steps(steps)
