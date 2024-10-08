@@ -991,8 +991,6 @@ def test_unstable_simulation_failure():
     # Coords will be significantly large than the box, will trigger an invalid memory access if not careful
     coords = rng.uniform(-1e10, 1e10, size=coords.shape).astype(dtype=np.float64)
 
-    print(np.max(coords), np.min(coords))
-
     bps = []
     for p, pot in zip(sys_params, unbound_potentials):
         bound_impl = pot.bind(p).to_gpu(np.float32).bound_impl
@@ -1001,5 +999,7 @@ def test_unstable_simulation_failure():
     intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
     ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
-    with pytest.raises(RuntimeError, match="simulation unstable: coordinates order of magnitude larger than box"):
+    with pytest.raises(
+        RuntimeError, match="simulation unstable: coordinates order of magnitude larger than max box dimension"
+    ):
         ctxt.multiple_steps(steps)
