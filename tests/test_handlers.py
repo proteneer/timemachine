@@ -11,7 +11,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, ONE_4PI_EPS0
-from timemachine.fe import utils
+from timemachine.fe import topology, utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
@@ -339,7 +339,7 @@ def test_am1_bcc():
 
     assert len(charges) == mol.GetNumAtoms()
 
-    new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, mol=mol))
+    new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, None, mol))
 
     # charges_adjoints = np.random.randn(*charges.shape)
 
@@ -580,6 +580,31 @@ def test_am1ccc_throws_error_on_phosphorus():
     with pytest.raises(RuntimeError) as e:
         _ = ff.q_handle.parameterize(mol)
     assert "unsupported element" in str(e)
+
+
+@pytest.mark.parametrize(
+    "am1bcc_ff", ["smirnoff_1_1_0_am1bcc.py", "smirnoff_2_0_0_am1bcc.py", "smirnoff_2_2_0_am1bcc.py"]
+)
+def test_am1bcc_handles_phosphorus(am1bcc_ff):
+    """Verify that the AM1BCC forcefields handle phosphorus, unlike the CCC forcefields"""
+    ff = Forcefield.load_from_file(am1bcc_ff)
+
+    # contains phosphorus
+    smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
+    mol = Chem.AddHs(Chem.MolFromSmiles(smi))
+
+    _ = ff.q_handle.parameterize(mol)
+
+    lamb = 0.0
+
+    base_topo = topology.BaseTopology(mol, ff)
+    base_topo.parameterize_nonbonded(
+        ff.q_handle.params,
+        ff.q_handle_intra.params,
+        ff.lj_handle.params,
+        ff.lj_handle_intra.params,
+        lamb,
+    )
 
 
 def test_am1_differences():

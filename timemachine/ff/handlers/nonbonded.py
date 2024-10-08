@@ -448,7 +448,7 @@ class AM1Handler(SerializableMixIn):
         assert len(params) == 0
         assert props is None
 
-    def partial_parameterize(self, mol):
+    def partial_parameterize(self, _, mol):
         return self.static_parameterize(mol)
 
     def parameterize(self, mol):
@@ -489,7 +489,7 @@ class AM1BCCHandler(SerializableMixIn):
         self.params = []
         self.props = None
 
-    def partial_parameterize(self, mol):
+    def partial_parameterize(self, _, mol):
         return self.static_parameterize(mol)
 
     def parameterize(self, mol):

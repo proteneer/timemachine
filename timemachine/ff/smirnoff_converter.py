@@ -9,7 +9,7 @@ from xml.dom import minidom
 import numpy as np
 from openmm import unit
 
-from timemachine.ff.charges import AM1CCC_CHARGES
+from timemachine.ff.charges import AM1BCC_CHARGES, AM1CCC_CHARGES, SIMPLE_CHARGES
 
 
 # (ytz): lol i think i wrote this originally
@@ -96,7 +96,7 @@ tags = [BOND_TAG, ANGLE_TAG, PROPER_TAG, IMPROPER_TAG, VDW_TAG]
 if __name__ == "__main__":
     parser = ArgumentParser(description="Convert an openforcefield XML FF to a timemachine FF")
     parser.add_argument("input_path", help="Path to XML ff")
-    parser.add_argument("--add_am1ccc_charges", default=False, action="store_true")
+    parser.add_argument("--charge_type", default="SC", choices=["SC", "CCC", "BCC"])
     parser.add_argument("--output_path", help="Path to write FF file", default=None)
     args = parser.parse_args()
 
@@ -186,8 +186,15 @@ if __name__ == "__main__":
                     continue
                 props[key] = val
             forcefield["LennardJones"] = {"patterns": params, "props": props}
-    if args.add_am1ccc_charges:
+    if args.charge_type == "CCC":
         forcefield["AM1CCC"] = AM1CCC_CHARGES
+    elif args.charge_type == "SC":
+        forcefield["SimpleCharge"] = SIMPLE_CHARGES
+    elif args.charge_type == "BCC":
+        forcefield["AM1BCC"] = AM1BCC_CHARGES
+    else:
+        assert False, "Unknown charge type"
+
     stream = None
     if args.output_path is not None:
         stream = open(args.output_path, "w")
