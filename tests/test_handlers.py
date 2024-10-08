@@ -581,6 +581,20 @@ def test_am1ccc_throws_error_on_phosphorus():
     assert "unsupported element" in str(e)
 
 
+@pytest.mark.parametrize(
+    "am1bcc_ff", ["smirnoff_1_1_0_am1bcc.py", "smirnoff_2_0_0_am1bcc.py", "smirnoff_2_2_0_am1bcc.py"]
+)
+def test_am1bcc_handles_phosphorus(am1bcc_ff):
+    """Verify that the AM1BCC forcefields handle phosphorus, unlike the CCC forcefields"""
+    ff = Forcefield.load_from_file(am1bcc_ff)
+
+    # contains phosphorus
+    smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
+    mol = Chem.AddHs(Chem.MolFromSmiles(smi))
+
+    _ = ff.q_handle.parameterize(mol)
+
+
 def test_am1_differences():
     ff = Forcefield.load_default()
 
