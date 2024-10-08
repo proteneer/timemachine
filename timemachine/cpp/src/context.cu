@@ -70,7 +70,8 @@ void Context::_verify_coords_and_box(const double *coords_buffer, const double *
     const double largest_magnitude_coord = *std::max_element(
         coords_buffer, coords_buffer + N_ * 3, [](const double &a, const double &b) { return abs(a) < abs(b); });
     if (max_box_dim * 100.0 < abs(largest_magnitude_coord)) {
-        throw std::runtime_error("simulation unstable: coordinates order of magnitude larger than max box dimension");
+        throw std::runtime_error(
+            "simulation unstable: coordinates two orders of magnitude larger than max box dimension");
     }
 }
 
