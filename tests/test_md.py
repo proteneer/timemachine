@@ -599,7 +599,7 @@ def test_multiple_steps_local_no_free_particles():
     k = 1.0
 
     rng = np.random.default_rng(seed)
-    x0 = rng.uniform(1, size=(N, D)).astype(dtype=np.float64) * 2
+    x0 = rng.uniform(0.0, 1, size=(N, D)).astype(dtype=np.float64) * 2
 
     E = 2
 
@@ -610,8 +610,8 @@ def test_multiple_steps_local_no_free_particles():
 
     bps = [test_nrg.bind(params).bound_impl]
 
-    masses = rng.uniform(1.0, size=N)
-    v0 = rng.uniform(1.0, size=(x0.shape[0], x0.shape[1]))
+    masses = rng.uniform(0.0, 1.0, size=N)
+    v0 = rng.uniform(0.0, 1.0, size=(x0.shape[0], x0.shape[1]))
 
     # Select the last particle the local idxs
     local_idxs = np.array([N - 1], dtype=np.int32)
