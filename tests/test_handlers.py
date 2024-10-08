@@ -10,7 +10,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, ONE_4PI_EPS0
-from timemachine.fe import utils
+from timemachine.fe import topology, utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
@@ -593,6 +593,17 @@ def test_am1bcc_handles_phosphorus(am1bcc_ff):
     mol = Chem.AddHs(Chem.MolFromSmiles(smi))
 
     _ = ff.q_handle.parameterize(mol)
+
+    lamb = 0.0
+
+    base_topo = topology.BaseTopology(mol, ff)
+    base_topo.parameterize_nonbonded(
+        ff.q_handle.params,
+        ff.q_handle_intra.params,
+        ff.lj_handle.params,
+        ff.lj_handle_intra.params,
+        lamb,
+    )
 
 
 def test_am1_differences():
