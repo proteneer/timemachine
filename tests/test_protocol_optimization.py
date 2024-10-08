@@ -206,7 +206,7 @@ def test_greedy_overlap_on_st_vacuum():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     ff = Forcefield.load_default()
     bisection_result = estimate_relative_free_energy_bisection(
-        mol_a, mol_b, core, ff, None, n_windows=48, min_overlap=2.0 / 3
+        mol_a, mol_b, core, ff, None, n_windows=48, min_overlap=2 / 3
     )
 
     # get MBAR inputs, lambdas
