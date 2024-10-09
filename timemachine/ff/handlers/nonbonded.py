@@ -89,7 +89,8 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
 
     oemol = convert_to_oe(mol)
 
-    # recover the original atom order in case modified by SetCanonOrder(True)
+    # this is to recover the ordering of atoms from input mol (current state of oemol),
+    # since canonicalization in oe_generate_conformations(oemol) may modify oemol's atom order in-place
     for i, atom in enumerate(oemol.GetAtoms()):
         atom.SetMapIdx(i + 1)
 
