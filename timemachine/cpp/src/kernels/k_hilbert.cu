@@ -2,10 +2,10 @@
 
 namespace timemachine {
 
-// k_coords_to_kv_gather converts the coords and boxes to floats for performance
-// and does not impact the precision of the kernels.
+// k_coords_to_kv_gather assigns coordinates to the relevant hilbert curve bin.
 // Note that this kernel requires the use of double precision as imaging into the home box
-// as expected, with float precision can be outside of the home box for coordinates with large magnitudes
+// with float precision can result in the final coordinates being outside of the home box for
+// coordinates with large magnitudes.
 void __global__ k_coords_to_kv_gather(
     const int N,
     const unsigned int *__restrict__ atom_idxs,
