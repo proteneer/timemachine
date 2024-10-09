@@ -9,14 +9,15 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.10 REQUIRED)
 find_package(PythonLibs 3.10 REQUIRED)
 
-string(APPEND CMAKE_CXX_FLAGS "-Werror -Wall -Wextra")
+set(COMMON_COMPILER_FLAGS, "-Werror -Wall -Wextra -O3")
 
-string(APPEND CMAKE_CUDA_FLAGS "-O3 -lineinfo")
+string(APPEND CMAKE_CXX_FLAGS "${COMMON_COMPILER_FLAGS}")
+string(APPEND CMAKE_CUDA_FLAGS "${COMMON_COMPILER_FLAGS}")
+
 string(APPEND CMAKE_CUDA_FLAGS
-  " -Werror all-warnings"
+  " -lineinfo"  # Disabling lineinfo reduces .so file by ~40MB
   " -Wall"
   " -Wno-sign-compare"
-  " -Wextra"
   " -Wno-unused-parameter"
   " -Wreorder"
   " -Wfloat-conversion"
