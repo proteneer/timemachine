@@ -3,6 +3,8 @@
 
 namespace timemachine {
 
+namespace {
+
 template <typename T> T *allocate_pinned_host_memory(const std::size_t length) {
     if (length < 1) {
         throw std::runtime_error("device buffer length must at least be 1");
@@ -11,6 +13,8 @@ template <typename T> T *allocate_pinned_host_memory(const std::size_t length) {
     gpuErrchk(cudaMallocHost(&buffer, length * sizeof(T)));
     return buffer;
 }
+
+} // namespace
 
 template <typename T>
 PinnedHostBuffer<T>::PinnedHostBuffer(const std::size_t length)
