@@ -6,7 +6,7 @@
 
 namespace timemachine {
 
-template <typename T> T *allocate(const std::size_t length) {
+template <typename T> T *allocate_gpu_memory(const std::size_t length) {
     T *buffer;
     cudaSafeMalloc(&buffer, length * sizeof(T));
     return buffer;
@@ -19,7 +19,7 @@ template <typename T> DeviceBuffer<T>::DeviceBuffer(const std::vector<T> &vec) :
 template <typename T> DeviceBuffer<T>::DeviceBuffer() : DeviceBuffer(0) {}
 
 template <typename T>
-DeviceBuffer<T>::DeviceBuffer(const std::size_t length) : length(length), data(allocate<T>(length)) {}
+DeviceBuffer<T>::DeviceBuffer(const std::size_t length) : length(length), data(allocate_gpu_memory<T>(length)) {}
 
 template <typename T> void DeviceBuffer<T>::realloc(const size_t new_length) {
     // Print a warning if buffers were non-zero when resized, this can have real performance impacts
@@ -29,7 +29,7 @@ template <typename T> void DeviceBuffer<T>::realloc(const size_t new_length) {
     // Free the existing data
     gpuErrchk(cudaFree(data));
     this->length = new_length;
-    this->data = allocate<T>(new_length);
+    this->data = allocate_gpu_memory<T>(new_length);
 }
 
 template <typename T> DeviceBuffer<T>::~DeviceBuffer() {
