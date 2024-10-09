@@ -13,12 +13,16 @@
 
 namespace timemachine {
 
+namespace {
+
 // Struct representing the CUB < operation
 struct LessThan {
     int compare;
     CUB_RUNTIME_FUNCTION __device__ __forceinline__ explicit LessThan(int compare) : compare(compare) {}
     CUB_RUNTIME_FUNCTION __device__ __forceinline__ bool operator()(const int &a) const { return (a < compare); }
 };
+
+} // namespace
 
 LocalMDPotentials::LocalMDPotentials(
     const int N, const std::vector<std::shared_ptr<BoundPotential>> &bps, bool freeze_reference, double temperature)
