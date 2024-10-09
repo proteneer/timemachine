@@ -9,7 +9,15 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.10 REQUIRED)
 find_package(PythonLibs 3.10 REQUIRED)
 
+set(DEBUG_BUILD "$ENV{DEBUG_BUILD}")
+
 set(COMMON_COMPILER_FLAGS "-Wall -Wextra")
+if (NOT DEBUG_BUILD)
+  string(APPEND COMMON_COMPILER_FLAGS " -O3")
+else()
+  string(APPEND COMMON_COMPILER_FLAGS " -g")
+endif()
+
 
 string(APPEND CMAKE_CXX_FLAGS "${COMMON_COMPILER_FLAGS} -Werror")
 string(APPEND CMAKE_CUDA_FLAGS "${COMMON_COMPILER_FLAGS}")
@@ -24,7 +32,8 @@ string(APPEND CMAKE_CUDA_FLAGS
   " -Wno-deprecated-declarations"
   " -restrict"  # Warn if device pointers are not restricted
 )
-message(${CMAKE_CUDA_FLAGS})
+message("C++ Compiler Flags" ${CMAKE_CXX_FLAGS})
+message("Cuda Compiler Flags" ${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	get_filename_component(PARENT_DIR ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
