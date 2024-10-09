@@ -7,6 +7,7 @@ from warnings import warn
 import jax
 import numpy as np
 from numpy.typing import NDArray
+from pymbar.utils import kln_to_kn
 
 from timemachine.constants import BOLTZ
 from timemachine.fe import model_utils, topology
@@ -281,37 +282,7 @@ class SimulationResult:
     def compute_u_kn(self) -> Tuple[NDArray, NDArray]:
         """get MBAR input matrices u_kn and N_k"""
 
-        # TODO: there's probably a much faster idiom for this -- shouldn't take a whole minute...
-        N_k = [len(traj.frames) for traj in self.trajectories]
-        N, K = sum(N_k), len(N_k)
-        assert len(self.final_result.initial_states) == K
-
-        kBTs = [BOLTZ * state.integrator.temperature for state in self.final_result.initial_states]
-
-        # assume all states are compatible
-        s_0 = self.final_result.initial_states[0]
-        for s in self.final_result.initial_states[1:]:
-            assert_ensembles_compatible(s_0, s)
-            assert_potentials_compatible(s_0.potentials, s.potentials)
-
-        u_kn = np.zeros((K, N))
-        for k, initial_state in enumerate(self.final_result.initial_states):
-            kBT = kBTs[k]
-
-            bound_impl = initial_state.to_bound_impl()
-
-            def u(x, box):
-                # TODO: bound_impl.execute_batch
-                U = bound_impl.execute(x, box, compute_du_dx=False, compute_u=True)[1]
-                return U / kBT
-
-            n = 0
-            for traj in self.trajectories:
-                for x, box in zip(traj.frames, traj.boxes):
-                    u_kn[k, n] = u(x, box)
-                    n += 1
-            assert n == N
-        return u_kn, np.array(N_k)
+        return compute_u_kn(self.trajectories, self.final_result.initial_states)
 
 
 @dataclass
@@ -1166,14 +1137,22 @@ def compute_potential_matrix(
 
 
 def make_u_kl_fxn(trajs, initial_states):
-    """fxn(k, l) = "trajs[k] evaluated in ensembles[k]" """
+    """fxn(k, l) = "trajs[k] evaluated in ensembles[l]"
+
+    usage note: be careful of axis-ordering convention, see: https://github.com/proteneer/timemachine/issues/1100
+    """
 
     summed_potentials = [make_summed_potential(s.potentials) for s in initial_states]
 
-    # TODO: validate assumption that initial states all have compatible potentials / ensembles
+    # validate assumption that initial states all have compatible potentials / ensembles
+    kBTs = [BOLTZ * state.integrator.temperature for state in initial_states]
+    s_0 = initial_states[0]
+    for s in initial_states[1:]:
+        assert_ensembles_compatible(s_0, s)
+        assert_potentials_compatible(s_0.potentials, s.potentials)
+
     sp = summed_potentials[0]
     sp_gpu = sp.potential.to_gpu(np.float32)
-    temperature = initial_states[0].integrator.temperature
 
     def batch_U_fxn(xs, ps, bs, x_idxs, p_idxs):
         Us = sp_gpu.unbound_impl.execute_batch_sparse(xs, ps, bs, x_idxs, p_idxs, False, False, True)[2]
@@ -1190,7 +1169,7 @@ def make_u_kl_fxn(trajs, initial_states):
 
         Us = batch_U_fxn(coords, params, boxes, coords_batch_idxs, params_batch_idxs)
 
-        return Us / (BOLTZ * temperature)
+        return Us / kBTs[l]
 
     return u_kl
 
@@ -1223,6 +1202,23 @@ def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
     else:
         # assert (A, B) are compatible NVT ensembles
         assert (state_a.box0 == state_b.box0).all()
+
+
+def compute_u_kn(trajs, initial_states) -> Tuple[NDArray, NDArray]:
+    """makes K^2 calls to execute_batch_selective"""
+
+    u_kl = make_u_kl_fxn(trajs, initial_states)
+    N_k = [len(traj.frames) for traj in trajs]
+    K = len(N_k)
+    assert len(initial_states) == K
+
+    u_kln = np.nan * np.zeros((K, K, max(N_k)))
+    for k in range(K):
+        for l in range(K):
+            u_kln[k, l, : N_k[k]] = u_kl(k, l)
+
+    u_kn = kln_to_kn(u_kln, N_k)
+    return u_kn, np.array(N_k)
 
 
 def run_sims_hrex(
