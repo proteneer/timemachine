@@ -1165,6 +1165,36 @@ def compute_potential_matrix(
     return U_kl
 
 
+def make_u_kl_fxn(trajs, initial_states):
+    """fxn(k, l) = "trajs[k] evaluated in ensembles[k]" """
+
+    summed_potentials = [make_summed_potential(s.potentials) for s in initial_states]
+
+    # TODO: validate assumption that initial states all have compatible potentials / ensembles
+    sp = summed_potentials[0]
+    sp_gpu = sp.potential.to_gpu(np.float32)
+    temperature = initial_states[0].integrator.temperature
+
+    def batch_U_fxn(xs, ps, bs, x_idxs, p_idxs):
+        Us = sp_gpu.unbound_impl.execute_batch_sparse(xs, ps, bs, x_idxs, p_idxs, False, False, True)[2]
+        return np.nan_to_num(Us, nan=+np.inf)
+
+    def u_kl(k, l):
+        coords = trajs[k].frames
+        boxes = trajs[k].boxes
+
+        params = np.array([summed_potentials[l].params])
+
+        coords_batch_idxs = np.arange(len(coords)).astype(np.uint32)
+        params_batch_idxs = np.zeros_like(coords_batch_idxs).astype(np.uint32)
+
+        Us = batch_U_fxn(coords, params, boxes, coords_batch_idxs, params_batch_idxs)
+
+        return Us / (BOLTZ * temperature)
+
+    return u_kl
+
+
 def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
     """check that xvb from state_a can be swapped with xvb from state_b (up to timestep error),
     with swap acceptance probability that depends only on U_a, U_b, kBT"""
