@@ -24,6 +24,7 @@ from timemachine.fe.free_energy import (
     WaterSamplingParams,
     get_context,
 )
+from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
@@ -448,16 +449,22 @@ def run_single_topology_benchmarks(
         x0 = initial_state.x0[: len(host_config.conf)]
         v0 = np.zeros_like(x0)
 
+        harmonic_bond_potential = get_bound_potential_by_type(host_fns, HarmonicBond).potential
+        bond_list = get_bond_list(harmonic_bond_potential)
+        dt = 2.5e-3
+        hmr_masses = apply_hmr(host_masses, bond_list)
+
         for barostat_interval in [0, 25]:
             benchmark(
                 config,
                 f"{stage}-apo",
-                np.array(host_masses),
+                np.array(hmr_masses),
                 x0,
                 v0,
                 initial_state.box0,
                 host_fns,
                 barostat_interval=barostat_interval,
+                dt=dt,
             )
 
         barostat_interval = initial_state.barostat.interval
@@ -503,17 +510,13 @@ def benchmark_dhfr(config: BenchmarkConfig):
     x0 = host_conf
     v0 = np.zeros_like(host_conf)
 
+    harmonic_bond_potential = get_bound_potential_by_type(host_fns, HarmonicBond).potential
+    bond_list = get_bond_list(harmonic_bond_potential)
+    dt = 2.5e-3
+    hmr_masses = apply_hmr(host_masses, bond_list)
+
     for barostat_interval in [0, 25]:
-        benchmark(
-            config,
-            "dhfr-apo",
-            host_masses,
-            x0,
-            v0,
-            box,
-            host_fns,
-            barostat_interval=barostat_interval,
-        )
+        benchmark(config, "dhfr-apo", hmr_masses, x0, v0, box, host_fns, barostat_interval=barostat_interval, dt=dt)
 
 
 def benchmark_hif2a(config: BenchmarkConfig):
@@ -593,6 +596,7 @@ def benchmark_ahfe(config: BenchmarkConfig):
         initial_state.box0,
         initial_state.potentials,
         barostat_interval=barostat_interval,
+        dt=initial_state.integrator.dt,
     )
     if host_config is not None:
         benchmark_local(
@@ -604,6 +608,7 @@ def benchmark_ahfe(config: BenchmarkConfig):
             initial_state.box0,
             initial_state.potentials,
             initial_state.ligand_idxs,
+            dt=initial_state.integrator.dt,
         )
 
 
