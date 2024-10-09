@@ -723,48 +723,6 @@ def test_compute_or_load_am1_charges():
         np.testing.assert_array_equal(fresh, cached)
 
 
-@pytest.fixture
-def mol_with_precomputed_charges():
-    """Provide a test mol with partial charges precomputed on one or more platforms"""
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = utils.read_sdf(path_to_ligand)
-    test_mol = mols[0]
-
-    # fmt: off
-    precomputed_charges = dict()
-    precomputed_charges['default'] = np.array([
-        -3.38348387, 0.25978743, 2.31451279, 1.10775057, -2.11342492,
-        0.95664012, -9.15833184, 0.04314074, -2.48495405, 1.87178973,
-        -1.65537874, 0.5919476, -1.69015062, 1.19686096, -1.04068203,
-        -1.52631013, 0.3024567, -1.25615, -1.33535922, 33.75810448,
-        -10.85025082, -10.85025082, -1.72480465, -0.10360851, -1.48352303,
-        -1.72480465, -11.3143085, 2.74214825, 1.64689193, 1.55907812,
-        1.7000517, 1.82546644, 2.11118549, 1.99555415, 1.98529933,
-        2.86355521, 2.86355521])
-    precomputed_charges['ubuntu-20.04.2'] = np.array([
-        -3.35519473,   0.13307623,   2.32818576,   1.13026392,  -2.03115102,
-        +0.98646147,  -9.24661759,   0.07779478,  -2.51076771,   1.89548163,
-        -1.64700996,   0.55752928,  -1.68555374,   1.20947315,  -1.03832466,
-        -1.5377435 ,   0.28689773,  -1.26876219,  -1.32581171,  33.73299761,
-        -10.88561234, -10.88561234, -1.72987313,  -0.09971877,  -1.48635191,
-        -1.72987313, -11.30617561,   2.70973383,   1.73706319,   1.55507051,
-        +1.70370574,   1.82923834,   2.12108657,   2.0012119 ,   2.01146672,
-        +2.88170739,   2.88170739])
-    # fmt: on
-
-    return dict(mol=test_mol, precomputed_charges=precomputed_charges)
-
-
-@pytest.mark.skip(reason="Not particularly informative")
-def test_am1_platform_dependence(mol_with_precomputed_charges):
-    """Assert AM1 charges computed on test runner ~equal to those previously computed on 1 of 3 supported platforms"""
-
-    mol = mol_with_precomputed_charges["mol"]
-    local_am1_charges = nonbonded.compute_or_load_am1_charges(mol)
-    allowable_charges = mol_with_precomputed_charges["precomputed_charges"].values()
-    assert any(np.isclose(local_am1_charges, expected_charges).all() for expected_charges in allowable_charges)
-
-
 def assert_permutation_equivariance(mol, fxn, perm):
     """fxn(mol[perm]) == fxn(mol)[perm]"""
     mol = deepcopy(mol)
