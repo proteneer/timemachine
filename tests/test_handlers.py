@@ -11,6 +11,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, ONE_4PI_EPS0
+from timemachine.datasets import fetch_freesolv
 from timemachine.fe import topology, utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
@@ -740,8 +741,6 @@ def test_partial_charge_equivariance_on_freesolv(mol_idx):
 
     seed = 2024
     rng = np.random.default_rng(seed)
-
-    from timemachine.datasets import fetch_freesolv
 
     mol = fetch_freesolv()[mol_idx]
     perm = rng.permutation(mol.GetNumAtoms())
