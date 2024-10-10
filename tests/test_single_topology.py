@@ -807,6 +807,8 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
     if use_tiny_mol:
         mol_a = ligand_from_smiles("S")
         mol_b = ligand_from_smiles("O")
+        # Align the mols that the heavy atom has a common position
+        Chem.rdMolAlign.AlignMol(mol_a, mol_b, atomMap=[(0, 0)])
     else:
         with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
             mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
@@ -832,11 +834,13 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
         vacuum_potentials = vacuum_system.get_U_fns()
         val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_potentials, solvent_box, precision=precision)
         vacuum_u, vacuum_grad = val_and_grad_fn(ligand_conf)
+        minimizer.check_force_norm(-vacuum_grad)
 
         solvent_system = st.combine_with_host(solv_sys, lamb, solvent_conf.shape[0], ff, solvent_top)
         solvent_potentials = solvent_system.get_U_fns()
         solv_val_and_grad_fn = minimizer.get_val_and_grad_fn(solvent_potentials, solvent_box, precision=precision)
         solvent_u, solvent_grad = solv_val_and_grad_fn(combined_conf)
+        minimizer.check_force_norm(-solvent_grad)
         return vacuum_grad, vacuum_u, solvent_grad, solvent_u
 
     n_lambdas = 3
@@ -1059,9 +1063,9 @@ def test_combine_with_host_split(precision, rtol, atol):
     )
 
 
-def ligand_from_smiles(smiles):
+def ligand_from_smiles(smiles, seed: int = 2024):
     mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
-    AllChem.Compute2DCoords(mol)
+    AllChem.EmbedMolecule(mol, randomSeed=seed)
     set_mol_name(mol, smiles)
     return mol
 

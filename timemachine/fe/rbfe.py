@@ -315,7 +315,7 @@ def setup_optimized_initial_state(
 
 
 def optimize_coords_state(
-    potentials: Iterable[BoundPotential],
+    potentials: Sequence[BoundPotential],
     x0: NDArray,
     box: NDArray,
     free_idxs: List[int],
