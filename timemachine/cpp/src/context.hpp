@@ -83,7 +83,7 @@ private:
 
     void _ensure_local_md_intialized();
 
-    void _verify_box(const double *box_buffer, cudaStream_t stream);
+    void _verify_coords_and_box(const double *coords_buffer, const double *box_buffer, cudaStream_t stream);
 
     int step_;
 
