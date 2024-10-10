@@ -707,7 +707,9 @@ def test_chiral_inversion_in_single_topology_runs(well_aligned):
     ff = Forcefield.load_default()
 
     atom_map = make_chiral_flip_pair(well_aligned)
-    _ = run_vacuum(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, very_short_hrex_params, n_windows=3)
+    _ = run_vacuum(
+        atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, very_short_hrex_params, n_windows=3, min_overlap=0.667
+    )
 
 
 @pytest.mark.nightly(reason="slow")

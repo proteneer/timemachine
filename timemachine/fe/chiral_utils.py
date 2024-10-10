@@ -4,7 +4,7 @@ from functools import partial
 from typing import Callable, Iterator, List, Mapping, Sequence, Set, Tuple
 
 import numpy as np
-from jax import jit
+from jax import jit, vmap
 from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem.rdchem import BondType
@@ -434,17 +434,10 @@ def xs_ab_from_xs(xs: NDArray, atom_map):
         Returns a tuple of the mol_a and mol_b frames.
 
     """
-    # Import here to avoid circular, TBD Deboggle
-    from timemachine.fe.cif_writer import convert_single_topology_mols
-
-    n_a = atom_map.mol_a.GetNumAtoms()
-    xs_a_, xs_b_ = [], []
-    for x in xs:
-        combined = convert_single_topology_mols(x, atom_map)
-        xs_a_.append(combined[:n_a])
-        xs_b_.append(combined[n_a:])
-    xs_a = np.array(xs_a_)
-    xs_b = np.array(xs_b_)
+    a_to_c_mapping = np.array([[a, c] for a, c in enumerate(atom_map.a_to_c)])
+    b_to_c_mapping = np.array([[b, c] for b, c in enumerate(atom_map.b_to_c)])
+    xs_a = xs[:, a_to_c_mapping[:, 1]]
+    xs_b = xs[:, b_to_c_mapping[:, 1]]
     return xs_a, xs_b
 
 
@@ -469,14 +462,17 @@ def make_chiral_flip_heatmaps(simulation_result, atom_map):
     mol_b_chiral_conflicts = []
     U_a, U_b = make_chiral_restr_fxns(atom_map.mol_a, atom_map.mol_b)
 
+    batch_U_a = vmap(U_a)
+    batch_U_b = vmap(U_b)
+
     for traj in simulation_result.frames:
         # Truncate off just the ligands, to handle all type of simulations
         # Use list comprehension to avoid loading the complete frames into memory traj is a StoredArrays object
         xs = np.array([frame[-atom_map.get_num_atoms() :] for frame in traj])
         xs_a, xs_b = xs_ab_from_xs(xs, atom_map)
-        # TODO: probably vmap
-        mol_a_chiral_conflicts.append(np.array([U_a(x) for x in xs_a]))
-        mol_b_chiral_conflicts.append(np.array([U_b(x) for x in xs_b]))
+
+        mol_a_chiral_conflicts.append(batch_U_a(xs_a))
+        mol_b_chiral_conflicts.append(batch_U_b(xs_b))
 
     mol_a_chiral_conflicts = np.array(mol_a_chiral_conflicts)
     mol_b_chiral_conflicts = np.array(mol_b_chiral_conflicts)
