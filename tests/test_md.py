@@ -988,7 +988,8 @@ def test_unstable_simulation_failure():
 
     rng = np.random.default_rng(seed)
 
-    # Coords will be significantly large than the box, will trigger an invalid memory access if not careful
+    # Coords will be significantly larger than the box, previously would trigger an invalid memory access
+    # should now trigger a Runtime exception
     coords = rng.uniform(-1e10, 1e10, size=coords.shape).astype(dtype=np.float64)
 
     bps = []
