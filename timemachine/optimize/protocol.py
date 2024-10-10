@@ -297,7 +297,12 @@ def make_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k):
 
 
 # optimization approach: specify [d(i,i+1) ~= target_distance]
-def greedily_optimize_protocol(distance_fxn: DistanceFxn, target_distance=0.5, max_iterations=1000) -> Array:
+def greedily_optimize_protocol(
+    distance_fxn: DistanceFxn,
+    target_distance=0.5,
+    max_iterations=1000,
+    bisection_xtol=1e-4,
+) -> Array:
     """Optimize a lambda protocol from "left to right"
 
     Sequentially pick next_lam so that
@@ -317,6 +322,7 @@ def greedily_optimize_protocol(distance_fxn: DistanceFxn, target_distance=0.5, m
             f=lambda trial_lam: distance_fxn(prev_lam, trial_lam) - target_distance,
             a=prev_lam,
             b=1.0,
+            xtol=bisection_xtol,
         )
         protocol.append(next_lam)
 
