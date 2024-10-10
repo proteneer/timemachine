@@ -15,6 +15,29 @@
 
 namespace timemachine {
 
+static bool is_summed_potential(std::shared_ptr<Potential> pot) {
+    if (std::shared_ptr<FanoutSummedPotential> fanned_potential = std::dynamic_pointer_cast<FanoutSummedPotential>(pot);
+        fanned_potential != nullptr) {
+        return true;
+    } else if (std::shared_ptr<SummedPotential> summed_potential = std::dynamic_pointer_cast<SummedPotential>(pot);
+               summed_potential != nullptr) {
+        return true;
+    }
+    return false;
+}
+
+static bool is_nonbonded_all_pairs_potential(std::shared_ptr<Potential> pot) {
+    if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
+        nb_pot) {
+        return true;
+    } else if (std::shared_ptr<NonbondedAllPairs<double>> nb_pot =
+                   std::dynamic_pointer_cast<NonbondedAllPairs<double>>(pot);
+               nb_pot) {
+        return true;
+    }
+    return false;
+}
+
 void verify_atom_idxs(const int N, const std::vector<int> &atom_idxs, const bool allow_empty) {
     if (atom_idxs.size() == 0) {
         if (allow_empty) {
@@ -33,29 +56,6 @@ void verify_atom_idxs(const int N, const std::vector<int> &atom_idxs, const bool
     if (*std::min_element(atom_idxs.begin(), atom_idxs.end()) < 0) {
         throw std::runtime_error("index values must be greater or equal to zero");
     }
-}
-
-bool is_summed_potential(std::shared_ptr<Potential> pot) {
-    if (std::shared_ptr<FanoutSummedPotential> fanned_potential = std::dynamic_pointer_cast<FanoutSummedPotential>(pot);
-        fanned_potential != nullptr) {
-        return true;
-    } else if (std::shared_ptr<SummedPotential> summed_potential = std::dynamic_pointer_cast<SummedPotential>(pot);
-               summed_potential != nullptr) {
-        return true;
-    }
-    return false;
-}
-
-bool is_nonbonded_all_pairs_potential(std::shared_ptr<Potential> pot) {
-    if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
-        nb_pot) {
-        return true;
-    } else if (std::shared_ptr<NonbondedAllPairs<double>> nb_pot =
-                   std::dynamic_pointer_cast<NonbondedAllPairs<double>>(pot);
-               nb_pot) {
-        return true;
-    }
-    return false;
 }
 
 // get_nonbonded_all_pair_cutoff_with_padding returns the cutoff plus padding. Using these value can be used

@@ -75,6 +75,8 @@ pip install -e .
 or
 ```shell
 make build  # Must have installed dev dependencies for this to work
+
+DEBUG_BUILD=true make build  # Disable optimizations and build with debugging information
 ```
 
 ### Running Tests

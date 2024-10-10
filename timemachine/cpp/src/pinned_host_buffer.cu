@@ -3,7 +3,7 @@
 
 namespace timemachine {
 
-template <typename T> T *allocate(const std::size_t length) {
+template <typename T> static T *allocate_pinned_host_memory(const std::size_t length) {
     if (length < 1) {
         throw std::runtime_error("device buffer length must at least be 1");
     }
@@ -13,7 +13,8 @@ template <typename T> T *allocate(const std::size_t length) {
 }
 
 template <typename T>
-PinnedHostBuffer<T>::PinnedHostBuffer(const std::size_t length) : size(length * sizeof(T)), data(allocate<T>(length)) {}
+PinnedHostBuffer<T>::PinnedHostBuffer(const std::size_t length)
+    : size(length * sizeof(T)), data(allocate_pinned_host_memory<T>(length)) {}
 
 template <typename T> PinnedHostBuffer<T>::~PinnedHostBuffer() {
     // TODO: the file/line context reported by gpuErrchk on failure is
