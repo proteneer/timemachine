@@ -6,15 +6,11 @@
 
 namespace timemachine {
 
-namespace {
-
-template <typename T> T *allocate_gpu_memory(const std::size_t length) {
+template <typename T> static T *allocate_gpu_memory(const std::size_t length) {
     T *buffer;
     cudaSafeMalloc(&buffer, length * sizeof(T));
     return buffer;
 }
-
-} // namespace
 
 template <typename T> DeviceBuffer<T>::DeviceBuffer(const std::vector<T> &vec) : DeviceBuffer(vec.size()) {
     this->copy_from(&vec[0]);

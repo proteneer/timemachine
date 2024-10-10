@@ -15,9 +15,7 @@
 
 namespace timemachine {
 
-namespace {
-
-bool is_summed_potential(std::shared_ptr<Potential> pot) {
+static bool is_summed_potential(std::shared_ptr<Potential> pot) {
     if (std::shared_ptr<FanoutSummedPotential> fanned_potential = std::dynamic_pointer_cast<FanoutSummedPotential>(pot);
         fanned_potential != nullptr) {
         return true;
@@ -28,7 +26,7 @@ bool is_summed_potential(std::shared_ptr<Potential> pot) {
     return false;
 }
 
-bool is_nonbonded_all_pairs_potential(std::shared_ptr<Potential> pot) {
+static bool is_nonbonded_all_pairs_potential(std::shared_ptr<Potential> pot) {
     if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
         nb_pot) {
         return true;
@@ -39,8 +37,6 @@ bool is_nonbonded_all_pairs_potential(std::shared_ptr<Potential> pot) {
     }
     return false;
 }
-
-} // namespace
 
 void verify_atom_idxs(const int N, const std::vector<int> &atom_idxs, const bool allow_empty) {
     if (atom_idxs.size() == 0) {

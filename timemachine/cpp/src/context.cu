@@ -17,17 +17,13 @@
 
 namespace timemachine {
 
-namespace {
-
-bool is_barostat(std::shared_ptr<Mover> &mover) {
+static bool is_barostat(std::shared_ptr<Mover> &mover) {
     if (std::shared_ptr<MonteCarloBarostat<float>> baro = std::dynamic_pointer_cast<MonteCarloBarostat<float>>(mover);
         baro) {
         return true;
     }
     return false;
 }
-
-} // namespace
 
 Context::Context(
     int N,
