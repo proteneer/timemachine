@@ -222,7 +222,13 @@ def construct_max_work_stddev_distance(work_stddev_estimator) -> DistanceFxn:
 # (2) pair overlap
 def reweighted_pair_overlap(u_n_A, u_n_B, u_n_ref):
     """given arrays [u(x) for x in xs] (for u in {u_A, u_B, u_ref}),
-    estimate overlap(A, B) by reweighting from ref->A and ref->B"""
+    estimate overlap(A, B) by reweighting from ref->A and ref->B
+
+    Notes
+    -----
+    * see sec. 3.4 of https://pubmed.ncbi.nlm.nih.gov/25808134/ for expression being approximated
+    * TODO: describe approximation approach
+    """
     # reduced potentials -> unnormalized log probs
     log_q_A = -u_n_A
     log_q_B = -u_n_B
@@ -252,20 +258,42 @@ def reweighted_pair_overlap(u_n_A, u_n_B, u_n_ref):
     return 2 * overlap  # so that it goes to 1.0 when u_n_A == u_n_B
 
 
+def make_one_minus_similarity_fxn(sim_fxn):
+    def one_minus_f(a, b):
+        return 1 - sim_fxn(a, b)
+
+    return one_minus_f
+
+
+def make_overlap_fxn(u_lam, src_u_n):
+    def overlap_fxn(lam_a, lam_b):
+        return reweighted_pair_overlap(u_lam(lam_a), u_lam(lam_b), src_u_n)
+
+    return overlap_fxn
+
+
+def make_fast_approx_overlap_fxn(lambdas, u_kn, f_k, N_k):
+    linear_u_lam = linear_u_kn_interpolant(lambdas, np.nan_to_num(u_kn, nan=np.inf))
+    mixture_u_n = interpret_as_mixture_potential(u_kn, f_k, N_k)
+
+    return make_overlap_fxn(linear_u_lam, mixture_u_n)
+
+
+# def make_ref_overlap_fxn(x_n, box_n, batch_u_fxn, ...):
+#     def ref_u_lam(lam):
+#         return batch_u_fxn(x_n, box_n, lam)
+#
+#     return make_overlap_fxn(ref_u_lam, ...)
+#
+
+
 def make_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k):
     """make a distance function d(a,b) = 1 - overlap(a,b)
 
     where overlap(a,b) uses fast approximations: reweighting, based on linear interpolation of energies"""
-    u_lam = linear_u_kn_interpolant(lambdas, np.nan_to_num(u_kn, nan=np.inf))
-    mixture_u_n = interpret_as_mixture_potential(u_kn, f_k, N_k)
-
-    def approximate_overlap(lam_i, lam_j):
-        return reweighted_pair_overlap(u_lam(lam_i), u_lam(lam_j), mixture_u_n)
-
-    def approximate_overlap_distance(lam_i, lam_j):
-        return 1.0 - approximate_overlap(lam_i, lam_j)
-
-    return approximate_overlap_distance
+    approx_overlap_fxn = make_fast_approx_overlap_fxn(lambdas, u_kn, f_k, N_k)
+    approx_overlap_distance = make_one_minus_similarity_fxn(approx_overlap_fxn)
+    return approx_overlap_distance
 
 
 # optimization approach: specify [d(i,i+1) ~= target_distance]
