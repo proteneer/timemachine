@@ -819,6 +819,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
     # split forcefield has different parameters for intramol and intermol terms
     ffs = load_split_forcefields()
     solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ffs.ref.water_ff, mols=[mol_a, mol_b])
+    solvent_box += np.eye(3) * 0.1
     solvent_conf = minimizer.fire_minimize_host(
         [mol_a, mol_b], HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top), ffs.ref
     )
@@ -834,19 +835,19 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
         vacuum_potentials = vacuum_system.get_U_fns()
         val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_potentials, solvent_box, precision=precision)
         vacuum_u, vacuum_grad = val_and_grad_fn(ligand_conf)
-        minimizer.check_force_norm(-vacuum_grad)
 
         solvent_system = st.combine_with_host(solv_sys, lamb, solvent_conf.shape[0], ff, solvent_top)
         solvent_potentials = solvent_system.get_U_fns()
         solv_val_and_grad_fn = minimizer.get_val_and_grad_fn(solvent_potentials, solvent_box, precision=precision)
         solvent_u, solvent_grad = solv_val_and_grad_fn(combined_conf)
-        minimizer.check_force_norm(-solvent_grad)
         return vacuum_grad, vacuum_u, solvent_grad, solvent_u
 
     n_lambdas = 3
     for lamb in np.linspace(0, 1, n_lambdas):
         # Compute the grads, potential with the ref ff
         vacuum_grad_ref, vacuum_u_ref, solvent_grad_ref, solvent_u_ref = get_vacuum_solvent_u_grads(ffs.ref, lamb)
+        minimizer.check_force_norm(-vacuum_grad_ref)
+        minimizer.check_force_norm(-solvent_grad_ref)
 
         # Compute the grads, potential with the scaled ff
         vacuum_grad_scaled, vacuum_u_scaled, solvent_grad_scaled, solvent_u_scaled = get_vacuum_solvent_u_grads(
