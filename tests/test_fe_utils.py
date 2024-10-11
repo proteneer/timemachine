@@ -218,7 +218,7 @@ def test_get_strained_atoms():
     x0 = utils.get_romol_conf(mol)
     x0[-2, :] = x0[-1, :] + 0.01
     utils.set_romol_conf(mol, x0)
-    assert model_utils.get_strained_atoms(mol, ff) == [10, 11]
+    assert model_utils.get_strained_atoms(mol, ff) == [4, 10, 11]
 
 
 def test_view_atom_mapping_3d():
