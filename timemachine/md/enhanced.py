@@ -405,7 +405,9 @@ def jax_sample_from_log_weights(weighted_samples, log_weights, size, key):
     return weighted_samples[idxs]
 
 
-def get_solvent_phase_system(mol, ff, lamb: float, box_width=3.0, margin=0.5, minimize_energy=True):
+def get_solvent_phase_system(
+    mol, ff, lamb: float, box_width: float = 3.0, margin: float = 0.5, minimize_energy: bool = True
+):
     """
     Given a mol and forcefield return a solvated system where the
     solvent has (optionally) been minimized.

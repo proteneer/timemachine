@@ -1,5 +1,5 @@
 import warnings
-from typing import Callable, Iterable, List, Optional, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -18,7 +18,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
-from timemachine.potentials import BoundPotential, HarmonicBond, Potential, SummedPotential
+from timemachine.potentials import BoundPotential, HarmonicBond, Potential, SummedPotential, make_summed_potential
 from timemachine.potentials.bonded import harmonic_positional_restraint
 from timemachine.potentials.potential import get_potential_by_type
 
@@ -427,7 +427,7 @@ def equilibrate_host_barker(
     return x_host
 
 
-def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=np.float32):
+def get_val_and_grad_fn(bps: Sequence[BoundPotential], box: NDArray, precision=np.float32):
     """
     Convert impls, box into a function that only takes in coords.
 
@@ -442,9 +442,8 @@ def get_val_and_grad_fn(bps: Iterable[BoundPotential], box: NDArray, precision=n
     Energy function with gradient
         f: R^(Nx3) -> (R^1, R^Nx3)
     """
-    summed_pot = SummedPotential([bp.potential for bp in bps], [bp.params for bp in bps])
-    params = np.concatenate([bp.params.reshape(-1) for bp in bps])
-    impl = summed_pot.to_gpu(precision).bind(params).bound_impl
+    summed_pot = make_summed_potential(bps)
+    impl = summed_pot.to_gpu(precision).bound_impl
 
     def val_and_grad_fn(coords):
         g_bp, u_bp = impl.execute(coords, box)
