@@ -594,7 +594,6 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 if src_res_template_name == "HOH":
                     # Skip waters
                     continue
-                bond_idxs.append((src_atom.index, dst_atom.index))
                 residue_bond_kv = self.res_to_bonds_to_param_idxs[src_res_template_name]
                 # we have to do one extra level of indirection where by we want the src_atom, dst_atom to be matched
                 # to the corresponding src_template_atom, dst_template_atom in the template definitions themselves.
@@ -606,7 +605,9 @@ class EnvironmentBCCHandler(SerializableMixIn):
                     param_idxs.append(residue_bond_kv[(tmpl_dst_idx, tmpl_src_idx)])
                     signs.append(-1.0)
                 else:
-                    assert 0
+                    # skip if bond is not present
+                    continue
+                bond_idxs.append((src_atom.index, dst_atom.index))
 
         self.bond_idxs = np.array(bond_idxs)
         self.param_idxs = np.array(param_idxs)
