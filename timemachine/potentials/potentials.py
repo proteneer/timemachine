@@ -262,7 +262,7 @@ class SummedPotential(Potential):
         return summed.unflatten_params(params, self.params_shapes)
 
 
-def make_summed_potential(bps: List[BoundPotential]):
+def make_summed_potential(bps: Sequence[BoundPotential]):
     potentials = [bp.potential for bp in bps]
     params = [bp.params for bp in bps]
     return SummedPotential(potentials, params).bind_params_list(params)

@@ -13,7 +13,7 @@ from timemachine.integrator import langevin_coefficients
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerletIntegrator, custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.enhanced import get_solvent_phase_system
-from timemachine.md.minimizer import check_force_norm
+from timemachine.md.minimizer import check_force_norm, replace_conformer_with_minimized
 from timemachine.potentials import HarmonicBond, SummedPotential
 from timemachine.potentials.potential import get_potential_by_type
 from timemachine.testsystems.ligands import get_biphenyl
@@ -398,6 +398,8 @@ def test_multiple_steps_local_consistency(freeze_reference):
     - Assert that wrapping potentials within a SummedPotential returns identical frames"""
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    # Minimize the starting pose
+    replace_conformer_with_minimized(mol, ff)
 
     temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
