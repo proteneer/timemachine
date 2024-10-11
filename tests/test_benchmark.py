@@ -104,7 +104,7 @@ def hi2fa_test_frames():
     return generate_hif2a_frames(100, 10, seed=2022, barostat_interval=20)
 
 
-def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barostat_interval: int = 5, hmr: bool = True):
+def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barostat_interval: int = 5):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, forcefield)
@@ -117,20 +117,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms, host_top)
     initial_state = prepare_single_topology_initial_state(st, host_config)
 
-    ligand_idxs = np.arange(len(host_coords), len(initial_state.x0), dtype=np.int32)
-
-    temperature = constants.DEFAULT_TEMP
-    pressure = constants.DEFAULT_PRESSURE
-
-    harmonic_bond_potential = get_bound_potential_by_type(initial_state.potentials, HarmonicBond).potential
-    bond_list = get_bond_list(harmonic_bond_potential)
-    masses = initial_state.integrator.masses
-    if hmr:
-        dt = 2.5e-3
-        masses = apply_hmr(masses, bond_list)
-    if seed is None:
-        seed = np.random.randint(np.iinfo(np.int32).max)
-    intg = LangevinIntegrator(temperature, dt, 1.0, np.array(masses), seed).impl()
+    intg = initial_state.integrator.impl()
 
     bps = []
 
@@ -140,22 +127,16 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     movers = []
 
     if barostat_interval > 0:
-        group_idxs = get_group_indices(bond_list, len(masses))
-        baro = MonteCarloBarostat(
-            initial_state.x0.shape[0],
-            pressure,
-            temperature,
-            group_idxs,
-            barostat_interval,
-            seed,
-        )
+        baro = initial_state.barostat
+        assert baro is not None
         baro_impl = baro.impl(bps)
+        baro_impl.set_interval(barostat_interval)
         movers.append(baro_impl)
 
     ctxt = custom_ops.Context(
         initial_state.x0,
         initial_state.v0,
-        host_box,
+        initial_state.box0,
         intg,
         bps,
         movers=movers,
@@ -163,7 +144,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     steps = n_frames * frame_interval
     coords, boxes = ctxt.multiple_steps(steps, frame_interval)
     assert coords.shape[0] == n_frames, f"Got {coords.shape[0]} frames, expected {n_frames}"
-    return initial_state.potentials, coords, boxes, ligand_idxs
+    return initial_state.potentials, coords, boxes, initial_state.ligand_idxs
 
 
 def benchmark_potential(
@@ -220,22 +201,19 @@ def benchmark(
     v0: NDArray,
     box: NDArray,
     bound_potentials: List[BoundPotential],
-    hmr: bool = True,
+    dt: float = 1.5e-3,
     barostat_interval: int = 0,
 ):
     if barostat_interval > 0:
         label += f"-barostat-interval-{barostat_interval}"
     seed = 1234
-    dt = 1.5e-3
     temperature = constants.DEFAULT_TEMP
     pressure = constants.DEFAULT_PRESSURE
 
     harmonic_bond_potential = get_bound_potential_by_type(bound_potentials, HarmonicBond)
     bond_list = get_bond_list(harmonic_bond_potential.potential)
-    if hmr:
-        dt = 2.5e-3
-        masses = apply_hmr(masses, bond_list)
-    intg = LangevinIntegrator(temperature, dt, 1.0, np.array(masses), seed).impl()
+
+    intg = LangevinIntegrator(temperature, dt, 1.0, np.asarray(masses), seed).impl()
 
     bps = []
 
@@ -388,21 +366,15 @@ def benchmark_local(
     box: NDArray,
     bound_potentials: List[BoundPotential],
     ligand_idxs: NDArray,
-    hmr: bool = True,
+    dt: float = 1.5e-3,
 ):
     seed = 1234
-    dt = 1.5e-3
     temperature = constants.DEFAULT_TEMP
     friction = 1.0
 
     rng = np.random.default_rng(seed)
 
-    harmonic_bond_potential = get_bound_potential_by_type(bound_potentials, HarmonicBond)
-    bond_list = get_bond_list(harmonic_bond_potential.potential)
-    if hmr:
-        dt = 2.5e-3
-        masses = apply_hmr(masses, bond_list)
-    intg = LangevinIntegrator(temperature, dt, friction, np.array(masses), seed).impl()
+    intg = LangevinIntegrator(temperature, dt, friction, np.asarray(masses), seed).impl()
 
     bps = []
 
@@ -477,16 +449,22 @@ def run_single_topology_benchmarks(
         x0 = initial_state.x0[: len(host_config.conf)]
         v0 = np.zeros_like(x0)
 
+        harmonic_bond_potential = get_bound_potential_by_type(host_fns, HarmonicBond).potential
+        bond_list = get_bond_list(harmonic_bond_potential)
+        dt = 2.5e-3
+        hmr_masses = apply_hmr(host_masses, bond_list)
+
         for barostat_interval in [0, 25]:
             benchmark(
                 config,
                 f"{stage}-apo",
-                np.array(host_masses),
+                np.array(hmr_masses),
                 x0,
                 v0,
                 initial_state.box0,
                 host_fns,
                 barostat_interval=barostat_interval,
+                dt=dt,
             )
 
         barostat_interval = initial_state.barostat.interval
@@ -499,6 +477,7 @@ def run_single_topology_benchmarks(
         initial_state.v0,
         initial_state.box0,
         initial_state.potentials,
+        dt=initial_state.integrator.dt,
         barostat_interval=barostat_interval,
     )
 
@@ -512,6 +491,7 @@ def run_single_topology_benchmarks(
             initial_state.box0,
             initial_state.potentials,
             initial_state.ligand_idxs,
+            dt=initial_state.integrator.dt,
         )
 
         # Only in the case where the ligand is in complex do we want to look at water sampling
@@ -530,17 +510,13 @@ def benchmark_dhfr(config: BenchmarkConfig):
     x0 = host_conf
     v0 = np.zeros_like(host_conf)
 
+    harmonic_bond_potential = get_bound_potential_by_type(host_fns, HarmonicBond).potential
+    bond_list = get_bond_list(harmonic_bond_potential)
+    dt = 2.5e-3
+    hmr_masses = apply_hmr(host_masses, bond_list)
+
     for barostat_interval in [0, 25]:
-        benchmark(
-            config,
-            "dhfr-apo",
-            host_masses,
-            x0,
-            v0,
-            box,
-            host_fns,
-            barostat_interval=barostat_interval,
-        )
+        benchmark(config, "dhfr-apo", hmr_masses, x0, v0, box, host_fns, barostat_interval=barostat_interval, dt=dt)
 
 
 def benchmark_hif2a(config: BenchmarkConfig):
@@ -620,6 +596,7 @@ def benchmark_ahfe(config: BenchmarkConfig):
         initial_state.box0,
         initial_state.potentials,
         barostat_interval=barostat_interval,
+        dt=initial_state.integrator.dt,
     )
     if host_config is not None:
         benchmark_local(
@@ -631,6 +608,7 @@ def benchmark_ahfe(config: BenchmarkConfig):
             initial_state.box0,
             initial_state.potentials,
             initial_state.ligand_idxs,
+            dt=initial_state.integrator.dt,
         )
 
 
