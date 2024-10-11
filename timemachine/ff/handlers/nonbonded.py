@@ -594,6 +594,10 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 if src_res_template_name == "HOH":
                     # Skip waters
                     continue
+                if src_res_template_name not in self.res_to_bonds_to_param_idxs:
+                    # skip if residue not present
+                    continue
+
                 residue_bond_kv = self.res_to_bonds_to_param_idxs[src_res_template_name]
                 # we have to do one extra level of indirection where by we want the src_atom, dst_atom to be matched
                 # to the corresponding src_template_atom, dst_template_atom in the template definitions themselves.

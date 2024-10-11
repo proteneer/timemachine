@@ -1202,3 +1202,28 @@ def test_environment_bcc_full_protein(protein_path):
 
     assert loss_fn(params) == loss_fn2(params)
     np.testing.assert_array_equal(grad_fn(params), grad_fn2(params))
+
+    # test that we can remove BCCs and still parameterize the molecule
+    keep_idxs = np.random.randint(len(smirks), size=len(smirks) // 2)
+
+    filtered_smirks = [smirks[i] for i in keep_idxs]
+    filtered_params = params[keep_idxs]
+    pbcc3 = nonbonded.EnvironmentBCCHandler(
+        filtered_smirks, filtered_params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology
+    )
+
+    env_charges = pbcc3.parameterize(filtered_params)
+
+    # should be the same as setting the params not at keep_idxs to 0
+
+    filtered_smirks = smirks
+    filtered_params_ = []
+    for i, param in enumerate(params):
+        filtered_params_.append(param if i in keep_idxs else 0.0)
+    filtered_params = np.array(filtered_params_)
+
+    pbcc4 = nonbonded.EnvironmentBCCHandler(
+        filtered_smirks, filtered_params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology
+    )
+    ref_env_charges = pbcc4.parameterize(filtered_params)
+    np.testing.assert_array_equal(env_charges, ref_env_charges)
