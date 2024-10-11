@@ -353,7 +353,7 @@ def mcs(
         cur_threshold = max_threshold - idx
         if cur_threshold < min_threshold:
             raise NoMappingError(f"Unable to find mapping with at least {min_threshold} edges")
-        mcs_result = recursion(
+        mcs_result = search(
             g_a,
             g_b,
             base_atom_map,
@@ -419,12 +419,12 @@ def mcs(
     )
 
 
-def recursion(
+def search(
     g1: Graph,
     g2: Graph,
     atom_map: AtomMap,
-    layer,
-    marcs,
+    layer: int,
+    marcs: NDArray,
     mcs_result: MCSResult,
     priority_idxs,
     max_visits,
@@ -436,103 +436,74 @@ def recursion(
     filter_fxn: Callable[[Sequence[int]], bool],
     leaf_filter_fxn: Callable[[Sequence[int]], bool],
 ) -> MCSResult:
-    if mcs_result.nodes_visited >= max_visits:
-        return replace(mcs_result, timed_out=True)
+    def go(atom_map: AtomMap, layer: int, marcs: NDArray, mcs_result: MCSResult) -> MCSResult:
+        if mcs_result.nodes_visited >= max_visits:
+            return replace(mcs_result, timed_out=True)
 
-    if len(mcs_result.all_maps) >= max_cores:
-        return replace(mcs_result, timed_out=True)
+        if len(mcs_result.all_maps) >= max_cores:
+            return replace(mcs_result, timed_out=True)
 
-    num_edges = _arcs_left(marcs)
-    if num_edges < threshold:
-        return mcs_result
+        num_edges = _arcs_left(marcs)
+        if num_edges < threshold:
+            return mcs_result
 
-    if max_connected_components is not None or min_connected_component_size > 1:
-        g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map.a_to_b[:layer]) if a2 != UNMAPPED}
+        if max_connected_components is not None or min_connected_component_size > 1:
+            g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map.a_to_b[:layer]) if a2 != UNMAPPED}
 
-        if g1_mapped_nodes:
-            # Nodes in g1 are visited in order, so nodes left to visit are [layer, layer + 1, ..., n - 1]
-            g1_unvisited_nodes = set(range(layer, g1.n_vertices))
-            if g1.mapping_incompatible_with_cc_constraints(
-                g1_mapped_nodes, g1_unvisited_nodes, max_connected_components, min_connected_component_size
-            ):
-                return mcs_result
+            if g1_mapped_nodes:
+                # Nodes in g1 are visited in order, so nodes left to visit are [layer, layer + 1, ..., n - 1]
+                g1_unvisited_nodes = set(range(layer, g1.n_vertices))
+                if g1.mapping_incompatible_with_cc_constraints(
+                    g1_mapped_nodes, g1_unvisited_nodes, max_connected_components, min_connected_component_size
+                ):
+                    return mcs_result
 
-        g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map.b_to_a) if a1 != UNMAPPED}
+            g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map.b_to_a) if a1 != UNMAPPED}
 
-        if g2_mapped_nodes:
-            # Nodes in g2 are visited in the order determined by priority_idxs. Nodes may be repeated in priority_idxs,
-            # but we skip over nodes that have already been mapped.
-            g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
-            if g2.mapping_incompatible_with_cc_constraints(
-                g2_mapped_nodes, g2_unvisited_nodes, max_connected_components, min_connected_component_size
-            ):
-                return mcs_result
+            if g2_mapped_nodes:
+                # Nodes in g2 are visited in the order determined by priority_idxs. Nodes may be repeated in priority_idxs,
+                # but we skip over nodes that have already been mapped.
+                g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
+                if g2.mapping_incompatible_with_cc_constraints(
+                    g2_mapped_nodes, g2_unvisited_nodes, max_connected_components, min_connected_component_size
+                ):
+                    return mcs_result
 
-    mcs_result = replace(mcs_result, nodes_visited=mcs_result.nodes_visited + 1)
-    n_a = g1.n_vertices
+        mcs_result = replace(mcs_result, nodes_visited=mcs_result.nodes_visited + 1)
+        n_a = g1.n_vertices
 
-    # leaf-node, every atom has been mapped
-    if layer == n_a:
-        if num_edges == threshold:
-            mcs_result = replace(mcs_result, leaves_visited=mcs_result.leaves_visited + 1)
-            if not leaf_filter_fxn(atom_map.a_to_b):
-                return mcs_result
+        # leaf-node, every atom has been mapped
+        if layer == n_a:
+            if num_edges == threshold:
+                mcs_result = replace(mcs_result, leaves_visited=mcs_result.leaves_visited + 1)
+                if not leaf_filter_fxn(atom_map.a_to_b):
+                    return mcs_result
 
-            mcs_result = replace(
-                mcs_result,
-                all_maps=mcs_result.all_maps + (atom_map.a_to_b,),
-                all_marcs=mcs_result.all_marcs + (np.array(marcs),),
-                num_edges=num_edges,
-            )
-        return mcs_result
-
-    for jdx in priority_idxs[layer]:
-        if atom_map.b_to_a[jdx] == UNMAPPED:
-            new_atom_map = atom_map.add(layer, jdx)
-            if enforce_core_core and not _verify_core_is_connected(
-                g1, g2, layer, jdx, new_atom_map.a_to_b, new_atom_map.b_to_a
-            ):
-                pass
-            elif not filter_fxn(new_atom_map.a_to_b):
-                pass
-            else:
-                new_marcs = refine_marcs(g1, g2, layer, jdx, marcs)
-                mcs_result = recursion(
-                    g1,
-                    g2,
-                    new_atom_map,
-                    layer + 1,
-                    new_marcs,
+                mcs_result = replace(
                     mcs_result,
-                    priority_idxs,
-                    max_visits,
-                    max_cores,
-                    threshold,
-                    enforce_core_core,
-                    max_connected_components,
-                    min_connected_component_size,
-                    filter_fxn,
-                    leaf_filter_fxn,
+                    all_maps=mcs_result.all_maps + (atom_map.a_to_b,),
+                    all_marcs=mcs_result.all_marcs + (np.array(marcs),),
+                    num_edges=num_edges,
                 )
+            return mcs_result
 
-    # always allow for explicitly not mapping layer atom
-    # nit: don't need to check for connected core if mapping to None
-    new_marcs = refine_marcs(g1, g2, layer, UNMAPPED, marcs)
+        for jdx in priority_idxs[layer]:
+            if atom_map.b_to_a[jdx] == UNMAPPED:
+                new_atom_map = atom_map.add(layer, jdx)
+                if enforce_core_core and not _verify_core_is_connected(
+                    g1, g2, layer, jdx, new_atom_map.a_to_b, new_atom_map.b_to_a
+                ):
+                    pass
+                elif not filter_fxn(new_atom_map.a_to_b):
+                    pass
+                else:
+                    new_marcs = refine_marcs(g1, g2, layer, jdx, marcs)
+                    mcs_result = go(new_atom_map, layer + 1, new_marcs, mcs_result)
 
-    return recursion(
-        g1,
-        g2,
-        atom_map,
-        layer + 1,
-        new_marcs,
-        mcs_result,
-        priority_idxs,
-        max_visits,
-        max_cores,
-        threshold,
-        enforce_core_core,
-        max_connected_components,
-        min_connected_component_size,
-        filter_fxn,
-        leaf_filter_fxn,
-    )
+        # always allow for explicitly not mapping layer atom
+        # nit: don't need to check for connected core if mapping to None
+        new_marcs = refine_marcs(g1, g2, layer, UNMAPPED, marcs)
+
+        return go(atom_map, layer + 1, new_marcs, mcs_result)
+
+    return go(atom_map, layer, marcs, mcs_result)
