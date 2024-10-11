@@ -17,6 +17,14 @@
 
 namespace timemachine {
 
+static bool is_barostat(std::shared_ptr<Mover> &mover) {
+    if (std::shared_ptr<MonteCarloBarostat<float>> baro = std::dynamic_pointer_cast<MonteCarloBarostat<float>>(mover);
+        baro) {
+        return true;
+    }
+    return false;
+}
+
 Context::Context(
     int N,
     const double *x_0,
@@ -40,14 +48,6 @@ Context::~Context() {
     gpuErrchk(cudaFree(d_v_t_));
     gpuErrchk(cudaFree(d_box_t_));
 };
-
-bool is_barostat(std::shared_ptr<Mover> &mover) {
-    if (std::shared_ptr<MonteCarloBarostat<float>> baro = std::dynamic_pointer_cast<MonteCarloBarostat<float>>(mover);
-        baro) {
-        return true;
-    }
-    return false;
-}
 
 void Context::_verify_coords_and_box(const double *coords_buffer, const double *box_buffer, cudaStream_t stream) {
     // If there are no nonbonded potentials (ie Vacuum), nothing to check.
