@@ -6,6 +6,7 @@
 # example usage:
 # python timemachine/ff/amber_converter.py --input_path amber99sbildn.xml --method "nonbonded"
 
+import json
 import pprint
 from argparse import ArgumentParser
 from typing import Any, Dict, List
@@ -209,7 +210,7 @@ def process_ff(args):
                         bond_list.append((src_idx, dst_idx))
                         bond_iota += 1
 
-                    elif cn.nodeName == "Bond" and args.method == "nonbonded":
+                    elif cn.nodeName == "Bond" and args.method in ("nonbonded", "nonbonded_no_cc_ch"):
                         # generate BCCs based on nonbonded atom types formed by the concatenation of q,sig,eps
                         # this roughly generates the correct symmetries (probably at the cost of having more parameters)
                         # Note: the xml is always ordered Atom tags are before Bond tags
@@ -217,6 +218,17 @@ def process_ff(args):
                         dst_idx = int(cn.attributes["to"].value)
                         src_type = atom_idxs_to_types[src_idx]
                         dst_type = atom_idxs_to_types[dst_idx]
+
+                        src_elem = atom_types_name_to_elem[src_type]
+                        dst_elem = atom_types_name_to_elem[dst_type]
+
+                        if args.method == "nonbonded_no_cc_ch":
+                            if (src_elem, dst_elem) in [("H", "C"), ("C", "H"), ("C", "C")]:
+                                continue
+
+                        print("src_type", src_type, src_elem)
+                        print("dst_type", dst_type, dst_elem)
+
                         # the following also applies to method == "harmonic_bond" and method == "template_bond"
                         # it's important that we canonicalize the bond in a way that also maintains the directionality of the bcc (placeholder'd by param_idx)
                         # Note that the bond list is ordered, such that [(atom_i, atom_j), bcc] is defined such that atom_i is incremented by bcc, atom_j is decrement by bcc
@@ -277,6 +289,7 @@ def process_ff(args):
         )
         fh.write(svg)
 
+    all_patterns = []
     all_patterns_and_params = []
     for res_name, bond_idxs_list, bond_classes in zip(all_residues, all_bond_idxs, all_bond_classes):
         bc_dict: Dict[int, List] = {}
@@ -289,6 +302,7 @@ def process_ff(args):
             pattern = res_name + " " + str(v)
             value = 0.0
             all_patterns_and_params.append([pattern, value])
+            all_patterns.append(pattern)
 
     final_dict = {"EnvironmentBCC": {"patterns": all_patterns_and_params}}
 
@@ -297,6 +311,8 @@ def process_ff(args):
 
     pp = pprint.PrettyPrinter(width=500, compact=False, indent=2)
     pp.pprint(final_dict)
+    print("-" * 80)
+    print(json.dumps(all_patterns, indent=2))
 
 
 if __name__ == "__main__":
@@ -305,7 +321,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--method",
         help="Which typing system to use, either based on residue template bond tables,  harmonic bonds or the nonbonded terms",
-        choices=["template_bond", "harmonic_bond", "nonbonded"],
+        choices=["template_bond", "harmonic_bond", "nonbonded", "nonbonded_no_cc_ch"],
         default="nonbonded",
     )
     args = parser.parse_args()
