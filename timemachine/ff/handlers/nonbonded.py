@@ -365,9 +365,15 @@ class NonbondedHandler(SerializableMixIn):
         return params[param_idxs]
 
 
-class PrecomputedChargeHandler:
-    def __init__(self):
-        self.params = None
+class PrecomputedChargeHandler(SerializableMixIn):
+    def __init__(self, smirks, params, props):
+        assert len(smirks) == 0
+        assert len(params) == 0
+        assert props is None
+        # These fields as to enable serialization
+        self.smirks = []
+        self.params = []
+        self.props = None
 
     def parameterize(self, mol):
         params = []
@@ -378,6 +384,10 @@ class PrecomputedChargeHandler:
 
     def partial_parameterize(self, _, mol):
         return self.parameterize(mol)
+
+
+class PrecomputedChargeIntraHandler(PrecomputedChargeHandler):
+    pass
 
 
 class SimpleChargeHandler(NonbondedHandler):

@@ -9,7 +9,6 @@ from numpy.testing import assert_equal
 from timemachine.constants import DEFAULT_FF, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.ff.handlers.nonbonded import PrecomputedChargeHandler
 from timemachine.ff.handlers.serialize import serialize_handlers
 
 _T = TypeVar("_T")
@@ -122,8 +121,8 @@ class Forcefield:
     def load_precomputed_default(cls) -> "Forcefield":
         """load a default forcefield where charges are read in from the Molblock"""
         ff = cls.load_default()
-        q_handle = PrecomputedChargeHandler()
-        q_handle_intra = PrecomputedChargeHandler()
+        q_handle = nonbonded.PrecomputedChargeHandler([], [], None)
+        q_handle_intra = nonbonded.PrecomputedChargeIntraHandler([], [], None)
         return Forcefield(
             ff.hb_handle,
             ff.ha_handle,
@@ -183,7 +182,13 @@ class Forcefield:
                 assert lj_handle is None
                 lj_handle = handle
             elif isinstance(
-                handle, (nonbonded.AM1CCCIntraHandler, nonbonded.AM1BCCIntraHandler, nonbonded.SimpleChargeIntraHandler)
+                handle,
+                (
+                    nonbonded.AM1CCCIntraHandler,
+                    nonbonded.AM1BCCIntraHandler,
+                    nonbonded.SimpleChargeIntraHandler,
+                    nonbonded.PrecomputedChargeIntraHandler,
+                ),
             ):
                 # Need to be checked first since they are also subclasses
                 # of the non-intra handlers
@@ -195,7 +200,15 @@ class Forcefield:
             ):
                 assert q_handle_solv is None
                 q_handle_solv = handle
-            elif isinstance(handle, (nonbonded.AM1CCCHandler, nonbonded.AM1BCCHandler, nonbonded.SimpleChargeHandler)):
+            elif isinstance(
+                handle,
+                (
+                    nonbonded.AM1CCCHandler,
+                    nonbonded.AM1BCCHandler,
+                    nonbonded.SimpleChargeHandler,
+                    nonbonded.PrecomputedChargeHandler,
+                ),
+            ):
                 assert q_handle is None
                 q_handle = handle
 
@@ -223,6 +236,10 @@ class Forcefield:
                 q_handle_intra = nonbonded.AM1BCCIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
             elif isinstance(q_handle, nonbonded.SimpleChargeHandler):
                 q_handle_intra = nonbonded.SimpleChargeIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
+            elif isinstance(q_handle, nonbonded.PrecomputedChargeHandler):
+                q_handle_intra = nonbonded.PrecomputedChargeIntraHandler(
+                    q_handle.smirks, q_handle.params, q_handle.props
+                )
             else:
                 raise ValueError(f"Unsupported charge handler {q_handle}")
 

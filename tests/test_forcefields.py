@@ -12,7 +12,7 @@ from rdkit import Chem
 
 from timemachine import constants
 from timemachine.ff import Forcefield, combine_params
-from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff.handlers import nonbonded, openmm_deserializer
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.md import builders
 
@@ -95,6 +95,17 @@ def test_load_default():
             continue
         assert ref_handle.smirks == test_handle.smirks
         np.testing.assert_array_equal(ref_handle.params, test_handle.params)
+
+
+def test_serialize_load_precomputed_default():
+    """Assert that we can serialize/deserialize the precomputed default forcefield"""
+    ff = Forcefield.load_precomputed_default()
+    with NamedTemporaryFile(suffix=".py") as temp:
+        with open(temp.name, "w") as ofs:
+            ofs.write(ff.serialize())
+        deserialized_ff = Forcefield.load_from_file(temp.name)
+    assert isinstance(ff.q_handle, nonbonded.PrecomputedChargeHandler)
+    assert isinstance(deserialized_ff.q_handle, nonbonded.PrecomputedChargeHandler)
 
 
 def test_split():

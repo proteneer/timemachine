@@ -18,7 +18,7 @@ def serialize_handlers(all_handlers, protein_ff, water_ff):
         ff_obj = handler.serialize()
 
         for k in ff_obj.keys():
-            assert k not in final_ff
+            assert k not in final_ff, f"Handler {k} already exists"
 
         final_ff.update(ff_obj)
 
