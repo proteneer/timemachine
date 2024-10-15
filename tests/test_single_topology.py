@@ -807,6 +807,8 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
     if use_tiny_mol:
         mol_a = ligand_from_smiles("S")
         mol_b = ligand_from_smiles("O")
+        # Align the mols that the heavy atom has a common position
+        Chem.rdMolAlign.AlignMol(mol_a, mol_b, atomMap=[(0, 0)])
     else:
         with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
             mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
@@ -817,6 +819,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
     # split forcefield has different parameters for intramol and intermol terms
     ffs = load_split_forcefields()
     solvent_sys, solvent_conf, solvent_box, solvent_top = build_water_system(4.0, ffs.ref.water_ff, mols=[mol_a, mol_b])
+    solvent_box += np.eye(3) * 0.1
     solvent_conf = minimizer.fire_minimize_host(
         [mol_a, mol_b], HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top), ffs.ref
     )
@@ -843,6 +846,8 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
     for lamb in np.linspace(0, 1, n_lambdas):
         # Compute the grads, potential with the ref ff
         vacuum_grad_ref, vacuum_u_ref, solvent_grad_ref, solvent_u_ref = get_vacuum_solvent_u_grads(ffs.ref, lamb)
+        minimizer.check_force_norm(-vacuum_grad_ref)
+        minimizer.check_force_norm(-solvent_grad_ref)
 
         # Compute the grads, potential with the scaled ff
         vacuum_grad_scaled, vacuum_u_scaled, solvent_grad_scaled, solvent_u_scaled = get_vacuum_solvent_u_grads(
@@ -1059,9 +1064,9 @@ def test_combine_with_host_split(precision, rtol, atol):
     )
 
 
-def ligand_from_smiles(smiles):
+def ligand_from_smiles(smiles, seed: int = 2024):
     mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
-    AllChem.Compute2DCoords(mol)
+    AllChem.EmbedMolecule(mol, randomSeed=seed)
     set_mol_name(mol, smiles)
     return mol
 

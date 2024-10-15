@@ -13,7 +13,7 @@ from timemachine.integrator import langevin_coefficients
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerletIntegrator, custom_ops
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.enhanced import get_solvent_phase_system
-from timemachine.md.minimizer import check_force_norm
+from timemachine.md.minimizer import check_force_norm, replace_conformer_with_minimized
 from timemachine.potentials import HarmonicBond, SummedPotential
 from timemachine.potentials.potential import get_potential_by_type
 from timemachine.testsystems.ligands import get_biphenyl
@@ -398,6 +398,8 @@ def test_multiple_steps_local_consistency(freeze_reference):
     - Assert that wrapping potentials within a SummedPotential returns identical frames"""
     mol, _ = get_biphenyl()
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    # Minimize the starting pose
+    replace_conformer_with_minimized(mol, ff)
 
     temperature = constants.DEFAULT_TEMP
     dt = 1.5e-3
@@ -599,7 +601,7 @@ def test_multiple_steps_local_no_free_particles():
     k = 1.0
 
     rng = np.random.default_rng(seed)
-    x0 = rng.uniform(1, size=(N, D)).astype(dtype=np.float64) * 2
+    x0 = rng.uniform(0.0, 1, size=(N, D)).astype(dtype=np.float64) * 2
 
     E = 2
 
@@ -610,8 +612,8 @@ def test_multiple_steps_local_no_free_particles():
 
     bps = [test_nrg.bind(params).bound_impl]
 
-    masses = rng.uniform(1.0, size=N)
-    v0 = rng.uniform(1.0, size=(x0.shape[0], x0.shape[1]))
+    masses = rng.uniform(0.0, 1.0, size=N)
+    v0 = rng.uniform(0.0, 1.0, size=(x0.shape[0], x0.shape[1]))
 
     # Select the last particle the local idxs
     local_idxs = np.array([N - 1], dtype=np.int32)
@@ -971,3 +973,37 @@ def test_context_invalid_boxes_without_nonbonded_potentials():
     ctxt.set_box(box * 0.01)
     _, boxes = ctxt.multiple_steps(steps)
     assert len(boxes) == 1
+
+
+def test_unstable_simulation_failure():
+    mol, _ = get_biphenyl()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    temperature = constants.DEFAULT_TEMP
+    dt = 1.5e-3
+    friction = 1.0
+    seed = 2024
+    steps = 1000
+
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
+    v0 = np.zeros_like(coords)
+
+    rng = np.random.default_rng(seed)
+
+    # Coords will be significantly larger than the box, previously would trigger an invalid memory access
+    # should now trigger a Runtime exception
+    coords = rng.uniform(-1e10, 1e10, size=coords.shape).astype(dtype=np.float64)
+
+    bps = []
+    for p, pot in zip(sys_params, unbound_potentials):
+        bound_impl = pot.bind(p).to_gpu(np.float32).bound_impl
+        bps.append(bound_impl)
+
+    intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
+
+    ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+    with pytest.raises(
+        RuntimeError,
+        match="simulation unstable: dimensions of coordinates two orders of magnitude larger than max box dimension",
+    ):
+        ctxt.multiple_steps(steps)

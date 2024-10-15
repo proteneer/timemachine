@@ -126,7 +126,12 @@ def test_barostat_with_clashes():
 
     # The clashes will result in overflows, so the box should never change as no move is accepted
     ctxt = custom_ops.Context(coords, v_0, box, integrator_impl, u_impls, movers=[baro])
-    ctxt.multiple_steps(barostat_interval * 100)
+    # Will trigger the unstable check since the box is so small.
+    with pytest.raises(
+        RuntimeError,
+        match="simulation unstable: dimensions of coordinates two orders of magnitude larger than max box dimension",
+    ):
+        ctxt.multiple_steps(barostat_interval * 100)
     assert np.all(box == ctxt.get_box())
 
 

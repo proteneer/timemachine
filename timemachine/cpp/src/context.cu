@@ -17,6 +17,14 @@
 
 namespace timemachine {
 
+static bool is_barostat(std::shared_ptr<Mover> &mover) {
+    if (std::shared_ptr<MonteCarloBarostat<float>> baro = std::dynamic_pointer_cast<MonteCarloBarostat<float>>(mover);
+        baro) {
+        return true;
+    }
+    return false;
+}
+
 Context::Context(
     int N,
     const double *x_0,
@@ -41,16 +49,8 @@ Context::~Context() {
     gpuErrchk(cudaFree(d_box_t_));
 };
 
-bool is_barostat(std::shared_ptr<Mover> &mover) {
-    if (std::shared_ptr<MonteCarloBarostat<float>> baro = std::dynamic_pointer_cast<MonteCarloBarostat<float>>(mover);
-        baro) {
-        return true;
-    }
-    return false;
-}
-
-void Context::_verify_box(const double *box_buffer, cudaStream_t stream) {
-    // If there are no nonbonded potentials, nothing to check.
+void Context::_verify_coords_and_box(const double *coords_buffer, const double *box_buffer, cudaStream_t stream) {
+    // If there are no nonbonded potentials (ie Vacuum), nothing to check.
     if (nonbonded_pots_.size() == 0) {
         return;
     }
@@ -64,6 +64,16 @@ void Context::_verify_box(const double *box_buffer, cudaStream_t stream) {
                     "cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
             }
         }
+    }
+
+    const double max_box_dim = max(box_buffer[0 * 3 + 0], max(box_buffer[1 * 3 + 1], box_buffer[2 * 3 + 2]));
+    const auto [min_coord, max_coord] = std::minmax_element(coords_buffer, coords_buffer + N_ * 3);
+    // Look at the largest difference in all dimensions, since coordinates are not imaged into the home box
+    // per se, rather into the nearest periodic box
+    const double max_coord_delta = *max_coord - *min_coord;
+    if (max_box_dim * 100.0 < max_coord_delta) {
+        throw std::runtime_error(
+            "simulation unstable: dimensions of coordinates two orders of magnitude larger than max box dimension");
     }
 }
 
@@ -132,15 +142,11 @@ void Context::multiple_steps_local(
         for (int i = 1; i <= n_steps; i++) {
             this->_step(local_pots, d_free_idxs, stream);
             if (i % store_x_interval == 0) {
-                gpuErrchk(cudaMemcpyAsync(
-                    h_x + ((i / store_x_interval) - 1) * N_ * 3,
-                    d_x_t_,
-                    N_ * 3 * sizeof(*d_x_t_),
-                    cudaMemcpyDeviceToHost,
-                    stream));
                 double *box_ptr = h_box + ((i / store_x_interval) - 1) * 3 * 3;
+                double *coord_ptr = h_x + ((i / store_x_interval) - 1) * N_ * 3;
+                gpuErrchk(cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream));
                 gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream));
-                this->_verify_box(box_ptr, stream);
+                this->_verify_coords_and_box(coord_ptr, box_ptr, stream);
             }
         }
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
@@ -189,15 +195,11 @@ void Context::multiple_steps_local_selection(
         for (int i = 1; i <= n_steps; i++) {
             this->_step(local_pots, d_free_idxs, stream);
             if (i % store_x_interval == 0) {
-                gpuErrchk(cudaMemcpyAsync(
-                    h_x + ((i / store_x_interval) - 1) * N_ * 3,
-                    d_x_t_,
-                    N_ * 3 * sizeof(*d_x_t_),
-                    cudaMemcpyDeviceToHost,
-                    stream));
                 double *box_ptr = h_box + ((i / store_x_interval) - 1) * 3 * 3;
+                double *coord_ptr = h_x + ((i / store_x_interval) - 1) * N_ * 3;
+                gpuErrchk(cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream));
                 gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream));
-                this->_verify_box(box_ptr, stream);
+                this->_verify_coords_and_box(coord_ptr, box_ptr, stream);
             }
         }
         intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
@@ -227,15 +229,11 @@ void Context::multiple_steps(const int n_steps, const int n_samples, double *h_x
         this->_step(bps_, nullptr, stream);
 
         if (i % store_x_interval == 0) {
-            gpuErrchk(cudaMemcpyAsync(
-                h_x + ((i / store_x_interval) - 1) * N_ * 3,
-                d_x_t_,
-                N_ * 3 * sizeof(*d_x_t_),
-                cudaMemcpyDeviceToHost,
-                stream));
             double *box_ptr = h_box + ((i / store_x_interval) - 1) * 3 * 3;
+            double *coord_ptr = h_x + ((i / store_x_interval) - 1) * N_ * 3;
+            gpuErrchk(cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream));
             gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream));
-            this->_verify_box(box_ptr, stream);
+            this->_verify_coords_and_box(coord_ptr, box_ptr, stream);
         }
     }
     intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
