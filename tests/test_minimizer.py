@@ -179,7 +179,15 @@ def test_equilibrate_host_barker():
         print(f"\tdone in {(t1 - t0):.3f} s")
 
 
-def test_local_minimize_water_box():
+@pytest.mark.parametrize(
+    "minimizer_options",
+    [
+        minimizer.FireMinimizationOptions(100),
+        minimizer.ScipyMinimizationOptions("BFGS", {}),
+        minimizer.ScipyMinimizationOptions("L-BFGS-B", {}),
+    ],
+)
+def test_local_minimize_water_box(minimizer_options):
     """
     Test that we can locally relax a box of water by selecting some random indices.
     """
@@ -197,7 +205,7 @@ def test_local_minimize_water_box():
 
     u_init, g_init = val_and_grad_fn(x0)
 
-    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs)
+    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_options)
 
     np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
     assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.01
@@ -210,8 +218,11 @@ def test_local_minimize_water_box():
 
 
 @pytest.mark.nocuda
+@pytest.mark.parametrize(
+    "minimizer_options", [minimizer.FireMinimizationOptions(100), minimizer.ScipyMinimizationOptions("BFGS", {})]
+)
 @pytest.mark.parametrize("restraint_k", [None, 3_000.0])
-def test_local_minimize_strained_ligand(restraint_k):
+def test_local_minimize_strained_ligand(minimizer_options, restraint_k):
     """
     Test that we can minimize a ligand in vacuum using local_minimize when the ligand is strained.
     """
@@ -279,7 +290,7 @@ $$$$
 
     u_init, g_init = val_and_grad_fn(x0)
 
-    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, restraint_k=restraint_k)
+    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_options, restraint_k=restraint_k)
 
     assert np.linalg.norm(x0 - x_opt) > 0.01
 
@@ -325,7 +336,7 @@ def test_minimizer_failure_toy_system():
     du_dx = lambda x: bound_impl.execute(x, box, compute_u=False)[0]
     initial_force_norms = np.linalg.norm(du_dx(coords))
 
-    minimized_coords = minimizer.fire_minimize(coords, du_dx, 100)
+    minimized_coords = minimizer.fire_minimize(coords, du_dx, minimizer.FireMinimizationOptions(100))
 
     final_distance = distance_on_pairs(minimized_coords[None, 0], minimized_coords[None, 1], box)
     assert not np.isclose(initial_distance, final_distance, atol=2e-4)
