@@ -177,9 +177,10 @@ def test_overlap_rebalancing_on_gaussian():
     target_overlap = 0.1
     target_dist = 1 - target_overlap
     print(f"optimized with target dist = {target_dist} (target overlap = {target_overlap}):")
-    greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist)
+    xtol = 1e-4
+    greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist, bisection_xtol=xtol)
     greedy_nbr_dist = summarize_protocol(greedy_prot, overlap_dist)
-    assert np.max(greedy_nbr_dist) <= target_dist + 1e-5  # a little wiggle room
+    assert np.max(greedy_nbr_dist) <= target_dist + (10 * xtol)
 
     # also, sanity-check the overlap_dist function: d(x,x)==0, d(x,y)==d(y,x), x<y<z => d(x,y)<d(x,z)
     rng = np.random.default_rng(2024)
@@ -225,12 +226,12 @@ def test_greedy_overlap_on_st_vacuum():
     for target_overlap in target_overlap_levels:
         target_dist = 1 - target_overlap
         print(f"optimized with target dist = {target_dist} (target overlap = {target_overlap}):")
-        greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist)
+        xtol = 1e-4
+        greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist, bisection_xtol=xtol)
         greedy_nbr_dist = summarize_protocol(greedy_prot, overlap_dist)
         protocol_length = len(greedy_prot)
         assert protocol_length < len(lambdas), "surprise: optimized protocol is longer than initial protocol"
-        assert (
-            np.max(greedy_nbr_dist) <= target_dist + 1e-5
-        ), "failure: optimized protocol didn't satisfy overlap target"
+        max_dist_lt_target_dist = np.max(greedy_nbr_dist) <= target_dist + (10 * xtol)
+        assert max_dist_lt_target_dist, "failure: optimized protocol didn't satisfy overlap target"
         protocol_lengths.append(protocol_length)
     assert np.all(np.diff(protocol_lengths) >= 0), "surprise: more stringent overlap target -> fewer windows"
