@@ -652,7 +652,7 @@ def local_minimize(
 
 
 def replace_conformer_with_minimized(
-    mol: Chem.rdchem.Mol, ff: Forcefield, minimizer_config: Optional[MinimizationOptions]
+    mol: Chem.rdchem.Mol, ff: Forcefield, minimizer_config: Optional[MinimizationOptions] = None
 ):
     """Replace the first conformer of the given mol with a conformer minimized with respect to the given forcefield.
 
