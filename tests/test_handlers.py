@@ -779,7 +779,7 @@ def test_precomputed_charge_handler():
     with resources.path("timemachine.datasets.water_exchange", "bb_centered_espaloma.sdf") as path_to_ligand:
         mol = utils.read_sdf(path_to_ligand)[0]
 
-    pch = nonbonded.PrecomputedChargeHandler()
+    pch = nonbonded.PrecomputedChargeHandler([], [], None)
     params = pch.parameterize(mol)
     for a_idx, p in enumerate(params):
         assert float(mol.GetAtomWithIdx(a_idx).GetProp("PartialCharge")) * np.sqrt(ONE_4PI_EPS0) == p
