@@ -90,7 +90,7 @@ def scale_torsion(torsion: BoundPotential[PeriodicTorsion], target_torsions: Can
     return replace(torsion, params=jnp.asarray(torsion.params).at[target_torsions, 0].mul(scale))
 
 
-def scale_nonbonded_pairs(nonbonded_pairs: BoundPotential[HarmonicAngle], scale: ArrayLike):
+def scale_nonbonded_pairs(nonbonded_pairs: BoundPotential[NonbondedPairListPrecomputed], scale: ArrayLike):
     return replace(
         nonbonded_pairs,
         params=jnp.asarray(nonbonded_pairs.params)
