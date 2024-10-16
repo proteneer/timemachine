@@ -34,6 +34,8 @@ class MinimizationError(Exception):
 
 @dataclass(frozen=True)
 class FireMinimizationOptions:
+    """Refer to timemachine.md.fire.fire_descent for documentation of each parameter"""
+
     n_steps: int
     dt_start: float = 1e-5
     dt_max: float = 1e-3
@@ -576,6 +578,11 @@ def local_minimize(
     -------
     Optimized set of coordinates (N,3)
 
+    Raises
+    ------
+    AssertionError
+    MinimizationError
+
     """
 
     if type(minimizer_options) not in (FireMinimizationOptions, ScipyMinimizationOptions):
@@ -644,7 +651,10 @@ def local_minimize(
     check_force_norm(forces)
 
     if assert_energy_decreased:
-        assert U_final < U_0, f"U_0: {U_0:.3f}, U_f: {U_final:.3f}"
+        if not np.isnan(U_0):
+            assert U_final < U_0, f"U_0: {U_0:.3f}, U_f: {U_final:.3f}"
+        else:
+            assert np.isfinite(U_final), f"U_0: {U_0:.3f}, U_f: {U_final:.3f}"
     elif U_final >= U_0:
         warnings.warn(f"WARNING: Energy did not decrease: U_0: {U_0:.3f}, u_f: {U_final:.3f}", MinimizationWarning)
 

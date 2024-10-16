@@ -64,7 +64,16 @@ class Host:
 
 
 def _get_default_state_minimization_config() -> minimizer.MinimizationOptions:
-    return minimizer.ScipyMinimizationOptions("BFGS", {})
+    """These parameters were empirically selected based on some challenging minimization edges.
+
+    The rough rationale for the selection of these parameters:
+    * n_steps=400 started at 250 steps and increased to give some room for error
+    * dt_start=1e-7 start with a very small step size as clashes can otherwise take large steps
+    * n_min=10 increase the number of steps taken in the right direction before adjusting dt to be more confident of direction
+    * f_inc=1.5 since the starting time step is small, increase the rate at which the dt is increased
+    * dt_max=1e-4 we shouldn't have to take large step sizes here and going to 1e-3 seems to blow up in some cases
+    """
+    return minimizer.FireMinimizationOptions(n_steps=400, dt_start=1e-7, n_min=10, f_inc=1.5, dt_max=1e-4)
 
 
 def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
