@@ -11,7 +11,7 @@ from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.ff import Forcefield
 from timemachine.md.enhanced import identify_rotatable_bonds
-from timemachine.potentials.potentials import (
+from timemachine.potentials import (
     BoundPotential,
     HarmonicAngle,
     HarmonicAngleStable,
