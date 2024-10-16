@@ -13,7 +13,6 @@ from timemachine.ff import Forcefield
 from timemachine.md.enhanced import identify_rotatable_bonds
 from timemachine.potentials import (
     BoundPotential,
-    HarmonicAngle,
     HarmonicAngleStable,
     NonbondedInteractionGroup,
     NonbondedPairListPrecomputed,
@@ -78,19 +77,22 @@ def ixn_isin(test_ixns: CanonicalBonds, ixns: CanonicalBonds):
     return eq.all(-1).any(-1)
 
 
-def scale_angle(angle: BoundPotential[HarmonicAngle], target_angles: CanonicalBonds, scale: ArrayLike):
+def scale_angle(angle: BoundPotential[HarmonicAngleStable], target_angles: CanonicalBonds, scale: ArrayLike):
+    assert isinstance(angle.potential, HarmonicAngleStable)
     assert target_angles.idxs.shape[1] == 3
     target_angles = ixn_isin(CanonicalBonds.from_idxs(angle.potential.idxs, 3), target_angles)
     return replace(angle, params=jnp.asarray(angle.params).at[target_angles, 0].mul(scale))
 
 
 def scale_torsion(torsion: BoundPotential[PeriodicTorsion], target_torsions: CanonicalBonds, scale: ArrayLike):
+    assert isinstance(torsion.potential, PeriodicTorsion)
     assert target_torsions.idxs.shape[1] == 4
     target_torsions = ixn_isin(CanonicalBonds.from_idxs(torsion.potential.idxs, 4), target_torsions)
     return replace(torsion, params=jnp.asarray(torsion.params).at[target_torsions, 0].mul(scale))
 
 
 def scale_nonbonded_pairs(nonbonded_pairs: BoundPotential[NonbondedPairListPrecomputed], scale: ArrayLike):
+    assert isinstance(nonbonded_pairs.potential, NonbondedPairListPrecomputed)
     return replace(
         nonbonded_pairs,
         params=jnp.asarray(nonbonded_pairs.params)
@@ -104,6 +106,7 @@ def scale_nonbonded_pairs(nonbonded_pairs: BoundPotential[NonbondedPairListPreco
 def scale_nonbonded_host_guest_ixn(
     nonbonded_host_guest_ixn: BoundPotential[NonbondedInteractionGroup], num_atoms_host: int, scale: ArrayLike
 ):
+    assert isinstance(nonbonded_host_guest_ixn.potential, NonbondedInteractionGroup)
     return replace(
         nonbonded_host_guest_ixn,
         params=jnp.asarray(nonbonded_host_guest_ixn.params)
