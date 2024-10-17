@@ -2007,7 +2007,7 @@ M  END
     verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
 
 
-from timemachine.fe.depgraph import DepGraph
+from timemachine.fe.depgraph import DepGraph, find_nodes_to_turn_off, find_nodes_to_turn_on
 from timemachine.fe.utils import plot_atom_mapping_grid
 
 
@@ -2070,6 +2070,8 @@ $$$$""",
 
     st = SingleTopology(mol_a, mol_b, core, ff)
 
+    dgs = []
+
     for lamb in np.linspace(0, 1, 10):
         print("PROCESSING LAMBDA", lamb)
 
@@ -2089,7 +2091,7 @@ $$$$""",
         # mol_copy.AddConformer(mol_conf)
         # writer.write(mol_copy)
 
-        lhs_dg = DepGraph(lhs.bond, lhs.angle, lhs.proper_torsion, lhs.improper_torsion, lhs.chiral_atom)
+        dg = DepGraph(lhs.bond, lhs.angle, lhs.proper_torsion, lhs.improper_torsion, lhs.chiral_atom)
         expected_node_count = (
             len(lhs.bond.potential.idxs)
             + len(lhs.angle.potential.idxs)
@@ -2098,10 +2100,19 @@ $$$$""",
             + len(lhs.chiral_atom.potential.idxs)
         )
 
-        assert lhs_dg._dag.number_of_nodes() == expected_node_count
+        assert dg._dag.number_of_nodes() == expected_node_count
 
-        print("ON Bonds/Angles/Propers/Impropers/ChiralAtoms", lhs_dg.n_terms_on())
-        print("OFF Bonds/Angles/Propers/Impropers/ChiralAtoms", lhs_dg.n_terms_off())
+        # print("ON Bonds/Angles/Propers/Impropers/ChiralAtoms", dg.n_terms_on())
+        # print("OFF Bonds/Angles/Propers/Impropers/ChiralAtoms", dg.n_terms_off())
+
+        # print("ON NODES", dg.get_on_nodes())
+        # print("OFF NODES", dg.get_off_nodes())
+
+        dgs.append(dg)
+
+    print("----------")
+    print("OFF -> ON", find_nodes_to_turn_on(dgs[0], dgs[-1]))
+    print("ON -> OFF", find_nodes_to_turn_off(dgs[0], dgs[-1]))
 
     assert 0
 

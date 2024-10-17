@@ -59,16 +59,6 @@ _get_implied_bond_nodes_from_chiral_atoms = _get_implied_bond_nodes_from_imprope
 _get_implied_angle_nodes_from_chiral_atoms = _get_implied_angle_nodes_from_improper_idxs
 
 
-# def _get_implied_angle_nodes_from_chiral_atoms(c, j, k, l):
-#     implied_angle_idxs = [
-#         canonicalize_bond([j, c, k]),
-#         canonicalize_bond([j, c, l]),
-#         canonicalize_bond([k, c, l]),
-#     ]
-#     angle_nodes = [(NodeType.ANGLE, tuple(angle_idxs)) for angle_idxs in implied_angle_idxs]
-#     return angle_nodes
-
-
 class DepGraph:
     def __init__(self, bond, angle, proper_torsion, improper_torsion, chiral_atom):
         # self.potentials = potentials
@@ -224,8 +214,8 @@ class DepGraph:
                     for bond_node in implied_bond_nodes:
                         assert self._dag.nodes[bond_node]["state"] == NodeState.ON
                 elif node_state == NodeState.OFF:
-                    # if the chiral volume is turned off, we should avoid a situation where all three
-                    # adjacent chiral angles are turned on -> creating a slow, trapped, metastable state
+                    # if the chiral volume is turned off, we want to avoid a situation where all three
+                    # incident chiral angles are turned on, as it would create a slow, trapped, metastable state
                     # that is difficult to sample using conventional MD.
                     implied_angle_nodes = _get_implied_angle_nodes_from_chiral_atoms(c, j, k, l)
                     angle_nodes_on = 0
@@ -294,3 +284,30 @@ class DepGraph:
 
     def n_terms_off(self):
         return self._n_terms(state=NodeState.OFF)
+
+    def _get_nodes(self, state):
+        nodes = set()
+        for node, data in self._dag.nodes(data=True):
+            if data["state"] == state:
+                nodes.add(node)
+        return nodes
+
+    def get_on_nodes(self):
+        return self._get_nodes(NodeState.ON)
+
+    def get_off_nodes(self):
+        return self._get_nodes(NodeState.OFF)
+
+
+def find_nodes_to_turn_on(lhs_dg, rhs_dg):
+    return lhs_dg.get_off_nodes().intersection(rhs_dg.get_on_nodes())
+
+
+def find_nodes_to_turn_off(lhs_dg, rhs_dg):
+    return lhs_dg.get_on_nodes().intersection(rhs_dg.get_off_nodes())
+
+
+# goal: go from lhs to rhs with a sequence of intermediate dgs that are all "verified" to be valid
+#  sequential: greedy strategy, turn on one node at a time
+# # reoptimizing into a parallel strategy?
+#  parallel: greedy strategy, turn on multiple nodes?
