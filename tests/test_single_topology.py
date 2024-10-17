@@ -2007,28 +2007,86 @@ M  END
     verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
 
 
-from rdkit import Chem
-
 from timemachine.fe.depgraph import DepGraph
+from timemachine.fe.utils import plot_atom_mapping_grid
 
 
 def test_depgraph():
-    seed = 2024
+    # with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    #     mols = read_sdf(path_to_ligand)
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf(path_to_ligand)
+    # mol_a = mols[1]
+    # mol_b = mols[5]
 
-    mol_a = mols[1]
-    mol_b = mols[4]
+    # core = _get_core_by_mcs(mol_a, mol_b)
 
-    core = _get_core_by_mcs(mol_a, mol_b)
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 10092413403D
+
+  6  6  0  0  0  0            999 V2000
+    0.1292    1.5540   -0.4103 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.8029    0.8102    0.1698 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0572    0.0397    0.8217 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1063    0.7870    0.2530 C   0  0  2  0  0  0  0  0  0  0  0  0
+    2.1161    1.7939    1.5497 F   0  0  0  0  0  0  0  0  0  0  0  0
+    1.8910    0.0536   -0.6026 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  1  4  1  0  0  0  0
+  4  5  1  0  0  0  0
+  4  6  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    for atom in mol_a.GetAtoms():
+        atom.SetProp("atomLabel", str(atom.GetIdx()))
+    # keeps 2 chiral restraints
+    perm = [0, 1, 2, 3, 4, 5]
+    # keeps all chiral restraints
+    # perm = [3, 4, 5, 0, 2, 1]
+    perm_kv = {}
+    for new_idx, old_idx in enumerate(perm):
+        perm_kv[old_idx] = new_idx
+    mol_a = Chem.RenumberAtoms(mol_a, perm)
+    mol_a.SetProp("_Name", "mol")
+    mol_b = Chem.Mol(mol_a)
+    core = np.array([[1, 1], [2, 2], [3, 3], [4, 5]], dtype=np.int32)
+    core_perm = []
+    for i, j in core:
+        core_perm.append([perm_kv[i], perm_kv[j]])
+    core = np.array(core_perm, dtype=np.int32)
+
+    res = plot_atom_mapping_grid(mol_a, mol_b, core)
+    fpath = "atom_mapping.svg"
+    print("core mapping written to", fpath)
+    with open(fpath, "w") as fh:
+        fh.write(res)
 
     ff = Forcefield.load_default()
 
     st = SingleTopology(mol_a, mol_b, core, ff)
     lhs = st.setup_intermediate_state(0.0)
 
-    dg = DepGraph(lhs.bond, lhs.angle, lhs.proper_torsion, lhs.improper_torsion, lhs.chiral_atom)
+    stm = st.mol(0.0)
+    from io import StringIO
+
+    x_a = get_romol_conf(mol_a)
+    x_b = get_romol_conf(mol_b)
+    fh = StringIO()
+    writer = Chem.SDWriter("debug2.sdf")
+    mol_conf = Chem.Conformer(stm.GetNumAtoms())
+    mol_copy = Chem.Mol(stm)
+    coords = st.combine_confs(x_a, x_b, 0.0)
+    for a_idx, pos in enumerate(coords):
+        mol_conf.SetAtomPosition(a_idx, (pos * 10).astype(np.float64))
+    mol_copy.AddConformer(mol_conf)
+    writer.write(mol_copy)
+
+    lhs_dg = DepGraph(lhs.bond, lhs.angle, lhs.proper_torsion, lhs.improper_torsion, lhs.chiral_atom)
     expected_node_count = (
         len(lhs.bond.potential.idxs)
         + len(lhs.angle.potential.idxs)
@@ -2037,17 +2095,36 @@ def test_depgraph():
         + len(lhs.chiral_atom.potential.idxs)
     )
 
-    assert dg._dag.number_of_nodes() == expected_node_count
+    assert lhs_dg._dag.number_of_nodes() == expected_node_count
+
+    print("ON Bonds/Angles/Propers/Impropers/ChiralAtoms", lhs_dg.n_terms_on())
+    print("OFF Bonds/Angles/Propers/Impropers/ChiralAtoms", lhs_dg.n_terms_off())
+
+    rhs = st.setup_intermediate_state(1.0)
+
+    rhs_dg = DepGraph(rhs.bond, rhs.angle, rhs.proper_torsion, rhs.improper_torsion, rhs.chiral_atom)
+    expected_node_count = (
+        len(rhs.bond.potential.idxs)
+        + len(rhs.angle.potential.idxs)
+        + len(rhs.proper_torsion.potential.idxs)
+        + len(rhs.improper_torsion.potential.idxs)
+        + len(rhs.chiral_atom.potential.idxs)
+    )
+
+    assert rhs_dg._dag.number_of_nodes() == expected_node_count
+
+    print("ON Bonds/Angles/Propers/Impropers/ChiralAtoms", rhs_dg.n_terms_on())
+    print("OFF Bonds/Angles/Propers/Impropers/ChiralAtoms", rhs_dg.n_terms_off())
 
 
-def test_jank():
-    seed = 2024
+# def test_jank():
+#     seed = 2024
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf(path_to_ligand)
+#     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+#         mols = read_sdf(path_to_ligand)
 
-    mol_a = mols[1]
+#     mol_a = mols[1]
 
-    ff = Forcefield.load_default()
-    res = ff.it_handle.parameterize(mol_a)
-    print(res)
+#     ff = Forcefield.load_default()
+#     res = ff.it_handle.parameterize(mol_a)
+#     print(res)

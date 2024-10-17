@@ -854,3 +854,129 @@ def test_chiral_inversion_in_single_topology_solvent():
     # with open("solvent_chiral_energies_b.png", "wb") as ofs:
     #     data_b = plot_as_png_fxn(plot_chiral_restraint_energies, heatmap_b)
     #     ofs.write(data_b)
+
+
+import matplotlib.pyplot as plt
+
+from timemachine.fe.plots import (
+    plot_hrex_replica_state_distribution,
+    plot_hrex_replica_state_distribution_heatmap,
+    plot_hrex_swap_acceptance_rates_convergence,
+    plot_hrex_transition_matrix,
+)
+
+
+def plot_and_save(f, fname, *args, **kwargs):
+    """
+    Given a function which generates a plot, return the plot as png bytes.
+    """
+    plt.clf()
+    f(*args, **kwargs)
+    with open(fname, "wb") as fh:
+        plt.savefig(fh, format="png", bbox_inches="tight")
+
+
+from timemachine.fe.utils import plot_atom_mapping_grid
+
+
+def test_ring_breaking_chiral_restraints_failure():
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 10092413403D
+
+  6  6  0  0  0  0            999 V2000
+    0.1292    1.5540   -0.4103 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.8029    0.8102    0.1698 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0572    0.0397    0.8217 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1063    0.7870    0.2530 C   0  0  2  0  0  0  0  0  0  0  0  0
+    2.1161    1.7939    1.5497 F   0  0  0  0  0  0  0  0  0  0  0  0
+    1.8910    0.0536   -0.6026 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  1  4  1  0  0  0  0
+  4  5  1  0  0  0  0
+  4  6  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    # keeps 2 chiral restraints
+    # perm = [0, 1, 2, 3, 4, 5]
+
+    # keeps all chiral restraints
+    perm = [3, 4, 5, 0, 2, 1]
+
+    perm_kv = {}
+    for new_idx, old_idx in enumerate(perm):
+        perm_kv[old_idx] = new_idx
+
+    mol_a = Chem.RenumberAtoms(mol_a, perm)
+    mol_a.SetProp("_Name", "mol")
+    mol_b = Chem.Mol(mol_a)
+
+    core = np.array([[1, 1], [2, 2], [3, 3], [4, 5]], dtype=np.int32)
+    core_perm = []
+    for i, j in core:
+        core_perm.append([perm_kv[i], perm_kv[j]])
+    core = np.array(core_perm, dtype=np.int32)
+
+    res = plot_atom_mapping_grid(mol_a, mol_b, core)
+    fpath = "atom_mapping.svg"
+    print("core mapping written to", fpath)
+    with open(fpath, "w") as fh:
+        fh.write(res)
+
+    print(core)
+
+    # assert 0
+
+    short_hrex_params = replace(DEFAULT_HREX_PARAMS, n_frames=1000, n_eq_steps=10000, steps_per_frame=400)
+    ff = Forcefield.load_default()
+
+    vacuum_res = run_vacuum(mol_a, mol_b, core, ff, None, short_hrex_params, n_windows=48, min_overlap=0.666)
+
+    with open("vacuum_res.pkl", "wb") as fh:
+        import pickle
+
+        pickle.dump((vacuum_res, mol_a, mol_b, core), fh)
+
+    with open("vacuum_overlap.png", "wb") as fh:
+        fh.write(vacuum_res.plots.overlap_detail_png)
+
+    plot_and_save(
+        plot_hrex_swap_acceptance_rates_convergence,
+        "vac_plot_hrex_swap_acceptance_rates_convergence.png",
+        vacuum_res.hrex_diagnostics.cumulative_swap_acceptance_rates,
+    )
+    plot_and_save(
+        plot_hrex_transition_matrix,
+        "vac_plot_hrex_transition_matrix.png",
+        vacuum_res.hrex_diagnostics.transition_matrix,
+    )
+
+    plot_and_save(
+        plot_hrex_replica_state_distribution,
+        "vac_plot_hrex_replica_state_distribution.png",
+        vacuum_res.hrex_diagnostics.cumulative_replica_state_counts,
+    )
+    plot_and_save(
+        plot_hrex_replica_state_distribution_heatmap,
+        "vac_plot_hrex_replica_state_distribution_heatmap.png",
+        vacuum_res.hrex_diagnostics.cumulative_replica_state_counts,
+    )
+
+    from timemachine.fe.plots import plot_as_png_fxn, plot_chiral_restraint_energies
+
+    atom_map_mixin = AtomMapMixin(mol_a, mol_b, core)
+
+    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(vacuum_res, atom_map_mixin)
+
+    with open("solvent_chiral_energies_a.png", "wb") as ofs:
+        data_a = plot_as_png_fxn(plot_chiral_restraint_energies, heatmap_a)
+        ofs.write(data_a)
+
+    with open("solvent_chiral_energies_b.png", "wb") as ofs:
+        data_b = plot_as_png_fxn(plot_chiral_restraint_energies, heatmap_b)
+        ofs.write(data_b)

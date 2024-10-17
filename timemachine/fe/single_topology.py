@@ -65,7 +65,7 @@ class DummyGroupAssignmentError(RuntimeError):
     pass
 
 
-def bond_isin(bonds: NDArray[np.int32], idxs: NDArray[np.int32]) -> NDArray[np.bool_]:
+def bond_is_in(bonds: NDArray[np.int32], idxs: NDArray[np.int32]) -> NDArray[np.bool_]:
     """Returns a boolean mask indicating whether both indices of a bond are contained in idxs.
 
     Parameters
@@ -101,7 +101,7 @@ def setup_dummy_bond_and_chiral_interactions(
     dga = np.append(dummy_group_arr, root_anchor_atom)
 
     # keep interactions that involve only root_anchor_atom
-    bond_mask = bond_isin(bond_idxs, dga)
+    bond_mask = bond_is_in(bond_idxs, dga)
     dummy_bond_idxs = bond_idxs[bond_mask]
     dummy_bond_params = bond_params[bond_mask]
 
@@ -122,7 +122,7 @@ def setup_dummy_bond_and_chiral_interactions(
     # mask indicating whether a chiral atom ixn has a non-center dummy atom
     has_ncda = (chiral_atom_idxs[:, 1:, None] == dummy_group_arr[None, None, :]).any(-1).any(-1)
 
-    chiral_atom_ixn_mask = bond_isin(chiral_atom_idxs, dgc) & has_ncda
+    chiral_atom_ixn_mask = bond_is_in(chiral_atom_idxs, dgc) & has_ncda
     dummy_chiral_atom_idxs = chiral_atom_idxs[chiral_atom_ixn_mask]
     dummy_chiral_atom_params = chiral_atom_params[chiral_atom_ixn_mask]
 
