@@ -2005,3 +2005,49 @@ M  END
 
     # should not raise an assertion
     verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
+
+
+from rdkit import Chem
+
+from timemachine.fe.depgraph import DepGraph
+
+
+def test_depgraph():
+    seed = 2024
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
+
+    mol_a = mols[1]
+    mol_b = mols[4]
+
+    core = _get_core_by_mcs(mol_a, mol_b)
+
+    ff = Forcefield.load_default()
+
+    st = SingleTopology(mol_a, mol_b, core, ff)
+    lhs = st.setup_intermediate_state(0.0)
+
+    dg = DepGraph(lhs.bond, lhs.angle, lhs.proper_torsion, lhs.improper_torsion, lhs.chiral_atom)
+    expected_node_count = (
+        len(lhs.bond.potential.idxs)
+        + len(lhs.angle.potential.idxs)
+        + len(lhs.proper_torsion.potential.idxs)
+        + len(lhs.improper_torsion.potential.idxs)
+        + len(lhs.chiral_atom.potential.idxs)
+    )
+
+    assert dg._dag.number_of_nodes() == expected_node_count
+
+
+def test_jank():
+    seed = 2024
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
+
+    mol_a = mols[1]
+
+    ff = Forcefield.load_default()
+    res = ff.it_handle.parameterize(mol_a)
+    print(res)

@@ -130,10 +130,17 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
     # utility system container
     bond: BoundPotential[HarmonicBond]
     angle: BoundPotential[_HarmonicAngle]
-    torsion: Optional[BoundPotential[PeriodicTorsion]]
+    proper_torsion: Optional[BoundPotential[PeriodicTorsion]]
+    improper_torsion: Optional[BoundPotential[PeriodicTorsion]]
     nonbonded: BoundPotential[_Nonbonded]
     chiral_atom: Optional[BoundPotential[ChiralAtomRestraint]]
     chiral_bond: Optional[BoundPotential[ChiralBondRestraint]]
+
+    @property
+    def torsion(self):
+        torsion_idxs = np.concatenate([self.proper_torsion.potential.idxs, self.improper_torsion.potential.idxs])
+        torsion_params = np.concatenate([self.proper_torsion.params, self.improper_torsion.params])
+        return PeriodicTorsion(torsion_idxs).bind(torsion_params)
 
     def get_U_fn(self):
         """
@@ -151,7 +158,14 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
         # For molecules too small for to have certain terms,
         # skip when no params are present
         # Chiral bond restraints are disabled until checks are added (see GH #815)
-        potentials = [self.bond, self.angle, self.torsion, self.chiral_atom, self.nonbonded]
+        potentials = [
+            self.bond,
+            self.angle,
+            self.proper_torsion,
+            self.improper_torsion,
+            self.chiral_atom,
+            self.nonbonded,
+        ]
         terms = cast(
             List[BoundPotential[Potential]],
             [p for p in potentials if p],

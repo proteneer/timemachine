@@ -2,7 +2,7 @@ import numpy as np
 
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.suffix import _SUFFIX
-from timemachine.ff.handlers.utils import canonicalize_bond, match_smirks
+from timemachine.ff.handlers.utils import canonicalize_bond, canonicalize_improper_idxs, match_smirks
 
 
 def generate_vd_idxs(mol, smirks):
@@ -242,8 +242,12 @@ class ImproperTorsionHandler(SerializableMixIn):
         for atom_idxs, p_idx in impropers.items():
             center = atom_idxs[1]
             others = [atom_idxs[0], atom_idxs[2], atom_idxs[3]]
+            # enumerate trefoil
             for p in [(others[i], others[j], others[k]) for (i, j, k) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]]:
-                improper_idxs.append(canonicalize_bond((center, p[0], p[1], p[2])))
+                improper_cjkl = (center, p[0], p[1], p[2])
+                # by construction since they're in the same rotation set
+                assert improper_cjkl == canonicalize_improper_idxs(improper_cjkl)
+                improper_idxs.append(improper_cjkl)
                 param_idxs.append(p_idx)
 
         param_idxs = np.array(param_idxs)

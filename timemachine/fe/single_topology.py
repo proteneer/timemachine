@@ -25,6 +25,7 @@ from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lamb
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.fe.topology import get_ligand_ixn_pots_params
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers.utils import canonicalize_improper_idxs
 from timemachine.graph_utils import convert_to_nx
 from timemachine.potentials import (
     BoundPotential,
@@ -301,56 +302,6 @@ def canonicalize_bonds(bonds: NDArray[np.int32]) -> NDArray[np.int32]:
     assert bonds.shape[1] >= 2
     is_canonical = bonds[:, 0] < bonds[:, -1]
     return np.where(is_canonical[:, None], bonds, bonds[:, ::-1])
-
-
-def canonicalize_improper_idxs(idxs) -> Tuple[int, int, int, int]:
-    """
-    Canonicalize an improper_idx while being symmetry aware.
-
-    Given idxs (i,j,k,l), where i is the center, and (j,k,l) are neighbors:
-
-    0) Canonicalize the (j,k,l) into (jj,kk,ll) by sorting
-    1) Generate clockwise rotations of (jj,kk,ll)
-    2) Generate counter clockwise rotations of (jj,kk,ll)
-    3) We now can sort 1) and 2) and assign a mapping
-
-    If the (j,k,l) is in the cw rotation ordered set, we're done. Otherwise it must
-    be in the ccw ordered set. We look up the corresponding idx in the cw set.
-
-    This does not do idxs[0] < idxs[-1] canonicalization.
-    """
-    i, j, k, l = idxs
-
-    # i is the center
-    # generate lexical order
-    key = (j, k, l)
-
-    jj, kk, ll = sorted(key)
-
-    # generate clockwise permutations
-    # note: cw/ccw has nothing to do with the direction of rotation
-    # cw/ccw is related by a pair swap.
-    cw_jkl = (jj, kk, ll)  # starting idxs
-    cw_klj = (kk, ll, jj)  # rotate left
-    cw_ljk = (ll, jj, kk)  # rotate left
-    cw_items = sorted([cw_jkl, cw_klj, cw_ljk])
-
-    if key in cw_items:
-        return (i, j, k, l)
-
-    # generate counter clockwise permutations
-    ccw_kjl = (kk, jj, ll)  # swap 1st and 2nd element
-    ccw_jlk = (jj, ll, kk)  # rotate left
-    ccw_lkj = (ll, kk, jj)  # rotate left
-    ccw_items = sorted([ccw_kjl, ccw_jlk, ccw_lkj])
-
-    assert key in ccw_items
-
-    for idx, cw_item in enumerate(ccw_items):
-        if cw_item == key:
-            break
-
-    return (i, *cw_items[idx])
 
 
 def get_num_connected_components(num_atoms: int, bonds: Collection[Tuple[int, int]]) -> int:
@@ -644,18 +595,19 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
 
     assert_improper_idxs_are_canonical(mol_c_improper_idxs)
 
-    # combine proper + improper
-    mol_c_torsion_idxs = np.concatenate([mol_c_proper_idxs, mol_c_improper_idxs])
-    mol_c_torsion_params = np.concatenate([mol_c_proper_params, mol_c_improper_params])
-
     # canonicalize angles
     mol_c_angle_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_angle_idxs])
     mol_c_stable_angle_params = np.hstack([mol_c_angle_params, np.zeros((len(mol_c_angle_params), 1))])
     angle_potential = HarmonicAngleStable(mol_c_angle_idxs_canon).bind(np.array(mol_c_stable_angle_params))
 
     # canonicalize torsions with idxs[0] < idxs[-1] check
-    mol_c_torsion_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_torsion_idxs])
-    torsion_potential = PeriodicTorsion(mol_c_torsion_idxs_canon).bind(np.array(mol_c_torsion_params))
+    mol_c_proper_torsion_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_proper_idxs])
+    proper_torsion_potential = PeriodicTorsion(mol_c_proper_torsion_idxs_canon).bind(np.array(mol_c_proper_params))
+
+    mol_c_improper_torsion_idxs_canon = np.array(mol_c_improper_idxs)
+    improper_torsion_potential = PeriodicTorsion(mol_c_improper_torsion_idxs_canon).bind(
+        np.array(mol_c_improper_params)
+    )
 
     # dummy atoms do not have any nonbonded interactions, so we simply turn them off
     mol_c_nbpl_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_a_nbpl_idxs])
@@ -677,7 +629,8 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     return VacuumSystem(
         bond_potential,
         angle_potential,
-        torsion_potential,
+        proper_torsion_potential,
+        improper_torsion_potential,
         nonbonded_potential,
         chiral_atom_potential,
         chiral_bond_potential,
@@ -1672,11 +1625,35 @@ class SingleTopology(AtomMapMixin):
             ),
         )
 
-        assert src_system.torsion
-        assert dst_system.torsion
-        torsion = self._setup_intermediate_bonded_term(
-            src_system.torsion,
-            dst_system.torsion,
+        # assert src_system.torsion
+        # assert dst_system.torsion
+        # torsion = self._setup_intermediate_bonded_term(
+        #     src_system.torsion,
+        #     dst_system.torsion,
+        #     lamb,
+        #     interpolate.align_torsion_idxs_and_params,
+        #     partial(interpolate_periodic_torsion_params, lambda_min=torsions_min, lambda_max=torsions_max),
+        # )
+
+        assert src_system.proper_torsion
+        assert dst_system.proper_torsion
+        proper_torsion = self._setup_intermediate_bonded_term(
+            src_system.proper_torsion,
+            dst_system.proper_torsion,
+            lamb,
+            interpolate.align_torsion_idxs_and_params,
+            partial(interpolate_periodic_torsion_params, lambda_min=torsions_min, lambda_max=torsions_max),
+        )
+
+        assert src_system.improper_torsion
+        assert dst_system.improper_torsion
+
+        # print(src_system.improper_torsion.potential.idxs)
+        # assert 0
+
+        improper_torsion = self._setup_intermediate_bonded_term(
+            src_system.improper_torsion,
+            dst_system.improper_torsion,
             lamb,
             interpolate.align_torsion_idxs_and_params,
             partial(interpolate_periodic_torsion_params, lambda_min=torsions_min, lambda_max=torsions_max),
@@ -1722,7 +1699,7 @@ class SingleTopology(AtomMapMixin):
             interpolate.linear_interpolation,
         )
 
-        return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
+        return VacuumSystem(bond, angle, proper_torsion, improper_torsion, nonbonded, chiral_atom, chiral_bond)
 
     def mol(self, lamb, min_bond_k=100.0) -> Chem.Mol:
         """
