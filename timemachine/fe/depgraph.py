@@ -1,6 +1,6 @@
 from enum import IntEnum
 
-from networkx import DiGraph
+import networkx as nx
 
 from timemachine.fe.dummy import canonicalize_bond
 
@@ -18,10 +18,61 @@ class NodeType(IntEnum):
     CHIRAL_ATOM = 4
 
 
+def _get_implied_bond_nodes_from_angle_idxs(i, j, k):
+    implied_bond_idxs = [canonicalize_bond([i, j]), canonicalize_bond([j, k])]
+    bond_nodes = [(NodeType.BOND, tuple(bond_idxs)) for bond_idxs in implied_bond_idxs]
+    return bond_nodes
+
+
+def _get_implied_bond_nodes_from_proper_idxs(i, j, k, l):
+    implied_bond_idxs = [canonicalize_bond([i, j]), canonicalize_bond([j, k]), canonicalize_bond([k, l])]
+    bond_nodes = [(NodeType.BOND, tuple(bond_idxs)) for bond_idxs in implied_bond_idxs]
+    return bond_nodes
+
+
+def _get_implied_angle_nodes_from_proper_idxs(i, j, k, l):
+    implied_angle_idxs = [
+        canonicalize_bond([i, j, k]),
+        canonicalize_bond([j, k, l]),
+    ]
+    angle_nodes = [(NodeType.ANGLE, tuple(angle_idxs)) for angle_idxs in implied_angle_idxs]
+    return angle_nodes
+
+
+def _get_implied_bond_nodes_from_improper_idxs(c, j, k, l):
+    implied_bond_idxs = [canonicalize_bond([c, j]), canonicalize_bond([c, k]), canonicalize_bond([c, l])]
+    bond_nodes = [(NodeType.BOND, tuple(bond_idxs)) for bond_idxs in implied_bond_idxs]
+    return bond_nodes
+
+
+def _get_implied_angle_nodes_from_improper_idxs(c, j, k, l):
+    implied_angle_idxs = [
+        canonicalize_bond([j, c, k]),
+        canonicalize_bond([j, c, l]),
+        canonicalize_bond([k, c, l]),
+    ]
+    angle_nodes = [(NodeType.ANGLE, tuple(angle_idxs)) for angle_idxs in implied_angle_idxs]
+    return angle_nodes
+
+
+_get_implied_bond_nodes_from_chiral_atoms = _get_implied_bond_nodes_from_improper_idxs
+_get_implied_angle_nodes_from_chiral_atoms = _get_implied_angle_nodes_from_improper_idxs
+
+
+# def _get_implied_angle_nodes_from_chiral_atoms(c, j, k, l):
+#     implied_angle_idxs = [
+#         canonicalize_bond([j, c, k]),
+#         canonicalize_bond([j, c, l]),
+#         canonicalize_bond([k, c, l]),
+#     ]
+#     angle_nodes = [(NodeType.ANGLE, tuple(angle_idxs)) for angle_idxs in implied_angle_idxs]
+#     return angle_nodes
+
+
 class DepGraph:
     def __init__(self, bond, angle, proper_torsion, improper_torsion, chiral_atom):
         # self.potentials = potentials
-        self._dag = DiGraph()
+        self._dag = nx.DiGraph()
 
         # primitives
         # 1. add bonds
@@ -50,9 +101,8 @@ class DepGraph:
             assert not self._dag.has_node(angle_node)
             self._dag.add_node(angle_node, state=ns)
 
-            implied_bond_idxs = [canonicalize_bond([i, j]), canonicalize_bond([j, k])]
-            for bond_idxs in implied_bond_idxs:
-                bond_node = (NodeType.BOND, tuple(bond_idxs))
+            implied_bond_idxs = _get_implied_bond_nodes_from_angle_idxs(i, j, k)
+            for bond_node in implied_bond_idxs:
                 assert self._dag.has_node(bond_node)
                 self._dag.add_edge(angle_node, bond_node)
 
@@ -66,22 +116,22 @@ class DepGraph:
             assert not self._dag.has_node(chiral_node)
             self._dag.add_node(chiral_node, state=ns)
 
-            for x in [j, k, l]:
-                src, dst = canonicalize_bond((c, x))
-                bond_node = (NodeType.BOND, (src, dst))
+            implied_bond_nodes = _get_implied_bond_nodes_from_chiral_atoms(c, j, k, l)
+            for bond_node in implied_bond_nodes:
                 assert self._dag.has_node(bond_node)
                 self._dag.add_edge(chiral_node, bond_node)
 
             # add reverse dependencies for angles
-            implied_angle_idxs = [
-                canonicalize_bond([j, c, k]),
-                canonicalize_bond([j, c, l]),
-                canonicalize_bond([k, c, l]),
-            ]
-            for angle_idxs in implied_angle_idxs:
-                angle_node = (NodeType.ANGLE, tuple(angle_idxs))
+            implied_angle_nodes = _get_implied_angle_nodes_from_chiral_atoms(c, j, k, l)
+            for angle_node in implied_angle_nodes:
                 assert self._dag.has_node(angle_node)
                 self._dag.add_edge(angle_node, chiral_node)
+
+            # if ns == NodeState.OFF:
+            #     assert angle_on_count < 3
+            # elif ns == NodeState.ON:
+            #     print("NS ON angle_on_count", angle_on_count)
+            # assert angle_on_count == 3
 
         for (i, j, k, l), (force_k, _, n) in zip(proper_torsion.potential.idxs, proper_torsion.params):
             if force_k > 0:
@@ -94,20 +144,13 @@ class DepGraph:
             assert not self._dag.has_node(proper_node)
             self._dag.add_node(proper_node, state=ns)
 
-            # add reverse dependencies for angles
-            implied_angle_idxs = [
-                canonicalize_bond([i, j, k]),
-                canonicalize_bond([j, k, l]),
-            ]
-
-            for angle_idxs in implied_angle_idxs:
-                angle_node = (NodeType.ANGLE, tuple(angle_idxs))
+            implied_angle_nodes = _get_implied_angle_nodes_from_proper_idxs(i, j, k, l)
+            for angle_node in implied_angle_nodes:
                 assert self._dag.has_node(angle_node)
                 self._dag.add_edge(proper_node, angle_node)
 
-            implied_bond_idxs = [canonicalize_bond([i, j]), canonicalize_bond([j, k]), canonicalize_bond([k, l])]
-            for bond_idxs in implied_bond_idxs:
-                bond_node = (NodeType.BOND, tuple(bond_idxs))
+            implied_bond_nodes = _get_implied_bond_nodes_from_proper_idxs(i, j, k, l)
+            for bond_node in implied_bond_nodes:
                 assert self._dag.has_node(bond_node)
                 self._dag.add_edge(proper_node, bond_node)
 
@@ -121,32 +164,103 @@ class DepGraph:
             assert not self._dag.has_node(improper_node)
             self._dag.add_node(improper_node, state=ns)
 
-            # add reverse dependencies for angles
-            implied_angle_idxs = [
-                canonicalize_bond([j, c, k]),
-                canonicalize_bond([j, c, l]),
-                canonicalize_bond([k, c, l]),
-            ]
-
-            for angle_idxs in implied_angle_idxs:
-                angle_node = (NodeType.ANGLE, tuple(angle_idxs))
+            implied_angle_nodes = _get_implied_angle_nodes_from_improper_idxs(c, j, k, l)
+            for angle_node in implied_angle_nodes:
                 assert self._dag.has_node(angle_node)
                 self._dag.add_edge(improper_node, angle_node)
 
-            implied_bond_idxs = [canonicalize_bond([c, j]), canonicalize_bond([c, k]), canonicalize_bond([c, l])]
-            for bond_idxs in implied_bond_idxs:
-                bond_node = (NodeType.BOND, tuple(bond_idxs))
+            implied_bond_nodes = _get_implied_bond_nodes_from_improper_idxs(c, j, k, l)
+            for bond_node in implied_bond_nodes:
                 assert self._dag.has_node(bond_node)
                 self._dag.add_edge(improper_node, bond_node)
 
-        for src_node, dst_node in self._dag.edges():
-            src_state = self._dag.nodes[src_node]["state"]
-            dst_state = self._dag.nodes[dst_node]["state"]
+        self._verify_graph()
 
-            # invalid state
-            if src_state == NodeState.ON and dst_state == NodeState.OFF:
-                print(src_node, src_state, "->", dst_node, dst_state)
-                # assert 0
+    def _verify_angles(self):
+        for (node_type, angle_idxs), data in self._dag.nodes(data=True):
+            if node_type == NodeType.ANGLE:
+                node_state = data["state"]
+                if node_state == NodeState.ON:
+                    i, j, k = angle_idxs
+                    implied_bond_nodes = _get_implied_bond_nodes_from_angle_idxs(i, j, k)
+                    for bond_node in implied_bond_nodes:
+                        assert self._dag.nodes[bond_node]["state"] == NodeState.ON
+
+    def _verify_propers(self):
+        for (node_type, torsion_idxs), data in self._dag.nodes(data=True):
+            if node_type == NodeType.PROPER_TORSION:
+                node_state = data["state"]
+                if node_state == NodeState.ON:
+                    i, j, k, l, _ = torsion_idxs  # last element is periodicity
+                    implied_bond_nodes = _get_implied_bond_nodes_from_proper_idxs(i, j, k, l)
+                    for bond_node in implied_bond_nodes:
+                        assert self._dag.nodes[bond_node]["state"] == NodeState.ON
+
+                    implied_angle_nodes = _get_implied_angle_nodes_from_proper_idxs(i, j, k, l)
+                    for angle_node in implied_angle_nodes:
+                        assert self._dag.nodes[angle_node]["state"] == NodeState.ON
+
+    def _verify_impropers(self):
+        for (node_type, torsion_idxs), data in self._dag.nodes(data=True):
+            if node_type == NodeType.IMPROPER_TORSION:
+                node_state = data["state"]
+                if node_state == NodeState.ON:
+                    c, j, k, l, _ = torsion_idxs  # last element is periodicity
+                    implied_bond_nodes = _get_implied_bond_nodes_from_improper_idxs(c, j, k, l)
+                    for bond_node in implied_bond_nodes:
+                        assert self._dag.nodes[bond_node]["state"] == NodeState.ON
+
+                    implied_angle_nodes = _get_implied_angle_nodes_from_improper_idxs(c, j, k, l)
+                    for angle_node in implied_angle_nodes:
+                        assert self._dag.nodes[angle_node]["state"] == NodeState.ON
+
+    def _verify_chiral_atoms(self):
+        for (node_type, chiral_idxs), data in self._dag.nodes(data=True):
+            if node_type == NodeType.CHIRAL_ATOM:
+                node_state = data["state"]
+                c, j, k, l = chiral_idxs  # last element is periodicity
+                if node_state == NodeState.ON:
+                    implied_bond_nodes = _get_implied_bond_nodes_from_chiral_atoms(c, j, k, l)
+                    for bond_node in implied_bond_nodes:
+                        assert self._dag.nodes[bond_node]["state"] == NodeState.ON
+                elif node_state == NodeState.OFF:
+                    # if the chiral volume is turned off, we should avoid a situation where all three
+                    # adjacent chiral angles are turned on -> creating a slow, trapped, metastable state
+                    # that is difficult to sample using conventional MD.
+                    implied_angle_nodes = _get_implied_angle_nodes_from_chiral_atoms(c, j, k, l)
+                    angle_nodes_on = 0
+                    for angle_node in implied_angle_nodes:
+                        if self._dag.nodes[angle_node]["state"] == NodeState.ON:
+                            angle_nodes_on += 1
+
+                    if angle_nodes_on == 3:
+                        print("WARNING: Chiral Idxs", chiral_idxs, "is turned off but all the angles are turned on.")
+                    # assert angle_nodes_on < 3
+
+    def _verify_graph(self):
+        """
+        Check that angles, propers, impropers, chiral atoms have their dependencies satisfied.
+        """
+
+        # 1. Angle (i,j,k):
+        #   If ON then (i,j) and (j,k) bond states are ON
+        #   If OFF then no requirements
+        # 2. Proper Torsion (i,j,k,l)
+        #   If ON then bonds {(i,j), (j,k), (k,l)} and angles {(i,j,k), (j,k,l)} are ON
+        #   If OFF then no requirements
+        # 3. Improper Torsion (c,j,k,l)
+        #   If ON then bonds {(c,j), (j,k), (k,l)} and angles {(j,c,k), (j,c,l), (k,c,l)} are ON
+        #   If OFF then no requirements
+        # 4. Chiral Atom (c,j,k,l)
+        #   If ON then bonds {(c,j), (c,k), (c,l)} are ON, no requirement on angles.
+        #   If OFF then at _most_ 2 of the angles {(j,c,k), (j,c,l), (k,c,l)} are ON
+        # 5. Chiral Bond (i,j,k,l)
+        #   TBD.
+
+        self._verify_angles()
+        self._verify_propers()
+        self._verify_impropers()
+        self._verify_chiral_atoms()
 
     def _n_terms(self, state):
         n_bonds = 0

@@ -2069,36 +2069,41 @@ $$$$""",
     ff = Forcefield.load_default()
 
     st = SingleTopology(mol_a, mol_b, core, ff)
-    lhs = st.setup_intermediate_state(0.0)
 
-    stm = st.mol(0.0)
-    from io import StringIO
+    for lamb in np.linspace(0, 1, 10):
+        print("PROCESSING LAMBDA", lamb)
 
-    x_a = get_romol_conf(mol_a)
-    x_b = get_romol_conf(mol_b)
-    fh = StringIO()
-    writer = Chem.SDWriter("debug2.sdf")
-    mol_conf = Chem.Conformer(stm.GetNumAtoms())
-    mol_copy = Chem.Mol(stm)
-    coords = st.combine_confs(x_a, x_b, 0.0)
-    for a_idx, pos in enumerate(coords):
-        mol_conf.SetAtomPosition(a_idx, (pos * 10).astype(np.float64))
-    mol_copy.AddConformer(mol_conf)
-    writer.write(mol_copy)
+        lhs = st.setup_intermediate_state(lamb)
 
-    lhs_dg = DepGraph(lhs.bond, lhs.angle, lhs.proper_torsion, lhs.improper_torsion, lhs.chiral_atom)
-    expected_node_count = (
-        len(lhs.bond.potential.idxs)
-        + len(lhs.angle.potential.idxs)
-        + len(lhs.proper_torsion.potential.idxs)
-        + len(lhs.improper_torsion.potential.idxs)
-        + len(lhs.chiral_atom.potential.idxs)
-    )
+        # stm = st.mol(lamb)
+        # from io import StringIO
+        # x_a = get_romol_conf(mol_a)
+        # x_b = get_romol_conf(mol_b)
+        # fh = StringIO()
+        # writer = Chem.SDWriter("debug2.sdf")
+        # mol_conf = Chem.Conformer(stm.GetNumAtoms())
+        # mol_copy = Chem.Mol(stm)
+        # coords = st.combine_confs(x_a, x_b, 0.0)
+        # for a_idx, pos in enumerate(coords):
+        #     mol_conf.SetAtomPosition(a_idx, (pos * 10).astype(np.float64))
+        # mol_copy.AddConformer(mol_conf)
+        # writer.write(mol_copy)
 
-    assert lhs_dg._dag.number_of_nodes() == expected_node_count
+        lhs_dg = DepGraph(lhs.bond, lhs.angle, lhs.proper_torsion, lhs.improper_torsion, lhs.chiral_atom)
+        expected_node_count = (
+            len(lhs.bond.potential.idxs)
+            + len(lhs.angle.potential.idxs)
+            + len(lhs.proper_torsion.potential.idxs)
+            + len(lhs.improper_torsion.potential.idxs)
+            + len(lhs.chiral_atom.potential.idxs)
+        )
 
-    print("ON Bonds/Angles/Propers/Impropers/ChiralAtoms", lhs_dg.n_terms_on())
-    print("OFF Bonds/Angles/Propers/Impropers/ChiralAtoms", lhs_dg.n_terms_off())
+        assert lhs_dg._dag.number_of_nodes() == expected_node_count
+
+        print("ON Bonds/Angles/Propers/Impropers/ChiralAtoms", lhs_dg.n_terms_on())
+        print("OFF Bonds/Angles/Propers/Impropers/ChiralAtoms", lhs_dg.n_terms_off())
+
+    assert 0
 
     rhs = st.setup_intermediate_state(1.0)
 
