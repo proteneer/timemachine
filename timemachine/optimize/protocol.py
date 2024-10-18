@@ -51,11 +51,13 @@ import numpy as np
 from jax import Array, jit
 from jax import numpy as jnp
 from jax import vmap
-from jax.scipy.special import logsumexp
+from jax.scipy.special import logsumexp as _logsumexp
 from jax.typing import ArrayLike
 from scipy.optimize import bisect
 
 from timemachine.fe.reweighting import interpret_as_mixture_potential
+
+logsumexp = jit(_logsumexp)  # performance bottleneck in several functions below
 
 Float = float
 DistanceFxn = Callable[[Float, Float], Float]
