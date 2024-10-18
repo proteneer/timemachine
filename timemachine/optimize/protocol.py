@@ -268,34 +268,86 @@ def make_one_minus_similarity_fxn(sim_fxn):
 
 
 def make_overlap_fxn(u_lam, src_u_n):
+    """Compose a reduced potential function u_lam with the reweighting approximation from reweighted_pair_overlap
+
+    Parameters
+    ----------
+    u_lam : function : scalar -> array of length N
+        u_lam(lam) = [u(xs[n], lam) for n in range(N)]
+
+    src_u_n : array
+        src_u_n = [u_src(xs[n]) for n in range(N)]
+
+    Returns
+    -------
+    overlap_fxn: (lam_a, lam_b) -> overlap_estimate
+    """
+
     def overlap_fxn(lam_a, lam_b):
-        return reweighted_pair_overlap(u_lam(lam_a), u_lam(lam_b), src_u_n)
+        estimate = reweighted_pair_overlap(u_lam(lam_a), u_lam(lam_b), src_u_n)
+        clamped = jnp.clamp(estimate, min=0.0, max=1.0)  # TODO: revert this line if estimates > 1 are avoided
+        return clamped
 
     return overlap_fxn
 
 
 def make_fast_approx_overlap_fxn(lambdas, u_kn, f_k, N_k):
+    """WARNING: EXPERIMENTAL
+
+    Applies a sketchy performance optimization (linearly interpolating (lambdas, u_kn) to provide estimates of u_n(lam))
+
+    (Since the resulting estimates can sometimes exceed 1.0, they are clamped to the range [0.0, 1.0].)
+
+    Parameters
+    ----------
+    lambdas : [K] array
+        assumed sorted, and assumed to have lambdas[0] == 0, lambdas[-1] == 1
+    u_kn : [K, N] array
+        u_kn[k, n] = u(xs[n], lambdas[k])
+    f_k : [K] array
+        reduced free energy
+    N_k : [K] array of ints
+        num samples from each state
+
+    Returns
+    -------
+    overlap_fxn: (lam_a, lam_b) -> overlap_estimate
+    """
     linear_u_lam = linear_u_kn_interpolant(lambdas, np.nan_to_num(u_kn, nan=np.inf))
     mixture_u_n = interpret_as_mixture_potential(u_kn, f_k, N_k)
 
     return make_overlap_fxn(linear_u_lam, mixture_u_n)
 
 
-# def make_ref_overlap_fxn(x_n, box_n, batch_u_fxn, ...):
-#     def ref_u_lam(lam):
-#         return batch_u_fxn(x_n, box_n, lam)
-#
-#     return make_overlap_fxn(ref_u_lam, ...)
-#
+def make_overlap_distance_fxn(u_lam, src_u_n):
+    """
 
+    Parameters
+    ----------
+    u_lam : function : scalar -> array of length N
+        u_lam(lam) = [u(xs[n], lam) for n in range(N)]
+    src_u_n : array
+        src_u_n = [u_src(xs[n]) for n in range(N)]
 
-def make_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k):
-    """make a distance function d(a,b) = 1 - overlap(a,b)
+    Returns
+    -------
+    dist_fxn: (lam_a, lam_b) -> (1 - overlap_estimate)
+    """
 
-    where overlap(a,b) uses fast approximations: reweighting, based on linear interpolation of energies"""
-    approx_overlap_fxn = make_fast_approx_overlap_fxn(lambdas, u_kn, f_k, N_k)
+    approx_overlap_fxn = make_overlap_fxn(u_lam, src_u_n)
     approx_overlap_distance = make_one_minus_similarity_fxn(approx_overlap_fxn)
     return approx_overlap_distance
+
+
+def make_fast_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k):
+    """WARNING: EXPERIMENTAL
+
+    make a distance function d(a,b) = 1 - overlap(a,b)
+
+    where overlap(a,b) uses fast approximations: reweighting, based on linear interpolation of energies"""
+
+    fast_approx_overlap_fxn = make_fast_approx_overlap_fxn(lambdas, u_kn, f_k, N_k)
+    return make_one_minus_similarity_fxn(fast_approx_overlap_fxn)
 
 
 # optimization approach: specify [d(i,i+1) ~= target_distance]

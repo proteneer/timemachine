@@ -13,7 +13,7 @@ from timemachine.optimize.protocol import (
     greedily_optimize_protocol,
     linear_u_kn_interpolant,
     log_weights_from_mixture,
-    make_approx_overlap_distance_fxn,
+    make_fast_approx_overlap_distance_fxn,
     rebalance_initial_protocol_by_work_stddev,
 )
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -168,7 +168,7 @@ def test_overlap_rebalancing_on_gaussian():
         f_k = mbar.f_k
 
     # make a fast d(lam_i, lam_j) fxn
-    overlap_dist = make_approx_overlap_distance_fxn(initial_lams, u_kn, f_k, N_k)
+    overlap_dist = make_fast_approx_overlap_distance_fxn(initial_lams, u_kn, f_k, N_k)
 
     print("initial protocol: ")
     _ = summarize_protocol(initial_lams, overlap_dist)
@@ -216,7 +216,7 @@ def test_greedy_overlap_on_st_vacuum():
 
     # make approx overlap distance fxn
     f_k = MBAR(u_kn, N_k).f_k
-    overlap_dist = make_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k)
+    overlap_dist = make_fast_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k)
 
     # call protocol optimization, with various target values for neighbor overlap
     print("initial protocol (from bisection): ")
