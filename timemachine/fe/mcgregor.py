@@ -19,29 +19,6 @@ def get_num_edges_upper_bound(marcs: NDArray):
 UNMAPPED = -1  # (UNVISITED) OR (VISITED AND DEMAPPED)
 
 
-def _initialize_marcs_given_predicate(g1, g2, predicate):
-    num_a_edges = g1.n_edges
-    num_b_edges = g2.n_edges
-    marcs = np.full((num_a_edges, num_b_edges), True, dtype=bool)
-    for e_a in range(num_a_edges):
-        src_a, dst_a = g1.edges[e_a]
-        for e_b in range(num_b_edges):
-            src_b, dst_b = g2.edges[e_b]
-            # an edge mapping is allowed in two cases:
-            # 1) src_a can map to src_b, and dst_a can map dst_b
-            # 2) src_a can map to dst_b, and dst_a can map src_b
-            # if either 1 or 2 is satisfied, we skip, otherwise
-            # we can confidently reject the mapping
-            if predicate[src_a][src_b] and predicate[dst_a][dst_b]:
-                continue
-            elif predicate[src_a][dst_b] and predicate[dst_a][src_b]:
-                continue
-            else:
-                marcs[e_a][e_b] = False
-
-    return marcs
-
-
 def _verify_core_impl(g1, g2, new_v1, map_1_to_2):
     for e1 in g1.get_edges(new_v1):
         src, dst = g1.edges[e1]
@@ -56,25 +33,6 @@ def _verify_core_impl(g1, g2, new_v1, map_1_to_2):
 
 def _verify_core_is_connected(g1, g2, new_v1, new_v2, map_1_to_2, map_2_to_1):
     return _verify_core_impl(g1, g2, new_v1, map_1_to_2) and _verify_core_impl(g2, g1, new_v2, map_2_to_1)
-
-
-def refine_marcs(g1, g2, new_v1, new_v2, marcs):
-    """
-    return vertices that have changed
-    """
-    new_marcs = copy.copy(marcs)
-
-    if new_v2 == UNMAPPED:
-        # zero out rows corresponding to the edges of new_v1
-        new_marcs[g1.get_edges_as_vector(new_v1)] = False
-    else:
-        # mask out every row in marcs
-        adj1 = g1.get_edges_as_vector(new_v1)
-        adj2 = g2.get_edges_as_vector(new_v2)
-        mask = np.where(adj1[:, np.newaxis], adj2, ~adj2)
-        new_marcs &= mask
-
-    return new_marcs
 
 
 def set_at(xs: Tuple[int, ...], idx: int, val: int) -> Tuple[int, ...]:
@@ -257,6 +215,55 @@ class Graph:
         return g
 
 
+@dataclass(frozen=True)
+class Marcs:
+    marcs: NDArray[np.bool_]
+    num_edges_upper_bound: int  # redundant; stored to avoid recomputation
+
+    @classmethod
+    def from_predicate(cls, g1: Graph, g2: Graph, predicate: NDArray[np.bool_]) -> "Marcs":
+        num_a_edges = g1.n_edges
+        num_b_edges = g2.n_edges
+        marcs = np.full((num_a_edges, num_b_edges), True, dtype=bool)
+        for e_a in range(num_a_edges):
+            src_a, dst_a = g1.edges[e_a]
+            for e_b in range(num_b_edges):
+                src_b, dst_b = g2.edges[e_b]
+                # an edge mapping is allowed in two cases:
+                # 1) src_a can map to src_b, and dst_a can map dst_b
+                # 2) src_a can map to dst_b, and dst_a can map src_b
+                # if either 1 or 2 is satisfied, we skip, otherwise
+                # we can confidently reject the mapping
+                if predicate[src_a][src_b] and predicate[dst_a][dst_b]:
+                    continue
+                elif predicate[src_a][dst_b] and predicate[dst_a][src_b]:
+                    continue
+                else:
+                    marcs[e_a][e_b] = False
+
+        return Marcs.from_matrix(marcs)
+
+    @classmethod
+    def from_matrix(cls, marcs) -> "Marcs":
+        num_edges_upper_bound = get_num_edges_upper_bound(marcs)
+        return Marcs(marcs, num_edges_upper_bound)
+
+    def refine(self, g1: Graph, g2: Graph, new_v1: int, new_v2: int) -> "Marcs":
+        new_marcs = copy.copy(self.marcs)
+
+        if new_v2 == UNMAPPED:
+            # zero out rows corresponding to the edges of new_v1
+            new_marcs[g1.get_edges_as_vector(new_v1)] = False
+        else:
+            # mask out every row in marcs
+            adj1 = g1.get_edges_as_vector(new_v1)
+            adj2 = g2.get_edges_as_vector(new_v2)
+            mask = np.where(adj1[:, np.newaxis], adj2, ~adj2)
+            new_marcs &= mask
+
+        return Marcs.from_matrix(new_marcs)
+
+
 def max_tree_size(priority_list):
     cur_layer_size = 1
     layer_sizes = [cur_layer_size]
@@ -327,13 +334,13 @@ def mcs(
     predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
     g_a = Graph(n_a, bonds_a)
     g_b = Graph(n_b, bonds_b)
-    base_marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
+    base_marcs = Marcs.from_predicate(g_a, g_b, predicate)
 
     base_atom_map = AtomMap.empty(n_a, n_b)
     if initial_mapping is not None:
         for a, b in initial_mapping:
             base_atom_map = base_atom_map.add(a, b)
-            base_marcs = refine_marcs(g_a, g_b, a, b, base_marcs)
+            base_marcs = base_marcs.refine(g_a, g_b, a, b)
 
     base_layer = len(initial_mapping)
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
@@ -407,7 +414,7 @@ def search(
     g2: Graph,
     atom_map: AtomMap,
     layer: int,
-    marcs: NDArray,
+    marcs: Marcs,
     priority_idxs,
     max_nodes,
     max_leaves,
@@ -452,15 +459,15 @@ def search(
                 timed_out=True,
                 nodes_visited=-1,
             )
-        if node.num_edges_upper_bound < max_edges:
+        if node.marcs.num_edges_upper_bound < max_edges:
             continue
-        elif node.num_edges_upper_bound == max_edges:
+        elif node.marcs.num_edges_upper_bound == max_edges:
             all_maps.append(node.atom_map.a_to_b)
-            all_marcs.append(node.marcs)
+            all_marcs.append(node.marcs.marcs)
         else:
             all_maps = [node.atom_map.a_to_b]
-            all_marcs = [node.marcs]
-            max_edges = node.num_edges_upper_bound
+            all_marcs = [node.marcs.marcs]
+            max_edges = node.marcs.num_edges_upper_bound
 
     assert node is not None, "found no valid mappings"
 
@@ -471,8 +478,7 @@ def search(
 class Node:
     atom_map: AtomMap
     layer: int
-    marcs: NDArray
-    num_edges_upper_bound: int  # redundant with marcs; stored to avoid recomputation
+    marcs: Marcs
 
 
 def dfs_leaves(
@@ -480,7 +486,7 @@ def dfs_leaves(
     g2: Graph,
     init_atom_map: AtomMap,
     init_layer: int,
-    init_marcs: NDArray,
+    init_marcs: Marcs,
     priority_idxs,
     _max_nodes,
     enforce_core_core,
@@ -519,19 +525,19 @@ def dfs_leaves(
 
     def get_children(node: Node) -> List[Node]:
         mapped_children = [
-            Node(atom_map, node.layer + 1, refined_marcs, get_num_edges_upper_bound(refined_marcs))
+            Node(atom_map, node.layer + 1, refined_marcs)
             for jdx in priority_idxs[node.layer]
             if node.atom_map.b_to_a[jdx] == UNMAPPED
             for atom_map in [node.atom_map.add(node.layer, jdx)]
-            for refined_marcs in [refine_marcs(g1, g2, node.layer, jdx, node.marcs)]
+            for refined_marcs in [node.marcs.refine(g1, g2, node.layer, jdx)]
             if (
                 not enforce_core_core
                 or _verify_core_is_connected(g1, g2, node.layer, jdx, atom_map.a_to_b, atom_map.b_to_a)
             )
         ]
 
-        refined_marcs = refine_marcs(g1, g2, node.layer, UNMAPPED, node.marcs)
-        unmapped_child = Node(node.atom_map, node.layer + 1, refined_marcs, get_num_edges_upper_bound(refined_marcs))
+        refined_marcs = node.marcs.refine(g1, g2, node.layer, UNMAPPED)
+        unmapped_child = Node(node.atom_map, node.layer + 1, refined_marcs)
 
         children = [
             child
@@ -540,7 +546,7 @@ def dfs_leaves(
             if filter_fxn(child.atom_map.a_to_b)
         ]
 
-        children = sorted(children, key=lambda n: n.num_edges_upper_bound, reverse=True)
+        children = sorted(children, key=lambda n: n.marcs.num_edges_upper_bound, reverse=True)
 
         return children
 
@@ -551,16 +557,16 @@ def dfs_leaves(
 
         # leaf-node; every atom has been mapped
         if node.layer == g1.n_vertices:
-            best_num_edges = max(best_num_edges, node.num_edges_upper_bound)
+            best_num_edges = max(best_num_edges, node.marcs.num_edges_upper_bound)
             if leaf_filter_fxn(node.atom_map.a_to_b):
                 yield node
             return
 
         for child in get_children(node):
-            num_edges_upper_bound = child.num_edges_upper_bound
+            num_edges_upper_bound = child.marcs.num_edges_upper_bound
             if num_edges_upper_bound >= best_num_edges:
                 yield from go(child)
 
-    init_node = Node(init_atom_map, init_layer, init_marcs, get_num_edges_upper_bound(init_marcs))
+    init_node = Node(init_atom_map, init_layer, init_marcs)
 
     return go(init_node)
