@@ -454,3 +454,210 @@ def plot_as_png_fxn(f, *args, **kwargs) -> bytes:
     buffer.seek(0)
     plot_png = buffer.read()
     return plot_png
+
+
+def _plot_bond_interpolation(st, xs, systems, filter_fn, axs, row):
+    bond_ks = []  # K x # bonds
+    bond_bs = []  # K x # bonds
+    for sys in systems:
+        bond_idxs = sys.bond.potential.idxs
+        keep_idxs = []
+        for b_idx, idxs in enumerate(bond_idxs):
+            if filter_fn(idxs):
+                keep_idxs.append(b_idx)
+        keep_idxs = np.array(keep_idxs, dtype=np.int32)
+        bond_params = sys.bond.params
+        bond_ks.append(bond_params[keep_idxs, 0])
+        bond_bs.append(bond_params[keep_idxs, 1])
+
+    bond_idxs = bond_idxs[keep_idxs]
+    bond_ks = np.array(bond_ks).T  # bonds x K
+    bond_bs = np.array(bond_bs).T  # bonds x K
+    num_bonds = bond_ks.shape[0]
+    for b_idx in range(num_bonds):
+        if bond_ks[b_idx][0] != bond_ks[b_idx][-1]:
+            if st._bond_idxs_belong_to_chiral_volume_turning_on(
+                tuple(bond_idxs[b_idx])
+            ) or st._bond_idxs_belong_to_chiral_volume_turning_off(tuple(bond_idxs[b_idx])):
+                linestyle = "dashed"
+            else:
+                linestyle = "solid"
+            label = f"{bond_idxs[b_idx]}"
+            alpha = 1.0
+        else:
+            linestyle = "dotted"
+            label = None
+            alpha = 0.1
+
+        axs[row, 0].plot(xs, bond_ks[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+        axs[row, 1].plot(xs, bond_bs[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+
+    axs[row, 0].set_title("bond force constants")
+    axs[row, 1].set_title("bond lengths")
+
+    axs[row, 0].set_ylabel("force constant")
+    axs[row, 1].set_ylabel("bond length")
+
+    axs[row, 0].set_xlabel("lambda window")
+    axs[row, 1].set_xlabel("lambda window")
+
+    # axs[row, 0].legend()
+    # axs[row, 1].legend()
+
+
+def _plot_angle_interpolation(st, xs, systems, filter_fn, axs, row):
+    angle_ks = []  # K x # angles
+    angle_bs = []  # K x # angles
+    for sys in systems:
+        angle_idxs = sys.angle.potential.idxs
+        angle_params = sys.angle.params
+        keep_idxs = []
+        for b_idx, idxs in enumerate(angle_idxs):
+            if filter_fn(idxs):
+                keep_idxs.append(b_idx)
+        keep_idxs = np.array(keep_idxs, dtype=np.int32)
+        angle_ks.append(angle_params[keep_idxs, 0])
+        angle_bs.append(angle_params[keep_idxs, 1])
+
+    angle_idxs = angle_idxs[keep_idxs]
+    angle_ks = np.array(angle_ks).T  # angles x K
+    angle_bs = np.array(angle_bs).T * (180 / np.pi)  # angles x K *
+    num_angles = angle_ks.shape[0]
+
+    for b_idx in range(num_angles):
+        if angle_ks[b_idx][0] != angle_ks[b_idx][-1]:
+            if st._angle_idxs_belong_to_chiral_volume_turning_on(
+                tuple(angle_idxs[b_idx])
+            ) or st._angle_idxs_belong_to_chiral_volume_turning_off(tuple(angle_idxs[b_idx])):
+                linestyle = "dashed"
+            else:
+                linestyle = "solid"
+            label = f"{angle_idxs[b_idx]}"
+            alpha = 0.75
+        else:
+            linestyle = "dotted"
+            label = None
+            alpha = 0.1
+        axs[row, 0].plot(xs, angle_ks[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+        axs[row, 1].plot(xs, angle_bs[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+
+    axs[row, 0].set_title("angle force constants")
+    axs[row, 1].set_title("angle degrees")
+
+    axs[row, 0].set_ylabel("force constant")
+    axs[row, 1].set_ylabel("angle degree")
+
+    axs[row, 0].set_xlabel("lambda window")
+    axs[row, 1].set_xlabel("lambda window")
+
+    # axs[row, 0].legend()
+    # axs[row, 1].legend()
+
+
+def _plot_chiral_atom_interpolation(xs, systems, filter_fn, axs, row):
+    # process_bonds
+    chiral_atom_ks = []  # K x # chiral_atoms
+    for sys in systems:
+        chiral_atom_idxs = sys.chiral_atom.potential.idxs
+        chiral_atom_params = sys.chiral_atom.params
+        keep_idxs = []
+        for b_idx, idxs in enumerate(chiral_atom_idxs):
+            if filter_fn(idxs):
+                keep_idxs.append(b_idx)
+        keep_idxs = np.array(keep_idxs, dtype=np.int32)
+        chiral_atom_ks.append(chiral_atom_params[keep_idxs])
+
+    chiral_atom_idxs = chiral_atom_idxs[keep_idxs]
+    chiral_atom_ks = np.array(chiral_atom_ks).T  # chiral_atoms x K
+    num_chiral_atoms = chiral_atom_ks.shape[0]
+
+    for b_idx in range(num_chiral_atoms):
+        if chiral_atom_ks[b_idx][0] != chiral_atom_ks[b_idx][-1]:
+            linestyle = "dashed"
+            label = f"{chiral_atom_idxs[b_idx]}"
+            alpha = 1.0
+        else:
+            linestyle = "dotted"
+            label = None
+            alpha = 0.1
+
+        axs[row, 0].plot(xs, chiral_atom_ks[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+
+    axs[row, 0].set_title("chiral_atom force constants")
+    axs[row, 0].set_ylabel("force constant")
+    axs[row, 0].set_ylim(-100, 1200)
+    axs[row, 0].set_xlabel("lambda window")
+    # axs[row, 0].legend()
+
+
+def _plot_torsion_interpolation(xs, systems, filter_fn, axs, row):
+    torsion_ks = []  # K x # torsions
+    torsion_bs = []  # K x # torsions
+    for sys in systems:
+        torsion_idxs = sys.torsion.potential.idxs
+        torsion_params = sys.torsion.params
+        keep_idxs = []
+        for b_idx, idxs in enumerate(torsion_idxs):
+            if filter_fn(idxs):
+                keep_idxs.append(b_idx)
+        keep_idxs = np.array(keep_idxs, dtype=np.int32)
+        torsion_ks.append(torsion_params[keep_idxs, 0])
+        torsion_bs.append(torsion_params[keep_idxs, 1])
+
+    torsion_idxs = torsion_idxs[keep_idxs]
+    torsion_ks = np.array(torsion_ks).T  # torsions x K
+    torsion_bs = np.array(torsion_bs).T * (180 / np.pi)  # torsions x K *
+    num_torsions = torsion_ks.shape[0]
+
+    for b_idx in range(num_torsions):
+        if torsion_ks[b_idx][0] != torsion_ks[b_idx][-1]:
+            linestyle = "solid"
+            label = f"{torsion_idxs[b_idx]}"
+            alpha = 1.0
+        else:
+            linestyle = "dotted"
+            label = None
+            alpha = 0.1
+
+        axs[row, 0].plot(xs, torsion_ks[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+        axs[row, 1].plot(xs, torsion_bs[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+
+    axs[row, 0].set_title("torsion force constants")
+    axs[row, 1].set_title("torsion degrees")
+
+    axs[row, 0].set_ylabel("force constant")
+    axs[row, 1].set_ylabel("torsion degree")
+
+    axs[row, 0].set_xlabel("lambda window")
+    axs[row, 1].set_xlabel("lambda window")
+
+    # axs[row, 0].legend(bbox_to_anchor=(1, 0.5))
+    # axs[row, 1].legend(bbox_to_anchor=(1, 0.5))
+
+
+def plot_interpolation_schedule(st, filter_fn, fig_title, n_windows):
+    fig, axs = plt.subplots(5, 2, figsize=(9, 12))
+    # plot the force constant and equilibrium bond lengths along lambda
+    lambdas = np.linspace(0, 1.0, n_windows)
+    systems = []
+    for lam in lambdas:
+        systems.append(st.setup_intermediate_state(lam))
+    _plot_bond_interpolation(st, lambdas, systems, filter_fn, axs, row=0)
+    _plot_chiral_atom_interpolation(lambdas, systems, filter_fn, axs, row=1)
+    _plot_angle_interpolation(st, lambdas, systems, filter_fn, axs, row=2)
+    _plot_torsion_interpolation(lambdas, systems, filter_fn, axs, row=3)
+    fig.suptitle(fig_title, fontsize=12)
+    plt.tight_layout()
+    # plt.show()
+
+
+def plot_core_interpolation_schedule(st, n_windows=48):
+    plot_interpolation_schedule(st, st.all_idxs_belong_to_core, "Core Interpolation Schedule", n_windows)
+
+
+def plot_dummy_a_interpolation_schedule(st, n_windows=48):
+    plot_interpolation_schedule(st, st.any_idxs_belong_to_dummy_a, "Dummy Group A Interpolation Schedule", n_windows)
+
+
+def plot_dummy_b_interpolation_schedule(st, n_windows=48):
+    plot_interpolation_schedule(st, st.any_idxs_belong_to_dummy_b, "Dummy Group B Interpolation Schedule", n_windows)

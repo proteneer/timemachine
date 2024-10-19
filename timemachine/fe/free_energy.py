@@ -1407,7 +1407,7 @@ def run_sims_hrex(
                 return f"{r * 100.0:5.1f}%"
 
             def format_rates(rs):
-                return " | ".join(format_rate(r) for r in rs)
+                return " |".join(format_rate(r) for r in rs)
 
             print("Frame", current_frame + 1)
             print(
@@ -1415,9 +1415,9 @@ def run_sims_hrex(
                 f"{wall_time_per_frame_average:.2f} s/frame "
                 f"({wall_time_per_frame_current:.2f} s/frame since last message)"
             )
-            print("HREX acceptance rates, current :", format_rates(instantaneous_swap_acceptance_rates))
-            print("HREX acceptance rates, average :", format_rates(average_swap_acceptance_rates))
-            print("HREX replica permutation       :", hrex.replica_idx_by_state)
+            print("HREX acceptance rates, current:", format_rates(instantaneous_swap_acceptance_rates))
+            print("HREX acceptance rates, average:", format_rates(average_swap_acceptance_rates))
+            print("HREX replica permutation      :", hrex.replica_idx_by_state)
             print()
 
             last_update_time = current_time

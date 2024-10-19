@@ -168,14 +168,14 @@ def log_linear_interpolation(src_params, dst_params, lamb, min_value):
 
 def pad(f, src_params, dst_params, lamb, lambda_min, lambda_max):
     """
-    Use the specified interpolation function in the interval [lambda_min, lambda_max], otherwise pin to the end-state
+    Use the specified interpolation function in the interval (lambda_min, lambda_max), otherwise pin to the end-state
     values.
     """
     return jnp.where(
-        lamb < lambda_min,
+        lamb <= lambda_min,
         src_params,
         jnp.where(
-            lambda_max < lamb,
+            lambda_max <= lamb,
             dst_params,
             f(src_params, dst_params, (lamb - lambda_min) / (lambda_max - lambda_min)),
         ),

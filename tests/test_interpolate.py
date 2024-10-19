@@ -4,9 +4,20 @@ import numpy as np
 import pytest
 from rdkit import Chem
 
-from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
+from timemachine.constants import (
+    DEFAULT_ATOM_MAPPING_KWARGS,
+    DEFAULT_BOND_IS_PRESENT_K,
+    DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
+)
 from timemachine.fe import atom_mapping, interpolate, single_topology
-from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.interpolate import pad
+from timemachine.fe.single_topology import (
+    DUMMY_A_CHIRAL_ATOM_CONVERTING_OFF_MIN_MAX,
+    DUMMY_B_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX,
+    MissingBondsInChiralVolumeException,
+    SingleTopology,
+    assert_bonds_defined_for_chiral_volumes,
+)
 from timemachine.fe.utils import get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
 
@@ -351,3 +362,617 @@ $$$$""",
     assert duplicate_torsion_idxs not in counts_kv_dst
 
     st.setup_intermediate_state(0.5)
+
+
+def test_padded_interpolation():
+    # verify that values in the closed interval [0, lambda_min] are exactly equal to src_params,
+    # and that values in the closed in interval [lambda_max, 1] are exactly equal to dst_params,
+
+    def interpolate_fn(*_):
+        return np.random.rand() * 1000
+
+    # simple 1-parameter case.
+    src_k = np.array([1.0, 8.0])
+    dst_k = np.array([9.0, 2.0])
+    lamb_min = 0.2
+    lamb_max = 0.6
+
+    # note: don't replace with np.linspace, we need to test open/closed interval boundaries exactly here.
+    # (np.linspace can introduce floating errors breaking expected behavior of equality operators)
+    for lamb in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+        res = pad(interpolate_fn, src_k, dst_k, lamb, lamb_min, lamb_max)
+        if lamb <= lamb_min:
+            np.testing.assert_array_equal(res[0], src_k[0])
+        elif lamb >= lamb_max:
+            np.testing.assert_array_equal(res[0], dst_k[0])
+        else:
+            pass
+
+
+def get_aldehyde():
+    return Chem.MolFromMolBlock(
+        """
+  Mrv2311 11042413482D
+
+  4  3  0  0  0  0            999 V2000
+    4.7768    0.7115    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.9518    0.7115    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    5.1893   -0.0030    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    5.1893    1.4260    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+$$$$
+""",
+        removeHs=False,
+    )
+
+
+def get_inv_nitrogen():
+    return Chem.MolFromMolBlock(
+        """
+  Mrv2311 11042413493D
+
+  4  3  0  0  0  0            999 V2000
+   -0.0110   -0.0156    0.0270 N   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0099    0.0080   -0.0138 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3291   -0.4654   -0.8338 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3291    0.9548   -0.0138 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+
+def get_non_inv_nitrogen():
+    return Chem.MolFromMolBlock(
+        """
+  Mrv2311 11042413503D
+
+  4  3  0  0  0  0            999 V2000
+   -0.0138   -0.0196    0.0339 N   0  0  2  0  0  0  0  0  0  0  0  0
+    1.2876    0.0101   -0.0174 F   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4197   -0.5936   -1.0629 F   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4197    1.2173   -0.0174 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  4  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "mol_a, mol_b, core",
+    [
+        (get_aldehyde(), get_inv_nitrogen(), np.array([[0, 0], [1, 1], [2, 2], [3, 3]], dtype=np.int32)),
+        (get_inv_nitrogen(), get_aldehyde(), np.array([[0, 0], [1, 1], [2, 2], [3, 3]], dtype=np.int32)),
+    ],
+)
+def test_core_achiral_interpolation_sp2_to_invertible_sp3(mol_a, mol_b, core):
+    # test that we're using the default interpolation schedule spanning over the entirely of lambda [0,1]
+    # for achiral transformations.
+    ff = Forcefield.load_default()
+
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    lhs = st.setup_intermediate_state(0.0)
+    rhs = st.setup_intermediate_state(1.0)
+
+    # check that chiral volume is undefined in both end-states
+    assert len(lhs.chiral_atom.potential.idxs) == 0
+    assert len(rhs.chiral_atom.potential.idxs) == 0
+
+    lhs_bond_k = lhs.bond.params[0][0]
+    lhs_bond_b0 = lhs.bond.params[0][1]
+    lhs_angle_k = lhs.angle.params[0][0]
+    lhs_angle_a0 = lhs.angle.params[0][1]
+
+    rhs_bond_k = rhs.bond.params[0][0]
+    rhs_bond_b0 = rhs.bond.params[0][1]
+    rhs_angle_k = rhs.angle.params[0][0]
+    rhs_angle_a0 = rhs.angle.params[0][1]
+
+    # no chiral conversion happens, so we should be using the full schedule for bonds and angles
+    atol_k = 1e-3
+    atol_b0 = 1e-5
+    atol_a0 = 1e-4
+    for lamb in np.linspace(0.05, 0.95, 12):
+        itm = st.setup_intermediate_state(lamb)
+        itm_bond_k = itm.bond.params[0][0]
+        itm_bond_b0 = itm.bond.params[0][1]
+        itm_angle_k = itm.angle.params[0][0]
+        itm_angle_a0 = itm.angle.params[0][1]
+
+        assert abs(itm_bond_k - lhs_bond_k) > atol_k
+        assert abs(itm_bond_b0 - lhs_bond_b0) > atol_b0
+        assert abs(itm_angle_k - lhs_angle_k) > atol_k
+        assert abs(itm_angle_a0 - lhs_angle_a0) > atol_a0
+
+        assert abs(itm_bond_k - rhs_bond_k) > atol_k
+        assert abs(itm_bond_b0 - rhs_bond_b0) > atol_b0
+        assert abs(itm_angle_k - rhs_angle_k) > atol_k
+        assert abs(itm_angle_a0 - rhs_angle_a0) > atol_a0
+
+
+@pytest.mark.parametrize(
+    "mol_a, mol_b, core, direction",
+    [
+        (get_aldehyde(), get_non_inv_nitrogen(), np.array([[0, 0], [1, 1], [2, 2], [3, 3]], dtype=np.int32), "fwd"),
+        (get_inv_nitrogen(), get_non_inv_nitrogen(), np.array([[0, 0], [1, 1], [2, 2], [3, 3]], dtype=np.int32), "fwd"),
+        (get_non_inv_nitrogen(), get_aldehyde(), np.array([[0, 0], [1, 1], [2, 2], [3, 3]], dtype=np.int32), "rev"),
+        (get_non_inv_nitrogen(), get_inv_nitrogen(), np.array([[0, 0], [1, 1], [2, 2], [3, 3]], dtype=np.int32), "rev"),
+    ],
+)
+def test_core_chiral_interpolation_sp2_to_invertible_sp3(mol_a, mol_b, core, direction):
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    lhs = st.setup_intermediate_state(0.0)
+    rhs = st.setup_intermediate_state(1.0)
+
+    assert len(lhs.chiral_atom.potential.idxs) == 1
+    assert len(rhs.chiral_atom.potential.idxs) == 1
+    np.testing.assert_array_equal(lhs.chiral_atom.potential.idxs, rhs.chiral_atom.potential.idxs)
+
+    if direction == "fwd":
+        assert lhs.chiral_atom.params[0] == 0
+        assert rhs.chiral_atom.params[0] == DEFAULT_CHIRAL_ATOM_RESTRAINT_K
+    else:
+        assert lhs.chiral_atom.params[0] == DEFAULT_CHIRAL_ATOM_RESTRAINT_K
+        assert rhs.chiral_atom.params[0] == 0
+
+    atol_k = 1e-3
+    atol_b0 = 1e-5
+    atol_a0 = 1e-4
+
+    for lamb in np.linspace(0.0, 1.0, 12):
+        itm = st.setup_intermediate_state(lamb)
+        for bond_idx in range(3):  # 3 bonds
+            for term_idx, term_k in zip(range(2), [atol_k, atol_b0]):  # 2 terms, (k, b0)
+                _assert_bonded_term(
+                    lamb,
+                    bond_idx,
+                    term_idx,
+                    term_k,
+                    single_topology.CORE_BOND_MIN_MAX,
+                    itm.bond.params,
+                    lhs.bond.params,
+                    rhs.bond.params,
+                )
+
+        for angle_idx in range(3):  # 3 angles
+            for term_idx, term_k in zip(range(2), [atol_k, atol_a0]):  # 2 terms, (k, a0)
+                if direction == "fwd":
+                    min_max = single_topology.CORE_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX
+                else:
+                    min_max = single_topology.CORE_CHIRAL_ANGLE_CONVERTING_OFF_MIN_MAX
+
+                _assert_bonded_term(
+                    lamb,
+                    angle_idx,
+                    term_idx,
+                    term_k,
+                    min_max,
+                    itm.angle.params,
+                    lhs.angle.params,
+                    rhs.angle.params,
+                )
+
+        if direction == "fwd":
+            min_max = single_topology.CORE_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX
+        else:
+            min_max = single_topology.CORE_CHIRAL_ATOM_CONVERTING_OFF_MIN_MAX
+
+        _assert_bonded_term(
+            lamb,
+            0,
+            None,
+            atol_k,
+            min_max,
+            itm.chiral_atom.params,
+            lhs.chiral_atom.params,
+            rhs.chiral_atom.params,
+        )
+
+
+def get_identity_pair():
+    mol = Chem.MolFromMolBlock(
+        """identity_ring_pair
+  Mrv2311 10092413403D
+
+  6  6  0  0  0  0            999 V2000
+    0.1292    1.5540   -0.4103 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.8029    0.8102    0.1698 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0572    0.0397    0.8217 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1063    0.7870    0.2530 C   0  0  2  0  0  0  0  0  0  0  0  0
+    2.1161    1.7939    1.5497 F   0  0  0  0  0  0  0  0  0  0  0  0
+    1.8910    0.0536   -0.6026 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  1  4  1  0  0  0  0
+  4  5  1  0  0  0  0
+  4  6  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    mol_a = Chem.Mol(mol)
+    mol_b = Chem.Mol(mol)
+
+    return mol_a, mol_b, np.array([[1, 1], [2, 2], [3, 3], [4, 5]])
+
+
+def get_oxy_ring():
+    return Chem.MolFromMolBlock(
+        """
+  Mrv2311 11042415022D
+
+  5  5  0  0  0  0            999 V2000
+    0.4018    1.6964    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3828    1.4415    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.3155    2.5169    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.5733    0.8895    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2268    1.6964    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  4  1  0  0  0  0
+  5  4  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+
+def get_broken_ring():
+    return Chem.MolFromMolBlock(
+        """
+  Mrv2311 11042415023D
+
+  4  3  0  0  0  0            999 V2000
+   -0.0110   -0.0156    0.0270 N   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3291   -0.4654   -0.8338 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3291    0.9548   -0.0138 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0099    0.0080   -0.0138 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+$$$$
+""",
+        removeHs=False,
+    )
+
+
+def _assert_identical_end_states(angle_idx, itm_params, lhs_params, rhs_params):
+    np.testing.assert_allclose(itm_params[angle_idx], rhs_params[angle_idx])
+    np.testing.assert_allclose(itm_params[angle_idx], lhs_params[angle_idx])
+
+
+def _assert_bonded_term(lamb, bonded_idxs, param_idx, atol, min_max, itm_params, lhs_params, rhs_params):
+    """Verify that an intermediate bonded term is interpolated correctly in the range [min, max]"""
+    if abs(lhs_params[bonded_idxs][param_idx] - rhs_params[bonded_idxs][param_idx]) < 1e-5:
+        np.testing.assert_allclose(itm_params[bonded_idxs][param_idx], lhs_params[bonded_idxs][param_idx])
+        return
+
+    # test end-states first
+    if lamb == 0:
+        np.testing.assert_array_equal(itm_params, lhs_params)
+    elif lamb == 1.0:
+        np.testing.assert_array_equal(itm_params, rhs_params)
+    else:
+        lamb_min, lamb_max = min_max
+
+        if param_idx is None:
+            # chiral atoms have dim=1 parameters
+            itm_p = itm_params[bonded_idxs]
+            lhs_p = lhs_params[bonded_idxs]
+            rhs_p = rhs_params[bonded_idxs]
+        else:
+            # all other potentials have dim=2 parameters
+            itm_p = itm_params[bonded_idxs][param_idx]
+            lhs_p = lhs_params[bonded_idxs][param_idx]
+            rhs_p = rhs_params[bonded_idxs][param_idx]
+
+        if lamb < lamb_min:
+            assert abs(itm_p - lhs_p) < atol
+        elif lamb > lamb_min and lamb < lamb_max:
+            assert abs(itm_p - lhs_p) > atol
+            assert abs(itm_p - rhs_p) > atol
+        else:
+            assert abs(itm_p - rhs_p) < atol
+
+
+def test_core_dummy_chiral_conversion():
+    #  H1    D4      H1    O4
+    #    \  / .        \  / |
+    #     N0  .  -->    C0  |
+    #    /  \ .        /  \ |
+    #  H2    H3      H2    O3
+    #
+    # note: choice of core anchor and bond broken is arbitrary
+    # another possibility is the N0-D4 bond being broken
+
+    # lhs chiral volumes       rhs chiral volumes
+    # OFF: N0-H1-H2-H3         ON: N0-H1-H2-H3
+    #  ON: N0-H1-D4-H3         ON: N0-H1-D4-H3
+    #  ON: N0-H2-D4-H3         ON: N0-H2-D4-H3
+    #  ON: N0-H1-D4-H2         ON: N0-H1-D4-H2
+
+    mol_a = get_broken_ring()
+    mol_b = get_oxy_ring()
+    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3]], dtype=np.int32)
+
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+    lhs = st.setup_intermediate_state(0.0)
+    rhs = st.setup_intermediate_state(1.0)
+
+    assert len(lhs.chiral_atom.potential.idxs) == 4
+    assert len(rhs.chiral_atom.potential.idxs) == 4
+    np.testing.assert_array_equal(lhs.chiral_atom.potential.idxs, rhs.chiral_atom.potential.idxs)
+
+    assert sum([x == DEFAULT_CHIRAL_ATOM_RESTRAINT_K for x in lhs.chiral_atom.params]) == 3
+    assert sum([x == 0 for x in lhs.chiral_atom.params]) == 1
+
+    assert sum([x == DEFAULT_CHIRAL_ATOM_RESTRAINT_K for x in rhs.chiral_atom.params]) == 4
+    assert sum([x == 0 for x in rhs.chiral_atom.params]) == 0
+
+    import enum
+
+    class BondTag(enum.IntEnum):
+        N0_H3 = 0  # CORE
+        H3_D4 = 1  # DUMMY
+        N0_H1 = 2  # CORE
+        N0_D4 = 3  # DUMMY
+        N0_H2 = 4  # CORE
+
+    class AngleTag(enum.IntEnum):
+        H2_N0_H3 = 0  # CORE    - CHIRAL
+        H1_N0_D4 = 1  # DUMMY   - CHIRAL but non-converting
+        H1_N0_H2 = 2  # CORE    - CHIRAL
+        H2_N0_D4 = 3  # DUMMY   - CHIRAL but non-converting
+        H1_N0_H3 = 4  # CORE    - CHIRAL
+        N0_H3_D4 = 5  # DUMMY   - CHIRAL but non-converting
+        H3_N0_D4 = 6  # DUMMY   - CHIRAL
+        N0_D4_H3 = 7  # DUMMY   - CHIRAL but non-converting
+
+    # print(lhs.chiral_atom.potential.idxs)
+
+    class ChiralAtomTag(enum.IntEnum):
+        N0_H1_D4_H2 = 0
+        N0_H1_H3_D4 = 1
+        N0_H2_H3_D4 = 2
+        N0_H1_H3_H2 = 3  # CORE, CHIRAL, CONVERTING
+
+    # no chiral conversion happens, so we should be using the full schedule for bonds and angles
+    atol_k = 1e-3
+    for lamb in np.linspace(0.05, 0.95, 12):
+        itm = st.setup_intermediate_state(lamb)
+
+        # ########## #
+        # test bonds #
+        # ########## #
+
+        # core bonds:
+        #   N0_H3, N0_H1, N0_H2
+        # dummy bonds:
+        #   H3-D4, N0-D4
+        _assert_bonded_term(
+            lamb,
+            BondTag.N0_H1,
+            0,
+            atol_k,
+            single_topology.CORE_BOND_MIN_MAX,
+            itm.bond.params,
+            lhs.bond.params,
+            rhs.bond.params,
+        )
+        _assert_bonded_term(
+            lamb,
+            BondTag.N0_H2,
+            0,
+            atol_k,
+            single_topology.CORE_BOND_MIN_MAX,
+            itm.bond.params,
+            lhs.bond.params,
+            rhs.bond.params,
+        )
+        _assert_bonded_term(
+            lamb,
+            BondTag.N0_H3,
+            0,
+            atol_k,
+            single_topology.CORE_BOND_MIN_MAX,
+            itm.bond.params,
+            lhs.bond.params,
+            rhs.bond.params,
+        )
+
+        # dummy bond N0-D4 stays the same
+        assert abs(itm.bond.params[BondTag.N0_D4][0] - lhs.bond.params[BondTag.N0_D4][0]) < atol_k
+        assert abs(itm.bond.params[BondTag.N0_D4][0] - rhs.bond.params[BondTag.N0_D4][0]) < atol_k
+
+        # dummy bond H3-D4 is interpolated over achiral bounds
+        _assert_bonded_term(
+            lamb,
+            BondTag.H3_D4,
+            0,
+            atol_k,
+            single_topology.DUMMY_B_BOND_MIN_MAX,
+            itm.bond.params,
+            lhs.bond.params,
+            rhs.bond.params,
+        )
+        _assert_bonded_term(
+            lamb,
+            BondTag.N0_H2,
+            0,
+            atol_k,
+            single_topology.CORE_BOND_MIN_MAX,
+            itm.bond.params,
+            lhs.bond.params,
+            rhs.bond.params,
+        )
+
+        # ########### #
+        # test angles #
+        # ########### #
+
+        # test angle interpolation for chiral core atoms
+        _assert_bonded_term(
+            lamb,
+            AngleTag.H2_N0_H3,
+            0,
+            atol_k,
+            single_topology.CORE_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX,
+            itm.angle.params,
+            lhs.angle.params,
+            rhs.angle.params,
+        )
+        _assert_bonded_term(
+            lamb,
+            AngleTag.H1_N0_H2,
+            0,
+            atol_k,
+            single_topology.CORE_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX,
+            itm.angle.params,
+            lhs.angle.params,
+            rhs.angle.params,
+        )
+
+        _assert_bonded_term(
+            lamb,
+            AngleTag.H1_N0_H3,
+            0,
+            atol_k,
+            single_topology.CORE_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX,
+            itm.angle.params,
+            lhs.angle.params,
+            rhs.angle.params,
+        )
+
+        # test angle interpolation for achiral dummy atoms
+        _assert_bonded_term(
+            lamb,
+            AngleTag.H1_N0_D4,
+            0,
+            atol_k,
+            single_topology.DUMMY_B_ANGLE_MIN_MAX,
+            itm.angle.params,
+            lhs.angle.params,
+            rhs.angle.params,
+        )
+
+        # lhs/rhs are the same in this case.
+        _assert_bonded_term(
+            lamb,
+            AngleTag.H2_N0_D4,
+            0,
+            atol_k,
+            single_topology.DUMMY_B_ANGLE_MIN_MAX,
+            itm.angle.params,
+            lhs.angle.params,
+            rhs.angle.params,
+        )
+
+        _assert_bonded_term(
+            lamb,
+            AngleTag.N0_H3_D4,
+            0,
+            atol_k,
+            single_topology.DUMMY_B_ANGLE_MIN_MAX,
+            itm.angle.params,
+            lhs.angle.params,
+            rhs.angle.params,
+        )
+
+        _assert_bonded_term(
+            lamb,
+            AngleTag.N0_D4_H3,
+            0,
+            atol_k,
+            single_topology.DUMMY_B_ANGLE_MIN_MAX,
+            itm.angle.params,
+            lhs.angle.params,
+            rhs.angle.params,
+        )
+
+        _assert_bonded_term(
+            lamb,
+            AngleTag.H3_N0_D4,
+            0,
+            atol_k,
+            single_topology.DUMMY_B_ANGLE_MIN_MAX,
+            itm.angle.params,
+            lhs.angle.params,
+            rhs.angle.params,
+        )
+
+        # ################### #
+        # test chiral volumes #
+        # ################### #
+        _assert_bonded_term(
+            lamb,
+            ChiralAtomTag.N0_H1_H3_H2,
+            None,
+            atol_k,
+            single_topology.CORE_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX,
+            itm.chiral_atom.params,
+            lhs.chiral_atom.params,
+            rhs.chiral_atom.params,
+        )
+
+        _assert_identical_end_states(
+            ChiralAtomTag.N0_H1_D4_H2, itm.chiral_atom.params, lhs.chiral_atom.params, rhs.chiral_atom.params
+        )
+        _assert_identical_end_states(
+            ChiralAtomTag.N0_H1_H3_D4, itm.chiral_atom.params, lhs.chiral_atom.params, rhs.chiral_atom.params
+        )
+        _assert_identical_end_states(
+            ChiralAtomTag.N0_H2_H3_D4, itm.chiral_atom.params, lhs.chiral_atom.params, rhs.chiral_atom.params
+        )
+
+
+def _assert_exception_raised_at_least_once_in_interval(lambda_schedule, min_max, fn, expected_exception):
+    found = False
+    for lam in lambda_schedule:
+        if lam >= min_max[0] and lam <= min_max[1]:
+            try:
+                fn(lam)
+            except expected_exception:
+                found = True
+                break
+    assert found
+
+
+def test_assert_bonds_present_during_chiral_interpolation():
+    """We expect that if we set the threshold criteria (defining whether or not a bond is present based on the force constant)
+    too low, then we should raise MissingBondsInChiralVolumeException exceptions at the intermediate states."""
+    mol_a, mol_b, core = get_identity_pair()
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+    lambdas = np.linspace(0, 1, 48)
+
+    for lam in lambdas:
+        vs = st.setup_intermediate_state(lam)
+        assert_bonds_defined_for_chiral_volumes(vs, DEFAULT_BOND_IS_PRESENT_K)
+
+    def assert_fn(lam):
+        vs = st.setup_intermediate_state(lam)
+        assert_bonds_defined_for_chiral_volumes(vs, bond_k_min=200.0)
+
+    _assert_exception_raised_at_least_once_in_interval(
+        lambdas, DUMMY_B_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX, assert_fn, MissingBondsInChiralVolumeException
+    )
+    _assert_exception_raised_at_least_once_in_interval(
+        lambdas, DUMMY_A_CHIRAL_ATOM_CONVERTING_OFF_MIN_MAX, assert_fn, MissingBondsInChiralVolumeException
+    )

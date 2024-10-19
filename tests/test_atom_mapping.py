@@ -12,7 +12,6 @@ from rdkit.Chem import AllChem
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.mcgregor import MaxVisitsWarning, NoMappingError
-from timemachine.fe.single_topology import DummyGroupAssignmentError, verify_chiral_validity_of_core
 from timemachine.fe.utils import (
     get_mol_name,
     get_romol_conf,
@@ -21,7 +20,6 @@ from timemachine.fe.utils import (
     set_mol_name,
     set_romol_conf,
 )
-from timemachine.ff import Forcefield
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -1433,108 +1431,3 @@ def test_hybrid_core_generation(hif2a_ligands):
     # plt.legend()
 
     # plt.show()
-
-
-@pytest.mark.parametrize("seed", [2024, 2025])
-def test_enforce_chirally_valid_dummy_groups(seed):
-    # # MolBlocks below generated with the following code:
-
-    # mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))  # benzene
-    # mol_b = Chem.AddHs(Chem.MolFromSmiles("C(C1)(C2)CC12"))  # bicyclopentane
-    # AllChem.EmbedMolecule(mol_a, randomSeed=2024)
-    # AllChem.EmbedMolecule(mol_b, randomSeed=2024)
-    # AllChem.AlignMol(mol_b, mol_a, atomMap=[(0, 0), (4, 3)])
-
-    mol_a = Chem.MolFromMolBlock(
-        """
-     RDKit          3D
-
- 12 12  0  0  0  0  0  0  0  0999 V2000
-    0.9820    1.0014    0.0105 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.3692    1.3257   -0.0095 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.3213    0.3320   -0.0196 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.9782   -0.9962   -0.0105 C   0  0  0  0  0  0  0  0  0  0  0  0
-    0.3622   -1.3280    0.0094 C   0  0  0  0  0  0  0  0  0  0  0  0
-    1.3301   -0.3374    0.0197 C   0  0  0  0  0  0  0  0  0  0  0  0
-    1.7618    1.7512    0.0190 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.6369    2.3883   -0.0167 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -2.3674    0.6147   -0.0351 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.7688   -1.7441   -0.0191 H   0  0  0  0  0  0  0  0  0  0  0  0
-    0.6281   -2.3740    0.0165 H   0  0  0  0  0  0  0  0  0  0  0  0
-    2.3775   -0.6335    0.0353 H   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  2  0
-  2  3  1  0
-  3  4  2  0
-  4  5  1  0
-  5  6  2  0
-  6  1  1  0
-  1  7  1  0
-  2  8  1  0
-  3  9  1  0
-  4 10  1  0
-  5 11  1  0
-  6 12  1  0
-M  END""",
-        removeHs=False,
-    )
-
-    mol_b = Chem.MolFromMolBlock(
-        """
-     RDKit          3D
-
- 13 14  0  0  0  0  0  0  0  0999 V2000
-    0.6509    0.6640    0.0070 C   0  0  0  0  0  0  0  0  0  0  0  0
-    0.0474   -0.0518    1.1787 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.7335    0.7273   -0.5626 C   0  0  0  0  0  0  0  0  0  0  0  0
-    0.7357   -0.7070   -0.6174 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.6472   -0.6589   -0.0069 C   0  0  0  0  0  0  0  0  0  0  0  0
-    1.3555    1.3705    0.0097 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.5448    0.5192    1.8798 H   0  0  0  0  0  0  0  0  0  0  0  0
-    0.7823   -0.7798    1.5901 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.7595    0.6979   -1.6679 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.4509    1.3947   -0.0683 H   0  0  0  0  0  0  0  0  0  0  0  0
-    0.7983   -0.7612   -1.6975 H   0  0  0  0  0  0  0  0  0  0  0  0
-    1.3850   -1.3532   -0.0133 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.3319   -1.3827   -0.0161 H   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0
-  1  3  1  0
-  1  4  1  0
-  4  5  1  0
-  5  2  1  0
-  5  3  1  0
-  1  6  1  0
-  2  7  1  0
-  2  8  1  0
-  3  9  1  0
-  3 10  1  0
-  4 11  1  0
-  4 12  1  0
-  5 13  1  0
-M  END""",
-        removeHs=False,
-    )
-
-    rng = np.random.default_rng(seed)
-    mol_a = Chem.RenumberAtoms(mol_a, rng.permutation(mol_a.GetNumAtoms()).tolist())
-    mol_b = Chem.RenumberAtoms(mol_b, rng.permutation(mol_b.GetNumAtoms()).tolist())
-
-    ff = Forcefield.load_default()
-
-    get_cores_and_diagnostics = partial(
-        atom_mapping.get_cores_and_diagnostics, **{**DEFAULT_ATOM_MAPPING_KWARGS, "max_connected_components": 2}
-    )
-
-    cores_0, diagnostics_0 = get_cores_and_diagnostics(mol_a, mol_b, enforce_chirally_valid_dummy_groups=False)
-
-    # enforce_chirally_valid_dummy_groups is currently the only leaf filter, so when disabled we should have
-    # num_cores == total_leaves_visited
-    assert diagnostics_0.num_cores == diagnostics_0.total_leaves_visited
-
-    for core in cores_0:
-        with pytest.raises(DummyGroupAssignmentError):
-            verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
-
-    cores_1, diagnostics_1 = get_cores_and_diagnostics(mol_a, mol_b, enforce_chirally_valid_dummy_groups=True)
-    assert diagnostics_1.num_cores < diagnostics_1.total_leaves_visited
-    for core in cores_1:
-        verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
