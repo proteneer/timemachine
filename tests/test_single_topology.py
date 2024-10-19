@@ -38,6 +38,7 @@ from timemachine.fe.single_topology import (
     canonicalize_chiral_atom_idxs,
     canonicalize_improper_idxs,
     cyclic_difference,
+    find_induced_bonds_angles_from_chiral_idxs,
     handle_ring_opening_closing,
     interpolate_harmonic_bond_params,
     interpolate_harmonic_force_constant,
@@ -2005,3 +2006,66 @@ M  END
 
     # should not raise an assertion
     verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
+
+
+def test_find_converting_chiral_volumes():
+    mol_a = Chem.MolFromMolBlock(
+        """
+  Mrv2311 10092413403D
+
+  6  6  0  0  0  0            999 V2000
+    0.1292    1.5540   -0.4103 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.8029    0.8102    0.1698 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0572    0.0397    0.8217 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1063    0.7870    0.2530 C   0  0  2  0  0  0  0  0  0  0  0  0
+    2.1161    1.7939    1.5497 F   0  0  0  0  0  0  0  0  0  0  0  0
+    1.8910    0.0536   -0.6026 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  1  4  1  0  0  0  0
+  4  5  1  0  0  0  0
+  4  6  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    for atom in mol_a.GetAtoms():
+        atom.SetProp("atomLabel", str(atom.GetIdx()))
+    # keeps 2 chiral restraints, 6 are converting
+    perm = [0, 1, 2, 3, 4, 5]
+    # keeps all chiral restraints
+    # perm = [3, 4, 5, 0, 2, 1]
+    perm_kv = {}
+    for new_idx, old_idx in enumerate(perm):
+        perm_kv[old_idx] = new_idx
+    mol_a = Chem.RenumberAtoms(mol_a, perm)
+    mol_a.SetProp("_Name", "mol")
+    mol_b = Chem.Mol(mol_a)
+    core = np.array([[1, 1], [2, 2], [3, 3], [4, 5]], dtype=np.int32)
+    core_perm = []
+    for i, j in core:
+        core_perm.append([perm_kv[i], perm_kv[j]])
+    core = np.array(core_perm, dtype=np.int32)
+
+    # res = plot_atom_mapping_grid(mol_a, mol_b, core)
+    # fpath = "atom_mapping.svg"
+    # print("core mapping written to", fpath)
+    # with open(fpath, "w") as fh:
+    #     fh.write(res)
+
+    ff = Forcefield.load_default()
+
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    affected_chiral_atom_idxs = st.find_converting_chiral_volumes()
+    assert len(affected_chiral_atom_idxs) == 6
+
+    bond_idxs, angle_idxs = find_induced_bonds_angles_from_chiral_idxs(affected_chiral_atom_idxs)
+
+    # keep bonds the same, only stagger the angles/chiral terms differently
+
+    # print(bond_idxs, angle_idxs)
+
+    st.setup_intermediate_state(0.5)

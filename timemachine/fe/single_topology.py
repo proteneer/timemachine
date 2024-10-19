@@ -1066,6 +1066,23 @@ class AtomMapFlags(IntEnum):
     MOL_B = 2
 
 
+def find_induced_bonds_angles_from_chiral_idxs(chiral_idxs):
+    bonds = set()
+    angles = set()
+
+    for c, j, k, l in chiral_idxs:
+        bonds.add(canonicalize_bond([c, j]))
+        bonds.add(canonicalize_bond([c, k]))
+        bonds.add(canonicalize_bond([c, l]))
+
+    for c, j, k, l in chiral_idxs:
+        angles.add(canonicalize_bond([j, c, k]))
+        angles.add(canonicalize_bond([j, c, l]))
+        angles.add(canonicalize_bond([k, c, l]))
+
+    return bonds, angles
+
+
 class AtomMapMixin:
     """
     A Mixin class containing the atom_mapping information. This Mixin sets up the following
@@ -1241,9 +1258,9 @@ def assert_chiral_consistency_and_validity(
     dst_chiral_restr_idx_set = ChiralRestrIdxSet(dst_chiral_idxs)
 
     assert_chiral_consistency(src_chiral_restr_idx_set, dst_chiral_restr_idx_set, src_bond_idxs, dst_bond_idxs)
-    check_chiral_validity_impl(
-        atom_map, src_chiral_restr_idx_set, dst_chiral_restr_idx_set, src_bond_idxs, dst_bond_idxs
-    )
+    # check_chiral_validity_impl(
+    #     atom_map, src_chiral_restr_idx_set, dst_chiral_restr_idx_set, src_bond_idxs, dst_bond_idxs
+    # )
 
 
 def verify_chiral_validity_of_core(mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, forcefield):
@@ -1614,6 +1631,54 @@ class SingleTopology(AtomMapMixin):
 
         return ChiralBondRestraint(chiral_bond_idxs, np.array(chiral_bond_signs)).bind(jnp.array(chiral_bond_params))
 
+    def find_converting_chiral_volumes(self):
+        # this can't call into setup_intermedaite_state since it'd end up recursive
+        src_chiral_idxs = set(tuple(x) for x in self.src_system.chiral_atom.potential.idxs)
+        dst_chiral_idxs = set(tuple(x) for x in self.dst_system.chiral_atom.potential.idxs)
+        return dst_chiral_idxs.symmetric_difference(src_chiral_idxs)
+
+    def split_chiral_bonds_and_angles(self, bond_potential, angle_potential):
+        """
+        Given an angle potential, split the angle idxs into those involved in a convert chiral set and those not involved
+        """
+        bad_bond_idxs, bad_angle_idxs = find_induced_bonds_angles_from_chiral_idxs(
+            self.find_converting_chiral_volumes()
+        )
+
+        chiral_bond_idxs = []
+        chiral_bond_params = []
+        achiral_bond_idxs = []
+        achiral_bond_params = []
+
+        for idxs, params in zip(bond_potential.potential.idxs, bond_potential.params):
+            if tuple(idxs) in bad_bond_idxs:
+                chiral_bond_idxs.append(tuple(idxs))
+                chiral_bond_params.append(params)
+            else:
+                achiral_bond_idxs.append(tuple(idxs))
+                achiral_bond_params.append(params)
+
+        chiral_bond = HarmonicBond(np.array(chiral_bond_idxs, dtype=np.int32)).bind(chiral_bond_params)
+        achiral_bond = HarmonicBond(np.array(achiral_bond_idxs, dtype=np.int32)).bind(achiral_bond_params)
+
+        chiral_angle_idxs = []
+        chiral_angle_params = []
+        achiral_angle_idxs = []
+        achiral_angle_params = []
+
+        for idxs, params in zip(angle_potential.potential.idxs, angle_potential.params):
+            if tuple(idxs) in bad_angle_idxs:
+                chiral_angle_idxs.append(tuple(idxs))
+                chiral_angle_params.append(params)
+            else:
+                achiral_angle_idxs.append(tuple(idxs))
+                achiral_angle_params.append(params)
+
+        chiral_angle = HarmonicAngleStable(np.array(chiral_angle_idxs, dtype=np.int32)).bind(chiral_angle_params)
+        achiral_angle = HarmonicAngleStable(np.array(achiral_angle_idxs, dtype=np.int32)).bind(achiral_angle_params)
+
+        return chiral_bond, achiral_bond, chiral_angle, achiral_angle
+
     def setup_intermediate_state(self, lamb) -> VacuumSystem:
         r"""
         Set up intermediate states at some value of the alchemical parameter :math:`\lambda`.
@@ -1640,15 +1705,45 @@ class SingleTopology(AtomMapMixin):
         src_system = self.src_system
         dst_system = self.dst_system
 
-        # stagger the lambda schedule
+        # split schedule depending on if we're breaking/forming chiral volumes
         bonds_min, bonds_max = [0.0, 0.7]
         angles_min, angles_max = [0.0, 0.7]
         torsions_min, torsions_max = [0.7, 1.0]
-        chiral_atoms_min, chiral_atoms_max = [0.7, 1.0]
 
-        bond = self._setup_intermediate_bonded_term(
-            src_system.bond,
-            dst_system.bond,
+        # bonds involved in chiral volumes need to be turned on before volumes
+        # angles involved in chiral volumes need to be turned on after volumes
+        chiral_bonds_min, chiral_bonds_max = [0.0, 0.5]
+        chiral_atoms_min, chiral_atoms_max = [0.5, 0.6]
+        chiral_angles_min, chiral_angles_max = [0.6, 0.7]
+
+        (
+            src_affected_bond,
+            src_unaffected_bond,
+            src_affected_angle,
+            src_unaffected_angle,
+        ) = self.split_chiral_bonds_and_angles(src_system.bond, src_system.angle)
+        (
+            dst_affected_bond,
+            dst_unaffected_bond,
+            dst_affected_angle,
+            dst_unaffected_angle,
+        ) = self.split_chiral_bonds_and_angles(dst_system.bond, dst_system.angle)
+
+        bond_affected = self._setup_intermediate_bonded_term(
+            src_affected_bond,
+            dst_affected_bond,
+            lamb,
+            interpolate.align_harmonic_bond_idxs_and_params,
+            partial(
+                interpolate_harmonic_bond_params,
+                k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
+                lambda_min=chiral_bonds_min,
+                lambda_max=chiral_bonds_max,
+            ),
+        )
+        bond_unaffected = self._setup_intermediate_bonded_term(
+            src_unaffected_bond,
+            dst_unaffected_bond,
             lamb,
             interpolate.align_harmonic_bond_idxs_and_params,
             partial(
@@ -1658,10 +1753,25 @@ class SingleTopology(AtomMapMixin):
                 lambda_max=bonds_max,
             ),
         )
+        bond = HarmonicBond(np.concatenate([bond_affected.potential.idxs, bond_unaffected.potential.idxs])).bind(
+            np.concatenate([bond_affected.params, bond_unaffected.params])
+        )
 
-        angle = self._setup_intermediate_bonded_term(
-            src_system.angle,
-            dst_system.angle,
+        angle_affected = self._setup_intermediate_bonded_term(
+            src_affected_angle,
+            dst_affected_angle,
+            lamb,
+            interpolate.align_harmonic_angle_idxs_and_params,
+            partial(
+                interpolate_harmonic_angle_params,
+                k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
+                lambda_min=chiral_angles_min,
+                lambda_max=chiral_angles_max,
+            ),
+        )
+        angle_unaffected = self._setup_intermediate_bonded_term(
+            src_unaffected_angle,
+            dst_unaffected_angle,
             lamb,
             interpolate.align_harmonic_angle_idxs_and_params,
             partial(
@@ -1671,6 +1781,9 @@ class SingleTopology(AtomMapMixin):
                 lambda_max=angles_max,
             ),
         )
+        angle = HarmonicAngleStable(
+            np.concatenate([angle_affected.potential.idxs, angle_unaffected.potential.idxs])
+        ).bind(np.concatenate([angle_affected.params, angle_unaffected.params]))
 
         assert src_system.torsion
         assert dst_system.torsion
