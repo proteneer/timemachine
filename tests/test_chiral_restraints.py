@@ -11,7 +11,7 @@ from timemachine.constants import (
     DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
     DEFAULT_CHIRAL_BOND_RESTRAINT_K,
 )
-from timemachine.fe import topology, utils
+from timemachine.fe import atom_mapping, topology, utils
 from timemachine.fe.atom_mapping import get_cores
 from timemachine.fe.chiral_utils import (
     make_chiral_flip_heatmaps,
@@ -925,9 +925,96 @@ $$$$""",
     return mol_a, mol_b, core
 
 
-def test_ring_breaking_chiral_restraints_failure():
-    # mol_a, mol_b, core = get_simple_pair()
+def get_alt_pair():
+    # cyclobutane ring
+    mol_a = Chem.MolFromMolBlock(
+        """mol_a
+                    3D
+ Structure written by MMmdl.
+ 10 10  0  0  1  0            999 V2000
+   61.0392  -33.5497  -35.2867 F   0  0  0  0  0  0
+   60.3271  -33.5255  -36.4685 C   0  0  1  0  0  0
+   61.0252  -33.1997  -37.8026 S   0  0  0  0  0  0
+   60.0215  -34.1193  -38.5010 C   0  0  0  0  0  0
+   59.8393  -34.8162  -37.1515 C   0  0  0  0  0  0
+   59.4787  -32.8508  -36.3286 H   0  0  0  0  0  0
+   60.4356  -34.7522  -39.2862 H   0  0  0  0  0  0
+   59.1170  -33.6045  -38.8304 H   0  0  0  0  0  0
+   58.8113  -35.1061  -36.9244 H   0  0  0  0  0  0
+   60.5281  -35.6523  -37.0189 H   0  0  0  0  0  0
+  1  2  1  0  0  0
+  2  3  1  0  0  0
+  2  5  1  0  0  0
+  2  6  1  0  0  0
+  3  4  1  0  0  0
+  4  5  1  0  0  0
+  4  7  1  0  0  0
+  4  8  1  0  0  0
+  5  9  1  0  0  0
+  5 10  1  0  0  0
+M  END
 
+$$$$""",
+        removeHs=False,
+    )
+
+    mol_b = Chem.MolFromMolBlock(
+        """mol_b
+                    3D
+ Structure written by MMmdl.
+ 14 14  0  0  1  0            999 V2000
+   60.9363  -33.6820  -35.2687 F   0  0  0  0  0  0
+   60.3022  -33.9870  -36.4558 C   0  0  1  0  0  0
+   60.2039  -32.8187  -37.4561 S   0  0  0  0  0  0
+   59.6848  -33.3119  -38.8168 C   0  0  0  0  0  0
+   60.5213  -34.3539  -39.3031 O   0  0  0  0  0  0
+   60.4244  -35.5141  -38.4856 C   0  0  0  0  0  0
+   61.0143  -35.1860  -37.1086 C   0  0  0  0  0  0
+   59.2791  -34.2938  -36.2244 H   0  0  0  0  0  0
+   59.7052  -32.4975  -39.5385 H   0  0  0  0  0  0
+   58.6547  -33.6631  -38.7462 H   0  0  0  0  0  0
+   60.9837  -36.3255  -38.9505 H   0  0  0  0  0  0
+   59.3881  -35.8507  -38.4036 H   0  0  0  0  0  0
+   60.9455  -36.0595  -36.4589 H   0  0  0  0  0  0
+   62.0769  -34.9691  -37.2220 H   0  0  0  0  0  0
+  1  2  1  0  0  0
+  2  3  1  0  0  0
+  2  7  1  0  0  0
+  2  8  1  0  0  0
+  3  4  1  0  0  0
+  4  5  1  0  0  0
+  4  9  1  0  0  0
+  4 10  1  0  0  0
+  5  6  1  0  0  0
+  6  7  1  0  0  0
+  6 11  1  0  0  0
+  6 12  1  0  0  0
+  7 13  1  0  0  0
+  7 14  1  0  0  0
+M  END
+
+$$$$
+""",
+        removeHs=False,
+    )
+    import copy
+
+    atom_mapping_kwargs = copy.deepcopy(DEFAULT_ATOM_MAPPING_KWARGS)
+    atom_mapping_kwargs["enforce_core_core"] = False
+    atom_mapping_kwargs["ring_matches_ring_only"] = False
+    atom_mapping_kwargs["ring_cutoff"] = 0.2
+    atom_mapping_kwargs["chain_cutoff"] = 0.2
+
+    core = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        **atom_mapping_kwargs,
+    )[0]
+
+    return mol_a, mol_b, core
+
+
+def simple_ring():
     from importlib import resources
 
     from timemachine.fe.utils import read_sdf
@@ -940,13 +1027,18 @@ def test_ring_breaking_chiral_restraints_failure():
 
     print(mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
 
-    from timemachine.fe import atom_mapping
-
     core = atom_mapping.get_cores(
         mol_a,
         mol_b,
         **DEFAULT_ATOM_MAPPING_KWARGS,
     )[0]
+
+    return mol_a, mol_b, core
+
+
+def test_ring_breaking_chiral_restraints_failure():
+    # mol_a, mol_b, core = get_simple_pair()
+    mol_a, mol_b, core = get_alt_pair()
 
     res = plot_atom_mapping_grid(mol_a, mol_b, core)
     fpath = "atom_mapping.svg"

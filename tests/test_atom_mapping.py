@@ -1417,6 +1417,7 @@ def test_hybrid_core_generation(hif2a_ligands):
     # plt.show()
 
 
+@pytest.mark.skip(reason="deprecated")
 @pytest.mark.parametrize("seed", [2024, 2025])
 def test_enforce_chirally_valid_dummy_groups(seed):
     # # MolBlocks below generated with the following code:

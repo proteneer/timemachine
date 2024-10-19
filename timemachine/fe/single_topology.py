@@ -1535,14 +1535,15 @@ class SingleTopology(AtomMapMixin):
         else:
             bond_params = jnp.array([])
 
-        assert src_bond.potential.idxs.shape[-1] == dst_bond.potential.idxs.shape[-1]
-        assert src_bond.params.shape[-1] == dst_bond.params.shape[-1]
-        idxs_dim_shape = src_bond.potential.idxs.shape[-1]
-        bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params], dtype=np.int32).reshape(-1, idxs_dim_shape)
+        bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params], dtype=np.int32)
+        if len(src_bond.params.shape) == 2:
+            assert src_bond.potential.idxs.shape[-1] == dst_bond.potential.idxs.shape[-1]
+            assert src_bond.params.shape[-1] == dst_bond.params.shape[-1]
+            idxs_dim_shape = src_bond.potential.idxs.shape[-1]
+            bond_idxs = bond_idxs.reshape(-1, idxs_dim_shape)
+            param_dim_shape = src_bond.params.shape[-1]
+            bond_params = bond_params.reshape(-1, param_dim_shape)
 
-        param_dim_shape = src_bond.params.shape[-1]
-
-        bond_params = bond_params.reshape(-1, param_dim_shape)
         r = src_cls_bond(bond_idxs).bind(bond_params)
 
         return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
@@ -1723,15 +1724,17 @@ class SingleTopology(AtomMapMixin):
         dst_system = self.dst_system
 
         # split schedule depending on if we're breaking/forming chiral volumes
-        bonds_min, bonds_max = [0.0, 0.7]
-        angles_min, angles_max = [0.0, 0.7]
-        torsions_min, torsions_max = [0.7, 1.0]
+        bonds_min, bonds_max = [0.0, 0.8]
+        angles_min, angles_max = [0.0, 0.8]
 
         # bonds involved in chiral volumes need to be turned on before volumes
         # angles involved in chiral volumes need to be turned on after volumes
-        chiral_bonds_min, chiral_bonds_max = [0.0, 0.5]
-        chiral_atoms_min, chiral_atoms_max = [0.5, 0.6]
-        chiral_angles_min, chiral_angles_max = [0.6, 0.7]
+        chiral_bonds_min, chiral_bonds_max = [0.0, 0.6]
+        chiral_atoms_min, chiral_atoms_max = [0.6, 0.7]
+        chiral_angles_min, chiral_angles_max = [0.7, 0.8]
+
+        # torsions are always done last
+        torsions_min, torsions_max = [0.8, 1.0]
 
         (
             src_affected_bond,
