@@ -1527,7 +1527,7 @@ class SingleTopology(AtomMapMixin):
             dst_bond.potential.idxs,
             dst_bond.params,
         )
-        bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params], dtype=np.int32)
+
         if bond_idxs_and_params:
             src_params = jnp.array([x for _, x, _ in bond_idxs_and_params])
             dst_params = jnp.array([x for _, _, x in bond_idxs_and_params])
@@ -1535,7 +1535,16 @@ class SingleTopology(AtomMapMixin):
         else:
             bond_params = jnp.array([])
 
+        assert src_bond.potential.idxs.shape[-1] == dst_bond.potential.idxs.shape[-1]
+        assert src_bond.params.shape[-1] == dst_bond.params.shape[-1]
+        idxs_dim_shape = src_bond.potential.idxs.shape[-1]
+        bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params], dtype=np.int32).reshape(-1, idxs_dim_shape)
+
+        param_dim_shape = src_bond.params.shape[-1]
+
+        bond_params = bond_params.reshape(-1, param_dim_shape)
         r = src_cls_bond(bond_idxs).bind(bond_params)
+
         return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
 
     def _setup_intermediate_nonbonded_term(
@@ -1749,6 +1758,7 @@ class SingleTopology(AtomMapMixin):
                 lambda_max=chiral_bonds_max,
             ),
         )
+
         bond_unaffected = self._setup_intermediate_bonded_term(
             src_unaffected_bond,
             dst_unaffected_bond,
