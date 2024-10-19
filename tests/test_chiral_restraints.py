@@ -879,7 +879,7 @@ from timemachine.fe.plots import (
 )
 
 
-def test_ring_breaking_chiral_restraints_failure():
+def get_simple_pair():
     mol_a = Chem.MolFromMolBlock(
         """
   Mrv2311 10092413403D
@@ -922,16 +922,42 @@ $$$$""",
         core_perm.append([perm_kv[i], perm_kv[j]])
     core = np.array(core_perm, dtype=np.int32)
 
+    return mol_a, mol_b, core
+
+
+def test_ring_breaking_chiral_restraints_failure():
+    # mol_a, mol_b, core = get_simple_pair()
+
+    from importlib import resources
+
+    from timemachine.fe.utils import read_sdf
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
+
+    mol_a = mols[1]
+    mol_b = mols[-7]
+
+    print(mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
+
+    from timemachine.fe import atom_mapping
+
+    core = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        **DEFAULT_ATOM_MAPPING_KWARGS,
+    )[0]
+
     res = plot_atom_mapping_grid(mol_a, mol_b, core)
     fpath = "atom_mapping.svg"
     print("core mapping written to", fpath)
     with open(fpath, "w") as fh:
         fh.write(res)
 
-    short_hrex_params = replace(DEFAULT_HREX_PARAMS, n_frames=1000, n_eq_steps=10000, steps_per_frame=400)
+    short_hrex_params = replace(DEFAULT_HREX_PARAMS, n_frames=2000, n_eq_steps=10000, steps_per_frame=400)
     ff = Forcefield.load_default()
 
-    vacuum_res = run_vacuum(mol_a, mol_b, core, ff, None, short_hrex_params, n_windows=48, min_overlap=0.666)
+    vacuum_res = run_vacuum(mol_a, mol_b, core, ff, None, short_hrex_params, n_windows=48, min_overlap=0.5)
 
     with open("vacuum_res.pkl", "wb") as fh:
         import pickle

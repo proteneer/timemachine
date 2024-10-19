@@ -1658,8 +1658,12 @@ class SingleTopology(AtomMapMixin):
                 achiral_bond_idxs.append(tuple(idxs))
                 achiral_bond_params.append(params)
 
-        chiral_bond = HarmonicBond(np.array(chiral_bond_idxs, dtype=np.int32)).bind(chiral_bond_params)
-        achiral_bond = HarmonicBond(np.array(achiral_bond_idxs, dtype=np.int32)).bind(achiral_bond_params)
+        chiral_bond = HarmonicBond(np.array(chiral_bond_idxs, dtype=np.int32).reshape(-1, 2)).bind(
+            np.array(chiral_bond_params).reshape(-1, 2)
+        )
+        achiral_bond = HarmonicBond(np.array(achiral_bond_idxs, dtype=np.int32).reshape(-1, 2)).bind(
+            np.array(achiral_bond_params).reshape(-1, 2)
+        )
 
         chiral_angle_idxs = []
         chiral_angle_params = []
@@ -1674,8 +1678,12 @@ class SingleTopology(AtomMapMixin):
                 achiral_angle_idxs.append(tuple(idxs))
                 achiral_angle_params.append(params)
 
-        chiral_angle = HarmonicAngleStable(np.array(chiral_angle_idxs, dtype=np.int32)).bind(chiral_angle_params)
-        achiral_angle = HarmonicAngleStable(np.array(achiral_angle_idxs, dtype=np.int32)).bind(achiral_angle_params)
+        chiral_angle = HarmonicAngleStable(np.array(chiral_angle_idxs, dtype=np.int32).reshape(-1, 3)).bind(
+            np.array(chiral_angle_params).reshape(-1, 3)
+        )
+        achiral_angle = HarmonicAngleStable(np.array(achiral_angle_idxs, dtype=np.int32).reshape(-1, 3)).bind(
+            np.array(achiral_angle_params).reshape(-1, 3)
+        )
 
         return chiral_bond, achiral_bond, chiral_angle, achiral_angle
 
@@ -1753,6 +1761,7 @@ class SingleTopology(AtomMapMixin):
                 lambda_max=bonds_max,
             ),
         )
+
         bond = HarmonicBond(np.concatenate([bond_affected.potential.idxs, bond_unaffected.potential.idxs])).bind(
             np.concatenate([bond_affected.params, bond_unaffected.params])
         )
