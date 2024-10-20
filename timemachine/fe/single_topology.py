@@ -1519,12 +1519,33 @@ class SingleTopology(AtomMapMixin):
         src_cls_bond = type(src_bond.potential)
         dst_cls_bond = type(dst_bond.potential)
 
+        # deal with any 0 sized arrays
+        if isinstance(src_bond.potential, HarmonicBond):
+            idxs_shape = (-1, 2)
+            params_shape = (-1, 2)
+        elif isinstance(src_bond.potential, HarmonicAngleStable):
+            idxs_shape = (-1, 3)
+            params_shape = (-1, 3)
+        elif isinstance(src_bond.potential, PeriodicTorsion):
+            idxs_shape = (-1, 4)
+            params_shape = (-1, 3)
+        elif isinstance(src_bond.potential, ChiralAtomRestraint):
+            idxs_shape = (-1, 4)
+            params_shape = (-1,)  # type: ignore
+        else:
+            assert 0
+
+        src_bond.potential.idxs = src_bond.potential.idxs.reshape(*idxs_shape)  # type: ignore
+        dst_bond.potential.idxs = dst_bond.potential.idxs.reshape(*idxs_shape)  # type: ignore
+        src_bond.params = src_bond.params.reshape(*params_shape)
+        dst_bond.params = dst_bond.params.reshape(*params_shape)
+
         assert src_cls_bond == dst_cls_bond
 
         bond_idxs_and_params = align_fn(
-            src_bond.potential.idxs,
+            src_bond.potential.idxs,  # type: ignore
             src_bond.params,
-            dst_bond.potential.idxs,
+            dst_bond.potential.idxs,  # type: ignore
             dst_bond.params,
         )
 
@@ -1536,14 +1557,8 @@ class SingleTopology(AtomMapMixin):
             bond_params = jnp.array([])
 
         bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params], dtype=np.int32)
-        if len(src_bond.params.shape) == 2:
-            assert src_bond.potential.idxs.shape[-1] == dst_bond.potential.idxs.shape[-1]
-            assert src_bond.params.shape[-1] == dst_bond.params.shape[-1]
-            idxs_dim_shape = src_bond.potential.idxs.shape[-1]
-            bond_idxs = bond_idxs.reshape(-1, idxs_dim_shape)
-            param_dim_shape = src_bond.params.shape[-1]
-            bond_params = bond_params.reshape(-1, param_dim_shape)
-
+        bond_idxs = bond_idxs.reshape(*idxs_shape)
+        bond_params = bond_params.reshape(*params_shape)
         r = src_cls_bond(bond_idxs).bind(bond_params)
 
         return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
@@ -1776,7 +1791,7 @@ class SingleTopology(AtomMapMixin):
         )
 
         bond = HarmonicBond(np.concatenate([bond_affected.potential.idxs, bond_unaffected.potential.idxs])).bind(
-            np.concatenate([bond_affected.params, bond_unaffected.params])
+            jnp.concatenate([bond_affected.params, bond_unaffected.params])
         )
 
         angle_affected = self._setup_intermediate_bonded_term(
@@ -1805,7 +1820,7 @@ class SingleTopology(AtomMapMixin):
         )
         angle = HarmonicAngleStable(
             np.concatenate([angle_affected.potential.idxs, angle_unaffected.potential.idxs])
-        ).bind(np.concatenate([angle_affected.params, angle_unaffected.params]))
+        ).bind(jnp.concatenate([angle_affected.params, angle_unaffected.params]))
 
         assert src_system.torsion
         assert dst_system.torsion

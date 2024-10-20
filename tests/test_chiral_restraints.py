@@ -1000,7 +1000,7 @@ $$$$
     import copy
 
     atom_mapping_kwargs = copy.deepcopy(DEFAULT_ATOM_MAPPING_KWARGS)
-    atom_mapping_kwargs["enforce_core_core"] = False
+    atom_mapping_kwargs["enforce_core_core"] = True
     atom_mapping_kwargs["ring_matches_ring_only"] = False
     atom_mapping_kwargs["ring_cutoff"] = 0.2
     atom_mapping_kwargs["chain_cutoff"] = 0.2
@@ -1049,7 +1049,7 @@ def test_ring_breaking_chiral_restraints_failure():
     short_hrex_params = replace(DEFAULT_HREX_PARAMS, n_frames=2000, n_eq_steps=10000, steps_per_frame=400)
     ff = Forcefield.load_default()
 
-    vacuum_res = run_vacuum(mol_a, mol_b, core, ff, None, short_hrex_params, n_windows=48, min_overlap=0.5)
+    vacuum_res = run_vacuum(mol_a, mol_b, core, ff, None, short_hrex_params, n_windows=48, min_overlap=0.66)
 
     with open("vacuum_res.pkl", "wb") as fh:
         import pickle
