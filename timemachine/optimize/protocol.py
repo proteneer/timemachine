@@ -57,7 +57,9 @@ from scipy.optimize import bisect
 
 from timemachine.fe.reweighting import interpret_as_mixture_potential
 
-logsumexp = jit(_logsumexp)  # performance bottleneck in several functions below
+# performance bottleneck in several functions below
+logsumexp = jit(_logsumexp, static_argnames=["axis"])
+
 
 Float = float
 DistanceFxn = Callable[[Float, Float], Float]
@@ -285,7 +287,7 @@ def make_overlap_fxn(u_lam, src_u_n):
 
     def overlap_fxn(lam_a, lam_b):
         estimate = reweighted_pair_overlap(u_lam(lam_a), u_lam(lam_b), src_u_n)
-        clamped = jnp.clamp(estimate, min=0.0, max=1.0)  # TODO: revert this line if estimates > 1 are avoided
+        clamped = jnp.clip(estimate, 0.0, 1.0)  # TODO: revert this line if estimates > 1 are avoided
         return clamped
 
     return overlap_fxn
