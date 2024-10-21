@@ -1142,16 +1142,22 @@ def make_u_kl_fxn(trajs, initial_states):
     usage note: be careful of axis-ordering convention, see: https://github.com/proteneer/timemachine/issues/1100
     """
 
-    summed_potentials = [make_summed_potential(s.potentials) for s in initial_states]
-
     # validate assumption that initial states all have compatible potentials / ensembles
     kBTs = [BOLTZ * state.integrator.temperature for state in initial_states]
+    assert len(set(kBTs)) == 1
+
     s_0 = initial_states[0]
-    for s in initial_states[1:]:
+    sp = make_summed_potential(s_0.potentials)
+    K = len(initial_states)
+    P = len(sp.params)
+    all_params = np.zeros((K, P))
+    all_params[0] = sp.params
+    for i in range(1, K):
+        s = initial_states[i]
         assert_ensembles_compatible(s_0, s)
         assert_potentials_compatible(s_0.potentials, s.potentials)
+        all_params[i] = make_summed_potential(s.potentials).params
 
-    sp = summed_potentials[0]
     sp_gpu = sp.potential.to_gpu(np.float32)
 
     def batch_U_fxn(xs, ps, bs, x_idxs, p_idxs):
@@ -1162,7 +1168,7 @@ def make_u_kl_fxn(trajs, initial_states):
         coords = trajs[k].frames
         boxes = trajs[k].boxes
 
-        params = np.array([summed_potentials[l].params])
+        params = np.array([all_params[l]])
 
         coords_batch_idxs = np.arange(len(coords)).astype(np.uint32)
         params_batch_idxs = np.zeros_like(coords_batch_idxs).astype(np.uint32)
