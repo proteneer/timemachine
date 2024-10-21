@@ -101,6 +101,8 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
         )
 
 
+# 1) cherry pick a couple of edges that are hard to setup initial geometries
+# 2) failures come from failed edges in the original hif2a set
 @pytest.mark.parametrize(
     "src, dst",
     [
@@ -125,9 +127,6 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
 )
 @pytest.mark.nightly(reason="Takes a while to run")
 def test_confgen_hard_edges(src, dst):
-    # 1) cherry pick a couple of edges that are hard to setup initial geometries
-    # 2) failures come from failed edges in the original hif2a set
-
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
     with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
         mols = read_sdf(ligand_path)

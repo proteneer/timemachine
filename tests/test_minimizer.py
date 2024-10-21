@@ -180,14 +180,14 @@ def test_equilibrate_host_barker():
 
 
 @pytest.mark.parametrize(
-    "minimizer_options",
+    "minimizer_config",
     [
-        minimizer.FireMinimizationOptions(100),
-        minimizer.ScipyMinimizationOptions("BFGS", {}),
-        minimizer.ScipyMinimizationOptions("L-BFGS-B", {}),
+        minimizer.FireMinimizationConfig(100),
+        minimizer.ScipyMinimizationConfig("BFGS"),
+        minimizer.ScipyMinimizationConfig("L-BFGS-B"),
     ],
 )
-def test_local_minimize_water_box(minimizer_options):
+def test_local_minimize_water_box(minimizer_config):
     """
     Test that we can locally relax a box of water by selecting some random indices.
     """
@@ -205,7 +205,7 @@ def test_local_minimize_water_box(minimizer_options):
 
     u_init, g_init = val_and_grad_fn(x0)
 
-    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_options)
+    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config)
 
     np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
     assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.01
@@ -219,10 +219,15 @@ def test_local_minimize_water_box(minimizer_options):
 
 @pytest.mark.nocuda
 @pytest.mark.parametrize(
-    "minimizer_options", [minimizer.FireMinimizationOptions(100), minimizer.ScipyMinimizationOptions("BFGS", {})]
+    "minimizer_config",
+    [
+        minimizer.FireMinimizationConfig(100),
+        minimizer.ScipyMinimizationConfig("BFGS"),
+        minimizer.ScipyMinimizationConfig("L-BFGS-B"),
+    ],
 )
 @pytest.mark.parametrize("restraint_k", [None, 3_000.0])
-def test_local_minimize_strained_ligand(minimizer_options, restraint_k):
+def test_local_minimize_strained_ligand(minimizer_config, restraint_k):
     """
     Test that we can minimize a ligand in vacuum using local_minimize when the ligand is strained.
     """
@@ -290,7 +295,7 @@ $$$$
 
     u_init, g_init = val_and_grad_fn(x0)
 
-    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_options, restraint_k=restraint_k)
+    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restraint_k=restraint_k)
 
     assert np.linalg.norm(x0 - x_opt) > 0.01
 
@@ -336,7 +341,7 @@ def test_minimizer_failure_toy_system():
     du_dx = lambda x: bound_impl.execute(x, box, compute_u=False)[0]
     initial_force_norms = np.linalg.norm(du_dx(coords))
 
-    minimized_coords = minimizer.fire_minimize(coords, du_dx, minimizer.FireMinimizationOptions(100))
+    minimized_coords = minimizer.fire_minimize(coords, du_dx, minimizer.FireMinimizationConfig(100))
 
     final_distance = distance_on_pairs(minimized_coords[None, 0], minimized_coords[None, 1], box)
     assert not np.isclose(initial_distance, final_distance, atol=2e-4)

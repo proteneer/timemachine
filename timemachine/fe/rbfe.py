@@ -63,17 +63,9 @@ class Host:
     omm_topology: app.topology.Topology
 
 
-def _get_default_state_minimization_config() -> minimizer.MinimizationOptions:
-    """These parameters were empirically selected based on some challenging minimization edges.
-
-    The rough rationale for the selection of these parameters:
-    * n_steps=400 started at 250 steps and increased to give some room for error
-    * dt_start=1e-7 start with a very small step size as clashes can otherwise take large steps
-    * n_min=10 increase the number of steps taken in the right direction before adjusting dt to be more confident of direction
-    * f_inc=1.5 since the starting time step is small, increase the rate at which the dt is increased
-    * dt_max=1e-4 we shouldn't have to take large step sizes here and going to 1e-3 seems to blow up in some cases
-    """
-    return minimizer.FireMinimizationOptions(n_steps=400, dt_start=1e-7, n_min=10, f_inc=1.5, dt_max=1e-4)
+def _get_default_state_minimization_config() -> minimizer.MinimizationConfig:
+    """The parameters to be used to minimize initial states"""
+    return minimizer.ScipyMinimizationConfig(method="BFGS", options={"disp": True})
 
 
 def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
@@ -334,7 +326,7 @@ def optimize_coords_state(
     free_idxs: List[int],
     assert_energy_decreased: bool,
     k: Optional[float],
-    minimization_config: Optional[minimizer.MinimizationOptions] = None,
+    minimization_config: Optional[minimizer.MinimizationConfig] = None,
 ) -> NDArray:
     val_and_grad_fn = minimizer.get_val_and_grad_fn(potentials, box)
     assert np.all(np.isfinite(x0)), "Initial coordinates contain nan or inf"
@@ -365,7 +357,7 @@ def get_free_idxs(initial_state: InitialState, cutoff: float = 0.5) -> List[int]
 
 
 def _optimize_coords_along_states(
-    initial_states: List[InitialState], k: Optional[float], minimization_config: minimizer.MinimizationOptions
+    initial_states: List[InitialState], k: Optional[float], minimization_config: minimizer.MinimizationConfig
 ) -> List[NDArray]:
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
@@ -397,7 +389,7 @@ def optimize_coordinates(
     initial_states: List[InitialState],
     min_cutoff: Optional[float] = 0.7,
     k: Optional[float] = DEFAULT_POSITIONAL_RESTRAINT_K,
-    minimization_config: Optional[minimizer.MinimizationOptions] = None,
+    minimization_config: Optional[minimizer.MinimizationConfig] = None,
 ) -> List[NDArray]:
     """
     Optimize geometries of the initial states.
@@ -414,7 +406,7 @@ def optimize_coordinates(
         If None, minimize with no positional restraint. Refer to `timemachine.potentials.bonded.harmonic_positional_restraint`
         for implementation.
 
-    minimization_config: minimizer.MinimizationOptions, optional
+    minimization_config: minimizer.MinimizationConfig, optional
         Options to define the type of minimization for the states
         Defaults to value defined by _get_default_state_minimization_config() if None
 

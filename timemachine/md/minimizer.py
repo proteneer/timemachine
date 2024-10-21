@@ -1,5 +1,5 @@
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeAlias
 
 import jax
@@ -33,7 +33,7 @@ class MinimizationError(Exception):
 
 
 @dataclass(frozen=True)
-class FireMinimizationOptions:
+class FireMinimizationConfig:
     """Refer to timemachine.md.fire.fire_descent for documentation of each parameter"""
 
     n_steps: int
@@ -47,12 +47,12 @@ class FireMinimizationOptions:
 
 
 @dataclass(frozen=True)
-class ScipyMinimizationOptions:
+class ScipyMinimizationConfig:
     method: str
-    options: dict[str, Any]
+    options: dict[str, Any] = field(default_factory=dict)
 
 
-MinimizationOptions: TypeAlias = FireMinimizationOptions | ScipyMinimizationOptions
+MinimizationConfig: TypeAlias = FireMinimizationConfig | ScipyMinimizationConfig
 
 
 def check_force_norm(forces: NDArray, threshold: float = MAX_FORCE_NORM):
@@ -102,7 +102,7 @@ def summed_potential_bound_impl_from_potentials_and_params(
 def fire_minimize(
     x0: NDArray,
     du_dx_fxn: Callable[[NDArray], NDArray],
-    config: FireMinimizationOptions,
+    config: FireMinimizationConfig,
 ) -> NDArray:
     """
     Minimize coordinates using the FIRE algorithm
@@ -114,7 +114,7 @@ def fire_minimize(
 
     du_dx_fxn: Function that given coordinates returns the du_dx
 
-    config: FireMinimizationOptions
+    config: FireMinimizationConfig
         Fire configuration for minimization
 
     Returns
@@ -348,7 +348,7 @@ def fire_minimize_host(
     assert 1.0 >= max_lambda > 0.0, "Max lambda must be greater than 0.0 and less than or equal to 1.0"
     x_host = np.asarray(host_config.conf)
 
-    config = FireMinimizationOptions(n_steps_per_window)
+    config = FireMinimizationConfig(n_steps_per_window)
 
     for lamb in np.linspace(max_lambda, 0.0, n_windows):
         du_dx_fxn = make_host_du_dx_fxn(mols, host_config, ff, mol_coords=mol_coords, lamb=lamb)
@@ -510,7 +510,7 @@ def wrap_val_and_grad_with_positional_restraint(
 
 
 def scipy_minimize(
-    x0: NDArray, val_and_grad_fn: Callable[[NDArray], Tuple[float, NDArray]], config: ScipyMinimizationOptions
+    x0: NDArray, val_and_grad_fn: Callable[[NDArray], Tuple[float, NDArray]], config: ScipyMinimizationConfig
 ):
     final_shape = x0.shape
 
@@ -518,7 +518,7 @@ def scipy_minimize(
     def val_and_grad_fn_bfgs(x_flattened):
         x = x_flattened.reshape(final_shape)
         u, grad_full = val_and_grad_fn(x)
-        return u, grad_full.reshape(-1)
+        return u, grad_full.reshape(-1).astype(np.float64)
 
     x_flat = x0.reshape(-1)
 
@@ -538,7 +538,7 @@ def local_minimize(
     box0: NDArray,
     val_and_grad_fn: Callable[[NDArray], Tuple[float, NDArray]],
     local_idxs: List[int] | NDArray,
-    minimizer_options: MinimizationOptions,
+    minimizer_config: MinimizationConfig,
     verbose: bool = True,
     assert_energy_decreased: bool = True,
     restraint_k: Optional[float] = None,
@@ -560,8 +560,8 @@ def local_minimize(
     local_idxs: list of int
         Unique idxs we allow to move.
 
-    minimizer_options: FireMinimizationOptions | ScipyMinimizationOptions
-        BFGS, L-BFGS-B, FIRE
+    minimizer_config: FireMinimizationConfig | ScipyMinimizationConfig
+        Minimization configuration
 
     verbose: bool
         Print internal potential energy + gradient norm
@@ -585,12 +585,12 @@ def local_minimize(
 
     """
 
-    if type(minimizer_options) not in (FireMinimizationOptions, ScipyMinimizationOptions):
-        raise ValueError(f"Invalid minimizer options: {type(minimizer_options)}")
+    if type(minimizer_config) not in (FireMinimizationConfig, ScipyMinimizationConfig):
+        raise ValueError(f"Invalid minimizer config: {type(minimizer_config)}")
 
     method = "FIRE"
-    if isinstance(minimizer_options, ScipyMinimizationOptions):
-        method = minimizer_options.method
+    if isinstance(minimizer_config, ScipyMinimizationConfig):
+        method = minimizer_config.method
 
     assert len(local_idxs) == len(set(local_idxs))
     n_frozen = len(x0) - len(local_idxs)
@@ -627,10 +627,10 @@ def local_minimize(
 
     x_local_0 = x0[free_idxs]
 
-    if isinstance(minimizer_options, ScipyMinimizationOptions):
-        x_local_final = scipy_minimize(x_local_0, val_and_grad_fn_local, minimizer_options)
+    if isinstance(minimizer_config, ScipyMinimizationConfig):
+        x_local_final = scipy_minimize(x_local_0, val_and_grad_fn_local, minimizer_config)
     else:
-        x_local_final = fire_minimize(x_local_0, lambda x: val_and_grad_fn_local(x)[1], minimizer_options)
+        x_local_final = fire_minimize(x_local_0, lambda x: val_and_grad_fn_local(x)[1], minimizer_config)
 
     x_final = x0.copy()
     x_final[free_idxs] = x_local_final
@@ -641,7 +641,7 @@ def local_minimize(
     if verbose:
         per_atom_force_norms = np.linalg.norm(forces[free_idxs], axis=1)
         print(f"U(x_final) = {U_final:.3f}")
-        # identity worst atom
+        # identify worst atom
         argmax_local = np.argmax(per_atom_force_norms)
         worst_atom_idx = free_idxs[argmax_local]
         print(f"atom with highest force norm after minimization: {worst_atom_idx}")
@@ -662,7 +662,7 @@ def local_minimize(
 
 
 def replace_conformer_with_minimized(
-    mol: Chem.rdchem.Mol, ff: Forcefield, minimizer_config: Optional[MinimizationOptions] = None
+    mol: Chem.rdchem.Mol, ff: Forcefield, minimizer_config: Optional[MinimizationConfig] = None
 ):
     """Replace the first conformer of the given mol with a conformer minimized with respect to the given forcefield.
 
@@ -674,7 +674,7 @@ def replace_conformer_with_minimized(
     ff : Forcefield
         Forcefield to use in energy minimization
 
-    minimizer_config: FireMinimizationOptions or ScipyMinimizationOptions, optional
+    minimizer_config: FireMinimizationConfig or ScipyMinimizationConfig, optional
         Defaults to BFGS minimization if not provided
     """
     top = topology.BaseTopology(mol, ff)
@@ -685,7 +685,7 @@ def replace_conformer_with_minimized(
     all_idxs = np.arange(mol.GetNumAtoms())
 
     if minimizer_config is None:
-        minimizer_config = ScipyMinimizationOptions(method="BFGS", options={})
+        minimizer_config = ScipyMinimizationConfig(method="BFGS")
 
     xs_opt = local_minimize(xs, box, val_and_grad_fn, all_idxs, minimizer_config, verbose=False)
     set_romol_conf(mol, xs_opt)
