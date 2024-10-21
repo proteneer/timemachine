@@ -1,6 +1,6 @@
 import hashlib
 from pathlib import Path
-from typing import List, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
@@ -464,7 +464,7 @@ def sanitize_energies(full_us, lamb_idx, cutoff=10000):
     return np.where(abs_us < cutoff, full_us, np.inf)
 
 
-def read_sdf(fname: Union[str, Path], removeHs: bool = False) -> List[Chem.Mol]:
+def read_sdf(fname: str | Path, removeHs: bool = False) -> List[Chem.Mol]:
     """Read list of mols from an SDF
 
     Parameters
@@ -483,6 +483,12 @@ def read_sdf(fname: Union[str, Path], removeHs: bool = False) -> List[Chem.Mol]:
     supplier = Chem.SDMolSupplier(str(fname), removeHs=removeHs)
     mols = [mol for mol in supplier]
     return mols
+
+
+def read_sdf_mols_by_name(fname: str | Path, removeHs: bool = False) -> Dict[str, Chem.Mol]:
+    mols = read_sdf(fname, removeHs)
+    mols_by_name = {get_mol_name(mol): mol for mol in mols}
+    return mols_by_name
 
 
 def extract_delta_Us_from_U_knk(U_knk):
