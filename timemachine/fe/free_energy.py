@@ -7,6 +7,7 @@ from warnings import warn
 import jax
 import numpy as np
 from numpy.typing import NDArray
+from pymbar.utils import kln_to_kn
 
 from timemachine.constants import BOLTZ
 from timemachine.fe import model_utils, topology
@@ -34,7 +35,14 @@ from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get
 from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import BoundPotential, HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials import (
+    BoundPotential,
+    HarmonicBond,
+    Nonbonded,
+    NonbondedInteractionGroup,
+    SummedPotential,
+    make_summed_potential,
+)
 from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.utils import batches, pairwise_transform_and_combine
 
@@ -163,6 +171,9 @@ class InitialState:
         assert self.ligand_idxs.dtype == np.int32 or self.ligand_idxs.dtype == np.int64
         assert self.protein_idxs.dtype == np.int32 or self.protein_idxs.dtype == np.int64
 
+    def to_bound_impl(self, precision=np.float32):
+        return make_summed_potential(self.potentials).to_gpu(precision).bound_impl
+
 
 @dataclass
 class BarResult:
@@ -267,6 +278,11 @@ class SimulationResult:
     @property
     def boxes(self) -> List[NDArray]:
         return [np.array(traj.boxes) for traj in self.trajectories]
+
+    def compute_u_kn(self) -> Tuple[NDArray, NDArray]:
+        """get MBAR input matrices u_kn and N_k"""
+
+        return compute_u_kn(self.trajectories, self.final_result.initial_states)
 
 
 @dataclass
@@ -1120,6 +1136,97 @@ def compute_potential_matrix(
     return U_kl
 
 
+def make_u_kl_fxn(trajs, initial_states):
+    """fxn(k, l) = "trajs[k] evaluated in ensembles[l]"
+
+    usage note: be careful of axis-ordering convention, see: https://github.com/proteneer/timemachine/issues/1100
+    """
+
+    # validate assumption that initial states all have compatible potentials / ensembles
+    kBTs = [BOLTZ * state.integrator.temperature for state in initial_states]
+    assert len(set(kBTs)) == 1
+
+    s_0 = initial_states[0]
+    sp = make_summed_potential(s_0.potentials)
+    K = len(initial_states)
+    P = len(sp.params)
+    all_params = np.zeros((K, P))
+    all_params[0] = sp.params
+    for i in range(1, K):
+        s = initial_states[i]
+        assert_ensembles_compatible(s_0, s)
+        assert_potentials_compatible(s_0.potentials, s.potentials)
+        all_params[i] = make_summed_potential(s.potentials).params
+
+    sp_gpu = sp.potential.to_gpu(np.float32)
+
+    def batch_U_fxn(xs, ps, bs, x_idxs, p_idxs):
+        Us = sp_gpu.unbound_impl.execute_batch_sparse(xs, ps, bs, x_idxs, p_idxs, False, False, True)[2]
+        return np.nan_to_num(Us, nan=+np.inf)
+
+    def u_kl(k, l):
+        coords = trajs[k].frames
+        boxes = trajs[k].boxes
+
+        params = np.array([all_params[l]])
+
+        coords_batch_idxs = np.arange(len(coords)).astype(np.uint32)
+        params_batch_idxs = np.zeros_like(coords_batch_idxs).astype(np.uint32)
+
+        Us = batch_U_fxn(coords, params, boxes, coords_batch_idxs, params_batch_idxs)
+
+        return Us / kBTs[l]
+
+    return u_kl
+
+
+def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
+    """check that xvb from state_a can be swapped with xvb from state_b (up to timestep error),
+    with swap acceptance probability that depends only on U_a, U_b, kBT"""
+
+    # assert (A, B) have identical masses, temperature
+    intg_a = state_a.integrator
+    intg_b = state_b.integrator
+
+    assert (intg_a.masses == intg_b.masses).all()
+    assert intg_a.temperature == intg_b.temperature
+
+    # assert same pressure (or same volume)
+    assert (state_a.barostat is None) == (state_b.barostat is None), "should both be NVT or both be NPT"
+
+    if state_a.barostat and state_b.barostat:
+        # assert (A, B) are compatible NPT ensembles
+        baro_a: MonteCarloBarostat = state_a.barostat
+        baro_b: MonteCarloBarostat = state_b.barostat
+
+        assert baro_a.pressure == baro_b.pressure
+        assert baro_a.temperature == baro_b.temperature
+
+        # also, assert barostat and integrator are self-consistent
+        assert intg_a.temperature == baro_a.temperature
+
+    else:
+        # assert (A, B) are compatible NVT ensembles
+        assert (state_a.box0 == state_b.box0).all()
+
+
+def compute_u_kn(trajs, initial_states) -> Tuple[NDArray, NDArray]:
+    """makes K^2 calls to execute_batch_sparse"""
+
+    u_kl = make_u_kl_fxn(trajs, initial_states)
+    N_k = [len(traj.frames) for traj in trajs]
+    K = len(N_k)
+    assert len(initial_states) == K
+
+    u_kln = np.nan * np.zeros((K, K, max(N_k)))
+    for k in range(K):
+        for l in range(K):
+            u_kln[k, l, : N_k[k]] = u_kl(k, l)
+
+    u_kn = kln_to_kn(u_kln, N_k)
+    return u_kn, np.array(N_k)
+
+
 def run_sims_hrex(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
@@ -1161,35 +1268,6 @@ def run_sims_hrex(
 
     # TODO: to support replica exchange with variable temperatures,
     #  consider modifying sample fxn to rescale velocities by sqrt(T_new/T_orig)
-    def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
-        """check that xvb from state_a can be swapped with xvb from state_b (up to timestep error),
-        with swap acceptance probability that depends only on U_a, U_b, kBT"""
-
-        # assert (A, B) have identical masses, temperature
-        intg_a = state_a.integrator
-        intg_b = state_b.integrator
-
-        assert (intg_a.masses == intg_b.masses).all()
-        assert intg_a.temperature == intg_b.temperature
-
-        # assert same pressure (or same volume)
-        assert (state_a.barostat is None) == (state_b.barostat is None), "should both be NVT or both be NPT"
-
-        if state_a.barostat and state_b.barostat:
-            # assert (A, B) are compatible NPT ensembles
-            baro_a: MonteCarloBarostat = state_a.barostat
-            baro_b: MonteCarloBarostat = state_b.barostat
-
-            assert baro_a.pressure == baro_b.pressure
-            assert baro_a.temperature == baro_b.temperature
-
-            # also, assert barostat and integrator are self-consistent
-            assert intg_a.temperature == baro_a.temperature
-
-        else:
-            # assert (A, B) are compatible NVT ensembles
-            assert (state_a.box0 == state_b.box0).all()
-
     for s in initial_states[1:]:
         assert_ensembles_compatible(initial_states[0], s)
 
