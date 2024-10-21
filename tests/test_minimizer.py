@@ -179,7 +179,15 @@ def test_equilibrate_host_barker():
         print(f"\tdone in {(t1 - t0):.3f} s")
 
 
-def test_local_minimize_water_box():
+@pytest.mark.parametrize(
+    "minimizer_config",
+    [
+        minimizer.FireMinimizationConfig(100),
+        minimizer.ScipyMinimizationConfig("BFGS"),
+        minimizer.ScipyMinimizationConfig("L-BFGS-B"),
+    ],
+)
+def test_local_minimize_water_box(minimizer_config):
     """
     Test that we can locally relax a box of water by selecting some random indices.
     """
@@ -197,7 +205,7 @@ def test_local_minimize_water_box():
 
     u_init, g_init = val_and_grad_fn(x0)
 
-    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs)
+    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config)
 
     np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
     assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.01
@@ -209,9 +217,58 @@ def test_local_minimize_water_box():
     np.testing.assert_array_equal(g_init, g_init_test)
 
 
+def test_local_minimize_water_box_with_bounds():
+    """
+    Test that we can locally relax a box of water using L-BFGS-B with bounds
+    """
+    ff = Forcefield.load_default()
+
+    system, x0, box0, top = builders.build_water_system(4.0, ff.water_ff)
+    host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
+
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(host_fns, box0)
+
+    free_idxs = [0, 2, 3, 6, 7, 9, 15, 16]
+    frozen_idxs = set(range(len(x0))).difference(set(free_idxs))
+    frozen_idxs = list(frozen_idxs)
+
+    allowed_diff = 0.01
+
+    # Set up the bounds
+    lower_bounds = np.array(x0[free_idxs].reshape(-1)) - allowed_diff
+    upper_bounds = np.array(x0[free_idxs].reshape(-1)) + allowed_diff
+    bounds = list(zip(lower_bounds, upper_bounds))
+
+    minimizer_config = minimizer.ScipyMinimizationConfig("L-BFGS-B", bounds=bounds)
+
+    u_init, g_init = val_and_grad_fn(x0)
+
+    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config)
+
+    np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
+    assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.01
+    assert np.all(x0[free_idxs] - allowed_diff <= x_opt[free_idxs])
+    assert np.all(x_opt[free_idxs] <= x0[free_idxs] + allowed_diff)
+
+    # Verify that the value and grad return the exact same result even after
+    # being used for minimization
+    u_init_test, g_init_test = val_and_grad_fn(x0)
+    assert u_init == u_init_test
+    np.testing.assert_array_equal(g_init, g_init_test)
+
+
 @pytest.mark.nocuda
+@pytest.mark.parametrize(
+    "minimizer_config",
+    [
+        minimizer.FireMinimizationConfig(100),
+        minimizer.ScipyMinimizationConfig("BFGS"),
+        minimizer.ScipyMinimizationConfig("L-BFGS-B"),
+    ],
+)
 @pytest.mark.parametrize("restraint_k", [None, 3_000.0])
-def test_local_minimize_strained_ligand(restraint_k):
+def test_local_minimize_strained_ligand(minimizer_config, restraint_k):
     """
     Test that we can minimize a ligand in vacuum using local_minimize when the ligand is strained.
     """
@@ -279,7 +336,7 @@ $$$$
 
     u_init, g_init = val_and_grad_fn(x0)
 
-    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, restraint_k=restraint_k)
+    x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restraint_k=restraint_k)
 
     assert np.linalg.norm(x0 - x_opt) > 0.01
 
@@ -325,7 +382,7 @@ def test_minimizer_failure_toy_system():
     du_dx = lambda x: bound_impl.execute(x, box, compute_u=False)[0]
     initial_force_norms = np.linalg.norm(du_dx(coords))
 
-    minimized_coords = minimizer.fire_minimize(coords, du_dx, 100)
+    minimized_coords = minimizer.fire_minimize(coords, du_dx, minimizer.FireMinimizationConfig(100))
 
     final_distance = distance_on_pairs(minimized_coords[None, 0], minimized_coords[None, 1], box)
     assert not np.isclose(initial_distance, final_distance, atol=2e-4)
