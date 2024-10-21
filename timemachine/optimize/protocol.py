@@ -249,7 +249,7 @@ def reweighted_pair_overlap(u_n_A, u_n_B, u_n_ref):
     log_prod_AB_n = log_p_A + log_p_B
     # assert (log_prod_AB_n < jnp.inf).all()
 
-    log_p_mix_n = logsumexp(jnp.array([log_p_A, log_p_B]), axis=0)
+    log_p_mix_n = logsumexp(jnp.array([log_p_A, log_p_B]), axis=0) - jnp.log(2)
     # assert (log_p_mix_n < jnp.inf).all()
 
     log_denom = log_p_mix_n + log_p_ref_n
@@ -259,7 +259,7 @@ def reweighted_pair_overlap(u_n_A, u_n_B, u_n_ref):
 
     log_mean_f = logsumexp(log_f_n - jnp.log(sum(mask)))
     overlap = jnp.exp(log_mean_f)
-    return 2 * overlap  # so that it goes to 1.0 when u_n_A == u_n_B
+    return overlap
 
 
 def make_one_minus_similarity_fxn(sim_fxn):
