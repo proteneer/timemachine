@@ -593,7 +593,7 @@ def local_minimize(
 
     """
 
-    if type(minimizer_config) not in (FireMinimizationConfig, ScipyMinimizationConfig):
+    if not isinstance(minimizer_config, MinimizationConfig):
         raise ValueError(f"Invalid minimizer config: {type(minimizer_config)}")
 
     method = "FIRE"
