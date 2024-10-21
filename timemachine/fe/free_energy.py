@@ -1205,7 +1205,7 @@ def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
 
 
 def compute_u_kn(trajs, initial_states) -> Tuple[NDArray, NDArray]:
-    """makes K^2 calls to execute_batch_selective"""
+    """makes K^2 calls to execute_batch_sparse"""
 
     u_kl = make_u_kl_fxn(trajs, initial_states)
     N_k = [len(traj.frames) for traj in trajs]
