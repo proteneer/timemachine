@@ -48,8 +48,15 @@ class FireMinimizationConfig:
 
 @dataclass(frozen=True)
 class ScipyMinimizationConfig:
+    """Allows for using any scipy.optimize.minimize method that supports jac=True.
+
+    Refer to https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html#scipy.optimize.minimize for
+    documentation
+    """
+
     method: str
     options: dict[str, Any] = field(default_factory=dict)
+    bounds: Optional[Sequence | scipy.optimize.Bounds] = None
 
 
 MinimizationConfig: TypeAlias = FireMinimizationConfig | ScipyMinimizationConfig
@@ -527,6 +534,7 @@ def scipy_minimize(
         x_flat,
         method=config.method,
         jac=True,
+        bounds=config.bounds,
         options=config.options,
     )
 
