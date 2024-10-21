@@ -247,7 +247,9 @@ def test_local_minimize_water_box_with_bounds():
     x_opt = minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config)
 
     np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
-    assert 0.01 < np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) <= np.linalg.norm([allowed_diff * 2] * 3)
+    assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.01
+    assert np.all(x0[free_idxs] - allowed_diff <= x_opt[free_idxs])
+    assert np.all(x_opt[free_idxs] <= x0[free_idxs] + allowed_diff)
 
     # Verify that the value and grad return the exact same result even after
     # being used for minimization
