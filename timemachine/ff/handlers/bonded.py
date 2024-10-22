@@ -243,7 +243,7 @@ class ImproperTorsionHandler(SerializableMixIn):
             center = atom_idxs[1]
             others = [atom_idxs[0], atom_idxs[2], atom_idxs[3]]
             for p in [(others[i], others[j], others[k]) for (i, j, k) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]]:
-                improper_idxs.append(canonicalize_bond((center, p[0], p[1], p[2])))
+                improper_idxs.append((center, p[0], p[1], p[2]))
                 param_idxs.append(p_idx)
 
         param_idxs = np.array(param_idxs)
