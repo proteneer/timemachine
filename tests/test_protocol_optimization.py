@@ -6,23 +6,27 @@ from pymbar import MBAR
 from pymbar.testsystems import HarmonicOscillatorsTestCase
 from scipy.special import logsumexp
 
+from timemachine.fe.rbfe import estimate_relative_free_energy_bisection
+from timemachine.ff import Forcefield
 from timemachine.optimize.protocol import (
     construct_work_stddev_estimator,
+    greedily_optimize_protocol,
     linear_u_kn_interpolant,
     log_weights_from_mixture,
-    rebalance_initial_protocol,
+    make_fast_approx_overlap_distance_fxn,
+    rebalance_initial_protocol_by_work_stddev,
 )
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 np.random.seed(2021)
 
-pytestmark = [pytest.mark.nocuda]
 
-
+@pytest.mark.nocuda
 def test_rebalance_initial_protocol():
     """Integration test: assert that protocol optimization improves run-to-run variance in free energy estimates"""
     initial_protocol = np.linspace(0, 1, 64)
     mbar = simulate_protocol(initial_protocol, seed=2021)
-    new_protocol = rebalance_initial_protocol(
+    new_protocol = rebalance_initial_protocol_by_work_stddev(
         initial_protocol,
         mbar.f_k,
         mbar.u_kn,
@@ -52,6 +56,7 @@ def test_rebalance_initial_protocol():
     assert new_stddev < old_stddev
 
 
+@pytest.mark.nocuda
 def test_log_weights_from_mixture():
     """Assert self-consistency between
     (1) delta_f from mbar.f_k[-1] - mbar.f_k[0] and
@@ -72,6 +77,7 @@ def test_log_weights_from_mixture():
     np.testing.assert_almost_equal(source_delta_f, recons_delta_f)
 
 
+@pytest.mark.nocuda
 def test_linear_u_kn_interpolant():
     """Assert self-consistency with input"""
     lambdas = np.linspace(0, 1, 64)
@@ -83,6 +89,7 @@ def test_linear_u_kn_interpolant():
         np.testing.assert_allclose(mbar.u_kn[k], vec_u_interp(lambdas[k]))
 
 
+@pytest.mark.nocuda
 def test_work_stddev_estimator():
     """Assert nonegative, assert bigger estimates for more distant pairs"""
     lambdas = np.linspace(0, 1, 64)
@@ -121,3 +128,110 @@ def simulate_protocol(lambdas_k, n_samples_per_window=100, seed=None):
         xs, u_kn, N_k, s_n = testsystem.sample(N_k, seed=seed)
     mbar = MBAR(u_kn, N_k)
     return mbar
+
+
+def summarize_protocol(lambdas, dist_fxn):
+    K = len(lambdas)
+    neighbor_distances = []
+    for k in range(K - 1):
+        neighbor_distances.append(dist_fxn(lambdas[k], lambdas[k + 1]))
+    neighbor_distances = np.array(neighbor_distances)
+    min_dist, max_dist = np.min(neighbor_distances), np.max(neighbor_distances)
+    msg = f"\t# states = {K}, min(d(i,i+1)) = {min_dist:.3f}, max(d(i,i+1)) = {max_dist:.3f}"
+    msg += f"\t{str(neighbor_distances)}"
+    print(msg)
+    return neighbor_distances
+
+
+@pytest.mark.nocuda
+def test_overlap_rebalancing_on_gaussian():
+    # initial_lams = linspace(0,1), along a path where nonuniform lams are probably better
+    initial_num_states = 20
+
+    def initial_path(lam):
+        offset = lam * 4
+        force_constant = 2 ** (4 * lam)
+        return (offset, force_constant)
+
+    initial_lams = np.linspace(0, 1, initial_num_states)
+    initial_params = [initial_path(lam) for lam in initial_lams]
+
+    with patch("numpy.int", int):
+        # make a pymbar test case
+        O_k = [offset for (offset, _) in initial_params]
+        K_k = [force_constant for (_, force_constant) in initial_params]
+        test_case = HarmonicOscillatorsTestCase(O_k=O_k, K_k=K_k)
+
+        # get samples, estimate free energies
+        _, u_kn, N_k, _ = test_case.sample(N_k=[100] * initial_num_states)
+        mbar = MBAR(u_kn, N_k)
+        f_k = mbar.f_k
+
+    # make a fast d(lam_i, lam_j) fxn
+    overlap_dist = make_fast_approx_overlap_distance_fxn(initial_lams, u_kn, f_k, N_k)
+
+    print("initial protocol: ")
+    _ = summarize_protocol(initial_lams, overlap_dist)
+
+    # optimize for a target neighbor distance
+    target_overlap = 0.1
+    target_dist = 1 - target_overlap
+    print(f"optimized with target dist = {target_dist} (target overlap = {target_overlap}):")
+    xtol = 1e-4
+    greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist, bisection_xtol=xtol)
+    greedy_nbr_dist = summarize_protocol(greedy_prot, overlap_dist)
+    assert np.max(greedy_nbr_dist) <= target_dist + (10 * xtol)
+
+    # also, sanity-check the overlap_dist function: d(x,x)==0, d(x,y)==d(y,x), x<y<z => d(x,y)<d(x,z)
+    rng = np.random.default_rng(2024)
+    random_lams = rng.uniform(0, 1, 20)
+    self_distances = [overlap_dist(lam, lam) for lam in random_lams]
+    np.testing.assert_allclose(self_distances, 0.0, atol=1e-10)
+    for lam_i in random_lams:
+        # compare to some random lam_j between lam_i and 1
+        lams_above = sorted(set(rng.uniform(lam_i, 1, 5)))
+        distances_to_sorted_larger_lams = np.array([overlap_dist(lam_i, lam_j) for lam_j in lams_above])
+
+        # assert x < y < z implies d(x, y) <= d(x, z)
+        eps = 1e-3
+        np.testing.assert_array_less(distances_to_sorted_larger_lams[:-1], distances_to_sorted_larger_lams[1:] + eps)
+
+        # assert symmetric
+        _distances_flipped = np.array([overlap_dist(lam_j, lam_i) for lam_j in lams_above])
+        np.testing.assert_allclose(distances_to_sorted_larger_lams, _distances_flipped)
+
+
+@pytest.mark.nightly(reason="Slow")
+def test_greedy_overlap_on_st_vacuum():
+    # get bisection result
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_default()
+    bisection_result = estimate_relative_free_energy_bisection(
+        mol_a, mol_b, core, ff, None, n_windows=48, min_overlap=2 / 3
+    )
+
+    # get MBAR inputs, lambdas
+    u_kn, N_k = bisection_result.compute_u_kn()
+    lambdas = np.array([s.lamb for s in bisection_result.final_result.initial_states])
+
+    # make approx overlap distance fxn
+    f_k = MBAR(u_kn, N_k).f_k
+    overlap_dist = make_fast_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k)
+
+    # call protocol optimization, with various target values for neighbor overlap
+    print("initial protocol (from bisection): ")
+    _ = summarize_protocol(lambdas, overlap_dist)
+    target_overlap_levels = [0.05, 0.1, 0.2, 0.4, 0.666]
+    protocol_lengths = []
+    for target_overlap in target_overlap_levels:
+        target_dist = 1 - target_overlap
+        print(f"optimized with target dist = {target_dist} (target overlap = {target_overlap}):")
+        xtol = 1e-4
+        greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist, bisection_xtol=xtol)
+        greedy_nbr_dist = summarize_protocol(greedy_prot, overlap_dist)
+        protocol_length = len(greedy_prot)
+        assert protocol_length < len(lambdas), "surprise: optimized protocol is longer than initial protocol"
+        max_dist_lt_target_dist = np.max(greedy_nbr_dist) <= target_dist + (10 * xtol)
+        assert max_dist_lt_target_dist, "failure: optimized protocol didn't satisfy overlap target"
+        protocol_lengths.append(protocol_length)
+    assert np.all(np.diff(protocol_lengths) >= 0), "surprise: more stringent overlap target -> fewer windows"
