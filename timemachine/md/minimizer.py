@@ -620,7 +620,7 @@ def local_minimize(
         x_prime[free_idxs] = x_local
         U_full, grad_full = minimizer_val_and_grad(x_prime)
         # The GPU Potentials can return NaN if value would have overflowed in uint64
-        # FIRE only looks at the gradients and can recover from NaN energies
+        # FIRE only looks at the gradients and the gradients may be accurate when the energy is NaN
         if method != "FIRE" and np.isnan(U_full):
             U_full = np.inf
             grad_full = np.nan * grad_full
