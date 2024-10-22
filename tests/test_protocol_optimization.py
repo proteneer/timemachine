@@ -201,7 +201,7 @@ def test_overlap_rebalancing_on_gaussian():
         np.testing.assert_allclose(distances_to_sorted_larger_lams, _distances_flipped)
 
 
-# @pytest.mark.nightly(reason="Slow")  # TODO: restore pytest.mark.nightly before merging
+@pytest.mark.nightly(reason="Slow")
 def test_greedy_overlap_on_st_vacuum():
     # get bisection result
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
