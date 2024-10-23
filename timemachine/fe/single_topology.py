@@ -2,7 +2,7 @@ import warnings
 from collections import defaultdict
 from enum import IntEnum
 from functools import partial
-from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple, TypeVar, Union, cast
+from typing import Any, Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple, TypeVar, Union, cast
 
 import jax
 import jax.numpy as jnp
@@ -38,7 +38,7 @@ from timemachine.potentials import (
 )
 from timemachine.utils import fair_product_2
 
-OpenMMTopology = TypeVar("OpenMMTopology")
+OpenMMTopology = Any
 
 
 class ChiralVolumeDisabledWarning(UserWarning):

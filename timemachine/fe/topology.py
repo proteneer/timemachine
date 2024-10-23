@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, TypeVar
+from typing import Any, List, Optional, Tuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -14,7 +14,7 @@ from timemachine.ff.handlers import nonbonded
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 from timemachine.potentials.types import Params
 
-OpenMMTopology = TypeVar("OpenMMTopology")
+OpenMMTopology = Any
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
