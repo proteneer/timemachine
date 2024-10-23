@@ -665,7 +665,7 @@ $$$$""",
 def make_chiral_flip_pair(well_aligned=True):
     # mol_a, mol_b : substituted chiral cyclobutyl
     # with 2 different alignments of mol_b w.r.t. mol_a
-    mol_dict = {utils.get_mol_name(mol): mol for mol in utils.read_sdf("tests/data/1243_chiral_ring_confs.sdf")}
+    mol_dict = utils.read_sdf_mols_by_name("tests/data/1243_chiral_ring_confs.sdf")
     mol_a = mol_dict["A"]
     mol_b_0 = mol_dict["B_0"]
     mol_b_1 = mol_dict["B_1"]

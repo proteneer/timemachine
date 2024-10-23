@@ -46,7 +46,7 @@ from timemachine.fe.single_topology import (
     verify_chiral_validity_of_core,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
-from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, set_mol_name
+from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, read_sdf_mols_by_name, set_mol_name
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import minimizer
@@ -632,7 +632,7 @@ def arbitrary_transformation():
     # NOTE: test system can probably be simplified; we just need
     # any SingleTopology and conformation
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+        mols = read_sdf_mols_by_name(path_to_ligand)
 
     mol_a = mols["206"]
     mol_b = mols["57"]
@@ -811,7 +811,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
         Chem.rdMolAlign.AlignMol(mol_a, mol_b, atomMap=[(0, 0)])
     else:
         with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-            mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+            mols = read_sdf_mols_by_name(path_to_ligand)
         mol_a = mols["338"]
         mol_b = mols["43"]
     core = _get_core_by_mcs(mol_a, mol_b)
@@ -909,7 +909,7 @@ class SingleTopologyRef(SingleTopology):
 @pytest.mark.parametrize("lamb", [0.0, 0.5, 1.0])
 def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+        mols = read_sdf_mols_by_name(path_to_ligand)
     mol_a = mols["338"]
     mol_b = mols["43"]
     core = _get_core_by_mcs(mol_a, mol_b)
@@ -960,7 +960,7 @@ def test_combine_with_host_split(precision, rtol, atol):
     # test the split P-L and L-W interactions
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+        mols = read_sdf_mols_by_name(path_to_ligand)
     mol_a = mols["338"]
     mol_b = mols["43"]
     core = _get_core_by_mcs(mol_a, mol_b)

@@ -13,7 +13,7 @@ from timemachine import potentials
 from timemachine.constants import NBParamIdx
 from timemachine.fe import topology
 from timemachine.fe.topology import _SCALE_14_LJ, _SCALE_14_Q, BaseTopology, DualTopology, DualTopologyMinimization
-from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, set_romol_conf
+from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name, set_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 
@@ -213,7 +213,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         return u_impl.execute(x0, box)
 
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols_by_name = {get_mol_name(mol): mol for mol in read_sdf(path_to_ligand)}
+        mols_by_name = read_sdf_mols_by_name(path_to_ligand)
 
     # mol with no intramolecular NB terms and no dihedrals
     if use_tiny_mol:
