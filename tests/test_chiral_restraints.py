@@ -460,6 +460,7 @@ $$$$""",
     assert ks < 0.05 or pv > 0.10
 
 
+@pytest.mark.nocuda
 @pytest.mark.parametrize(
     "check_chiral_atoms, check_chiral_bonds",
     [
