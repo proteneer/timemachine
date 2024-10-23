@@ -1,9 +1,8 @@
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
-from openmm import app
 
 from timemachine import potentials
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, NBParamIdx
@@ -14,6 +13,8 @@ from timemachine.ff import Forcefield
 from timemachine.ff.handlers import nonbonded
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 from timemachine.potentials.types import Params
+
+OpenMMTopology = Any
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
@@ -33,7 +34,7 @@ class UnsupportedPotential(Exception):
 
 class HostGuestTopology:
     def __init__(
-        self, host_potentials, guest_topology, num_water_atoms: int, ff: Forcefield, omm_topology: app.topology.Topology
+        self, host_potentials, guest_topology, num_water_atoms: int, ff: Forcefield, omm_topology: OpenMMTopology
     ):
         """
         Utility tool for combining host with a guest, in that order. host_potentials must be comprised
