@@ -7,8 +7,9 @@ whose intermediates are more "evenly spaced" according to something like "thermo
 
 Approach
 --------
-* Define a "thermodynamic distance" between two values of lambda in terms of work standard deviation:
-    "thermodynamic_distance(prev_lam, next_lam) = max(forward_work_stddev, reverse_work_stddev)"
+* Define a "thermodynamic distance" between two values of lambda:
+    * option: work stddev: d(a, b) = max(work_stddev(a->b), work_stddev(b->a))
+    * option: pair overlap: d(a, b) = 1 - overlap(a, b)
 * Compute a deterministic approximation of this distance by reweighting initial samples,
     and make this reweighting approximation extremely cheap by linearly interpolating previously computed energies.
 * Build a protocol "left to right" by repeatedly using bisection to place the next lambda window at a fixed
@@ -39,6 +40,9 @@ References
     * https://github.com/proteneer/timemachine/pull/437
         Gradient-based optimization of high-dimensional protocols, using a reweighting-based estimate of a
         a T.I.-tailored objective, stddev(du/dlambda).
+
+3. This is intended to be used in the context of some initial protocol, e.g. from bisection
+    * Bisection guarantees that overlap(lams[i],lams[i+1]) > threshold for all i, but does not minimize len(lams)
 """
 
 from typing import Callable, cast
@@ -47,16 +51,22 @@ import numpy as np
 from jax import Array, jit
 from jax import numpy as jnp
 from jax import vmap
-from jax.scipy.special import logsumexp
+from jax.scipy.special import logsumexp as _logsumexp
 from jax.typing import ArrayLike
 from scipy.optimize import bisect
+
+from timemachine.fe.reweighting import interpret_as_mixture_potential
+
+# performance bottleneck in several functions below
+logsumexp = jit(_logsumexp, static_argnames=["axis"])
+
 
 Float = float
 DistanceFxn = Callable[[Float, Float], Float]
 WorkStddevEstimator = DistanceFxn
 
 
-def rebalance_initial_protocol(
+def rebalance_initial_protocol_by_work_stddev(
     lambdas_k: Array,
     f_k: Array,
     u_kn: Array,
@@ -112,6 +122,7 @@ def log_weights_from_mixture(u_kn: ArrayLike, f_k: ArrayLike, N_k: ArrayLike) ->
     interpret the collection of N = \sum_k N_k samples as coming from a
     mixture of states p(x) = (1 / K) \sum_k e^-u_k / Z_k
     """
+    # TODO: merge with timemachine/fe/reweighting.py::interpret_as_mixture_potential ?
     f_k = jnp.asarray(f_k)
     u_kn = jnp.asarray(u_kn)
 
@@ -135,6 +146,10 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Callable:
     return vec_u_interp
 
 
+# distance fxns: (1) max(work_stddev(a->b), work_stddev(b->a)), (2) 1 - overlap(a,b)
+
+
+# (1) work stddev
 def construct_work_stddev_estimator(reference_log_weights_n: Array, vec_u: Callable) -> WorkStddevEstimator:
     """Construct reweighted estimator for stddev from a collection of reference samples"""
 
@@ -208,7 +223,142 @@ def construct_max_work_stddev_distance(work_stddev_estimator) -> DistanceFxn:
     return max_work_stddev_distance
 
 
-def greedily_optimize_protocol(distance_fxn: DistanceFxn, target_distance=0.5, max_iterations=1000) -> Array:
+# (2) pair overlap
+def reweighted_pair_overlap(u_n_A, u_n_B, u_n_ref):
+    """given arrays [u(x) for x in xs] (for u in {u_A, u_B, u_ref}),
+    estimate overlap(A, B) by reweighting from ref->A and ref->B
+
+    Notes
+    -----
+    * see sec. 3.4 of https://pubmed.ncbi.nlm.nih.gov/25808134/ for expression being approximated
+    * TODO: describe approximation approach
+    """
+    # reduced potentials -> unnormalized log probs
+    log_q_A = -u_n_A
+    log_q_B = -u_n_B
+    log_q_ref = -u_n_ref
+    log_N = jnp.log(len(log_q_ref))
+
+    # pick a normalization constant for ref
+    log_p_ref_n = log_q_ref - logsumexp(log_q_ref - log_N)
+
+    # normalize A and B wrt ref
+    log_p_A = log_q_A - logsumexp(log_q_A - log_p_ref_n - log_N)
+    log_p_B = log_q_B - logsumexp(log_q_B - log_p_ref_n - log_N)
+
+    log_prod_AB_n = log_p_A + log_p_B
+    # assert (log_prod_AB_n < jnp.inf).all()
+
+    log_p_mix_n = logsumexp(jnp.array([log_p_A, log_p_B]), axis=0) - jnp.log(2)
+    # assert (log_p_mix_n < jnp.inf).all()
+
+    log_denom = log_p_mix_n + log_p_ref_n
+    mask = log_denom > -jnp.inf  # mask out div by 0
+    log_f_n = jnp.where(mask, log_prod_AB_n - log_denom, 0.0)
+    # assert not jnp.isnan(log_f_n).any()
+
+    log_mean_f = logsumexp(log_f_n - jnp.log(sum(mask)))
+    overlap = jnp.exp(log_mean_f)
+    return overlap
+
+
+def make_one_minus_similarity_fxn(sim_fxn):
+    def one_minus_f(a, b):
+        return 1 - sim_fxn(a, b)
+
+    return one_minus_f
+
+
+def make_overlap_fxn(u_lam, src_u_n):
+    """Compose a reduced potential function u_lam with the reweighting approximation from reweighted_pair_overlap
+
+    Parameters
+    ----------
+    u_lam : function : scalar -> array of length N
+        u_lam(lam) = [u(xs[n], lam) for n in range(N)]
+
+    src_u_n : array
+        src_u_n = [u_src(xs[n]) for n in range(N)]
+
+    Returns
+    -------
+    overlap_fxn: (lam_a, lam_b) -> overlap_estimate
+    """
+
+    def overlap_fxn(lam_a, lam_b):
+        estimate = reweighted_pair_overlap(u_lam(lam_a), u_lam(lam_b), src_u_n)
+        clamped = jnp.clip(estimate, 0.0, 1.0)  # TODO: revert this line if estimates > 1 are avoided
+        return clamped
+
+    return overlap_fxn
+
+
+def make_fast_approx_overlap_fxn(lambdas, u_kn, f_k, N_k):
+    """WARNING: EXPERIMENTAL
+
+    Applies a sketchy performance optimization (linearly interpolating (lambdas, u_kn) to provide estimates of u_n(lam))
+
+    (Since the resulting estimates can sometimes exceed 1.0, they are clamped to the range [0.0, 1.0].)
+
+    Parameters
+    ----------
+    lambdas : [K] array
+        assumed sorted, and assumed to have lambdas[0] == 0, lambdas[-1] == 1
+    u_kn : [K, N] array
+        u_kn[k, n] = u(xs[n], lambdas[k])
+    f_k : [K] array
+        reduced free energy
+    N_k : [K] array of ints
+        num samples from each state
+
+    Returns
+    -------
+    overlap_fxn: (lam_a, lam_b) -> overlap_estimate
+    """
+    linear_u_lam = linear_u_kn_interpolant(lambdas, np.nan_to_num(u_kn, nan=np.inf))
+    mixture_u_n = interpret_as_mixture_potential(u_kn, f_k, N_k)
+
+    return make_overlap_fxn(linear_u_lam, mixture_u_n)
+
+
+def make_overlap_distance_fxn(u_lam, src_u_n):
+    """
+
+    Parameters
+    ----------
+    u_lam : function : scalar -> array of length N
+        u_lam(lam) = [u(xs[n], lam) for n in range(N)]
+    src_u_n : array
+        src_u_n = [u_src(xs[n]) for n in range(N)]
+
+    Returns
+    -------
+    dist_fxn: (lam_a, lam_b) -> (1 - overlap_estimate)
+    """
+
+    approx_overlap_fxn = make_overlap_fxn(u_lam, src_u_n)
+    approx_overlap_distance = make_one_minus_similarity_fxn(approx_overlap_fxn)
+    return approx_overlap_distance
+
+
+def make_fast_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k):
+    """WARNING: EXPERIMENTAL
+
+    make a distance function d(a,b) = 1 - overlap(a,b)
+
+    where overlap(a,b) uses fast approximations: reweighting, based on linear interpolation of energies"""
+
+    fast_approx_overlap_fxn = make_fast_approx_overlap_fxn(lambdas, u_kn, f_k, N_k)
+    return make_one_minus_similarity_fxn(fast_approx_overlap_fxn)
+
+
+# optimization approach: specify [d(i,i+1) ~= target_distance]
+def greedily_optimize_protocol(
+    distance_fxn: DistanceFxn,
+    target_distance=0.5,
+    max_iterations=1000,
+    bisection_xtol=1e-4,
+) -> Array:
     """Optimize a lambda protocol from "left to right"
 
     Sequentially pick next_lam so that
@@ -228,6 +378,7 @@ def greedily_optimize_protocol(distance_fxn: DistanceFxn, target_distance=0.5, m
             f=lambda trial_lam: distance_fxn(prev_lam, trial_lam) - target_distance,
             a=prev_lam,
             b=1.0,
+            xtol=bisection_xtol,
         )
         protocol.append(next_lam)
 

@@ -94,11 +94,11 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
         )
 
 
-@pytest.mark.nightly(reason="Takes a while to run")
-def test_confgen_hard_edges():
-    # 1) cherry pick a couple of edges that are hard to setup initial geometries
-    # 2) failures come from failed edges in the original hif2a set
-    edges = [
+# 1) cherry pick a couple of edges that are hard to setup initial geometries
+# 2) failures come from failed edges in the original hif2a set
+@pytest.mark.parametrize(
+    "src, dst",
+    [
         ("30", "25"),  # core-hopping B-ring
         ("227", "266"),  # core-hopping A-ring, bicycle
         ("7a", "224"),  # core-hopping A-ring, 6->5 member,
@@ -116,41 +116,43 @@ def test_confgen_hard_edges():
         ("290", "84"),  # failure, B-ring, core-hopping into oxazole
         ("290", "256"),  # failure, should be a simple transformation
         ("164", "163"),  # failure, B-ring has a different conformation
-    ]
-
+    ],
+)
+@pytest.mark.nightly(reason="Takes a while to run")
+def test_confgen_hard_edges(src, dst):
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
     with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
         mols_by_name = read_sdf_mols_by_name(ligand_path)
 
     n_windows = 12
 
-    for src, dst in edges:
-        print("\nProcessing", src, "->", dst, "\n")
-        mol_a = mols_by_name[src]
-        mol_b = mols_by_name[dst]
-        # try both directions
-        run_edge(mol_a, mol_b, protein_path, n_windows)
-        run_edge(mol_b, mol_a, protein_path, n_windows)
+    print("\nProcessing", src, "->", dst, "\n")
+    mol_a = mols_by_name[src]
+    mol_b = mols_by_name[dst]
+    # try both directions
+    run_edge(mol_a, mol_b, protein_path, n_windows)
+    run_edge(mol_b, mol_a, protein_path, n_windows)
 
 
-def test_confgen_spot_edges():
-    # spot check so we have something in unit testing.
-    edges = [
+@pytest.mark.parametrize(
+    "src, dst",
+    [
         ("35", "84"),  # failure, B-ring, core-hopping into oxazole, <-- this fails
         ("41", "50"),  # failure, moves beyond 7 A in the solvent leg
-    ]
-
+    ],
+)
+def test_confgen_spot_edges(src, dst):
+    # spot check so we have something in unit testing.
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
     with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
         mols_by_name = read_sdf_mols_by_name(ligand_path)
 
     n_windows = 12
 
-    for src, dst in edges:
-        print("\nProcessing", src, "->", dst, "\n")
-        mol_a = mols_by_name[src]
-        mol_b = mols_by_name[dst]
-        run_edge(mol_a, mol_b, protein_path, n_windows)
+    print("\nProcessing", src, "->", dst, "\n")
+    mol_a = mols_by_name[src]
+    mol_b = mols_by_name[dst]
+    run_edge(mol_a, mol_b, protein_path, n_windows)
 
 
 @pytest.mark.parametrize("pair", [("35", "84")])
