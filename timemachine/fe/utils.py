@@ -399,7 +399,7 @@ def get_romol_conf(mol, conf_id: int = 0) -> NDArray:
 
 
 def set_romol_conf(mol, new_coords: NDArray, conf_id: int = 0):
-    """Sets coordinates of mol's 0th conformer. Expects coords in nanometers and converts to angstrom"""
+    """Sets coordinates of the specified conformer. Expects coords in nanometers and converts to angstroms"""
     assert new_coords.shape[0] == mol.GetNumAtoms()
     # convert from nm to angstroms
     angstrom_coords = new_coords * 10.0
