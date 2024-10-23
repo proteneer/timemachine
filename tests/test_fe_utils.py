@@ -174,7 +174,7 @@ def test_get_and_set_mol_name():
     assert utils.get_mol_name(mol) == "test_name"
 
 
-def test_set_mol_coords():
+def test_get_and_set_mol_coords():
     np.random.seed(2022)
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
     AllChem.EmbedMolecule(mol)
@@ -193,6 +193,25 @@ def test_set_mol_coords():
         # Won't be exact, but should be close
         assert not np.all(x1 == x1_copy)
         np.testing.assert_allclose(x1, x1_copy)
+
+
+def test_get_and_set_mol_coords_conf_id():
+    mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
+    AllChem.EmbedMultipleConfs(mol, numConfs=2, randomSeed=2024)
+
+    x0 = utils.get_romol_conf(mol, 0)
+    x1 = utils.get_romol_conf(mol, 1)
+    assert np.any(x0 != x1)  # expect different confs
+
+    utils.set_romol_conf(mol, x0, 1)
+    x1_new = utils.get_romol_conf(mol, 1)
+    assert np.all(x0 == x1_new)
+
+    with pytest.raises(ValueError, match="Bad Conformer Id"):
+        _ = utils.get_romol_conf(mol, 2)
+
+    with pytest.raises(ValueError, match="Bad Conformer Id"):
+        _ = utils.set_romol_conf(mol, x0, 2)
 
 
 def test_experimental_conversions_to_kj():

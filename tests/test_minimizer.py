@@ -8,7 +8,7 @@ from rdkit.Chem import AllChem
 
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.model_utils import get_vacuum_val_and_grad_fn
-from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf
+from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders, minimizer
@@ -55,9 +55,9 @@ from timemachine.potentials.jax_utils import distance_on_pairs
 )
 def test_fire_minimize_host_protein(pdb_path, sdf_path, mol_a_name, mol_b_name):
     ff = Forcefield.load_default()
-    all_mols = read_sdf(sdf_path)
-    mol_a = next(m for m in all_mols if get_mol_name(m) == mol_a_name)
-    mol_b = next(m for m in all_mols if get_mol_name(m) == mol_b_name)
+    mols_by_name = read_sdf_mols_by_name(sdf_path)
+    mol_a = mols_by_name[mol_a_name]
+    mol_b = mols_by_name[mol_b_name]
 
     for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
         complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
@@ -90,9 +90,9 @@ def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
     ff = Forcefield.load_default()
     mol_a_name, mol_b_name = mol_pair
     with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as path_to_ligand:
-        all_mols = read_sdf(path_to_ligand)
-    mol_a = next(m for m in all_mols if get_mol_name(m) == mol_a_name)
-    mol_b = next(m for m in all_mols if get_mol_name(m) == mol_b_name)
+        mols_by_name = read_sdf_mols_by_name(path_to_ligand)
+    mol_a = mols_by_name[mol_a_name]
+    mol_b = mols_by_name[mol_b_name]
     mols = [mol_a, mol_b]
     if host_name == "solvent":
         solvent_system, solvent_coords, solvent_box, solvent_top = builders.build_water_system(

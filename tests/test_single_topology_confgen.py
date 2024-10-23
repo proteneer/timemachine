@@ -6,8 +6,8 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, cif_writer, utils
+from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.rbfe import (
-    HostConfig,
     get_free_idxs,
     optimize_coords_state,
     setup_initial_state,
@@ -15,19 +15,12 @@ from timemachine.fe.rbfe import (
     setup_optimized_host,
 )
 from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
-from timemachine.fe.utils import get_mol_name, read_sdf
+from timemachine.fe.utils import get_mol_name, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.potentials.jax_utils import distance_on_pairs
 
 SAVE_FRAMES = False
-
-
-def get_mol_by_name(mols, name):
-    for m in mols:
-        if get_mol_name(m) == name:
-            return m
-    assert 0, "Mol not found"
 
 
 def write_trajectory_as_cif(mol_a, mol_b, core, all_frames, host_topology, out_path):
@@ -129,13 +122,13 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
 def test_confgen_hard_edges(src, dst):
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
     with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
-        mols = read_sdf(ligand_path)
+        mols_by_name = read_sdf_mols_by_name(ligand_path)
 
     n_windows = 12
 
     print("\nProcessing", src, "->", dst, "\n")
-    mol_a = get_mol_by_name(mols, src)
-    mol_b = get_mol_by_name(mols, dst)
+    mol_a = mols_by_name[src]
+    mol_b = mols_by_name[dst]
     # try both directions
     run_edge(mol_a, mol_b, protein_path, n_windows)
     run_edge(mol_b, mol_a, protein_path, n_windows)
@@ -152,13 +145,13 @@ def test_confgen_spot_edges(src, dst):
     # spot check so we have something in unit testing.
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
     with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
-        mols = read_sdf(ligand_path)
+        mols_by_name = read_sdf_mols_by_name(ligand_path)
 
     n_windows = 12
 
     print("\nProcessing", src, "->", dst, "\n")
-    mol_a = get_mol_by_name(mols, src)
-    mol_b = get_mol_by_name(mols, dst)
+    mol_a = mols_by_name[src]
+    mol_b = mols_by_name[dst]
     run_edge(mol_a, mol_b, protein_path, n_windows)
 
 
@@ -174,9 +167,10 @@ def test_min_cutoff_failure(pair, seed, n_windows):
     min_cutoff = 1e-8
 
     with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
-        mols = read_sdf(ligand_path)
-    mol_a = get_mol_by_name(mols, src)
-    mol_b = get_mol_by_name(mols, dst)
+        mols_by_name = read_sdf_mols_by_name(ligand_path)
+
+    mol_a = mols_by_name[src]
+    mol_b = mols_by_name[dst]
 
     all_cores = atom_mapping.get_cores(
         mol_a,

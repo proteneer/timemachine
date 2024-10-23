@@ -670,7 +670,7 @@ def local_minimize(
 
 
 def replace_conformer_with_minimized(
-    mol: Chem.rdchem.Mol, ff: Forcefield, minimizer_config: Optional[MinimizationConfig] = None
+    mol: Chem.rdchem.Mol, ff: Forcefield, minimizer_config: Optional[MinimizationConfig] = None, conf_id: int = 0
 ):
     """Replace the first conformer of the given mol with a conformer minimized with respect to the given forcefield.
 
@@ -684,11 +684,14 @@ def replace_conformer_with_minimized(
 
     minimizer_config: FireMinimizationConfig or ScipyMinimizationConfig, optional
         Defaults to BFGS minimization if not provided
+
+    conf_id : int
+        ID of the conformer to replace
     """
     top = topology.BaseTopology(mol, ff)
     system = top.setup_end_state()
     val_and_grad_fn = jax.value_and_grad(system.get_U_fn())
-    xs = get_romol_conf(mol)
+    xs = get_romol_conf(mol, conf_id)
     box = np.eye(3) * 100.0
     all_idxs = np.arange(mol.GetNumAtoms())
 
@@ -696,4 +699,4 @@ def replace_conformer_with_minimized(
         minimizer_config = ScipyMinimizationConfig(method="BFGS")
 
     xs_opt = local_minimize(xs, box, val_and_grad_fn, all_idxs, minimizer_config, verbose=False)
-    set_romol_conf(mol, xs_opt)
+    set_romol_conf(mol, xs_opt, conf_id)
