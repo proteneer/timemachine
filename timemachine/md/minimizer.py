@@ -682,11 +682,11 @@ def replace_conformer_with_minimized(
     ff : Forcefield
         Forcefield to use in energy minimization
 
-    conf_id : int
-        ID of the conformer to replace
-
     minimizer_config: FireMinimizationConfig or ScipyMinimizationConfig, optional
         Defaults to BFGS minimization if not provided
+
+    conf_id : int
+        ID of the conformer to replace
     """
     top = topology.BaseTopology(mol, ff)
     system = top.setup_end_state()
