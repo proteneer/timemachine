@@ -18,6 +18,7 @@ from timemachine.ff import Forcefield
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 
 
+@pytest.mark.nocuda
 def test_base_topology_14_exclusions():
     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(path_to_ligand)
@@ -265,6 +266,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
     )
 
 
+@pytest.mark.nocuda
 def test_exclude_all_ligand_ligand_ixns():
     num_host_atoms = 0
     num_guest_atoms = 3
