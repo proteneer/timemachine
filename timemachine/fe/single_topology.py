@@ -2,14 +2,13 @@ import warnings
 from collections import defaultdict
 from enum import IntEnum
 from functools import partial
-from typing import Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple, TypeVar, Union, cast
+from typing import Any, Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple, TypeVar, Union, cast
 
 import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
-from openmm import app
 from rdkit import Chem
 
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, NBParamIdx
@@ -38,6 +37,8 @@ from timemachine.potentials import (
     PeriodicTorsion,
 )
 from timemachine.utils import fair_product_2
+
+OpenMMTopology = Any
 
 
 class ChiralVolumeDisabledWarning(UserWarning):
@@ -1868,7 +1869,7 @@ class SingleTopology(AtomMapMixin):
         host_nonbonded: BoundPotential[Nonbonded],
         num_water_atoms: int,
         ff: Forcefield,
-        omm_topology: app.topology.Topology,
+        omm_topology: OpenMMTopology,
     ) -> BoundPotential[NonbondedInteractionGroup]:
         """Parameterize nonbonded interactions between the host and guest"""
         num_host_atoms = host_nonbonded.params.shape[0]
@@ -1915,7 +1916,7 @@ class SingleTopology(AtomMapMixin):
         lamb: float,
         num_water_atoms: int,
         ff: Forcefield,
-        omm_topology: app.topology.Topology,
+        omm_topology: OpenMMTopology,
     ) -> HostGuestSystem:
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
