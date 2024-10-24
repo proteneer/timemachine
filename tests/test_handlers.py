@@ -1156,8 +1156,8 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries):
 
     pbcc = nonbonded.EnvironmentBCCHandler(smirks, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
 
-    assert len(pbcc.bond_elements) == len(pbcc.bond_idxs)
-    assert ("C", "C") in pbcc.bond_elements
+    assert len(pbcc.bond_atomic_numbers) == len(pbcc.bond_idxs)
+    assert (6, 6) in pbcc.bond_atomic_numbers
 
     # raw charges are correct are in the order of atoms in the topology
     raw_charges = np.array(pbcc.parameterize(np.zeros_like(params)))
