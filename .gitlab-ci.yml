@@ -21,8 +21,7 @@ docker_build:
   stage: build-docker
   image: docker:20.10
   tags:
-    - gpu
-    - docker
+    - timemachine-l40
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
     # Prune images older than 2 days
@@ -39,8 +38,7 @@ lint:
   image: $DOCKER_TAG
   needs: ["docker_build"]
   tags:
-    - timemachine
-    - gpu
+    - timemachine-l40
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
     - if: $NIGHTLY_TESTS
@@ -93,7 +91,7 @@ memory-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - timemachine-l40
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
@@ -111,7 +109,7 @@ unit-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - timemachine-l40
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
@@ -129,7 +127,7 @@ nightly-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - timemachine-l40
   rules:
     - if: $NIGHTLY_TESTS
   script:
@@ -147,7 +145,7 @@ nightly-memcheck-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - timemachine-l40
   rules:
     - if: $NIGHTLY_TESTS
   script:
