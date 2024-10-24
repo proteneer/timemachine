@@ -102,6 +102,7 @@ def test_harmonic_angle_finite_force_with_vanishing_bond_length(potential, param
     assert (np.abs(du_dx) < 1e7).all()
 
 
+@pytest.mark.nocuda
 def test_harmonic_angle_stable_jax():
     "Check that forces do not blow up when a bond has length close to zero"
 
