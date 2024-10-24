@@ -606,6 +606,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
         bond_idxs = []
         param_idxs = []
         signs = []
+        bond_atomic_numbers = []
 
         # find typing information for each bond in the topology
         for src_atom, dst_atom in topology.bonds():
@@ -619,6 +620,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
                     # Skip waters
                     continue
                 bond_idxs.append((src_atom.index, dst_atom.index))
+                bond_atomic_numbers.append((src_atom.element.atomic_number, dst_atom.element.atomic_number))
                 residue_bond_kv = self.res_to_bonds_to_param_idxs[src_res_template_name]
                 # we have to do one extra level of indirection where by we want the src_atom, dst_atom to be matched
                 # to the corresponding src_template_atom, dst_template_atom in the template definitions themselves.
@@ -635,6 +637,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
         self.bond_idxs = np.array(bond_idxs)
         self.param_idxs = np.array(param_idxs)
         self.signs = np.array(signs)
+        self.bond_atomic_numbers = bond_atomic_numbers
 
     def parameterize(self, params):
         # If there aren't any matched parameters (i.e. it's all water),
