@@ -96,7 +96,7 @@ def deserialize_nonbonded_force(force, N):
         else:
             q_scale_factor = 1 - desired_q / initial_q
 
-        scale_factors_.append((q_scale_factor, lj_scale_factor))
+        scale_factors_.append((lj_scale_factor, lj_scale_factor))  # XXX
 
         # check combining rules for sigmas are consistent
         if desired_eps != 0:
