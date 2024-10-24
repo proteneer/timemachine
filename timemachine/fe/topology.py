@@ -18,7 +18,7 @@ from timemachine.potentials.types import Params
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
 _SCALE_14_LJ = 0.5
-_SCALE_14_Q = 1 / 6
+_SCALE_14_Q = 0.5  # XXX
 _BETA = 2.0
 _CUTOFF = 1.2
 
