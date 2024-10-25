@@ -6,10 +6,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import scipy.optimize
+from jax import grad, jit, value_and_grad
 from numpy.typing import NDArray
 from rdkit import Chem
 
-from timemachine.constants import BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP, MAX_FORCE_NORM
+from timemachine.constants import BOLTZ, DEFAULT_POSITIONAL_RESTRAINT_K, DEFAULT_PRESSURE, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import topology
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.utils import get_romol_conf, set_romol_conf
@@ -470,6 +471,9 @@ def equilibrate_host_barker(
     return x_host
 
 
+# note: two code paths, one for Sequence[BoundPotential] and one for jax-transformable fxn
+
+
 def get_val_and_grad_fn(bps: Sequence[BoundPotential], box: NDArray, precision=np.float32):
     """
     Convert impls, box into a function that only takes in coords.
@@ -539,6 +543,34 @@ def scipy_minimize(
     )
 
     return res.x.reshape(final_shape)
+
+
+def wrap_for_scipy(f, x0):
+    """scipy L-BFGS-B assumes a flat array, and gradient in f64
+
+    Parameters
+    ----------
+    f : jax-transformable scalar-valued fxn
+        function to be minimized
+    x0: array
+        determines shape used for flattening / unflattening
+
+    Returns
+    -------
+    fun(x_flat) -> (value, gradient)
+    """
+    vg = jit(value_and_grad(f))
+
+    def fun(x_flat):
+        x = x_flat.reshape(x0.shape)
+        v, g = vg(x)
+        return float(v), np.array(g, dtype=np.float64).flatten()
+
+    return fun
+
+
+#
+# def
 
 
 def local_minimize(
@@ -700,3 +732,96 @@ def replace_conformer_with_minimized(
 
     xs_opt = local_minimize(xs, box, val_and_grad_fn, all_idxs, minimizer_config, verbose=False)
     set_romol_conf(mol, xs_opt, conf_id)
+
+
+def make_intramol_softened_fxn(mol, ff):
+    """Construct a potential function U(x, lam)
+    where lam controls the `w` coordinate associated with each intramol NB pair:
+
+    lam = 0 --> w_ij = 0
+        (No softening applied.)
+
+    lam = 1 --> w_ij = 0.75 * sig_ij
+        (0.75*sig_ij chosen so that, even at r_ij = 0, lennard_jones(sqrt(r_ij^2 + w_ij^2); sig_ij, eps_ij)
+        will be at most ~(100 * eps_ij).)
+    """
+    bt = topology.BaseTopology(mol, ff)
+    vacuum_system = bt.setup_end_state()
+    bps = [vacuum_system.bond, vacuum_system.angle, vacuum_system.torsion, vacuum_system.nonbonded]
+    potentials = [bp.potential for bp in bps]  # TODO: should these also include chiral_atom, chiral_bond ?
+    params = [bp.params for bp in bps]
+    summed_potential = SummedPotential(potentials, params)
+    params_0 = [jnp.array(p) for p in params]
+    nb_params_0 = jnp.array(params_0[-1])
+    box = 100000 * np.eye(3)
+
+    # scale each w_ij between 0 and 0.75 * sig_ij
+    lj_sig = nb_params_0[:, 1]
+    max_ws = 0.75 * lj_sig  # TODO: expose the 0.75 parameter?
+
+    def make_nb_params(lam):
+        nb_params = nb_params_0.at[:, -1].set(lam * max_ws)
+        return nb_params
+
+    def U(x, lam):
+        new_nb_params = make_nb_params(lam)
+        _params = params_0[:-1] + [new_nb_params]
+        return summed_potential.call_with_params_list(x, _params, box)
+
+    return U
+
+
+def resolve_intramol_clashes(mol, ff, k=DEFAULT_POSITIONAL_RESTRAINT_K, verbose=True, in_place=True):
+    """Minimize energy of mol
+
+    Parameters
+    ----------
+    mol : rdkit romol
+    ff : forcefield
+    k : float
+        force constant for positional restraints
+    verbose : bool
+        print messages
+    in_place : bool
+        update mol's 0'th conformer in-place
+
+    Returns
+    -------
+    final_conf: array
+        energy-minimized version of get_romol_conf(mol, 0)
+    """
+    x0 = get_romol_conf(mol)
+    box = 100000 * np.eye(3)
+
+    U_fxn = make_intramol_softened_fxn(mol, ff)
+
+    def force_norm(x, lam):
+        return jnp.max(jnp.linalg.norm(grad(U_fxn)(x, lam), axis=1))
+
+    if verbose:
+        print("initial force norm: ", force_norm(x0, 0.0))
+
+    U_restr = lambda x: harmonic_positional_restraint(get_romol_conf(mol), x, box, k)
+    U_combined = lambda x, lam: U_fxn(x, lam) + U_restr(x)
+
+    # TODO: could replace minimize(x, lam) with something like mcmc_update(x, lam)
+    def minimize(x, lam):
+        fun = wrap_for_scipy(lambda x: U_combined(x, lam), x)
+        result = scipy.optimize.minimize(fun, x.flatten(), jac=True, method="L-BFGS-B")
+        return result.x.reshape(x.shape)
+
+    # TODO: instead of just looping over lam in [1.0, 0.0], might need to introduce more steps adaptively
+    adjusted_conf = minimize(x0, 1.0)
+    final_conf = minimize(adjusted_conf, 0.0)
+
+    final_force_norm = force_norm(final_conf, 0.0)
+    if verbose:
+        print("final force norm: ", final_force_norm)
+
+    if final_force_norm > MAX_FORCE_NORM:
+        raise RuntimeError("final force norm exceeds threshold")
+
+    if in_place:
+        set_romol_conf(mol, final_conf)
+
+    return final_conf

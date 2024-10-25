@@ -3,9 +3,12 @@ from time import time
 
 import numpy as np
 import pytest
+from jax import grad
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine.constants import MAX_FORCE_NORM
+from timemachine.datasets import fetch_freesolv
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.model_utils import get_vacuum_val_and_grad_fn
 from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name
@@ -13,7 +16,12 @@ from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import compute_box_volume
-from timemachine.md.minimizer import equilibrate_host_barker, make_host_du_dx_fxn
+from timemachine.md.minimizer import (
+    equilibrate_host_barker,
+    make_host_du_dx_fxn,
+    make_intramol_softened_fxn,
+    resolve_intramol_clashes,
+)
 from timemachine.potentials import NonbondedPairList
 from timemachine.potentials.jax_utils import distance_on_pairs
 
@@ -388,3 +396,36 @@ def test_minimizer_failure_toy_system():
     assert not np.isclose(initial_distance, final_distance, atol=2e-4)
     assert initial_force_norms > np.linalg.norm(du_dx(minimized_coords))
     minimizer.check_force_norm(minimized_coords)
+
+
+def test_resolve_intramol_clashes():
+    """start from a conformer where |force| is +inf"""
+
+    mol_dict = {mol.GetProp("_Name"): mol for mol in fetch_freesolv()}
+    mol = mol_dict["mobley_2850833"]
+    ff = Forcefield.load_default()
+
+    # put a pair of atoms nearly on top of each other
+    np.random.seed(0)
+    conf = mol.GetConformer(0)
+    conf.SetAtomPosition(14, conf.GetAtomPosition(7) + np.random.randn(3) * 0.01)
+
+    x0 = get_romol_conf(mol)
+    U_fxn = make_intramol_softened_fxn(mol, ff)
+
+    def force_norm(x, lam):
+        return np.max(np.linalg.norm(grad(U_fxn)(x, lam), axis=1))
+
+    assert np.isposinf(force_norm(x0, 0.0)), "oops, test isn't strong enough"
+    assert force_norm(x0, 1.0) < force_norm(x0, 0.0), "oops, lam isn't doing enough"
+
+    x1 = resolve_intramol_clashes(mol, ff, in_place=False)
+
+    assert force_norm(x1, 0.0) < MAX_FORCE_NORM, "oops, minimization didn't achieve its goal"
+    np.testing.assert_equal(get_romol_conf(mol), x0, "oops, in_place=False updated mol in-place")
+    assert np.linalg.norm(x1 - x0, axis=1).max() < 1.0, "oops, minimization moved things too much"
+
+    x2 = resolve_intramol_clashes(mol, ff, in_place=True)
+
+    np.testing.assert_equal(x2, x1, "oops, minimization wasn't deterministic")
+    np.testing.assert_equal(get_romol_conf(mol), x1, "oops, in_place=True didn't update mol in-place")
