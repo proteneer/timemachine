@@ -569,10 +569,6 @@ def wrap_for_scipy(f, x0):
     return fun
 
 
-#
-# def
-
-
 def local_minimize(
     x0: NDArray,
     box0: NDArray,
