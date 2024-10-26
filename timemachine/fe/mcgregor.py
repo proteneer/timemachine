@@ -2,11 +2,13 @@
 import copy
 import warnings
 from dataclasses import dataclass, field
-from typing import Callable, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Iterable, List, Optional, Sequence, Set, Tuple
 
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
+
+from .tree import dfs_
 
 
 def get_num_edges_upper_bound(marcs: NDArray):
@@ -50,16 +52,6 @@ class AtomMap:
 
     def add(self, idx: int, jdx: int) -> "AtomMap":
         return AtomMap(set_at(self.a_to_b, idx, jdx), set_at(self.b_to_a, jdx, idx))
-
-
-@dataclass(frozen=True)
-class MCSResult:
-    all_maps: Tuple[Tuple[int, ...], ...] = field(default_factory=tuple)
-    all_marcs: Tuple[NDArray, ...] = field(default_factory=tuple)
-    num_edges: int = 0
-    timed_out: bool = False
-    nodes_visited: int = 0
-    leaves_visited: int = 0
 
 
 class Graph:
@@ -264,6 +256,48 @@ class Marcs:
         return Marcs.from_matrix(new_marcs)
 
 
+@dataclass(frozen=True)
+class Node:
+    atom_map: AtomMap
+    layer: int
+    marcs: Marcs
+
+
+@dataclass(frozen=True)
+class MCSResult:
+    all_maps: Tuple[Tuple[int, ...], ...] = field(default_factory=tuple)
+    all_marcs: Tuple[NDArray, ...] = field(default_factory=tuple)
+    num_edges: int = 0
+    timed_out: bool = False
+    nodes_visited: int = 0
+    leaves_visited: int = 0
+
+    @classmethod
+    def from_leaves(cls, leaves: Iterable[Node], max_leaves: int) -> "MCSResult":
+        all_maps: List[Tuple[int, ...]] = []
+        all_marcs: List[NDArray[np.bool_]] = []
+
+        node = None
+        for num_leaves, node in enumerate(leaves, 1):
+            if num_leaves > max_leaves:
+                return MCSResult(
+                    tuple(all_maps),
+                    tuple(all_marcs),
+                    node.marcs.num_edges_upper_bound,
+                    timed_out=True,
+                    nodes_visited=-1,
+                )
+            else:
+                all_maps.append(node.atom_map.a_to_b)
+                all_marcs.append(node.marcs.marcs)
+
+        assert node is not None, "found no valid mappings"
+
+        return MCSResult(
+            tuple(all_maps), tuple(all_marcs), node.marcs.num_edges_upper_bound, timed_out=False, nodes_visited=-1
+        )
+
+
 def max_tree_size(priority_list):
     cur_layer_size = 1
     layer_sizes = [cur_layer_size]
@@ -425,77 +459,33 @@ def search(
     filter_fxn: Callable[[Sequence[int]], bool],
     leaf_filter_fxn: Callable[[Sequence[int]], bool],
 ) -> MCSResult:
-    leaves = dfs_leaves(
+    get_children = make_get_children(
         g1,
         g2,
-        atom_map,
-        layer,
-        marcs,
         priority_idxs,
         max_nodes,
         enforce_core_core,
         max_connected_components,
         min_connected_component_size,
-        min_threshold,
         filter_fxn,
-        leaf_filter_fxn,
     )
 
-    # max_layer = max(n.layer for n in dfs_nodes)
-    # assert max_layer == g1.n_vertices, f"did not reach leaf node: {max_layer} < {g1.n_vertices}"
+    nodes = dfs_(get_children, Node(atom_map, layer, marcs), min_threshold)
+    leaves = (node for node in nodes if node.layer == g1.n_vertices and leaf_filter_fxn(node.atom_map.a_to_b))
 
-    all_maps: List[Tuple[int, ...]] = []
-    all_marcs: List[NDArray[np.bool_]] = []
-    max_edges = 0
-
-    node = None
-
-    for num_leaves, node in enumerate(leaves, 1):
-        if num_leaves > max_leaves:
-            return MCSResult(
-                tuple(all_maps),
-                tuple(all_marcs),
-                max_edges,
-                timed_out=True,
-                nodes_visited=-1,
-            )
-        if node.marcs.num_edges_upper_bound < max_edges:
-            continue
-        elif node.marcs.num_edges_upper_bound == max_edges:
-            all_maps.append(node.atom_map.a_to_b)
-            all_marcs.append(node.marcs.marcs)
-        else:
-            all_maps = [node.atom_map.a_to_b]
-            all_marcs = [node.marcs.marcs]
-            max_edges = node.marcs.num_edges_upper_bound
-
-    assert node is not None, "found no valid mappings"
-
-    return MCSResult(tuple(all_maps), tuple(all_marcs), max_edges, timed_out=False, nodes_visited=-1)
+    return MCSResult.from_leaves(leaves, max_leaves)
 
 
-@dataclass(frozen=True)
-class Node:
-    atom_map: AtomMap
-    layer: int
-    marcs: Marcs
-
-
-def dfs_leaves(
+def make_get_children(
     g1: Graph,
     g2: Graph,
-    init_atom_map: AtomMap,
-    init_layer: int,
-    init_marcs: Marcs,
     priority_idxs,
     _max_nodes,
     enforce_core_core,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
-    min_threshold: int,
     filter_fxn: Callable[[Sequence[int]], bool],
-    leaf_filter_fxn: Callable[[Sequence[int]], bool],
-) -> Iterator[Node]:
+) -> Callable[[Node, int], Tuple[Sequence[Node], int]]:
     def satisfies_connected_components_constraints(node: Node) -> bool:
         if max_connected_components is not None or min_connected_component_size > 1:
             g1_mapped_nodes = {a1 for a1, a2 in enumerate(node.atom_map.a_to_b[: node.layer]) if a2 != UNMAPPED}
@@ -523,7 +513,14 @@ def dfs_leaves(
 
         return True
 
-    def get_children(node: Node) -> List[Node]:
+    def get_children(node: Node, best_num_edges: int) -> Tuple[List[Node], int]:
+        if node.marcs.num_edges_upper_bound < best_num_edges:
+            return [], best_num_edges
+
+        if node.layer == g1.n_vertices:
+            new_best_num_edges = max(best_num_edges, node.marcs.num_edges_upper_bound)
+            return [], new_best_num_edges
+
         mapped_children = [
             Node(atom_map, node.layer + 1, refined_marcs)
             for jdx in priority_idxs[node.layer]
@@ -548,25 +545,6 @@ def dfs_leaves(
 
         children = sorted(children, key=lambda n: n.marcs.num_edges_upper_bound, reverse=True)
 
-        return children
+        return children, best_num_edges
 
-    best_num_edges = min_threshold
-
-    def go(node: Node) -> Iterator[Node]:
-        nonlocal best_num_edges
-
-        # leaf-node; every atom has been mapped
-        if node.layer == g1.n_vertices:
-            best_num_edges = max(best_num_edges, node.marcs.num_edges_upper_bound)
-            if leaf_filter_fxn(node.atom_map.a_to_b):
-                yield node
-            return
-
-        for child in get_children(node):
-            num_edges_upper_bound = child.marcs.num_edges_upper_bound
-            if num_edges_upper_bound >= best_num_edges:
-                yield from go(child)
-
-    init_node = Node(init_atom_map, init_layer, init_marcs)
-
-    return go(init_node)
+    return get_children
