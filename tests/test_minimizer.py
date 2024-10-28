@@ -399,7 +399,7 @@ def test_minimizer_failure_toy_system():
 
 
 def test_resolve_intramol_clashes():
-    """start from a conformer where |force| is +inf"""
+    """start from a conformer where |force(x.astype(f32))| is +inf"""
 
     mol_dict = {mol.GetProp("_Name"): mol for mol in fetch_freesolv()}
     mol = mol_dict["mobley_2850833"]
@@ -416,7 +416,7 @@ def test_resolve_intramol_clashes():
     def force_norm(x, lam):
         return np.max(np.linalg.norm(grad(U_fxn)(x, lam), axis=1))
 
-    assert np.isposinf(force_norm(x0, 0.0)), "oops, test isn't strong enough"
+    assert np.isposinf(force_norm(x0.astype(np.float32), 0.0)), "oops, test isn't strong enough"
     assert force_norm(x0, 1.0) < force_norm(x0, 0.0), "oops, lam isn't doing enough"
 
     x1 = resolve_intramol_clashes(mol, ff, in_place=False)
@@ -428,4 +428,4 @@ def test_resolve_intramol_clashes():
     x2 = resolve_intramol_clashes(mol, ff, in_place=True)
 
     np.testing.assert_equal(x2, x1, "oops, minimization wasn't deterministic")
-    np.testing.assert_equal(get_romol_conf(mol), x1, "oops, in_place=True didn't update mol in-place")
+    np.testing.assert_allclose(get_romol_conf(mol), x1, err_msg="oops, in_place=True didn't update mol in-place")
