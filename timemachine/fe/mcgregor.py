@@ -472,7 +472,21 @@ def search(
         filter_fxn,
     )
 
-    nodes = dfs_(get_children, Node(atom_map, layer, marcs), min_threshold)
+    def get_children_pruned(node: Node, best_num_edges: int) -> Tuple[List[Node], int]:
+        if node.marcs.num_edges_upper_bound < best_num_edges:
+            return [], best_num_edges
+
+        if node.layer == g1.n_vertices:
+            new_best_num_edges = max(best_num_edges, node.marcs.num_edges_upper_bound)
+            return [], new_best_num_edges
+
+        children = get_children(node)
+
+        children = sorted(children, key=lambda n: n.marcs.num_edges_upper_bound, reverse=True)
+
+        return children, best_num_edges
+
+    nodes = dfs_(get_children_pruned, Node(atom_map, layer, marcs), min_threshold)
     leaves = (node for node in nodes if node.layer == g1.n_vertices and leaf_filter_fxn(node.atom_map.a_to_b))
 
     return MCSResult.from_leaves(leaves, max_leaves)
@@ -487,7 +501,7 @@ def make_get_children(
     max_connected_components: Optional[int],
     min_connected_component_size: int,
     filter_fxn: Callable[[Sequence[int]], bool],
-) -> Callable[[Node, int], Tuple[Sequence[Node], int]]:
+) -> Callable[[Node], Sequence[Node]]:
     def satisfies_connected_components_constraints(node: Node) -> bool:
         if max_connected_components is not None or min_connected_component_size > 1:
             g1_mapped_nodes = {a1 for a1, a2 in enumerate(node.atom_map.a_to_b[: node.layer]) if a2 != UNMAPPED}
@@ -515,13 +529,9 @@ def make_get_children(
 
         return True
 
-    def get_children(node: Node, best_num_edges: int) -> Tuple[List[Node], int]:
-        if node.marcs.num_edges_upper_bound < best_num_edges:
-            return [], best_num_edges
-
+    def get_children(node: Node) -> List[Node]:
         if node.layer == g1.n_vertices:
-            new_best_num_edges = max(best_num_edges, node.marcs.num_edges_upper_bound)
-            return [], new_best_num_edges
+            return []
 
         mapped_children = [
             Node(atom_map, node.layer + 1, refined_marcs)
@@ -545,8 +555,6 @@ def make_get_children(
             if filter_fxn(child.atom_map.a_to_b)
         ]
 
-        children = sorted(children, key=lambda n: n.marcs.num_edges_upper_bound, reverse=True)
-
-        return children, best_num_edges
+        return children
 
     return get_children
