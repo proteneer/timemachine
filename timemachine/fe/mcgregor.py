@@ -395,7 +395,8 @@ def mcs(
         filter_fxn,
     )
 
-    leaves = search(get_neighbors, base_atom_map, base_layer, base_marcs, min_num_edges)
+    init_node = Node(base_atom_map, base_layer, base_marcs)
+    leaves = search(get_neighbors, init_node, min_num_edges)
 
     leaves_filtered = (leaf for leaf in leaves if leaf_filter_fxn(leaf.atom_map.a_to_b))
 
@@ -445,18 +446,12 @@ def mcs(
     )
 
 
-def search(
-    get_children: Callable[[Node], Sequence[Node]],
-    init_atom_map: AtomMap,
-    init_layer: int,
-    init_marcs: Marcs,
-    min_num_edges: int,
-) -> Iterable[Node]:
+def search(get_children: Callable[[Node], Sequence[Node]], init_node: Node, min_num_edges: int) -> Iterable[Node]:
     def get_children_pruned(node: Node, best_num_edges: int) -> Tuple[List[Node], int]:
         if node.marcs.num_edges_upper_bound < best_num_edges:
             return [], best_num_edges
 
-        if node.layer == len(init_atom_map.a_to_b):
+        if node.layer == len(init_node.atom_map.a_to_b):
             new_best_num_edges = max(best_num_edges, node.marcs.num_edges_upper_bound)
             return [], new_best_num_edges
 
@@ -466,8 +461,8 @@ def search(
 
         return children, best_num_edges
 
-    nodes = dfs_(get_children_pruned, Node(init_atom_map, init_layer, init_marcs), min_num_edges)
-    leaves = (node for node in nodes if node.layer == len(init_atom_map.a_to_b))
+    nodes = dfs_(get_children_pruned, init_node, min_num_edges)
+    leaves = (node for node in nodes if node.layer == len(init_node.atom_map.a_to_b))
     return leaves
 
 
