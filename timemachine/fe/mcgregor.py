@@ -21,22 +21,6 @@ def get_num_edges_upper_bound(marcs: NDArray):
 UNMAPPED = -1  # (UNVISITED) OR (VISITED AND DEMAPPED)
 
 
-def _verify_core_impl(g1, g2, new_v1, map_1_to_2):
-    for e1 in g1.get_edges(new_v1):
-        src, dst = g1.edges[e1]
-        # both ends are mapped
-        src_2, dst_2 = map_1_to_2[src], map_1_to_2[dst]
-        if src_2 != UNMAPPED and dst_2 != UNMAPPED:
-            # see if this edge is present in g2
-            if not g2.cmat[src_2][dst_2]:
-                return False
-    return True
-
-
-def _verify_core_is_connected(g1, g2, new_v1, new_v2, map_1_to_2, map_2_to_1):
-    return _verify_core_impl(g1, g2, new_v1, map_1_to_2) and _verify_core_impl(g2, g1, new_v2, map_2_to_1)
-
-
 def set_at(xs: Tuple[int, ...], idx: int, val: int) -> Tuple[int, ...]:
     return xs[:idx] + (val,) + xs[idx + 1 :]
 
@@ -205,6 +189,24 @@ class Graph:
         g.add_nodes_from(range(self.n_vertices))
         g.add_edges_from(self.edges)
         return g
+
+
+def _verify_core_is_connected(
+    g1: Graph, g2: Graph, new_v1: int, new_v2: int, map_1_to_2: Sequence[int], map_2_to_1: Sequence[int]
+):
+    return _verify_core_impl(g1, g2, new_v1, map_1_to_2) and _verify_core_impl(g2, g1, new_v2, map_2_to_1)
+
+
+def _verify_core_impl(g1: Graph, g2: Graph, new_v1: int, map_1_to_2: Sequence[int]):
+    for e1 in g1.get_edges(new_v1):
+        src, dst = g1.edges[e1]
+        # both ends are mapped
+        src_2, dst_2 = map_1_to_2[src], map_1_to_2[dst]
+        if src_2 != UNMAPPED and dst_2 != UNMAPPED:
+            # see if this edge is present in g2
+            if not g2.cmat[src_2][dst_2]:
+                return False
+    return True
 
 
 @dataclass(frozen=True)
