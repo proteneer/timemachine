@@ -467,6 +467,7 @@ def search(get_children: Callable[[Node], Sequence[Node]], init_node: Node, min_
             return [], new_best_num_edges
 
         children = get_children(node)
+        children = [child for child in children if child.marcs.num_edges_upper_bound >= best_num_edges]
 
         return children, best_num_edges
 
