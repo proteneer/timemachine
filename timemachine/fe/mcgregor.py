@@ -265,6 +265,10 @@ class Node:
     marcs: Marcs
 
     @property
+    def is_leaf(self):
+        return self.layer == len(self.atom_map.a_to_b)
+
+    @property
     def priority(self):
         """Compute the priority of this node. By convention, lowest numerical value is highest priority"""
         return (-self.marcs.num_edges_upper_bound, -self.layer)
@@ -404,11 +408,10 @@ def mcs(
     )
 
     init_node = Node(base_atom_map, base_layer, base_marcs)
-    leaves = search(get_neighbors, init_node, min_num_edges)
+    nodes = search(get_neighbors, init_node, min_num_edges)
+    leaves = (node for node in nodes if node.is_leaf and leaf_filter_fxn(node.atom_map.a_to_b))
 
-    leaves_filtered = (leaf for leaf in leaves if leaf_filter_fxn(leaf.atom_map.a_to_b))
-
-    mcs_result = MCSResult.from_leaves(leaves_filtered, max_cores)
+    mcs_result = MCSResult.from_leaves(leaves, max_cores)
 
     if len(mcs_result.all_maps) > 0:
         # If we timed out but got cores, throw a warning
@@ -459,7 +462,7 @@ def search(get_children: Callable[[Node], Sequence[Node]], init_node: Node, min_
         if node.marcs.num_edges_upper_bound < best_num_edges:
             return [], best_num_edges
 
-        if node.layer == len(init_node.atom_map.a_to_b):
+        if node.is_leaf:
             new_best_num_edges = max(best_num_edges, node.marcs.num_edges_upper_bound)
             return [], new_best_num_edges
 
@@ -468,8 +471,7 @@ def search(get_children: Callable[[Node], Sequence[Node]], init_node: Node, min_
         return children, best_num_edges
 
     nodes = tree.best_first_(get_children_pruned, init_node, min_num_edges)
-    leaves = (node for node in nodes if node.layer == len(init_node.atom_map.a_to_b))
-    return leaves
+    return nodes
 
 
 def make_get_children(
@@ -510,7 +512,7 @@ def make_get_children(
         return True
 
     def get_children(node: Node) -> List[Node]:
-        if node.layer == g1.n_vertices:
+        if node.is_leaf:
             return []
 
         mapped_children = [
