@@ -55,11 +55,7 @@ def _verify_core_impl(g1, g2, new_v1, map_1_to_2):
 
 
 def _verify_core_is_connected(g1, g2, new_v1, new_v2, map_1_to_2, map_2_to_1):
-    # incremental checks
-    if _verify_core_impl(g1, g2, new_v1, map_1_to_2):
-        return _verify_core_impl(g2, g1, new_v2, map_2_to_1)
-    else:
-        return False
+    return _verify_core_impl(g1, g2, new_v1, map_1_to_2) and _verify_core_impl(g2, g1, new_v2, map_2_to_1)
 
 
 def refine_marcs(g1, g2, new_v1, new_v2, marcs):
