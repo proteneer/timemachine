@@ -359,7 +359,7 @@ def mcs(
     enforce_core_core,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
-    min_threshold: int,
+    min_num_edges: int,
     initial_mapping,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda _: True,
     leaf_filter_fxn: Callable[[Sequence[int]], bool] = lambda _: True,
@@ -395,7 +395,7 @@ def mcs(
         filter_fxn,
     )
 
-    leaves = search(get_neighbors, base_atom_map, base_layer, base_marcs, min_threshold)
+    leaves = search(get_neighbors, base_atom_map, base_layer, base_marcs, min_num_edges)
 
     leaves_filtered = (leaf for leaf in leaves if leaf_filter_fxn(leaf.atom_map.a_to_b))
 
@@ -450,7 +450,7 @@ def search(
     init_atom_map: AtomMap,
     init_layer: int,
     init_marcs: Marcs,
-    min_threshold: int,
+    min_num_edges: int,
 ) -> Iterable[Node]:
     def get_children_pruned(node: Node, best_num_edges: int) -> Tuple[List[Node], int]:
         if node.marcs.num_edges_upper_bound < best_num_edges:
@@ -466,7 +466,7 @@ def search(
 
         return children, best_num_edges
 
-    nodes = dfs_(get_children_pruned, Node(init_atom_map, init_layer, init_marcs), min_threshold)
+    nodes = dfs_(get_children_pruned, Node(init_atom_map, init_layer, init_marcs), min_num_edges)
     leaves = (node for node in nodes if node.layer == len(init_atom_map.a_to_b))
     return leaves
 
