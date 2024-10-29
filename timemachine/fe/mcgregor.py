@@ -384,22 +384,22 @@ def mcs(
     # import time
     # start_time = time.time()  # noqa
 
-    mcs_result = search(
+    get_neighbors = make_get_children(
         g_a,
         g_b,
-        base_atom_map,
-        base_layer,
-        base_marcs,
         priority_idxs,
         max_visits,
-        max_cores,
         enforce_core_core,
         max_connected_components,
         min_connected_component_size,
-        min_threshold,
         filter_fxn,
-        leaf_filter_fxn,
     )
+
+    leaves = search(get_neighbors, base_atom_map, base_layer, base_marcs, min_threshold)
+
+    leaves_filtered = (leaf for leaf in leaves if leaf_filter_fxn(leaf.atom_map.a_to_b))
+
+    mcs_result = MCSResult.from_leaves(leaves_filtered, max_cores)
 
     if len(mcs_result.all_maps) > 0:
         # If we timed out but got cores, throw a warning
@@ -446,37 +446,17 @@ def mcs(
 
 
 def search(
-    g1: Graph,
-    g2: Graph,
-    atom_map: AtomMap,
-    layer: int,
-    marcs: Marcs,
-    priority_idxs,
-    max_nodes,
-    max_leaves,
-    enforce_core_core,
-    max_connected_components: Optional[int],
-    min_connected_component_size: int,
+    get_children: Callable[[Node], Sequence[Node]],
+    init_atom_map: AtomMap,
+    init_layer: int,
+    init_marcs: Marcs,
     min_threshold: int,
-    filter_fxn: Callable[[Sequence[int]], bool],
-    leaf_filter_fxn: Callable[[Sequence[int]], bool],
-) -> MCSResult:
-    get_children = make_get_children(
-        g1,
-        g2,
-        priority_idxs,
-        max_nodes,
-        enforce_core_core,
-        max_connected_components,
-        min_connected_component_size,
-        filter_fxn,
-    )
-
+) -> Iterable[Node]:
     def get_children_pruned(node: Node, best_num_edges: int) -> Tuple[List[Node], int]:
         if node.marcs.num_edges_upper_bound < best_num_edges:
             return [], best_num_edges
 
-        if node.layer == g1.n_vertices:
+        if node.layer == len(init_atom_map.a_to_b):
             new_best_num_edges = max(best_num_edges, node.marcs.num_edges_upper_bound)
             return [], new_best_num_edges
 
@@ -486,10 +466,9 @@ def search(
 
         return children, best_num_edges
 
-    nodes = dfs_(get_children_pruned, Node(atom_map, layer, marcs), min_threshold)
-    leaves = (node for node in nodes if node.layer == g1.n_vertices and leaf_filter_fxn(node.atom_map.a_to_b))
-
-    return MCSResult.from_leaves(leaves, max_leaves)
+    nodes = dfs_(get_children_pruned, Node(init_atom_map, init_layer, init_marcs), min_threshold)
+    leaves = (node for node in nodes if node.layer == len(init_atom_map.a_to_b))
+    return leaves
 
 
 def make_get_children(
