@@ -1,3 +1,4 @@
+import heapq
 from typing import Callable, Iterator, Sequence, Tuple, TypeVar
 
 N = TypeVar("N")
@@ -26,3 +27,36 @@ def dfs_pure(get_children: Callable[[N], Sequence[N]], root: N) -> Iterator[N]:
         return get_children(node), None
 
     return dfs_(get_children_, root, None)
+
+
+def bfs(get_children: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state: S) -> Iterator[Tuple[N, S]]:
+    state = initial_state
+    queue = [root]
+    while queue:
+        node = queue.pop(0)
+        children, state = get_children(node, state)
+        yield node, state
+        queue.extend(children)
+
+
+def bfs_(get_children: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state: S) -> Iterator[N]:
+    return (node for node, _ in bfs(get_children, root, initial_state))
+
+
+def best_first(
+    get_children: Callable[[N, S], Tuple[Sequence[N], S]],
+    root: N,
+    initial_state: S,
+) -> Iterator[Tuple[N, S]]:
+    state = initial_state
+    queue = [root]
+    while queue:
+        node = heapq.heappop(queue)
+        children, state = get_children(node, state)
+        yield node, state
+        for child in children:
+            heapq.heappush(queue, child)
+
+
+def best_first_(get_children: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state: S) -> Iterator[N]:
+    return (node for node, _ in best_first(get_children, root, initial_state))

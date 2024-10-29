@@ -8,7 +8,7 @@ import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
-from .tree import dfs_
+from . import tree
 
 
 def get_num_edges_upper_bound(marcs: NDArray):
@@ -264,6 +264,14 @@ class Node:
     layer: int
     marcs: Marcs
 
+    @property
+    def priority(self):
+        """Compute the priority of this node. By convention, lowest numerical value is highest priority"""
+        return (-self.marcs.num_edges_upper_bound, -self.layer)
+
+    def __lt__(self, other: "Node") -> bool:
+        return self.priority < other.priority
+
 
 @dataclass(frozen=True)
 class MCSResult:
@@ -447,7 +455,7 @@ def mcs(
 
 
 def search(get_children: Callable[[Node], Sequence[Node]], init_node: Node, min_num_edges: int) -> Iterable[Node]:
-    def get_children_pruned(node: Node, best_num_edges: int) -> Tuple[List[Node], int]:
+    def get_children_pruned(node: Node, best_num_edges: int) -> Tuple[Sequence[Node], int]:
         if node.marcs.num_edges_upper_bound < best_num_edges:
             return [], best_num_edges
 
@@ -457,11 +465,9 @@ def search(get_children: Callable[[Node], Sequence[Node]], init_node: Node, min_
 
         children = get_children(node)
 
-        children = sorted(children, key=lambda n: n.marcs.num_edges_upper_bound, reverse=True)
-
         return children, best_num_edges
 
-    nodes = dfs_(get_children_pruned, init_node, min_num_edges)
+    nodes = tree.best_first_(get_children_pruned, init_node, min_num_edges)
     leaves = (node for node in nodes if node.layer == len(init_node.atom_map.a_to_b))
     return leaves
 
