@@ -287,28 +287,49 @@ class MCSResult:
     leaves_visited: int = 0
 
     @classmethod
-    def from_leaves(cls, leaves: Iterable[Node], max_leaves: int) -> "MCSResult":
+    def from_nodes(
+        cls, nodes: Iterable[Node], leaf_filter_fxn: Callable[[Tuple[int, ...]], bool], max_nodes: int, max_leaves: int
+    ) -> "MCSResult":
         all_maps: List[Tuple[int, ...]] = []
         all_marcs: List[NDArray[np.bool_]] = []
 
         node = None
-        for num_leaves, node in enumerate(leaves, 1):
-            if num_leaves > max_leaves:
+        nodes_visited = 0
+        leaves_visited = 0
+        for nodes_visited, node in enumerate(nodes, 1):
+            if nodes_visited > max_nodes:
                 return MCSResult(
                     tuple(all_maps),
                     tuple(all_marcs),
                     node.marcs.num_edges_upper_bound,
                     timed_out=True,
-                    nodes_visited=-1,
+                    nodes_visited=nodes_visited,
                 )
-            else:
-                all_maps.append(node.atom_map.a_to_b)
-                all_marcs.append(node.marcs.marcs)
+            if node.is_leaf:
+                if leaves_visited > max_leaves:
+                    return MCSResult(
+                        tuple(all_maps),
+                        tuple(all_marcs),
+                        node.marcs.num_edges_upper_bound,
+                        timed_out=True,
+                        nodes_visited=nodes_visited,
+                    )
+
+                if leaf_filter_fxn(node.atom_map.a_to_b):
+                    all_maps.append(node.atom_map.a_to_b)
+                    all_marcs.append(node.marcs.marcs)
+
+                leaves_visited += 1
 
         assert node is not None, "found no valid mappings"
 
         return MCSResult(
-            tuple(all_maps), tuple(all_marcs), node.marcs.num_edges_upper_bound, timed_out=False, nodes_visited=-1
+            tuple(all_maps),
+            tuple(all_marcs),
+            node.marcs.num_edges_upper_bound,
+            timed_out=False,
+            nodes_visited=nodes_visited,
+            leaves_visited=leaves_visited,
         )
 
 
@@ -409,9 +430,8 @@ def mcs(
 
     init_node = Node(base_atom_map, base_layer, base_marcs)
     nodes = search(get_neighbors, init_node, min_num_edges)
-    leaves = (node for node in nodes if node.is_leaf and leaf_filter_fxn(node.atom_map.a_to_b))
 
-    mcs_result = MCSResult.from_leaves(leaves, max_cores)
+    mcs_result = MCSResult.from_nodes(nodes, leaf_filter_fxn, max_visits, max_cores)
 
     if len(mcs_result.all_maps) > 0:
         # If we timed out but got cores, throw a warning
