@@ -1,10 +1,13 @@
 import hypothesis.strategies as st
 import networkx as nx
 import numpy as np
+import pytest
 from hypothesis import event, example, given, seed, settings
 
 from timemachine.fe import mcgregor
 from timemachine.fe.mcgregor import UNMAPPED, core_to_perm, perm_to_core
+
+pytestmark = [pytest.mark.nocuda]
 
 
 @st.composite
