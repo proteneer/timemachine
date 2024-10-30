@@ -279,9 +279,9 @@ def test_improper_torsion():
 
 def test_exclusions():
     mol = Chem.MolFromSmiles("FC(F)=C(F)F")
-    exc_idxs, scales = nonbonded.generate_exclusion_idxs(mol, scale12=0.0, scale13=0.2, scale14_q=0.25, scale14_lj=0.75)
+    exc_idxs, scales = nonbonded.generate_exclusion_idxs(mol, scale12=0.0, scale13=0.2, scale14=0.5)
 
-    for pair, _ in zip(exc_idxs, scales):
+    for pair, scale in zip(exc_idxs, scales):
         src, dst = pair
         assert src < dst
 
@@ -307,23 +307,7 @@ def test_exclusions():
 
     np.testing.assert_equal(exc_idxs, expected_idxs)
 
-    expected_scales = [
-        [0.0, 0.0],
-        [0.2, 0.2],
-        [0.2, 0.2],
-        [0.25, 0.75],
-        [0.25, 0.75],
-        [0.0, 0.0],
-        [0.0, 0.0],
-        [0.2, 0.2],
-        [0.2, 0.2],
-        [0.2, 0.2],
-        [0.25, 0.75],
-        [0.25, 0.75],
-        [0.0, 0.0],
-        [0.0, 0.0],
-        [0.2, 0.2],
-    ]
+    expected_scales = [0.0, 0.2, 0.2, 0.5, 0.5, 0.0, 0.0, 0.2, 0.2, 0.2, 0.5, 0.5, 0.0, 0.0, 0.2]
     np.testing.assert_equal(scales, expected_scales)
 
 

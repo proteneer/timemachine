@@ -12,48 +12,9 @@ from rdkit.Chem import AllChem
 from timemachine import potentials
 from timemachine.constants import NBParamIdx
 from timemachine.fe import topology
-from timemachine.fe.topology import _SCALE_14_LJ, _SCALE_14_Q, BaseTopology, DualTopology, DualTopologyMinimization
+from timemachine.fe.topology import BaseTopology, DualTopology, DualTopologyMinimization
 from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name, set_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
-
-
-@pytest.mark.nocuda
-def test_base_topology_14_exclusions():
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        all_mols = read_sdf(path_to_ligand)
-
-    mol = all_mols[0]
-
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    bt = topology.BaseTopology(mol, ff)
-    nb_params, nb = bt.parameterize_nonbonded_pairlist(
-        ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, ff.lj_handle_intra.params, True
-    )
-
-    kvs = dict()
-    for (i, j), qljw in zip(nb.idxs, nb_params):
-        kvs[(i, j)] = qljw
-
-    qs = ff.q_handle.parameterize(mol)
-    ljs = ff.lj_handle.parameterize(mol)
-
-    sigmas = ljs[:, 0]
-    epsilons = ljs[:, 1]
-
-    # atoms 27-0-1-28 correspond to a H-O-C-H torsion (respectively), we expect:
-    # q_ij to be rescaled by (1-SCALE_14_Q)
-    # sigma_ij to be unscaled
-    # eps_ij to be rescaled by (1-SCALE_14_LJ)
-    np.testing.assert_almost_equal(kvs[(27, 28)][0], qs[27] * qs[28] * (1 - _SCALE_14_Q))
-    np.testing.assert_almost_equal(kvs[(27, 28)][1], combining_rule_sigma(sigmas[27], sigmas[28]))
-    np.testing.assert_almost_equal(
-        kvs[(27, 28)][2], combining_rule_epsilon(epsilons[27], epsilons[28]) * (1 - _SCALE_14_LJ)
-    )
-
-    # 0-1-28 correspond to an O-C-H angle, we expect it to be missing
-    assert (0, 28) not in kvs
-    assert (28, 0) not in kvs
 
 
 def test_dual_topology_nonbonded_pairlist():

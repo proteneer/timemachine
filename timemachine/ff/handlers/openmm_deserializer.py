@@ -60,47 +60,36 @@ def deserialize_nonbonded_force(force, N):
     # validate exclusions/exceptions to make sure they make sense
     for a_idx in range(force.getNumExceptions()):
         # tbd charge scale factors
-        src, dst, new_q, new_sig, new_eps = force.getExceptionParameters(a_idx)
-        desired_q = value(new_q) * constants.ONE_4PI_EPS0
-        desired_sig = value(new_sig)
-        desired_eps = value(new_eps)
+        src, dst, new_cp, new_sig, new_eps = force.getExceptionParameters(a_idx)
+        new_sig = value(new_sig)
+        new_eps = value(new_eps)
 
         src_sig = all_sig[src]
         dst_sig = all_sig[dst]
 
         src_eps = all_eps[src]
         dst_eps = all_eps[dst]
-        initial_sig = (src_sig + dst_sig) / 2
-        initial_eps = np.sqrt(src_eps * dst_eps)
-
-        src_q = charge_params[src]
-        dst_q = charge_params[dst]
-
-        initial_q = src_q * dst_q
+        expected_sig = (src_sig + dst_sig) / 2
+        expected_eps = np.sqrt(src_eps * dst_eps)
 
         exclusion_idxs_.append([src, dst])
+
+        # sanity check this (expected_eps can be zero), redo this thing
+
         # the lj_scale factor measures how much we *remove*
-        if initial_eps == 0:
-            if desired_eps == 0:
+        if expected_eps == 0:
+            if new_eps == 0:
                 lj_scale_factor = 1
             else:
-                raise RuntimeError("No LJ scaling factor possible to arrive at desired_eps")
+                raise RuntimeError("Divide by zero in epsilon calculation")
         else:
-            lj_scale_factor = 1 - desired_eps / initial_eps
+            lj_scale_factor = 1 - new_eps / expected_eps
 
-        if initial_q == 0:
-            if desired_q == 0:
-                q_scale_factor = 1
-            else:
-                raise RuntimeError("No ES scaling factor possible to arrive at desired_q")
-        else:
-            q_scale_factor = 1 - desired_q / initial_q
+        scale_factors_.append(lj_scale_factor)
 
-        scale_factors_.append((q_scale_factor, lj_scale_factor))
-
-        # check combining rules for sigmas are consistent
-        if desired_eps != 0:
-            np.testing.assert_almost_equal(initial_sig, desired_sig)
+        # tbd fix charge_scale_factors using new_cp
+        if new_eps != 0:
+            np.testing.assert_almost_equal(expected_sig, new_sig)
 
     exclusion_idxs = np.array(exclusion_idxs_, dtype=np.int32)
 
@@ -122,7 +111,7 @@ def deserialize_nonbonded_force(force, N):
     beta = 2.0  # erfc correction
 
     # use the same scale factors for electrostatics and lj
-    scale_factors = np.array(scale_factors_)
+    scale_factors = np.stack([scale_factors_, scale_factors_], axis=1)
 
     return nb_params, exclusion_idxs, beta, scale_factors
 
