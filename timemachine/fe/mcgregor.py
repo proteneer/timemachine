@@ -477,7 +477,7 @@ def mcs(
 
 
 def search(expand: Callable[[Node], Sequence[Node]], init_node: Node, min_num_edges: int) -> Iterable[Node]:
-    def expand_pruned(node: Node, best_num_edges: int) -> Tuple[Sequence[Node], int]:
+    def expand_and_prune(node: Node, best_num_edges: int) -> Tuple[Sequence[Node], int]:
         if node.marcs.num_edges_upper_bound < best_num_edges:
             return [], best_num_edges
 
@@ -490,7 +490,7 @@ def search(expand: Callable[[Node], Sequence[Node]], init_node: Node, min_num_ed
 
         return children, best_num_edges
 
-    nodes = tree.best_first_(expand_pruned, init_node, min_num_edges)
+    nodes = tree.best_first_(expand_and_prune, init_node, min_num_edges)
     return nodes
 
 
