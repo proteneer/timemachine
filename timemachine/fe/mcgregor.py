@@ -1,6 +1,7 @@
 # maximum common subgraph routines based off of the mcgregor paper
 import warnings
 from dataclasses import dataclass, field
+from functools import cache
 from typing import Callable, Iterable, List, Optional, Sequence, Set, Tuple
 
 import networkx as nx
@@ -35,6 +36,10 @@ class AtomMap:
 
     def add(self, idx: int, jdx: int) -> "AtomMap":
         return AtomMap(set_at(self.a_to_b, idx, jdx), set_at(self.b_to_a, jdx, idx))
+
+    @property
+    def core_size(self):
+        return sum(1 for j in self.a_to_b if j != UNMAPPED)
 
 
 class Graph:
@@ -296,16 +301,14 @@ class MCSResult:
         nodes_visited = 0
         leaves_visited = 0
         for nodes_visited, node in enumerate(nodes, 1):
-            if nodes_visited > max_nodes:
-                return MCSResult(
-                    tuple(all_maps),
-                    tuple(all_marcs),
-                    node.marcs.num_edges_upper_bound,
-                    timed_out=True,
-                    nodes_visited=nodes_visited,
-                )
-            if node.is_leaf:
-                if leaves_visited > max_leaves:
+            if node.is_leaf and node.atom_map.core_size > 0:
+                if leaf_filter_fxn(node.atom_map.a_to_b):
+                    all_maps.append(node.atom_map.a_to_b)
+                    all_marcs.append(node.marcs.marcs)
+
+                leaves_visited += 1
+
+                if leaves_visited == max_leaves:
                     return MCSResult(
                         tuple(all_maps),
                         tuple(all_marcs),
@@ -314,11 +317,14 @@ class MCSResult:
                         nodes_visited=nodes_visited,
                     )
 
-                if leaf_filter_fxn(node.atom_map.a_to_b):
-                    all_maps.append(node.atom_map.a_to_b)
-                    all_marcs.append(node.marcs.marcs)
-
-                leaves_visited += 1
+            if nodes_visited == max_nodes:
+                return MCSResult(
+                    tuple(all_maps),
+                    tuple(all_marcs),
+                    node.marcs.num_edges_upper_bound,
+                    timed_out=True,
+                    nodes_visited=nodes_visited,
+                )
 
         assert node is not None, "found no valid mappings"
 
@@ -410,6 +416,9 @@ def mcs(
             base_atom_map = base_atom_map.add(a, b)
             base_marcs = base_marcs.refine(g_a, g_b, a, b)
 
+    if base_marcs.num_edges_upper_bound == 0:
+        raise NoMappingError("No possible mapping given the predicate matrix")
+
     base_layer = len(initial_mapping)
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
     # Keep start time for debugging purposes below
@@ -428,9 +437,12 @@ def mcs(
     )
 
     init_node = Node(base_atom_map, base_layer, base_marcs)
-    nodes = search(expand, init_node, min_num_edges)
 
-    mcs_result = MCSResult.from_nodes(nodes, leaf_filter_fxn, max_visits, max_cores)
+    leaf_filter_fxn_ = cache(leaf_filter_fxn)
+
+    nodes = search(expand, init_node, leaf_filter_fxn_, min_num_edges)
+
+    mcs_result = MCSResult.from_nodes(nodes, leaf_filter_fxn_, max_visits, max_cores)
 
     if len(mcs_result.all_maps) > 0:
         # If we timed out but got cores, throw a warning
@@ -456,7 +468,7 @@ def mcs(
     # )
 
     if len(mcs_result.all_maps) == 0:
-        raise NoMappingError("Unable to find mapping")
+        raise NoMappingError(f"Unable to find mapping with at least {min_num_edges} edges")
 
     all_cores = []
 
@@ -476,13 +488,22 @@ def mcs(
     )
 
 
-def search(expand: Callable[[Node], Sequence[Node]], init_node: Node, min_num_edges: int) -> Iterable[Node]:
+def search(
+    expand: Callable[[Node], Sequence[Node]],
+    init_node: Node,
+    leaf_filter_fxn: Callable[[Tuple[int, ...]], bool],
+    min_num_edges: int,
+) -> Iterable[Node]:
     def expand_and_prune(node: Node, best_num_edges: int) -> Tuple[Sequence[Node], int]:
         if node.marcs.num_edges_upper_bound < best_num_edges:
             return [], best_num_edges
 
         if node.is_leaf:
-            new_best_num_edges = max(best_num_edges, node.marcs.num_edges_upper_bound)
+            new_best_num_edges = (
+                max(best_num_edges, node.marcs.num_edges_upper_bound)
+                if leaf_filter_fxn(node.atom_map.a_to_b)
+                else best_num_edges
+            )
             return [], new_best_num_edges
 
         children = expand(node)
