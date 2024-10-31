@@ -250,9 +250,9 @@ class Marcs:
             new_marcs[g1.get_edges_as_vector(new_v1)] = False
         else:
             # mask out every row in marcs
-            adj1 = g1.get_edges_as_vector(new_v1)
-            adj2 = g2.get_edges_as_vector(new_v2)
-            mask = np.where(adj1[:, np.newaxis], adj2, ~adj2)
+            e1 = g1.get_edges_as_vector(new_v1)
+            e2 = g2.get_edges_as_vector(new_v2)
+            mask = e1[:, None] == e2[None, :]
             new_marcs &= mask
 
         return Marcs.from_matrix(new_marcs)
