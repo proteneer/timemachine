@@ -1,5 +1,4 @@
 # maximum common subgraph routines based off of the mcgregor paper
-import copy
 import warnings
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, List, Optional, Sequence, Set, Tuple
@@ -243,7 +242,7 @@ class Marcs:
         return Marcs(marcs, num_edges_upper_bound)
 
     def refine(self, g1: Graph, g2: Graph, new_v1: int, new_v2: int) -> "Marcs":
-        new_marcs = copy.copy(self.marcs)
+        new_marcs = np.array(self.marcs)
 
         if new_v2 == UNMAPPED:
             # zero out rows corresponding to the edges of new_v1
