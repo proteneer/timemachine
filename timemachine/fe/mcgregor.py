@@ -8,7 +8,7 @@ import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
-from . import tree
+from .tree_search import best_first_
 
 
 def get_num_edges_upper_bound(marcs: NDArray):
@@ -510,7 +510,7 @@ def search(
 
         return children, best_num_edges
 
-    nodes = tree.best_first_(expand_and_prune, init_node, min_num_edges)
+    nodes = best_first_(expand_and_prune, init_node, min_num_edges)
     return nodes
 
 
