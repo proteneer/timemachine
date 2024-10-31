@@ -1,14 +1,18 @@
 import heapq
-from typing import Callable, Iterator, Sequence, Tuple, TypeVar
+from typing import Callable, Iterator, Sequence, Tuple, TypeAlias, TypeVar
 
-N = TypeVar("N")
-S = TypeVar("S")
+Node = TypeVar("Node")
+State = TypeVar("State")
+
+ExpandFn: TypeAlias = Callable[[Node, State], Tuple[Sequence[Node], State]]
+SearchAlgorithm: TypeAlias = Callable[[ExpandFn, Node, State], Iterator[Tuple[Node, State]]]
+SearchAlgorithm_: TypeAlias = Callable[[ExpandFn, Node, State], Iterator[Node]]
 
 
-def dfs(expand: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state: S) -> Iterator[Tuple[N, S]]:
+def dfs(expand: ExpandFn[Node, State], root: Node, initial_state: State) -> Iterator[Tuple[Node, State]]:
     state = initial_state
 
-    def go(node: N) -> Iterator[Tuple[N, S]]:
+    def go(node: Node) -> Iterator[Tuple[Node, State]]:
         nonlocal state
         children, state = expand(node, state)
         yield (node, state)
@@ -18,18 +22,7 @@ def dfs(expand: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state:
     return go(root)
 
 
-def dfs_(expand: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state: S) -> Iterator[N]:
-    return (node for node, _ in dfs(expand, root, initial_state))
-
-
-def dfs_pure(expand: Callable[[N], Sequence[N]], root: N) -> Iterator[N]:
-    def expand_(node: N, _: None) -> Tuple[Sequence[N], None]:
-        return expand(node), None
-
-    return dfs_(expand_, root, None)
-
-
-def bfs(expand: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state: S) -> Iterator[Tuple[N, S]]:
+def bfs(expand: ExpandFn[Node, State], root: Node, initial_state: State) -> Iterator[Tuple[Node, State]]:
     state = initial_state
     queue = [root]
     while queue:
@@ -39,11 +32,7 @@ def bfs(expand: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state:
         queue.extend(children)
 
 
-def bfs_(expand: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state: S) -> Iterator[N]:
-    return (node for node, _ in bfs(expand, root, initial_state))
-
-
-def best_first(expand: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state: S) -> Iterator[Tuple[N, S]]:
+def best_first(expand: ExpandFn[Node, State], root: Node, initial_state: State) -> Iterator[Tuple[Node, State]]:
     state = initial_state
     queue = [root]
     while queue:
@@ -54,5 +43,13 @@ def best_first(expand: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial
             heapq.heappush(queue, child)
 
 
-def best_first_(expand: Callable[[N, S], Tuple[Sequence[N], S]], root: N, initial_state: S) -> Iterator[N]:
-    return (node for node, _ in best_first(expand, root, initial_state))
+def drop_state(alg: SearchAlgorithm) -> SearchAlgorithm_:
+    def sa(expand, root, initial_state):
+        return (node for node, _ in alg(expand, root, initial_state))
+
+    return sa
+
+
+dfs_: SearchAlgorithm_ = drop_state(dfs)
+bfs_: SearchAlgorithm_ = drop_state(bfs)
+best_first_: SearchAlgorithm_ = drop_state(best_first)
