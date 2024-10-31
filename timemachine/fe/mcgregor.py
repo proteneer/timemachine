@@ -416,7 +416,7 @@ def mcs(
     # import time
     # start_time = time.time()  # noqa
 
-    get_children = make_get_children(
+    expand = make_expand(
         g_a,
         g_b,
         priority_idxs,
@@ -428,7 +428,7 @@ def mcs(
     )
 
     init_node = Node(base_atom_map, base_layer, base_marcs)
-    nodes = search(get_children, init_node, min_num_edges)
+    nodes = search(expand, init_node, min_num_edges)
 
     mcs_result = MCSResult.from_nodes(nodes, leaf_filter_fxn, max_visits, max_cores)
 
@@ -476,8 +476,8 @@ def mcs(
     )
 
 
-def search(get_children: Callable[[Node], Sequence[Node]], init_node: Node, min_num_edges: int) -> Iterable[Node]:
-    def get_children_pruned(node: Node, best_num_edges: int) -> Tuple[Sequence[Node], int]:
+def search(expand: Callable[[Node], Sequence[Node]], init_node: Node, min_num_edges: int) -> Iterable[Node]:
+    def expand_pruned(node: Node, best_num_edges: int) -> Tuple[Sequence[Node], int]:
         if node.marcs.num_edges_upper_bound < best_num_edges:
             return [], best_num_edges
 
@@ -485,16 +485,16 @@ def search(get_children: Callable[[Node], Sequence[Node]], init_node: Node, min_
             new_best_num_edges = max(best_num_edges, node.marcs.num_edges_upper_bound)
             return [], new_best_num_edges
 
-        children = get_children(node)
+        children = expand(node)
         children = [child for child in children if child.marcs.num_edges_upper_bound >= best_num_edges]
 
         return children, best_num_edges
 
-    nodes = tree.best_first_(get_children_pruned, init_node, min_num_edges)
+    nodes = tree.best_first_(expand_pruned, init_node, min_num_edges)
     return nodes
 
 
-def make_get_children(
+def make_expand(
     g1: Graph,
     g2: Graph,
     priority_idxs,
@@ -531,7 +531,7 @@ def make_get_children(
 
         return True
 
-    def get_children(node: Node) -> List[Node]:
+    def expand(node: Node) -> List[Node]:
         if node.is_leaf:
             return []
 
@@ -559,4 +559,4 @@ def make_get_children(
 
         return children
 
-    return get_children
+    return expand
