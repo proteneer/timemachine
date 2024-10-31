@@ -416,7 +416,7 @@ def mcs(
     # import time
     # start_time = time.time()  # noqa
 
-    get_neighbors = make_get_children(
+    get_children = make_get_children(
         g_a,
         g_b,
         priority_idxs,
@@ -428,7 +428,7 @@ def mcs(
     )
 
     init_node = Node(base_atom_map, base_layer, base_marcs)
-    nodes = search(get_neighbors, init_node, min_num_edges)
+    nodes = search(get_children, init_node, min_num_edges)
 
     mcs_result = MCSResult.from_nodes(nodes, leaf_filter_fxn, max_visits, max_cores)
 
