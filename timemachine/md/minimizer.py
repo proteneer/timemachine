@@ -525,7 +525,7 @@ def scipy_minimize(
     def val_and_grad_fn_bfgs(x_flattened):
         x = x_flattened.reshape(final_shape)
         u, grad_full = val_and_grad_fn(x)
-        return u, grad_full.reshape(-1).astype(np.float64)
+        return u, np.asarray(grad_full.reshape(-1)).astype(np.float64)
 
     x_flat = x0.reshape(-1)
 
@@ -653,7 +653,7 @@ def local_minimize(
         argmax_local = np.argmax(per_atom_force_norms)
         worst_atom_idx = free_idxs[argmax_local]
         print(f"atom with highest force norm after minimization: {worst_atom_idx}")
-        print(f"force(x_final)[{worst_atom_idx}] = {forces[argmax_local]}")
+        print(f"force(x_final)[{worst_atom_idx}] = {forces[worst_atom_idx]}")
         print("-" * 70)
 
     check_force_norm(forces)
