@@ -8,7 +8,7 @@ import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
-from .tree_search import best_first_
+from .tree_search import best_first_stateful
 
 # used in main recursion() loop
 UNMAPPED = -1  # (UNVISITED) OR (VISITED AND DEMAPPED)
@@ -450,7 +450,7 @@ def mcs(
 
         return children, best_num_edges
 
-    nodes = best_first_(expand_and_prune, init_node, min_num_edges)
+    nodes = best_first_stateful(expand_and_prune, init_node, min_num_edges)
 
     mcs_result = MCSResult.from_nodes(nodes, leaf_filter_fxn_, max_visits, max_cores)
 
