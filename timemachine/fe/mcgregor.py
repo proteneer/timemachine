@@ -439,7 +439,24 @@ def mcs(
 
     leaf_filter_fxn_ = cache(leaf_filter_fxn)
 
-    nodes = search(expand, init_node, leaf_filter_fxn_, min_num_edges)
+    def expand_and_prune(node: Node, best_num_edges: int) -> Tuple[Sequence[Node], int]:
+        if node.marcs.num_edges_upper_bound < best_num_edges:
+            return [], best_num_edges
+
+        if node.is_leaf:
+            new_best_num_edges = (
+                max(best_num_edges, node.marcs.num_edges_upper_bound)
+                if leaf_filter_fxn_(node.atom_map.a_to_b)
+                else best_num_edges
+            )
+            return [], new_best_num_edges
+
+        children = expand(node)
+        children = [child for child in children if child.marcs.num_edges_upper_bound >= best_num_edges]
+
+        return children, best_num_edges
+
+    nodes = best_first_(expand_and_prune, init_node, min_num_edges)
 
     mcs_result = MCSResult.from_nodes(nodes, leaf_filter_fxn_, max_visits, max_cores)
 
@@ -485,33 +502,6 @@ def mcs(
             num_cores=len(all_cores),
         ),
     )
-
-
-def search(
-    expand: Callable[[Node], Sequence[Node]],
-    init_node: Node,
-    leaf_filter_fxn: Callable[[Tuple[int, ...]], bool],
-    min_num_edges: int,
-) -> Iterable[Node]:
-    def expand_and_prune(node: Node, best_num_edges: int) -> Tuple[Sequence[Node], int]:
-        if node.marcs.num_edges_upper_bound < best_num_edges:
-            return [], best_num_edges
-
-        if node.is_leaf:
-            new_best_num_edges = (
-                max(best_num_edges, node.marcs.num_edges_upper_bound)
-                if leaf_filter_fxn(node.atom_map.a_to_b)
-                else best_num_edges
-            )
-            return [], new_best_num_edges
-
-        children = expand(node)
-        children = [child for child in children if child.marcs.num_edges_upper_bound >= best_num_edges]
-
-        return children, best_num_edges
-
-    nodes = best_first_(expand_and_prune, init_node, min_num_edges)
-    return nodes
 
 
 def make_expand(
