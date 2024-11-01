@@ -19,7 +19,8 @@ OpenMMTopology = Any
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
 _SCALE_14_LJ = 0.5
-_SCALE_14_Q = 0.5  # XXX
+_SCALE_14_Q = 0.5  # TODO: investigate FEP performance regression when set to OFF value
+
 _BETA = 2.0
 _CUTOFF = 1.2
 
