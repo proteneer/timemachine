@@ -244,7 +244,7 @@ class AtomMap:
             set_at(self.b_to_a, new_v2, new_v1),
         )
 
-    @property
+    @cached_property
     def core_size(self):
         return sum(1 for j in self.a_to_b if j != UNMAPPED)
 
@@ -293,7 +293,7 @@ class Node:
     def is_leaf(self):
         return self.layer == len(self.atom_map.a_to_b)
 
-    @property
+    @cached_property
     def priority(self):
         """Compute the priority of this node. By convention, lowest numerical value is highest priority"""
         return (-self.marcs.num_edges_upper_bound, -self.layer)
