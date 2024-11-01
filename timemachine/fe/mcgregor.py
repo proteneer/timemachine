@@ -1,7 +1,7 @@
 # maximum common subgraph routines based off of the mcgregor paper
 import warnings
 from dataclasses import dataclass, field
-from functools import cache
+from functools import cache, cached_property
 from typing import Callable, Iterable, List, Optional, Sequence, Set, Tuple
 
 import networkx as nx
@@ -9,13 +9,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .tree_search import best_first_
-
-
-def get_num_edges_upper_bound(marcs: NDArray):
-    num_row_edges = np.sum(np.any(marcs, 1))
-    num_col_edges = np.sum(np.any(marcs, 0))
-    return min(num_row_edges, num_col_edges)
-
 
 # used in main recursion() loop
 UNMAPPED = -1  # (UNVISITED) OR (VISITED AND DEMAPPED)
@@ -216,7 +209,12 @@ def _verify_core_impl(g1: Graph, g2: Graph, new_v1: int, map_1_to_2: Sequence[in
 @dataclass(frozen=True)
 class Marcs:
     marcs: NDArray[np.bool_]
-    num_edges_upper_bound: int  # redundant; stored to avoid recomputation
+
+    @cached_property
+    def num_edges_upper_bound(self) -> int:
+        num_row_edges = self.marcs.any(1).sum()
+        num_col_edges = self.marcs.any(0).sum()
+        return min(num_row_edges, num_col_edges)
 
     @classmethod
     def from_predicate(cls, g1: Graph, g2: Graph, predicate: NDArray[np.bool_]) -> "Marcs":
@@ -243,8 +241,7 @@ class Marcs:
 
     @classmethod
     def from_matrix(cls, marcs) -> "Marcs":
-        num_edges_upper_bound = get_num_edges_upper_bound(marcs)
-        return Marcs(marcs, num_edges_upper_bound)
+        return Marcs(marcs)
 
     def refine(self, g1: Graph, g2: Graph, new_v1: int, new_v2: int) -> "Marcs":
         new_marcs = np.array(self.marcs)
