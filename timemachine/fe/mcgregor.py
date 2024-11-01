@@ -14,27 +14,6 @@ from .tree_search import best_first_stateful
 UNMAPPED = -1  # (UNVISITED) OR (VISITED AND DEMAPPED)
 
 
-def set_at(xs: Tuple[int, ...], idx: int, val: int) -> Tuple[int, ...]:
-    return xs[:idx] + (val,) + xs[idx + 1 :]
-
-
-@dataclass(frozen=True)
-class AtomMap:
-    a_to_b: Tuple[int, ...]
-    b_to_a: Tuple[int, ...]
-
-    @classmethod
-    def empty(cls, n_a: int, n_b: int) -> "AtomMap":
-        return cls(a_to_b=(UNMAPPED,) * n_a, b_to_a=(UNMAPPED,) * n_b)
-
-    def add(self, idx: int, jdx: int) -> "AtomMap":
-        return AtomMap(set_at(self.a_to_b, idx, jdx), set_at(self.b_to_a, jdx, idx))
-
-    @property
-    def core_size(self):
-        return sum(1 for j in self.a_to_b if j != UNMAPPED)
-
-
 class Graph:
     def __init__(self, n_vertices, edges):
         self.n_vertices = n_vertices
@@ -188,24 +167,6 @@ class Graph:
         return g
 
 
-def _verify_core_is_connected(
-    g1: Graph, g2: Graph, new_v1: int, new_v2: int, map_1_to_2: Sequence[int], map_2_to_1: Sequence[int]
-):
-    return _verify_core_impl(g1, g2, new_v1, map_1_to_2) and _verify_core_impl(g2, g1, new_v2, map_2_to_1)
-
-
-def _verify_core_impl(g1: Graph, g2: Graph, new_v1: int, map_1_to_2: Sequence[int]):
-    for e1 in g1.get_edges(new_v1):
-        src, dst = g1.edges[e1]
-        # both ends are mapped
-        src_2, dst_2 = map_1_to_2[src], map_1_to_2[dst]
-        if src_2 != UNMAPPED and dst_2 != UNMAPPED:
-            # see if this edge is present in g2
-            if not g2.cmat[src_2][dst_2]:
-                return False
-    return True
-
-
 @dataclass(frozen=True)
 class Marcs:
     marcs: NDArray[np.bool_]
@@ -266,12 +227,69 @@ class Marcs:
 
 
 @dataclass(frozen=True)
-class Node:
-    atom_map: AtomMap
-    layer: int
-    marcs: Marcs
+class AtomMap:
+    a_to_b: Tuple[int, ...]
+    b_to_a: Tuple[int, ...]
+
+    @classmethod
+    def init(cls, n_1: int, n_2: int) -> "AtomMap":
+        return cls((UNMAPPED,) * n_1, (UNMAPPED,) * n_2)
+
+    def add(self, new_v1: int, new_v2: int) -> "AtomMap":
+        def set_at(xs: Tuple[int, ...], idx: int, val: int) -> Tuple[int, ...]:
+            return xs[:idx] + (val,) + xs[idx + 1 :]
+
+        return AtomMap(
+            set_at(self.a_to_b, new_v1, new_v2),
+            set_at(self.b_to_a, new_v2, new_v1),
+        )
 
     @property
+    def core_size(self):
+        return sum(1 for j in self.a_to_b if j != UNMAPPED)
+
+
+def _verify_core_is_connected(g1: Graph, g2: Graph, new_v1: int, new_v2: int, atom_map: AtomMap):
+    return _verify_core_impl(g1, g2, new_v1, atom_map.a_to_b) and _verify_core_impl(g2, g1, new_v2, atom_map.b_to_a)
+
+
+def _verify_core_impl(g1: Graph, g2: Graph, new_v1: int, map_1_to_2: Sequence[int]):
+    for e1 in g1.get_edges(new_v1):
+        src, dst = g1.edges[e1]
+        # both ends are mapped
+        src_2, dst_2 = map_1_to_2[src], map_1_to_2[dst]
+        if src_2 != UNMAPPED and dst_2 != UNMAPPED:
+            # see if this edge is present in g2
+            if not g2.cmat[src_2][dst_2]:
+                return False
+    return True
+
+
+@dataclass(frozen=True)
+class Node:
+    atom_map: AtomMap
+    marcs: Marcs
+    layer: int
+
+    @classmethod
+    def init(cls, g1: Graph, g2: Graph, predicate: NDArray[np.bool_]) -> "Node":
+        return cls(AtomMap.init(g1.n_vertices, g2.n_vertices), Marcs.from_predicate(g1, g2, predicate), 0)
+
+    def add(self, g1: Graph, g2: Graph, new_v2: int) -> "Node":
+        return Node(
+            self.atom_map.add(self.layer, new_v2),
+            self.marcs.refine(g1, g2, self.layer, new_v2),
+            self.layer + 1,
+        )
+
+    def skip(self, g1: Graph, g2: Graph) -> "Node":
+        return Node(
+            self.atom_map,
+            self.marcs.refine(g1, g2, self.layer, UNMAPPED),
+            self.layer + 1,
+        )
+
+    @cached_property
     def is_leaf(self):
         return self.layer == len(self.atom_map.a_to_b)
 
@@ -402,18 +420,17 @@ def mcs(
     predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
     g_a = Graph(n_a, bonds_a)
     g_b = Graph(n_b, bonds_b)
-    base_marcs = Marcs.from_predicate(g_a, g_b, predicate)
 
-    base_atom_map = AtomMap.empty(n_a, n_b)
+    init_node = Node.init(g_a, g_b, predicate)
+
     if initial_mapping is not None:
-        for a, b in initial_mapping:
-            base_atom_map = base_atom_map.add(a, b)
-            base_marcs = base_marcs.refine(g_a, g_b, a, b)
+        initial_mapping_dict = {a: b for a, b in initial_mapping}
+        for a in range(len(initial_mapping)):
+            init_node = init_node.add(g_a, g_b, initial_mapping_dict.get(a, UNMAPPED))
 
-    if base_marcs.num_edges_upper_bound == 0:
+    if init_node.marcs.num_edges_upper_bound == 0:
         raise NoMappingError("No possible mapping given the predicate matrix")
 
-    base_layer = len(initial_mapping)
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
     # Keep start time for debugging purposes below
     # import time
@@ -428,8 +445,6 @@ def mcs(
         min_connected_component_size,
         filter_fxn,
     )
-
-    init_node = Node(base_atom_map, base_layer, base_marcs)
 
     leaf_filter_fxn_ = cache(leaf_filter_fxn)
 
@@ -539,19 +554,14 @@ def make_expand(
             return []
 
         mapped_children = [
-            Node(atom_map, node.layer + 1, refined_marcs)
-            for jdx in priority_idxs[node.layer]
-            if node.atom_map.b_to_a[jdx] == UNMAPPED
-            for atom_map in [node.atom_map.add(node.layer, jdx)]
-            for refined_marcs in [node.marcs.refine(g1, g2, node.layer, jdx)]
-            if (
-                not enforce_core_core
-                or _verify_core_is_connected(g1, g2, node.layer, jdx, atom_map.a_to_b, atom_map.b_to_a)
-            )
+            child
+            for new_v2 in priority_idxs[node.layer]
+            if node.atom_map.b_to_a[new_v2] == UNMAPPED
+            for child in [node.add(g1, g2, new_v2)]
+            if (not enforce_core_core or _verify_core_is_connected(g1, g2, node.layer, new_v2, child.atom_map))
         ]
 
-        refined_marcs = node.marcs.refine(g1, g2, node.layer, UNMAPPED)
-        unmapped_child = Node(node.atom_map, node.layer + 1, refined_marcs)
+        unmapped_child = node.skip(g1, g2)
 
         children = [
             child
