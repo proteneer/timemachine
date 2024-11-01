@@ -244,15 +244,21 @@ class Marcs:
         return Marcs(marcs)
 
     def refine(self, g1: Graph, g2: Graph, new_v1: int, new_v2: int) -> "Marcs":
+        """Set to False entries in marcs corresponding to edge pairs that can no longer correspond under the addition of
+        (new_v1, new_v2) to the mapping"""
+
         new_marcs = np.array(self.marcs)
+        e1 = g1.get_edges_as_vector(new_v1)
 
         if new_v2 == UNMAPPED:
-            # zero out rows corresponding to the edges of new_v1
-            new_marcs[g1.get_edges_as_vector(new_v1)] = False
+            # Set to False rows corresponding to the edges of new_v1
+            new_marcs[e1] = False
         else:
-            # mask out every row in marcs
-            e1 = g1.get_edges_as_vector(new_v1)
             e2 = g2.get_edges_as_vector(new_v2)
+
+            # Set to False edge pairs (e1, e2) where either
+            # 1. e1 connects to new_v1 but e2 does NOT connect to new_v2
+            # 2. e1 does NOT connect to new_v1 but e2 connects to new_v2
             mask = e1[:, None] == e2[None, :]
             new_marcs &= mask
 
