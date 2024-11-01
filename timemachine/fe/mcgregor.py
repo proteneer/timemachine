@@ -1,6 +1,6 @@
 # maximum common subgraph routines based off of the mcgregor paper
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cache, cached_property
 from typing import Callable, Iterable, List, Optional, Sequence, Set, Tuple
 
@@ -286,8 +286,8 @@ class Node:
 
 @dataclass(frozen=True)
 class MCSResult:
-    all_maps: Tuple[Tuple[int, ...], ...] = field(default_factory=tuple)
-    all_marcs: Tuple[NDArray, ...] = field(default_factory=tuple)
+    all_maps: Tuple[Tuple[int, ...], ...] = ()
+    all_marcs: Tuple[NDArray, ...] = ()
     num_edges: int = 0
     timed_out: bool = False
     nodes_visited: int = 0
