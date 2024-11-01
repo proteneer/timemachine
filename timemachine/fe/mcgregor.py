@@ -249,20 +249,19 @@ class AtomMap:
         return sum(1 for j in self.a_to_b if j != UNMAPPED)
 
 
-def _verify_core_is_connected(g1: Graph, g2: Graph, new_v1: int, new_v2: int, atom_map: AtomMap):
-    return _verify_core_impl(g1, g2, new_v1, atom_map.a_to_b) and _verify_core_impl(g2, g1, new_v2, atom_map.b_to_a)
+def _verify_map_preserves_core_edges(g1: Graph, g2: Graph, new_v1: int, new_v2: int, atom_map: AtomMap) -> bool:
+    def verify(g1: Graph, g2: Graph, new_v1: int, map_1_to_2: Sequence[int]):
+        for e1 in g1.get_edges(new_v1):
+            src, dst = g1.edges[e1]
+            src_2, dst_2 = map_1_to_2[src], map_1_to_2[dst]
+            if src_2 != UNMAPPED and dst_2 != UNMAPPED:
+                # both ends are mapped
+                # see if this edge is present in g2
+                if not g2.cmat[src_2][dst_2]:
+                    return False
+        return True
 
-
-def _verify_core_impl(g1: Graph, g2: Graph, new_v1: int, map_1_to_2: Sequence[int]):
-    for e1 in g1.get_edges(new_v1):
-        src, dst = g1.edges[e1]
-        # both ends are mapped
-        src_2, dst_2 = map_1_to_2[src], map_1_to_2[dst]
-        if src_2 != UNMAPPED and dst_2 != UNMAPPED:
-            # see if this edge is present in g2
-            if not g2.cmat[src_2][dst_2]:
-                return False
-    return True
+    return verify(g1, g2, new_v1, atom_map.a_to_b) and verify(g2, g1, new_v2, atom_map.b_to_a)
 
 
 @dataclass(frozen=True)
@@ -558,7 +557,7 @@ def make_expand(
             for new_v2 in priority_idxs[node.layer]
             if node.atom_map.b_to_a[new_v2] == UNMAPPED
             for child in [node.add(g1, g2, new_v2)]
-            if (not enforce_core_core or _verify_core_is_connected(g1, g2, node.layer, new_v2, child.atom_map))
+            if (not enforce_core_core or _verify_map_preserves_core_edges(g1, g2, node.layer, new_v2, child.atom_map))
         ]
 
         unmapped_child = node.skip(g1, g2)
