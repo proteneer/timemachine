@@ -335,15 +335,6 @@ class MCSResult:
         )
 
 
-def max_tree_size(priority_list):
-    cur_layer_size = 1
-    layer_sizes = [cur_layer_size]
-    for neighbors in priority_list:
-        cur_layer_size *= len(neighbors)
-        layer_sizes.append(cur_layer_size)
-    return sum(layer_sizes)
-
-
 def build_predicate_matrix(n_a, n_b, priority_idxs):
     assert len(priority_idxs) == n_a
     pmat = np.full((n_a, n_b), False, dtype=bool)
