@@ -435,6 +435,8 @@ def mcs(
     # import time
     # start_time = time.time()  # noqa
 
+    cached_leaf_filter_fxn = cache(leaf_filter_fxn)
+
     expand = make_expand(
         g_a,
         g_b,
@@ -443,30 +445,12 @@ def mcs(
         max_connected_components,
         min_connected_component_size,
         filter_fxn,
+        cached_leaf_filter_fxn,
     )
 
-    leaf_filter_fxn_ = cache(leaf_filter_fxn)
+    nodes = best_first_stateful(expand, init_node, min_num_edges)
 
-    def expand_and_prune(node: Node, best_num_edges: int) -> Tuple[Sequence[Node], int]:
-        if node.marcs.num_edges_upper_bound < best_num_edges:
-            return [], best_num_edges
-
-        if node.is_leaf:
-            new_best_num_edges = (
-                max(best_num_edges, node.marcs.num_edges_upper_bound)
-                if leaf_filter_fxn_(node.atom_map.a_to_b)
-                else best_num_edges
-            )
-            return [], new_best_num_edges
-
-        children = expand(node)
-        children = [child for child in children if child.marcs.num_edges_upper_bound >= best_num_edges]
-
-        return children, best_num_edges
-
-    nodes = best_first_stateful(expand_and_prune, init_node, min_num_edges)
-
-    mcs_result = MCSResult.from_nodes(nodes, leaf_filter_fxn_, max_visits, max_cores)
+    mcs_result = MCSResult.from_nodes(nodes, cached_leaf_filter_fxn, max_visits, max_cores)
 
     if len(mcs_result.all_maps) > 0:
         # If we timed out but got cores, throw a warning
@@ -520,7 +504,8 @@ def make_expand(
     max_connected_components: Optional[int],
     min_connected_component_size: int,
     filter_fxn: Callable[[Sequence[int]], bool],
-) -> Callable[[Node], Sequence[Node]]:
+    leaf_filter_fxn: Callable[[Sequence[int]], bool],
+) -> Callable[[Node, int], Tuple[Sequence[Node], int]]:
     def satisfies_connected_components_constraints(node: Node) -> bool:
         if max_connected_components is not None or min_connected_component_size > 1:
             g1_mapped_nodes = {a1 for a1, a2 in enumerate(node.atom_map.a_to_b[: node.layer]) if a2 != UNMAPPED}
@@ -548,9 +533,17 @@ def make_expand(
 
         return True
 
-    def expand(node: Node) -> List[Node]:
+    def expand(node: Node, best_num_edges: int) -> Tuple[List[Node], int]:
+        if node.marcs.num_edges_upper_bound < best_num_edges:
+            return [], best_num_edges
+
         if node.is_leaf:
-            return []
+            new_best_num_edges = (
+                max(best_num_edges, node.marcs.num_edges_upper_bound)
+                if leaf_filter_fxn(node.atom_map.a_to_b)
+                else best_num_edges
+            )
+            return [], new_best_num_edges
 
         mapped_children = [
             child
@@ -565,10 +558,11 @@ def make_expand(
         children = [
             child
             for child in mapped_children + [unmapped_child]
+            if child.marcs.num_edges_upper_bound >= best_num_edges
             if satisfies_connected_components_constraints(child)
             if filter_fxn(child.atom_map.a_to_b)
         ]
 
-        return children
+        return children, best_num_edges
 
     return expand
