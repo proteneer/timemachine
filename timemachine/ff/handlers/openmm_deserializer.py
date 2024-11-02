@@ -90,13 +90,18 @@ def deserialize_nonbonded_force(force, N):
 
         if initial_q == 0:
             if desired_q == 0:
-                q_scale_factor = 1
+                q_scale_factor = 1  # noqa
             else:
                 raise RuntimeError("No ES scaling factor possible to arrive at desired_q")
         else:
-            q_scale_factor = 1 - desired_q / initial_q
+            q_scale_factor = 1 - desired_q / initial_q  # noqa
 
-        scale_factors_.append((q_scale_factor, lj_scale_factor))
+        scale_factors_.append(
+            (
+                lj_scale_factor,  # TODO: investigate FEP performance regression when set to OFF value
+                lj_scale_factor,
+            )
+        )
 
         # check combining rules for sigmas are consistent
         if desired_eps != 0:
