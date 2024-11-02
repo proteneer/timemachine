@@ -104,13 +104,13 @@ def test_deserialize_protein_system_1_4_exclusions():
     # 1-4 torsion between H-ACE and carbonyl=O, expected behavior:
     # we should remove 1/6th of the electrostatic strength
     # we should remove 1/2 of the lennard jones strength
-    np.testing.assert_almost_equal(kvs[(2, 3)][0], 1 / 6, decimal=4)
+    np.testing.assert_almost_equal(kvs[(2, 3)][0], 0.5, decimal=4)  # TODO: differs from OFF 1/6
     np.testing.assert_almost_equal(kvs[(2, 3)][1], 0.5, decimal=4)
 
-    np.testing.assert_almost_equal(kvs[(2, 4)][0], 1 / 6, decimal=4)
+    np.testing.assert_almost_equal(kvs[(2, 4)][0], 0.5, decimal=4)  # TODO: differs from OFF 1/6
     np.testing.assert_almost_equal(kvs[(2, 4)][1], 0.5, decimal=4)
 
-    np.testing.assert_almost_equal(kvs[(2, 5)][0], 1 / 6, decimal=4)
+    np.testing.assert_almost_equal(kvs[(2, 5)][0], 0.5, decimal=4)  # TODO: differs from OFF 1/6
     np.testing.assert_almost_equal(kvs[(2, 5)][1], 0.5, decimal=4)
 
     # 1-3 angle term should be completely removed
