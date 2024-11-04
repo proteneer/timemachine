@@ -303,12 +303,12 @@ class Node:
 
 @dataclass(frozen=True)
 class MCSResult:
-    all_maps: Tuple[Tuple[int, ...], ...] = ()
-    all_marcs: Tuple[NDArray, ...] = ()
-    num_edges: int = 0
-    timed_out: bool = False
-    nodes_visited: int = 0
-    leaves_visited: int = 0
+    all_maps: Tuple[Tuple[int, ...], ...]
+    all_marcs: Tuple[NDArray, ...]
+    num_edges: int
+    timed_out: bool
+    nodes_visited: int
+    leaves_visited: int
 
     @classmethod
     def from_nodes(
@@ -320,6 +320,8 @@ class MCSResult:
         node = None
         nodes_visited = 0
         leaves_visited = 0
+        timed_out = False
+
         for nodes_visited, node in enumerate(nodes, 1):
             if node.is_leaf and node.atom_map.core_size > 0:
                 if leaf_filter_fxn(node.atom_map.a_to_b):
@@ -329,22 +331,12 @@ class MCSResult:
                 leaves_visited += 1
 
                 if leaves_visited == max_leaves:
-                    return MCSResult(
-                        tuple(all_maps),
-                        tuple(all_marcs),
-                        node.marcs.num_edges_upper_bound,
-                        timed_out=True,
-                        nodes_visited=nodes_visited,
-                    )
+                    timed_out = True
+                    break
 
             if nodes_visited == max_nodes:
-                return MCSResult(
-                    tuple(all_maps),
-                    tuple(all_marcs),
-                    node.marcs.num_edges_upper_bound,
-                    timed_out=True,
-                    nodes_visited=nodes_visited,
-                )
+                timed_out = True
+                break
 
         assert node is not None, "found no valid mappings"
 
@@ -352,7 +344,7 @@ class MCSResult:
             tuple(all_maps),
             tuple(all_marcs),
             node.marcs.num_edges_upper_bound,
-            timed_out=False,
+            timed_out=timed_out,
             nodes_visited=nodes_visited,
             leaves_visited=leaves_visited,
         )
