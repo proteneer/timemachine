@@ -198,10 +198,6 @@ class Marcs:
                 else:
                     marcs[e_a][e_b] = False
 
-        return Marcs.from_matrix(marcs)
-
-    @classmethod
-    def from_matrix(cls, marcs) -> "Marcs":
         return Marcs(marcs)
 
     def refine(self, g1: Graph, g2: Graph, new_v1: int, new_v2: int) -> "Marcs":
@@ -223,7 +219,7 @@ class Marcs:
             mask = e1[:, None] == e2[None, :]
             new_marcs &= mask
 
-        return Marcs.from_matrix(new_marcs)
+        return Marcs(new_marcs)
 
 
 @dataclass(frozen=True)
