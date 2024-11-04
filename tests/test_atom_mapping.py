@@ -431,7 +431,7 @@ def test_all_pairs(dataset):
                 f"{mol_a.GetProp('_Name')} -> {mol_b.GetProp('_Name')} has {len(all_cores)} cores of size {len(all_cores[0])} | total nodes visited: {diagnostics.total_nodes_visited} | wall clock time: {end_time - start_time:.3f}"
             )
 
-            # sort cores and convert arrays to lists to simplify comparison with reference
+            # convert arrays to lists to simplify comparison with reference
             cores = [core.tolist() for core in all_cores]
             cores_by_pair[mol_a_name, mol_b_name] = cores
 
