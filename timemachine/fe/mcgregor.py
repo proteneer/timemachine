@@ -173,6 +173,10 @@ class Marcs:
 
     @cached_property
     def num_edges_upper_bound(self) -> int:
+        """Upper bound on the number of edges that can be put in correspondence, given the current partial mapping.
+
+        McGregor (1982) refers to this as "arcsleft".
+        """
         num_row_edges = self.marcs.any(1).sum()
         num_col_edges = self.marcs.any(0).sum()
         return min(num_row_edges, num_col_edges)
