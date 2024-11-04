@@ -18,7 +18,7 @@ class Graph:
     def __init__(self, n_vertices, edges):
         self.n_vertices = n_vertices
         self.n_edges = len(edges)
-        self.edges = edges
+        self.edges = np.asarray(edges)
 
         cmat = np.full((n_vertices, n_vertices), False, dtype=bool)
         for i, j in edges:
@@ -183,24 +183,20 @@ class Marcs:
 
     @classmethod
     def from_predicate(cls, g1: Graph, g2: Graph, predicate: NDArray[np.bool_]) -> "Marcs":
-        num_a_edges = g1.n_edges
-        num_b_edges = g2.n_edges
-        marcs = np.full((num_a_edges, num_b_edges), True, dtype=bool)
-        for e_a in range(num_a_edges):
-            src_a, dst_a = g1.edges[e_a]
-            for e_b in range(num_b_edges):
-                src_b, dst_b = g2.edges[e_b]
-                # an edge mapping is allowed in two cases:
-                # 1) src_a can map to src_b, and dst_a can map dst_b
-                # 2) src_a can map to dst_b, and dst_a can map src_b
-                # if either 1 or 2 is satisfied, we skip, otherwise
-                # we can confidently reject the mapping
-                if predicate[src_a][src_b] and predicate[dst_a][dst_b]:
-                    continue
-                elif predicate[src_a][dst_b] and predicate[dst_a][src_b]:
-                    continue
-                else:
-                    marcs[e_a][e_b] = False
+        src_a = g1.edges[:, None, 0]
+        dst_a = g1.edges[:, None, 1]
+        src_b = g2.edges[None, :, 0]
+        dst_b = g2.edges[None, :, 1]
+
+        # An edge mapping is allowed in two cases:
+        # 1) src_a can map to src_b, and dst_a can map dst_b
+        # 2) src_a can map to dst_b, and dst_a can map src_b
+        # The mapping is allowed iff (1) or (2) is true
+
+        marcs = np.logical_or(
+            predicate[src_a, src_b] & predicate[dst_a, dst_b],
+            predicate[src_a, dst_b] & predicate[dst_a, src_b],
+        )
 
         return Marcs(marcs)
 
