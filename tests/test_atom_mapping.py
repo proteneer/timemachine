@@ -1,6 +1,8 @@
 import copy
+import pickle
 import time
 from functools import partial
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -23,18 +25,15 @@ from timemachine.ff import Forcefield
 
 pytestmark = [pytest.mark.nocuda]
 
-hif2a_set = "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf"
-eg5_set = "timemachine/datasets/fep_benchmark/eg5/ligands.sdf"
-
-datasets = [
-    hif2a_set,
-    eg5_set,
-]
+datasets = {
+    "hif2a": "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf",
+    "eg5": "timemachine/datasets/fep_benchmark/eg5/ligands.sdf",
+}
 
 
 @pytest.fixture(scope="module")
 def hif2a_ligands():
-    return read_sdf(hif2a_set)
+    return read_sdf(datasets["hif2a"])
 
 
 def test_connected_core_with_large_numbers_of_cores():
@@ -385,12 +384,16 @@ $$$$""",
 # CHEMBL1077227 -> CHEMBL1083836 has 18 cores of size 48
 # CHEMBL1086410 -> CHEMBL1083836 has 15 cores of size 52
 # CHEMBL1086410 -> CHEMBL1084935 has 27 cores of size 60
-@pytest.mark.parametrize("filepath", datasets)
-def test_all_pairs(filepath):
+@pytest.mark.parametrize("dataset", datasets.items())
+def test_all_pairs(dataset):
+    key, filepath = dataset
     mols = read_sdf(filepath)
+    cores_by_pair = dict()
     for idx, mol_a in enumerate(mols):
+        mol_a_name = get_mol_name(mol_a)
         for mol_b in mols[idx + 1 :]:
-            # print("Processing", get_mol_name(mol_a), "->", get_mol_name(mol_b))
+            mol_b_name = get_mol_name(mol_b)
+            # print("Processing", mol_a_name, "->", mol_b_name)
             start_time = time.time()
             all_cores, diagnostics = atom_mapping.get_cores_and_diagnostics(
                 mol_a,
@@ -427,6 +430,21 @@ def test_all_pairs(filepath):
             print(
                 f"{mol_a.GetProp('_Name')} -> {mol_b.GetProp('_Name')} has {len(all_cores)} cores of size {len(all_cores[0])} | total nodes visited: {diagnostics.total_nodes_visited} | wall clock time: {end_time - start_time:.3f}"
             )
+
+            # convert arrays to lists to simplify comparison with reference
+            cores = [core.tolist() for core in all_cores]
+            cores_by_pair[mol_a_name, mol_b_name] = cores
+
+    ref_pickle_path = Path(f"tests/data/all_pairs_atom_mappings_{key}.pkl")
+
+    # Uncomment to update test reference
+    # with Path(ref_pickle_path).open("wb") as fp:
+    #     ref_cores_by_pair = pickle.dump(cores_by_pair, fp)
+
+    with Path(ref_pickle_path).open("rb") as fp:
+        ref_cores_by_pair = pickle.load(fp)
+
+    assert cores_by_pair == ref_cores_by_pair
 
 
 def get_mol_by_name(mols, name):
@@ -714,7 +732,7 @@ $$$$""",
 def test_hif2a_failure():
     # special failure with error message:
     # pred_sgg_a = a_cycles[a] == sg_a_cycles[a], KeyError: 18
-    mols = Chem.SDMolSupplier(hif2a_set, removeHs=False)
+    mols = Chem.SDMolSupplier(datasets["hif2a"], removeHs=False)
     mols = [m for m in mols]
     mol_a = get_mol_by_name(mols, "7a")
     mol_b = get_mol_by_name(mols, "224")
@@ -998,7 +1016,7 @@ def test_min_threshold():
 
 
 def test_get_cores_and_diagnostics():
-    mols = read_sdf(hif2a_set)
+    mols = read_sdf(datasets["hif2a"])
     n_pairs = 30
     random_pair_idxs = np.random.default_rng(2024).choice(len(mols), size=(n_pairs, 2))
 
@@ -1300,7 +1318,7 @@ def test_hybrid_core_generation(hif2a_ligands):
     * Cores generated with the hybrid approach without hydrogens first and then with hydrogens will be strictly larger.
     """
     mols_with_hs = hif2a_ligands
-    mols_without_hs = read_sdf(hif2a_set, removeHs=True)
+    mols_without_hs = read_sdf(datasets["hif2a"], removeHs=True)
 
     n_mols = len(mols_with_hs)
 

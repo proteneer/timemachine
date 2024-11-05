@@ -1,101 +1,23 @@
 # maximum common subgraph routines based off of the mcgregor paper
-import copy
 import warnings
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Sequence, Set, Tuple
+from functools import cache, cached_property
+from typing import Callable, Iterable, List, Optional, Sequence, Set, Tuple
 
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
+from .tree_search import best_first
 
-def _arcs_left(marcs):
-    num_row_edges = np.sum(np.any(marcs, 1))
-    num_col_edges = np.sum(np.any(marcs, 0))
-    return min(num_row_edges, num_col_edges)
-
-
-# used in main recursion() loop
 UNMAPPED = -1  # (UNVISITED) OR (VISITED AND DEMAPPED)
-
-
-def _initialize_marcs_given_predicate(g1, g2, predicate):
-    num_a_edges = g1.n_edges
-    num_b_edges = g2.n_edges
-    marcs = np.full((num_a_edges, num_b_edges), True, dtype=bool)
-    for e_a in range(num_a_edges):
-        src_a, dst_a = g1.edges[e_a]
-        for e_b in range(num_b_edges):
-            src_b, dst_b = g2.edges[e_b]
-            # an edge mapping is allowed in two cases:
-            # 1) src_a can map to src_b, and dst_a can map dst_b
-            # 2) src_a can map to dst_b, and dst_a can map src_b
-            # if either 1 or 2 is satisfied, we skip, otherwise
-            # we can confidently reject the mapping
-            if predicate[src_a][src_b] and predicate[dst_a][dst_b]:
-                continue
-            elif predicate[src_a][dst_b] and predicate[dst_a][src_b]:
-                continue
-            else:
-                marcs[e_a][e_b] = False
-
-    return marcs
-
-
-def _verify_core_impl(g1, g2, new_v1, map_1_to_2):
-    for e1 in g1.get_edges(new_v1):
-        src, dst = g1.edges[e1]
-        # both ends are mapped
-        src_2, dst_2 = map_1_to_2[src], map_1_to_2[dst]
-        if src_2 != UNMAPPED and dst_2 != UNMAPPED:
-            # see if this edge is present in g2
-            if not g2.cmat[src_2][dst_2]:
-                return False
-    return True
-
-
-def _verify_core_is_connected(g1, g2, new_v1, new_v2, map_1_to_2, map_2_to_1):
-    # incremental checks
-    if _verify_core_impl(g1, g2, new_v1, map_1_to_2):
-        return _verify_core_impl(g2, g1, new_v2, map_2_to_1)
-    else:
-        return False
-
-
-def refine_marcs(g1, g2, new_v1, new_v2, marcs):
-    """
-    return vertices that have changed
-    """
-    new_marcs = copy.copy(marcs)
-
-    if new_v2 == UNMAPPED:
-        # zero out rows corresponding to the edges of new_v1
-        new_marcs[g1.get_edges_as_vector(new_v1)] = False
-    else:
-        # mask out every row in marcs
-        adj1 = g1.get_edges_as_vector(new_v1)
-        adj2 = g2.get_edges_as_vector(new_v2)
-        mask = np.where(adj1[:, np.newaxis], adj2, ~adj2)
-        new_marcs &= mask
-
-    return new_marcs
-
-
-class MCSResult:
-    def __init__(self):
-        self.all_maps = []
-        self.all_marcs = []
-        self.num_edges = 0
-        self.timed_out = False
-        self.nodes_visited = 0
-        self.leaves_visited = 0
 
 
 class Graph:
     def __init__(self, n_vertices, edges):
         self.n_vertices = n_vertices
         self.n_edges = len(edges)
-        self.edges = edges
+        self.edges = np.asarray(edges)
 
         cmat = np.full((n_vertices, n_vertices), False, dtype=bool)
         for i, j in edges:
@@ -244,13 +166,191 @@ class Graph:
         return g
 
 
-def max_tree_size(priority_list):
-    cur_layer_size = 1
-    layer_sizes = [cur_layer_size]
-    for neighbors in priority_list:
-        cur_layer_size *= len(neighbors)
-        layer_sizes.append(cur_layer_size)
-    return sum(layer_sizes)
+@dataclass(frozen=True)
+class Marcs:
+    marcs: NDArray[np.bool_]
+
+    @cached_property
+    def num_edges_upper_bound(self) -> int:
+        """Upper bound on the number of edges that can be put in correspondence, given the current partial mapping.
+
+        McGregor (1982) refers to this as "arcsleft".
+        """
+        num_row_edges = self.marcs.any(1).sum()
+        num_col_edges = self.marcs.any(0).sum()
+        return min(num_row_edges, num_col_edges)
+
+    @classmethod
+    def from_predicate(cls, g1: Graph, g2: Graph, predicate: NDArray[np.bool_]) -> "Marcs":
+        src_a = g1.edges[:, None, 0]
+        dst_a = g1.edges[:, None, 1]
+        src_b = g2.edges[None, :, 0]
+        dst_b = g2.edges[None, :, 1]
+
+        # An edge mapping is allowed in two cases:
+        # 1) src_a can map to src_b, and dst_a can map dst_b
+        # 2) src_a can map to dst_b, and dst_a can map src_b
+        # The mapping is allowed iff (1) or (2) is true
+
+        marcs = np.logical_or(
+            predicate[src_a, src_b] & predicate[dst_a, dst_b],
+            predicate[src_a, dst_b] & predicate[dst_a, src_b],
+        )
+
+        return Marcs(marcs)
+
+    def refine(self, g1: Graph, g2: Graph, new_v1: int, new_v2: int) -> "Marcs":
+        """Set to False entries in marcs corresponding to edge pairs that can no longer correspond under the addition of
+        (new_v1, new_v2) to the mapping"""
+
+        # TODO: handle case when new_v2 is demapped
+        # (i.e., set to False columns corresponding to the edges incident on new_v2)
+        assert new_v1 != UNMAPPED
+
+        new_marcs = np.array(self.marcs)
+        e1 = g1.get_edges_as_vector(new_v1)
+
+        if new_v2 == UNMAPPED:
+            # Set to False rows corresponding to the edges incident on new_v1
+            new_marcs[e1, :] = False
+        else:
+            e2 = g2.get_edges_as_vector(new_v2)
+
+            # Set to False edge pairs (e1, e2) where either
+            # 1. e1 connects to new_v1 but e2 does NOT connect to new_v2
+            # 2. e1 does NOT connect to new_v1 but e2 connects to new_v2
+            mask = e1[:, None] == e2[None, :]
+            new_marcs &= mask
+
+        return Marcs(new_marcs)
+
+
+@dataclass(frozen=True)
+class AtomMap:
+    a_to_b: Tuple[int, ...]
+    b_to_a: Tuple[int, ...]
+
+    @classmethod
+    def init(cls, n_1: int, n_2: int) -> "AtomMap":
+        return cls((UNMAPPED,) * n_1, (UNMAPPED,) * n_2)
+
+    def add(self, new_v1: int, new_v2: int) -> "AtomMap":
+        def set_at(xs: Tuple[int, ...], idx: int, val: int) -> Tuple[int, ...]:
+            return xs[:idx] + (val,) + xs[idx + 1 :]
+
+        return AtomMap(
+            set_at(self.a_to_b, new_v1, new_v2),
+            set_at(self.b_to_a, new_v2, new_v1),
+        )
+
+    @cached_property
+    def core_size(self):
+        return sum(1 for j in self.a_to_b if j != UNMAPPED)
+
+
+def _verify_map_preserves_core_edges(g1: Graph, g2: Graph, new_v1: int, new_v2: int, atom_map: AtomMap) -> bool:
+    def verify(g1: Graph, g2: Graph, new_v1: int, map_1_to_2: Sequence[int]):
+        for e1 in g1.get_edges(new_v1):
+            src, dst = g1.edges[e1]
+            src_2, dst_2 = map_1_to_2[src], map_1_to_2[dst]
+            if src_2 != UNMAPPED and dst_2 != UNMAPPED:
+                # both ends are mapped
+                # see if this edge is present in g2
+                if not g2.cmat[src_2][dst_2]:
+                    return False
+        return True
+
+    return verify(g1, g2, new_v1, atom_map.a_to_b) and verify(g2, g1, new_v2, atom_map.b_to_a)
+
+
+@dataclass(frozen=True)
+class Node:
+    atom_map: AtomMap
+    marcs: Marcs
+    layer: int
+
+    @classmethod
+    def init(cls, g1: Graph, g2: Graph, predicate: NDArray[np.bool_]) -> "Node":
+        return cls(AtomMap.init(g1.n_vertices, g2.n_vertices), Marcs.from_predicate(g1, g2, predicate), 0)
+
+    def add(self, g1: Graph, g2: Graph, new_v2: int) -> "Node":
+        # TODO: further refine the marcs matrix accounting for nodes in g2 that are implicitly demapped (by looking at
+        # priority_idxs; probably requires extra bookkeeping to be fast)
+        return Node(
+            self.atom_map.add(self.layer, new_v2),
+            self.marcs.refine(g1, g2, self.layer, new_v2),
+            self.layer + 1,
+        )
+
+    def skip(self, g1: Graph, g2: Graph) -> "Node":
+        # TODO: further refine the marcs matrix accounting for nodes in g2 that are implicitly demapped (by looking at
+        # priority_idxs; probably requires extra bookkeeping to be fast)
+        return Node(
+            self.atom_map,
+            self.marcs.refine(g1, g2, self.layer, UNMAPPED),
+            self.layer + 1,
+        )
+
+    @cached_property
+    def is_leaf(self):
+        return self.layer == len(self.atom_map.a_to_b)
+
+    @cached_property
+    def priority(self):
+        """Compute the priority of this node. By convention, lowest numerical value is highest priority"""
+        return (-self.marcs.num_edges_upper_bound, -self.layer)
+
+    def __lt__(self, other: "Node") -> bool:
+        return self.priority < other.priority
+
+
+@dataclass(frozen=True)
+class MCSResult:
+    all_maps: Tuple[Tuple[int, ...], ...]
+    all_marcs: Tuple[NDArray, ...]
+    num_edges: int
+    timed_out: bool
+    nodes_visited: int
+    leaves_visited: int
+
+    @classmethod
+    def from_nodes(
+        cls, nodes: Iterable[Node], leaf_filter_fxn: Callable[[Tuple[int, ...]], bool], max_nodes: int, max_leaves: int
+    ) -> "MCSResult":
+        all_maps: List[Tuple[int, ...]] = []
+        all_marcs: List[NDArray[np.bool_]] = []
+
+        node = None
+        nodes_visited = 0
+        leaves_visited = 0
+        timed_out = False
+
+        for nodes_visited, node in enumerate(nodes, 1):
+            if node.is_leaf and node.atom_map.core_size > 0:
+                if leaf_filter_fxn(node.atom_map.a_to_b):
+                    all_maps.append(node.atom_map.a_to_b)
+                    all_marcs.append(node.marcs.marcs)
+
+                leaves_visited += 1
+
+                if leaves_visited == max_leaves:
+                    timed_out = True
+                    break
+
+            if nodes_visited == max_nodes:
+                timed_out = True
+                break
+
+        assert node is not None, "found no valid mappings"
+
+        return MCSResult(
+            tuple(all_maps),
+            tuple(all_marcs),
+            node.marcs.num_edges_upper_bound,
+            timed_out=timed_out,
+            nodes_visited=nodes_visited,
+            leaves_visited=leaves_visited,
+        )
 
 
 def build_predicate_matrix(n_a, n_b, priority_idxs):
@@ -270,7 +370,7 @@ class NoMappingError(Exception):
     pass
 
 
-@dataclass
+@dataclass(frozen=True)
 class MCSDiagnostics:
     total_nodes_visited: int
     total_leaves_visited: int
@@ -303,10 +403,10 @@ def mcs(
     enforce_core_core,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
-    min_threshold,
+    min_num_edges: int,
     initial_mapping,
-    filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
-    leaf_filter_fxn: Callable[[Sequence[int]], bool] = lambda core: True,
+    filter_fxn: Callable[[Sequence[int]], bool] = lambda _: True,
+    leaf_filter_fxn: Callable[[Sequence[int]], bool] = lambda _: True,
 ) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
     assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
@@ -314,231 +414,150 @@ def mcs(
     predicate = build_predicate_matrix(n_a, n_b, priority_idxs)
     g_a = Graph(n_a, bonds_a)
     g_b = Graph(n_b, bonds_b)
-    base_marcs = _initialize_marcs_given_predicate(g_a, g_b, predicate)
 
-    base_map_a_to_b = [UNMAPPED] * n_a
-    base_map_b_to_a = [UNMAPPED] * n_b
+    init_node = Node.init(g_a, g_b, predicate)
+
     if initial_mapping is not None:
-        for a, b in initial_mapping:
-            base_map_a_to_b[a] = b
-            base_map_b_to_a[b] = a
-            base_marcs = refine_marcs(g_a, g_b, a, b, base_marcs)
+        initial_mapping_dict = {a: b for a, b in initial_mapping}
+        for a in range(len(initial_mapping)):
+            init_node = init_node.add(g_a, g_b, initial_mapping_dict.get(a, UNMAPPED))
 
-    base_layer = len(initial_mapping)
+    if init_node.marcs.num_edges_upper_bound == 0:
+        raise NoMappingError("No possible mapping given the predicate matrix")
+
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
     # Keep start time for debugging purposes below
     # import time
     # start_time = time.time()  # noqa
 
-    # run in reverse by guessing max # of edges to avoid getting stuck in minima.
-    max_threshold = _arcs_left(base_marcs)
-    if max_threshold < 1:
-        raise NoMappingError("No possible mapping given the predicate matrix, verify molecules are aligned")
+    cached_leaf_filter_fxn = cache(leaf_filter_fxn)
 
-    total_nodes_visited = 0
-    total_leaves_visited = 0
-    for idx in range(max_threshold):
-        cur_threshold = max_threshold - idx
-        if cur_threshold < min_threshold:
-            raise NoMappingError(f"Unable to find mapping with at least {min_threshold} edges")
-        # Construct copies of the base map
-        map_a_to_b = list(base_map_a_to_b)
-        map_b_to_a = list(base_map_b_to_a)
-        mcs_result = MCSResult()
-        recursion(
-            g_a,
-            g_b,
-            map_a_to_b,
-            map_b_to_a,
-            base_layer,
-            base_marcs,
-            mcs_result,
-            priority_idxs,
-            # Decrement the max visits by the number already visited to ensure constant wall clock time
-            max_visits - total_nodes_visited,
-            max_cores,
-            cur_threshold,
-            enforce_core_core,
-            max_connected_components,
-            min_connected_component_size,
-            filter_fxn,
-            leaf_filter_fxn,
-        )
+    expand = make_expand(
+        g_a,
+        g_b,
+        priority_idxs,
+        enforce_core_core,
+        max_connected_components,
+        min_connected_component_size,
+        filter_fxn,
+        cached_leaf_filter_fxn,
+    )
 
-        total_nodes_visited += mcs_result.nodes_visited
-        total_leaves_visited += mcs_result.leaves_visited
+    nodes = best_first(expand, init_node, min_num_edges)
 
-        if len(mcs_result.all_maps) > 0:
-            # If we timed out but got cores, throw a warning
-            if mcs_result.timed_out and len(mcs_result.all_maps) < max_cores:
-                warnings.warn(
-                    f"Inexhaustive search: reached max number of visits ({max_visits}) and found only "
-                    f"{len(mcs_result.all_maps)} out of {max_cores} desired cores.",
-                    MaxVisitsWarning,
-                )
-            # don't remove this comment and the one below, useful for debugging!
-            # print(
-            # f"==SUCCESS==[NODES VISITED {mcs_result.nodes_visited} | CORE_SIZE {len([x != UNMAPPED for x in mcs_result.all_maps[0]])} | NUM_CORES {len(mcs_result.all_maps)} | NUM_EDGES {mcs_result.num_edges} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
-            # )
-            break
-        elif mcs_result.timed_out:
-            # If timed out, either due to max_visits or max_cores, raise exception.
-            raise NoMappingError(
-                f"Exceeded max number of visits/cores - no valid cores could be found: {total_nodes_visited} nodes visited."
+    mcs_result = MCSResult.from_nodes(nodes, cached_leaf_filter_fxn, max_visits, max_cores)
+
+    if len(mcs_result.all_maps) > 0:
+        # If we timed out but got cores, throw a warning
+        if mcs_result.timed_out and len(mcs_result.all_maps) < max_cores:
+            warnings.warn(
+                f"Inexhaustive search: reached max number of visits ({max_visits}) and found only "
+                + f"{len(mcs_result.all_maps)} out of {max_cores} desired cores.",
+                MaxVisitsWarning,
             )
-        # else:
+        # don't remove this comment and the one below, useful for debugging!
         # print(
-        # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
+        # f"==SUCCESS==[NODES VISITED {mcs_result.nodes_visited} | CORE_SIZE {len([x != UNMAPPED for x in mcs_result.all_maps[0]])} | NUM_CORES {len(mcs_result.all_maps)} | NUM_EDGES {mcs_result.num_edges} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
         # )
 
+    elif mcs_result.timed_out:
+        # If timed out, either due to max_visits or max_cores, raise exception.
+        raise NoMappingError(
+            f"Exceeded max number of visits/cores - no valid cores could be found: {mcs_result.nodes_visited} nodes visited."
+        )
+    # else:
+    # print(
+    # f"==FAILED==[NODES VISITED {mcs_result.nodes_visited} | time taken: {time.time()-start_time} | time out? {mcs_result.timed_out}]====="
+    # )
+
     if len(mcs_result.all_maps) == 0:
-        raise NoMappingError("Unable to find mapping")
+        raise NoMappingError(f"Unable to find mapping with at least {min_num_edges} edges")
 
     all_cores = []
 
-    for atom_map_1_to_2 in mcs_result.all_maps:
-        core_array = perm_to_core(atom_map_1_to_2)
+    for a_to_b in mcs_result.all_maps:
+        core_array = perm_to_core(a_to_b)
         all_cores.append(core_array)
 
     return (
         all_cores,
-        mcs_result.all_marcs,
+        list(mcs_result.all_marcs),
         MCSDiagnostics(
-            total_nodes_visited=total_nodes_visited,
-            total_leaves_visited=total_leaves_visited,
+            total_nodes_visited=mcs_result.nodes_visited,
+            total_leaves_visited=mcs_result.leaves_visited,
             core_size=len(all_cores[0]),
             num_cores=len(all_cores),
         ),
     )
 
 
-def atom_map_add(map_1_to_2, map_2_to_1, idx, jdx):
-    map_1_to_2[idx] = jdx
-    map_2_to_1[jdx] = idx
-
-
-def atom_map_pop(map_1_to_2, map_2_to_1, idx, jdx):
-    map_1_to_2[idx] = UNMAPPED
-    map_2_to_1[jdx] = UNMAPPED
-
-
-def recursion(
+def make_expand(
     g1: Graph,
     g2: Graph,
-    atom_map_1_to_2,
-    atom_map_2_to_1,
-    layer,
-    marcs,
-    mcs_result: MCSResult,
     priority_idxs,
-    max_visits,
-    max_cores,
-    threshold,
     enforce_core_core,
     max_connected_components: Optional[int],
     min_connected_component_size: int,
     filter_fxn: Callable[[Sequence[int]], bool],
     leaf_filter_fxn: Callable[[Sequence[int]], bool],
-):
-    if mcs_result.nodes_visited >= max_visits:
-        mcs_result.timed_out = True
-        return
+) -> Callable[[Node, int], Tuple[Sequence[Node], int]]:
+    def satisfies_connected_components_constraints(node: Node) -> bool:
+        if max_connected_components is not None or min_connected_component_size > 1:
+            g1_mapped_nodes = {a1 for a1, a2 in enumerate(node.atom_map.a_to_b[: node.layer]) if a2 != UNMAPPED}
 
-    if len(mcs_result.all_maps) >= max_cores:
-        mcs_result.timed_out = True
-        return
+            if g1_mapped_nodes:
+                # Nodes in g1 are visited in order, so nodes left to visit are [layer, layer + 1, ..., n - 1]
+                g1_unvisited_nodes = set(range(node.layer, g1.n_vertices))
+                if g1.mapping_incompatible_with_cc_constraints(
+                    g1_mapped_nodes, g1_unvisited_nodes, max_connected_components, min_connected_component_size
+                ):
+                    return False
 
-    num_edges = _arcs_left(marcs)
-    if num_edges < threshold:
-        return
+            g2_mapped_nodes = {a2 for a2, a1 in enumerate(node.atom_map.b_to_a) if a1 != UNMAPPED}
 
-    if max_connected_components is not None or min_connected_component_size > 1:
-        g1_mapped_nodes = {a1 for a1, a2 in enumerate(atom_map_1_to_2[:layer]) if a2 != UNMAPPED}
+            if g2_mapped_nodes:
+                # Nodes in g2 are visited in the order determined by priority_idxs. Nodes may be repeated in priority_idxs,
+                # but we skip over nodes that have already been mapped.
+                g2_unvisited_nodes = {
+                    a2 for a2s in priority_idxs[node.layer :] for a2 in a2s if a2 not in g2_mapped_nodes
+                }
+                if g2.mapping_incompatible_with_cc_constraints(
+                    g2_mapped_nodes, g2_unvisited_nodes, max_connected_components, min_connected_component_size
+                ):
+                    return False
 
-        if g1_mapped_nodes:
-            # Nodes in g1 are visited in order, so nodes left to visit are [layer, layer + 1, ..., n - 1]
-            g1_unvisited_nodes = set(range(layer, g1.n_vertices))
-            if g1.mapping_incompatible_with_cc_constraints(
-                g1_mapped_nodes, g1_unvisited_nodes, max_connected_components, min_connected_component_size
-            ):
-                return
+        return True
 
-        g2_mapped_nodes = {a2 for a2, a1 in enumerate(atom_map_2_to_1) if a1 != UNMAPPED}
+    def expand(node: Node, best_num_edges: int) -> Tuple[List[Node], int]:
+        if node.marcs.num_edges_upper_bound < best_num_edges:
+            return [], best_num_edges
 
-        if g2_mapped_nodes:
-            # Nodes in g2 are visited in the order determined by priority_idxs. Nodes may be repeated in priority_idxs,
-            # but we skip over nodes that have already been mapped.
-            g2_unvisited_nodes = {a2 for a2s in priority_idxs[layer:] for a2 in a2s if a2 not in g2_mapped_nodes}
-            if g2.mapping_incompatible_with_cc_constraints(
-                g2_mapped_nodes, g2_unvisited_nodes, max_connected_components, min_connected_component_size
-            ):
-                return
+        if node.is_leaf:
+            new_best_num_edges = (
+                max(best_num_edges, node.marcs.num_edges_upper_bound)
+                if leaf_filter_fxn(node.atom_map.a_to_b)
+                else best_num_edges
+            )
+            return [], new_best_num_edges
 
-    mcs_result.nodes_visited += 1
-    n_a = g1.n_vertices
+        mapped_children = [
+            child
+            for new_v2 in priority_idxs[node.layer]
+            if node.atom_map.b_to_a[new_v2] == UNMAPPED
+            for child in [node.add(g1, g2, new_v2)]
+            if (not enforce_core_core or _verify_map_preserves_core_edges(g1, g2, node.layer, new_v2, child.atom_map))
+        ]
 
-    # leaf-node, every atom has been mapped
-    if layer == n_a:
-        if num_edges == threshold:
-            mcs_result.leaves_visited += 1
-            if not leaf_filter_fxn(atom_map_1_to_2):
-                return
+        unmapped_child = node.skip(g1, g2)
 
-            mcs_result.all_maps.append(copy.copy(atom_map_1_to_2))
-            mcs_result.all_marcs.append(copy.copy(marcs))
-            mcs_result.num_edges = num_edges
-        return
+        children = [
+            child
+            for child in mapped_children + [unmapped_child]
+            if child.marcs.num_edges_upper_bound >= best_num_edges
+            if satisfies_connected_components_constraints(child)
+            if filter_fxn(child.atom_map.a_to_b)
+        ]
 
-    for jdx in priority_idxs[layer]:
-        if atom_map_2_to_1[jdx] == UNMAPPED:  # optimize later
-            atom_map_add(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
-            if enforce_core_core and not _verify_core_is_connected(
-                g1, g2, layer, jdx, atom_map_1_to_2, atom_map_2_to_1
-            ):
-                pass
-            elif not filter_fxn(atom_map_1_to_2):
-                pass
-            else:
-                new_marcs = refine_marcs(g1, g2, layer, jdx, marcs)
-                recursion(
-                    g1,
-                    g2,
-                    atom_map_1_to_2,
-                    atom_map_2_to_1,
-                    layer + 1,
-                    new_marcs,
-                    mcs_result,
-                    priority_idxs,
-                    max_visits,
-                    max_cores,
-                    threshold,
-                    enforce_core_core,
-                    max_connected_components,
-                    min_connected_component_size,
-                    filter_fxn,
-                    leaf_filter_fxn,
-                )
-            atom_map_pop(atom_map_1_to_2, atom_map_2_to_1, layer, jdx)
+        return children, best_num_edges
 
-    # always allow for explicitly not mapping layer atom
-    # nit: don't need to check for connected core if mapping to None
-    new_marcs = refine_marcs(g1, g2, layer, UNMAPPED, marcs)
-
-    recursion(
-        g1,
-        g2,
-        atom_map_1_to_2,
-        atom_map_2_to_1,
-        layer + 1,
-        new_marcs,
-        mcs_result,
-        priority_idxs,
-        max_visits,
-        max_cores,
-        threshold,
-        enforce_core_core,
-        max_connected_components,
-        min_connected_component_size,
-        filter_fxn,
-        leaf_filter_fxn,
-    )
+    return expand

@@ -32,12 +32,12 @@ from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 #   if atom i in mol_a is compatible with atom j in mol_b, and 0 otherwise. We do not implement a bond-bond compatibility matrix.
 # - allow for the generation of disconnected atom-mappings, which is very useful for linker changes etc.
 # - re-order the vertices in graph based on the degree, this penalizes None mapping by the degree of the vertex
-# - provide a hard guarantee for timeout, i.e. completion of the algorithm implies global optimum(s) have been found
 # - when searching for atoms in mol_b to map, we prioritize based on distance
-# - runs the recursive algorithm in iterations with thresholds, which avoids us getting stuck in a branch with a low
-#   max_num_edges. we've seen cases where we get stuck in an edge size of 45 but optimal edge mapping has 52 edges.
-# - termination guarantees correctness. otherwise an assertion is thrown since the distance (in terms of # of edges mapped)
-#   is unknown relative to optimal.
+# - uses a best-first search ordering with an upper bound on the number of edges in correspondence (i.e. arcs_left) as
+#   the heuristic. This guarantees that the optimal (in the sense of maximum number of edges) mappings are returned
+#   first (see https://github.com/proteneer/timemachine/pull/1415#issue-2627969721 for details)
+# - termination (without a timeout warning) guarantees optimality of the solution(s). If timeout occurs before an
+#   exhaustive search can be performed, a warning is raised
 
 # Engineering Tricks
 # ------------------
