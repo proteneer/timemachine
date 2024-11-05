@@ -203,12 +203,16 @@ class Marcs:
         """Set to False entries in marcs corresponding to edge pairs that can no longer correspond under the addition of
         (new_v1, new_v2) to the mapping"""
 
+        # TODO: handle case when new_v2 is demapped
+        # (i.e., set to False columns corresponding to the edges incident on new_v2)
+        assert new_v1 != UNMAPPED
+
         new_marcs = np.array(self.marcs)
         e1 = g1.get_edges_as_vector(new_v1)
 
         if new_v2 == UNMAPPED:
-            # Set to False rows corresponding to the edges of new_v1
-            new_marcs[e1] = False
+            # Set to False rows corresponding to the edges incident on new_v1
+            new_marcs[e1, :] = False
         else:
             e2 = g2.get_edges_as_vector(new_v2)
 
@@ -270,6 +274,8 @@ class Node:
         return cls(AtomMap.init(g1.n_vertices, g2.n_vertices), Marcs.from_predicate(g1, g2, predicate), 0)
 
     def add(self, g1: Graph, g2: Graph, new_v2: int) -> "Node":
+        # TODO: further refine the marcs matrix accounting for nodes in g2 that are implicitly demapped (by looking at
+        # priority_idxs; probably requires extra bookkeeping to be fast)
         return Node(
             self.atom_map.add(self.layer, new_v2),
             self.marcs.refine(g1, g2, self.layer, new_v2),
@@ -277,6 +283,8 @@ class Node:
         )
 
     def skip(self, g1: Graph, g2: Graph) -> "Node":
+        # TODO: further refine the marcs matrix accounting for nodes in g2 that are implicitly demapped (by looking at
+        # priority_idxs; probably requires extra bookkeeping to be fast)
         return Node(
             self.atom_map,
             self.marcs.refine(g1, g2, self.layer, UNMAPPED),
