@@ -36,7 +36,7 @@ def estimate_relative_free_energy_hrex_bb(
 
     combined_prefix = "hrex"
 
-    def make_optimized_initial_state_fn(lamb: float) -> InitialState:
+    def make_optimized_initial_state_fn(lamb: float, _: bool) -> InitialState:
         state, _, _ = get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb)
         return state
 

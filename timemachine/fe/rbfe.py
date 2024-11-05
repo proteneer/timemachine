@@ -7,6 +7,7 @@ from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, c
 import numpy as np
 from numpy.typing import NDArray
 from openmm import app
+from pymbar import MBAR
 from rdkit import Chem
 
 from timemachine.constants import DEFAULT_POSITIONAL_RESTRAINT_K, DEFAULT_PRESSURE, DEFAULT_TEMP
@@ -20,6 +21,7 @@ from timemachine.fe.free_energy import (
     MDParams,
     SimulationResult,
     Trajectory,
+    compute_u_kn,
     make_pair_bar_plots,
     run_sims_bisection,
     run_sims_hrex,
@@ -40,6 +42,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.thermostat.utils import sample_velocities
+from timemachine.optimize.protocol import greedily_optimize_protocol, make_fast_approx_overlap_distance_fxn
 from timemachine.potentials import BoundPotential, jax_utils
 
 DEFAULT_NUM_WINDOWS = 48
@@ -274,9 +277,57 @@ def setup_initial_states(
     return initial_states
 
 
+def rebalance_lambda_schedule(
+    initial_states: Sequence[InitialState],
+    setup_initial_state_fn: Callable[[float], InitialState],
+    trajectories: Sequence[Trajectory],
+    target_overlap: float,
+    xtol: float = 1e-4,
+) -> Sequence[InitialState]:
+    assert 0.0 < target_overlap <= 1.0
+    assert len(initial_states) == len(trajectories)
+    initial_lambs = np.array([state.lamb for state in initial_states])
+
+    lambda_min = min(initial_lambs)
+    lambda_max = max(initial_lambs)
+
+    u_kn, n_k = compute_u_kn(trajectories, initial_states)
+
+    f_k = MBAR(u_kn, n_k).f_k
+
+    overlap_dist = make_fast_approx_overlap_distance_fxn(initial_lambs, u_kn, f_k, n_k)
+    target_dist = 1.0 - target_overlap
+
+    greedy_prot = greedily_optimize_protocol(
+        overlap_dist, target_dist, bisection_xtol=xtol, protocol_interval=(lambda_min, lambda_max)
+    )
+    new_schedule = np.asarray(greedy_prot)
+    if len(greedy_prot) > len(initial_lambs):
+        warnings.warn("Optimized schedule has more windows than initial schedule, falling back to initial schedule")
+        new_schedule = initial_lambs
+    else:
+        print(
+            f"Optimized schedule has {len(new_schedule)} windows compared to {len(initial_lambs)} windows initially, target overlap {target_overlap}"
+        )
+
+    return [setup_initial_state_fn(lamb) for lamb in new_schedule]
+
+
+def get_nearest_state_idx(lamb: float, initial_states: Sequence[InitialState]) -> int:
+    """
+    Return the index of the initial state with the closest lambda value. When determining the nearest initial state, will only consider states on the same side of
+    lambda=0.5 as the specified lambda value. This imitates the behavior of `optimize_coordinates` which minimizes from
+    the endstate conformations towards lambda 0.5, resulting in a discontinuity in the conformation at lambda=0.5.
+    """
+    states_subset = [(i, s.lamb) for i, s in enumerate(initial_states) if (s.lamb <= 0.5) == (lamb <= 0.5)]
+    nearest_optimized = min(states_subset, key=lambda s: abs(lamb - s[1]))
+    return nearest_optimized[0]
+
+
 def setup_optimized_initial_state(
     st: SingleTopology,
     lamb: float,
+    optimize: bool,
     host: Optional[Host],
     optimized_initial_states: Sequence[InitialState],
     temperature: float,
@@ -298,27 +349,24 @@ def setup_optimized_initial_state(
     InitialState
         Optimized at the specified lambda value
     """
-
-    # NOTE: The current approach for generating optimized conformations in `optimize_coordinates` creates a
-    # discontinuity at lambda=0.5. Ensure that we pick a pre-optimized state on the same side of 0.5 as `lamb`
-    states_subset = [s for s in optimized_initial_states if (s.lamb <= 0.5) == (lamb <= 0.5)]
-    nearest_optimized = min(states_subset, key=lambda s: abs(lamb - s.lamb))
+    nearest_optimized_idx = get_nearest_state_idx(lamb, optimized_initial_states)
+    nearest_optimized = optimized_initial_states[nearest_optimized_idx]
 
     if np.isclose(lamb, nearest_optimized.lamb):
         return nearest_optimized
     else:
         initial_state = setup_initial_state(st, lamb, host, temperature, seed)
-        free_idxs = get_free_idxs(nearest_optimized)
-        initial_state.x0 = optimize_coords_state(
-            initial_state.potentials,
-            nearest_optimized.x0,
-            initial_state.box0,
-            free_idxs,
-            # assertion can lead to spurious errors when new state is close to an existing one
-            assert_energy_decreased=False,
-            restrained_idxs=initial_state.interacting_atoms,
-            k=k,
-        )
+        if optimize:
+            free_idxs = get_free_idxs(nearest_optimized)
+            initial_state.x0 = optimize_coords_state(
+                initial_state.potentials,
+                nearest_optimized.x0,
+                initial_state.box0,
+                free_idxs,
+                # assertion can lead to spurious errors when new state is close to an existing one
+                assert_energy_decreased=False,
+                k=k,
+            )
         return initial_state
 
 
@@ -657,6 +705,7 @@ def estimate_relative_free_energy_bisection(
     make_optimized_initial_state = partial(
         setup_optimized_initial_state,
         single_topology,
+        optimize=True,
         host=host,
         optimized_initial_states=initial_states,
         temperature=temperature,
@@ -702,18 +751,63 @@ def estimate_relative_free_energy_bisection_hrex_impl(
     lambda_max: float,
     md_params: MDParams,
     n_windows: int,
-    make_optimized_initial_state_fn: Callable[[float], InitialState],
+    make_initial_state_fn: Callable[[float, bool], InitialState],
     combined_prefix: str,
     min_overlap: Optional[float] = None,
 ) -> HREXSimulationResult:
+    """
+    Parameters
+    ----------
+    temperature: float
+        Temperature in K
+
+    lambda_min: float
+        Minimum value of lambda for the transformation; typically 0.0.
+
+    lambda_max: float
+        Maximum value of lambda for the transformation; typically 1.0.
+
+    md_params: MDParams
+        Parameters for the equilibration and production MD. md_params.hrex_params must be provided.
+
+    n_windows: int
+        Maximum number of windows to run simulations with, must be at least 2.
+
+    make_initial_state_fn: callable(lambda: float, optimize_state: bool) -> InitialState
+        Function that constructs an InitialState object given a lambda and a flag indicating whether to
+        optimize the coordinates of the InitialState. Optimization is performed during bisection, but disabled
+        when re-balancing the lambda schedule.
+
+    combined_prefix: str
+        A prefix to append to figures
+
+    min_overlap: float or None, optional
+        If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
+        value. When given, the final number of windows may be less than or equal to n_windows.
+
+    Returns
+    -------
+    HREXSimulationResult
+        Collected data from the simulation (see class for storage information).
+
+    """
     if n_windows is None:
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
+    assert md_params.hrex_params is not None, "hrex_params must be set to use HREX"
+    if min_overlap is not None and md_params.hrex_params.optimize_target_overlap is not None:
+        assert (
+            min_overlap >= md_params.hrex_params.optimize_target_overlap
+        ), "Target overlap must be less than or equal to bisection min overlap"
+
     try:
         # First phase: bisection to determine lambda spacing
-        assert md_params.hrex_params is not None, "hrex_params must be set to use HREX"
         md_params_bisection = replace(md_params, n_frames=md_params.hrex_params.n_frames_bisection)
+
+        # Always optimize during bisection
+        make_optimized_initial_state_fn = lambda lamb: make_initial_state_fn(lamb, True)
+
         results, trajectories_by_state = run_sims_bisection(
             [lambda_min, lambda_max],
             make_optimized_initial_state_fn,
@@ -729,8 +823,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         has_barostat_by_state = [initial_state.barostat is not None for initial_state in initial_states]
         assert all(has_barostat_by_state) or not any(has_barostat_by_state)
 
-        # Second phase: sample initial states determined by bisection using HREX
-
         def get_mean_final_barostat_volume_scale_factor(trajectories_by_state: Iterable[Trajectory]) -> Optional[float]:
             scale_factors = [traj.final_barostat_volume_scale_factor for traj in trajectories_by_state]
             if any(x is not None for x in scale_factors):
@@ -743,27 +835,48 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         mean_final_barostat_volume_scale_factor = get_mean_final_barostat_volume_scale_factor(trajectories_by_state)
         assert (mean_final_barostat_volume_scale_factor is not None) == all(has_barostat_by_state)
 
-        # Use equilibrated samples and the average of the final barostat volume scale factors from bisection phase to
-        # initialize states for HREX
-        initial_states_hrex = [
-            replace(
-                initial_state,
+        def get_initial_state(lamb: float) -> InitialState:
+            state_idx = get_nearest_state_idx(lamb, initial_states)
+            nearest_state = initial_states[state_idx]
+            traj = trajectories_by_state[state_idx]
+            if np.isclose(nearest_state.lamb, lamb):
+                state = nearest_state
+            else:
+                # If the lambda value is different, reconstruct the initial state to the correct parameters
+                state = make_initial_state_fn(lamb, False)
+
+                # Verify that the forces of the nearest lambda value's frames are stable, since frames were not generated
+                # with the same parameters
+                du_dx, _ = state.to_bound_impl().execute(traj.frames[-1], traj.boxes[-1], compute_u=False)
+                minimizer.check_force_norm(-du_dx)
+            # Use equilibrated samples and the average of the final barostat volume scale factors from bisection phase to
+            # initialize states for HREX
+            updated_state = replace(
+                state,
                 x0=traj.frames[-1],
                 v0=traj.final_velocities,  # type: ignore
                 box0=traj.boxes[-1],
                 barostat=(
                     replace(
-                        initial_state.barostat,
+                        state.barostat,
                         adaptive_scaling_enabled=False,
                         initial_volume_scale_factor=mean_final_barostat_volume_scale_factor,
                     )
-                    if initial_state.barostat
+                    if state.barostat
                     else None
                 ),
             )
-            for initial_state, traj in zip(initial_states, trajectories_by_state)
-        ]
+            # Verify that the forces of the system are reasonable
+            return updated_state
 
+        if md_params.hrex_params.optimize_target_overlap is not None:
+            initial_states_hrex = rebalance_lambda_schedule(
+                initial_states, get_initial_state, trajectories_by_state, md_params.hrex_params.optimize_target_overlap
+            )
+        else:
+            initial_states_hrex = [get_initial_state(s.lamb) for s in initial_states]
+
+        # Second phase: sample initial states determined by bisection using HREX
         pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
             initial_states_hrex,
             replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
@@ -842,6 +955,7 @@ def estimate_relative_free_energy_bisection_hrex(
     min_overlap: float or None, optional
         If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
         value. When given, the final number of windows may be less than or equal to n_windows.
+
     min_cutoff: float or None, optional
         Throw error if any atom moves more than this distance (nm) after minimization
 
