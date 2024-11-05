@@ -10,7 +10,6 @@ from numpy.typing import NDArray
 
 from .tree_search import best_first
 
-# used in main recursion() loop
 UNMAPPED = -1  # (UNVISITED) OR (VISITED AND DEMAPPED)
 
 
