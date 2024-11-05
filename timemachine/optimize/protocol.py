@@ -44,7 +44,7 @@ References
 3. This is intended to be used in the context of some initial protocol, e.g. from bisection
     * Bisection guarantees that overlap(lams[i],lams[i+1]) > threshold for all i, but does not minimize len(lams)
 """
-
+import warnings
 from typing import Callable, cast
 
 import numpy as np
@@ -383,7 +383,7 @@ def greedily_optimize_protocol(
         protocol.append(next_lam)
 
         if t == max_iterations - 1:
-            print(UserWarning("Exceeded max_iterations!"))
+            warnings.warn("Exceeded max_iterations!")
 
     if protocol[-1] != 1.0:
         protocol.append(1.0)

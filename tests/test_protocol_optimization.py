@@ -170,14 +170,19 @@ def test_overlap_rebalancing_on_gaussian():
     # make a fast d(lam_i, lam_j) fxn
     overlap_dist = make_fast_approx_overlap_distance_fxn(initial_lams, u_kn, f_k, N_k)
 
-    print("initial protocol: ")
-    _ = summarize_protocol(initial_lams, overlap_dist)
-
     # optimize for a target neighbor distance
     target_overlap = 0.1
     target_dist = 1 - target_overlap
-    print(f"optimized with target dist = {target_dist} (target overlap = {target_overlap}):")
     xtol = 1e-4
+
+    print("initial protocol: ")
+    _ = summarize_protocol(initial_lams, overlap_dist)
+
+    print(f"optimized with target dist = {target_dist} (target overlap = {target_overlap}):")
+    # Verify that if the iterations max out, a warning is provided
+    with pytest.warns(UserWarning):
+        greedily_optimize_protocol(overlap_dist, target_dist, bisection_xtol=xtol, max_iterations=1)
+
     greedy_prot = greedily_optimize_protocol(overlap_dist, target_dist, bisection_xtol=xtol)
     greedy_nbr_dist = summarize_protocol(greedy_prot, overlap_dist)
     assert np.max(greedy_nbr_dist) <= target_dist + (10 * xtol)
