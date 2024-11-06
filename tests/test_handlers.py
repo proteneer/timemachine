@@ -1193,16 +1193,18 @@ def test_environment_bcc_full_protein(protein_path):
     """
     Test that we can compute BCCs to generate per atom charge offsets and that they can be differentiated
     """
-    patterns = get_amber99ildn_patterns()
-    smirks = [x[0] for x in patterns]
-    params = [x[1] for x in patterns]
-    params = np.random.rand(len(params)) - 0.5
+    patterns = [smirks for (smirks, param) in AM1CCC_CHARGES["patterns"]]
+    # patterns = get_amber99ildn_patterns()
+    # smirks = [x[0] for x in patterns]
+    # params = [x[1] for x in patterns]
+    params = np.random.rand(len(patterns)) - 0.5
+    # params = np.zeros((len(patterns),))
 
     with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
         host_pdb = app.PDBFile(str(path_to_pdb))
         _, _, _, topology, _ = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
 
-    pbcc = nonbonded.EnvironmentBCCHandler(smirks, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
+    pbcc = nonbonded.EnvironmentBCCHandler(patterns, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
 
     # test that we can mechanically parameterize everything
     pbcc.parameterize(params)
@@ -1219,7 +1221,7 @@ def test_environment_bcc_full_protein(protein_path):
 
     # test that the partial handler gives the same results
     ff = Forcefield.load_default()
-    partial_cc = nonbonded.EnvironmentBCCPartialHandler(smirks, params, None)
+    partial_cc = nonbonded.EnvironmentBCCPartialHandler(patterns, params, None)
     pbcc2 = partial_cc.get_env_handle(topology, ff)
     np.testing.assert_array_equal(pbcc.parameterize(params), pbcc2.parameterize(params))
 

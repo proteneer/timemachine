@@ -1,4 +1,3 @@
-import ast
 import base64
 import pickle
 from collections import Counter
@@ -18,6 +17,7 @@ from timemachine.graph_utils import convert_to_nx
 
 AM1_CHARGE_CACHE = "AM1Cache"
 AM1ELF10_CHARGE_CACHE = "AM1ELF10Cache"
+AM1BCCELF10_CHARGE_CACHE = "AM1BCCELF10Cache"
 BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
 
 AM1 = "AM1"
@@ -215,6 +215,26 @@ def generate_nonbonded_idxs(mol, smirks):
             param_idxs[m[0]] = p_idx
 
     return param_idxs
+
+
+def compute_or_load_am1bcc_charges(mol):
+    """Unless already cached in mol's "AM1BCCELF10_CHARGE_CACHE" property, use OpenEye to compute AM1ELF10 partial charges."""
+
+    # check for cache
+    if not mol.HasProp(AM1BCCELF10_CHARGE_CACHE):
+        # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
+        # to be an issue that the atom ordering modifies the return values as well. A follow up
+        # with OpenEye is in order
+        # https://github.com/openforcefield/openff-toolkit/issues/983
+        am1_charges = list(oe_assign_charges(mol, AM1BCCELF10))
+
+        mol.SetProp(AM1BCCELF10_CHARGE_CACHE, base64.b64encode(pickle.dumps(am1_charges)))
+
+    else:
+        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(AM1BCCELF10_CHARGE_CACHE)))
+        assert len(am1_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
+
+    return np.array(am1_charges)
 
 
 def compute_or_load_am1_charges(mol):
@@ -531,6 +551,23 @@ class AM1BCCSolventHandler(AM1BCCHandler):
     pass
 
 
+def make_residue_mol(atoms, bonds):
+    # Generate an rdkit molecule given a list of atoms and a list of bonds
+    mw = Chem.RWMol()
+    mw.BeginBatchEdit()
+    for atom in atoms:
+        aa = Chem.Atom(atom)
+        mw.AddAtom(aa)
+
+    for src, dst in bonds:
+        mw.AddBond(src, dst, Chem.BondType.SINGLE)
+    mw.CommitBatchEdit()
+
+    for atom in mw.GetAtoms():
+        atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+    return mw
+
+
 class EnvironmentBCCHandler(SerializableMixIn):
     """
     Applies BCCs to residues in a protein. Needs a concrete openmm topology to use.
@@ -550,31 +587,6 @@ class EnvironmentBCCHandler(SerializableMixIn):
         self.params = np.array(params)
         self.env_ff = ForceField(f"{protein_ff_name}.xml", f"{water_ff_name}.xml")
 
-        # nested map of residue names to bonds to param_idxs:
-        # kv = {
-        #    "ACE": {
-        #      (1, 0): bcc_0,
-        #      (2, 3): bcc_0,
-        #      (4, 2): bcc_1,
-        #   },
-        #    "TYR": {
-        #      (6, 2): bcc_0,
-        #      (4, 1): bcc_0,
-        #      ...
-        #   },
-        #   ...
-        # }
-        self.res_to_bonds_to_param_idxs = dict()
-        for param_idx, pattern in enumerate(self.patterns):
-            res = pattern.split()
-            res_name = res[0]
-            # evaluate a string "[(1, 0), (1, 2), (1, 3)]" into actual list
-            bonds = ast.literal_eval(" ".join(res[1:]))
-            if res_name not in self.res_to_bonds_to_param_idxs:
-                self.res_to_bonds_to_param_idxs[res_name] = dict()
-            for bond in bonds:
-                self.res_to_bonds_to_param_idxs[res_name][bond] = param_idx
-
         # reverse engineered from openmm's Forcefield class
         self.topology = topology
         residueTemplates = dict()
@@ -586,7 +598,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
         # may be different from the standard residue type in the PDB file itself, eg:
         # a standard HIS tag in the input PDB is processed into the specific template type:
         # {HID,HIE,HIP}
-        template_for_residue = self.env_ff._matchAllResiduesToTemplates(
+        self.template_for_residue = self.env_ff._matchAllResiduesToTemplates(
             data, topology, residueTemplates, ignoreExternalBonds
         )
 
@@ -603,53 +615,32 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 self.initial_charges = nb_params[:, 0]  # already scaled by sqrt(ONE_4PI_EPS0)
         assert self.initial_charges is not None
 
-        bond_idxs = []
-        param_idxs = []
-        signs = []
-        bond_atomic_numbers = []
-
-        # find typing information for each bond in the topology
-        for src_atom, dst_atom in topology.bonds():
-            # don't compare name, ASP-ASP would break this when processing the amide C-N bond since
-            # those are not part of the type definitions.
-            if src_atom.residue.index == dst_atom.residue.index:
-                src_res_template_name = template_for_residue[src_atom.residue.index].name
-                dst_res_template_name = template_for_residue[dst_atom.residue.index].name
-                assert src_res_template_name == dst_res_template_name
-                if src_res_template_name == "HOH":
-                    # Skip waters
-                    continue
-                bond_idxs.append((src_atom.index, dst_atom.index))
-                bond_atomic_numbers.append((src_atom.element.atomic_number, dst_atom.element.atomic_number))
-                residue_bond_kv = self.res_to_bonds_to_param_idxs[src_res_template_name]
-                # we have to do one extra level of indirection where by we want the src_atom, dst_atom to be matched
-                # to the corresponding src_template_atom, dst_template_atom in the template definitions themselves.
-                tmpl_src_idx, tmpl_dst_idx = data.atomTemplateIndexes[src_atom], data.atomTemplateIndexes[dst_atom]
-                if (tmpl_src_idx, tmpl_dst_idx) in residue_bond_kv:
-                    param_idxs.append(residue_bond_kv[(tmpl_src_idx, tmpl_dst_idx)])
-                    signs.append(1.0)
-                elif (tmpl_dst_idx, tmpl_src_idx) in residue_bond_kv:
-                    param_idxs.append(residue_bond_kv[(tmpl_dst_idx, tmpl_src_idx)])
-                    signs.append(-1.0)
-                else:
-                    assert 0
-
-        self.bond_idxs = np.array(bond_idxs)
-        self.param_idxs = np.array(param_idxs)
-        self.signs = np.array(signs)
-        self.bond_atomic_numbers = bond_atomic_numbers
-
     def parameterize(self, params):
-        # If there aren't any matched parameters (i.e. it's all water),
-        # then there is nothing to do
-        if len(self.param_idxs) == 0:
-            return self.initial_charges
+        cur_atom = 0
+        final_charges = []
+        for i in range(len(self.template_for_residue)):
+            tfr = self.template_for_residue[i]
+            symbol_list = [atm.element.symbol for atm in tfr.atoms]
+            bond_list = tfr.bonds
+            res_mol = make_residue_mol(symbol_list, bond_list)
+            amber_charges = self.initial_charges[cur_atom : cur_atom + res_mol.GetNumAtoms()]
+            assert len(amber_charges) == res_mol.GetNumAtoms()
+            cur_atom += res_mol.GetNumAtoms()
 
-        bond_deltas = params[self.param_idxs] * self.signs
-        final_charges = apply_bond_charge_corrections(
-            self.initial_charges, self.bond_idxs, bond_deltas, runtime_validate=False
-        )
-        return final_charges
+            if res_mol.GetNumAtoms() == 3:  # water
+                final_charges.append(amber_charges)
+                continue
+
+            bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(res_mol, self.patterns)
+            deltas = params[type_idxs]
+            q_params = apply_bond_charge_corrections(
+                amber_charges,
+                bond_idxs,
+                deltas,
+                runtime_validate=False,  # required for jit
+            )
+            final_charges.append(q_params)
+        return jnp.concatenate(final_charges, axis=0)
 
 
 class EnvironmentBCCPartialHandler(SerializableMixIn):
@@ -719,7 +710,6 @@ class AM1CCCHandler(SerializableMixIn):
 
         props: any
         """
-
         assert len(smirks) == len(params)
 
         self.smirks = smirks
@@ -776,4 +766,46 @@ class AM1CCCIntraHandler(AM1CCCHandler):
 
 
 class AM1CCCSolventHandler(AM1CCCHandler):
+    pass
+
+
+class AM1BCCCCCHandler(AM1CCCHandler):
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
+        """
+        Parameters
+        ----------
+        params: np.array, (P,)
+            normalized charge increment for each matched bond
+        smirks: list of str (P,)
+            SMIRKS patterns matching bonds, to be parsed using OpenEye Toolkits
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        """
+        # (ytz): leave this comment here, useful for quickly disable AM1 calculations for large mols
+        # return np.zeros(mol.GetNumAtoms())
+
+        # TODO: Merge duplicate code w/AM1CCCHandler, only difference is line below
+        am1_charges = compute_or_load_am1bcc_charges(mol)
+        bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
+
+        deltas = params[type_idxs]
+        q_params = apply_bond_charge_corrections(
+            am1_charges,
+            bond_idxs,
+            deltas,
+            runtime_validate=False,  # required for jit
+        )
+
+        assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
+
+        return q_params
+
+
+class AM1BCCCCCIntraHandler(AM1BCCCCCHandler):
+    pass
+
+
+class AM1BCCCCCSolventHandler(AM1BCCCCCHandler):
     pass
