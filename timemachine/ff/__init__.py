@@ -54,6 +54,7 @@ class Forcefield:
             nonbonded.SimpleChargeHandler,
             nonbonded.AM1BCCHandler,
             nonbonded.AM1CCCHandler,
+            nonbonded.AM1BCCCCCHandler,
             nonbonded.PrecomputedChargeHandler,
         ]
     ]
@@ -62,6 +63,7 @@ class Forcefield:
             nonbonded.SimpleChargeIntraHandler,
             nonbonded.AM1BCCIntraHandler,
             nonbonded.AM1CCCIntraHandler,
+            nonbonded.AM1BCCCCCIntraHandler,
             nonbonded.PrecomputedChargeHandler,
         ]
     ]
@@ -184,6 +186,7 @@ class Forcefield:
             elif isinstance(
                 handle,
                 (
+                    nonbonded.AM1BCCCCCIntraHandler,
                     nonbonded.AM1CCCIntraHandler,
                     nonbonded.AM1BCCIntraHandler,
                     nonbonded.SimpleChargeIntraHandler,
@@ -203,6 +206,7 @@ class Forcefield:
             elif isinstance(
                 handle,
                 (
+                    nonbonded.AM1BCCCCCHandler,
                     nonbonded.AM1CCCHandler,
                     nonbonded.AM1BCCHandler,
                     nonbonded.SimpleChargeHandler,
@@ -230,7 +234,9 @@ class Forcefield:
         if q_handle_intra is None:
             # Copy the forcefield parameters to the intramolecular term if not
             # already handled.
-            if isinstance(q_handle, nonbonded.AM1CCCHandler):
+            if isinstance(q_handle, nonbonded.AM1BCCCCCHandler):
+                q_handle_intra = nonbonded.AM1BCCCCCIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
+            elif isinstance(q_handle, nonbonded.AM1CCCHandler):
                 q_handle_intra = nonbonded.AM1CCCIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
             elif isinstance(q_handle, nonbonded.AM1BCCHandler):
                 q_handle_intra = nonbonded.AM1BCCIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
