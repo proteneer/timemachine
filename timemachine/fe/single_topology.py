@@ -646,8 +646,10 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     assert_improper_idxs_are_canonical(mol_c_improper_idxs)
 
     # combine proper + improper
-    mol_c_torsion_idxs = np.concatenate([mol_c_proper_idxs, mol_c_improper_idxs])
-    mol_c_torsion_params = np.concatenate([mol_c_proper_params, mol_c_improper_params])
+    # mol_c_torsion_idxs = np.concatenate([mol_c_proper_idxs, mol_c_improper_idxs])
+    # mol_c_torsion_params = np.concatenate([mol_c_proper_params, mol_c_improper_params])
+    mol_c_torsion_idxs = mol_c_proper_idxs
+    mol_c_torsion_params = mol_c_proper_params
 
     # canonicalize angles
     mol_c_angle_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_angle_idxs])
