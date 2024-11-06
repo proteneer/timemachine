@@ -320,9 +320,9 @@ def canonicalize_improper_idxs(idxs) -> Tuple[int, int, int, int]:
 
     This does not do idxs[0] < idxs[-1] canonicalization.
     """
-    i, j, k, l = idxs
+    j, c, k, l = idxs
 
-    # i is the center
+    # c is the center
     # generate lexical order
     key = (j, k, l)
 
@@ -337,7 +337,7 @@ def canonicalize_improper_idxs(idxs) -> Tuple[int, int, int, int]:
     cw_items = sorted([cw_jkl, cw_klj, cw_ljk])
 
     if key in cw_items:
-        return (i, j, k, l)
+        return (j, c, k, l)
 
     # generate counter clockwise permutations
     ccw_kjl = (kk, jj, ll)  # swap 1st and 2nd element
@@ -351,7 +351,9 @@ def canonicalize_improper_idxs(idxs) -> Tuple[int, int, int, int]:
         if cw_item == key:
             break
 
-    return (i, *cw_items[idx])
+    j, k, l = cw_items[idx]
+
+    return (j, c, k, l)
 
 
 def get_num_connected_components(num_atoms: int, bonds: Collection[Tuple[int, int]]) -> int:
@@ -639,7 +641,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
 
     # check that the improper idxs are canonical
     def assert_improper_idxs_are_canonical(all_idxs):
-        for _, j, k, l in all_idxs:
+        for j, _, k, l in all_idxs:
             jj, kk, ll = sorted((j, k, l))
             assert (jj, kk, ll) == (j, k, l) or (kk, ll, jj) == (j, k, l) or (ll, jj, kk) == (j, k, l)
 
