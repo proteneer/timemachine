@@ -530,8 +530,6 @@ def test_canonicalize_improper_idxs():
         assert idxs == canonicalize_improper_idxs(idxs)
 
     # these are in the ccw rotation set
-    #                          1          2          0
-    # bad_improper_idxs = [(5,1,0,3), (5,3,1,0), (5,0,3,1)]
     assert canonicalize_improper_idxs((1, 5, 0, 3)) == (1, 5, 3, 0)
     assert canonicalize_improper_idxs((3, 5, 1, 0)) == (3, 5, 0, 1)
     assert canonicalize_improper_idxs((0, 5, 3, 1)) == (0, 5, 1, 3)
