@@ -2016,14 +2016,18 @@ def get_vacuum_system_and_conf(mol_a, mol_b, core, lamb):
     return st.setup_intermediate_state(lamb), conf
 
 
-def _assert_u_and_grad_consistent(u_fwd, u_rev, x_fwd, x_rev, core):
+from timemachine.fe.single_topology import AtomMapMixin
+
+
+def _assert_u_and_grad_consistent(u_fwd, u_rev, x_fwd, x_rev, fused_map):
+    assert len(fused_map) == len(x_fwd)
     box = 100.0 * np.eye(3)
     np.testing.assert_allclose(u_fwd(x_fwd, box), u_rev(x_rev, box))
-
     fwd_bond_grad_fn = jax.grad(u_fwd)
     rev_bond_grad_fn = jax.grad(u_rev)
-
-    np.testing.assert_allclose(fwd_bond_grad_fn(x_fwd, box)[core[:, 0]], rev_bond_grad_fn(x_rev, box)[core[:, 1]])
+    np.testing.assert_allclose(
+        fwd_bond_grad_fn(x_fwd, box)[fused_map[:, 0]], rev_bond_grad_fn(x_rev, box)[fused_map[:, 1]]
+    )
 
 
 @pytest.mark.nocuda
@@ -2039,14 +2043,28 @@ def test_hif2a_end_state_symmetry_nightly_test():
         for mol_b in mols[idx + 1 :]:
             print("testing", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
             core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+            amm_fwd = AtomMapMixin(mol_a, mol_b, core)
+            amm_rev = AtomMapMixin(mol_b, mol_a, core[:, ::-1])
+            fused_map = np.concatenate(
+                [
+                    np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)]),
+                    np.array(
+                        [
+                            [x, y]
+                            for x, y in zip(amm_fwd.b_to_c, amm_rev.a_to_c)
+                            if x not in core[:, 0] and y not in core[:, 1]
+                        ]
+                    ),
+                ]
+            )
             sys_fwd, conf_fwd = get_vacuum_system_and_conf(mol_a, mol_b, core, 0.0)
             sys_rev, conf_rev = get_vacuum_system_and_conf(mol_b, mol_a, core[:, ::-1], 1.0)
 
-            _assert_u_and_grad_consistent(sys_fwd.bond, sys_rev.bond, conf_fwd, conf_rev, core)
-            _assert_u_and_grad_consistent(sys_fwd.angle, sys_rev.angle, conf_fwd, conf_rev, core)
-            _assert_u_and_grad_consistent(sys_fwd.nonbonded, sys_rev.nonbonded, conf_fwd, conf_rev, core)
-            _assert_u_and_grad_consistent(sys_fwd.torsion, sys_rev.torsion, conf_fwd, conf_rev, core)
-            _assert_u_and_grad_consistent(sys_fwd.chiral_atom, sys_rev.chiral_atom, conf_fwd, conf_rev, core)
+            _assert_u_and_grad_consistent(sys_fwd.bond, sys_rev.bond, conf_fwd, conf_rev, fused_map)
+            _assert_u_and_grad_consistent(sys_fwd.angle, sys_rev.angle, conf_fwd, conf_rev, fused_map)
+            _assert_u_and_grad_consistent(sys_fwd.nonbonded, sys_rev.nonbonded, conf_fwd, conf_rev, fused_map)
+            _assert_u_and_grad_consistent(sys_fwd.torsion, sys_rev.torsion, conf_fwd, conf_rev, fused_map)
+            _assert_u_and_grad_consistent(sys_fwd.chiral_atom, sys_rev.chiral_atom, conf_fwd, conf_rev, fused_map)
 
 
 @pytest.mark.nocuda
@@ -2057,7 +2075,18 @@ def test_hif2a_end_state_symmetry_unit_test():
     mol_a = mols[0]
     mol_b = mols[1]
     core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+    amm_fwd = AtomMapMixin(mol_a, mol_b, core)
+    amm_rev = AtomMapMixin(mol_b, mol_a, core[:, ::-1])
+    fused_map = np.concatenate(
+        [
+            np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)]),
+            np.array(
+                [[x, y] for x, y in zip(amm_fwd.b_to_c, amm_rev.a_to_c) if x not in core[:, 0] and y not in core[:, 1]]
+            ),
+        ]
+    )
+
     sys_fwd, conf_fwd = get_vacuum_system_and_conf(mol_a, mol_b, core, 0.0)
     sys_rev, conf_rev = get_vacuum_system_and_conf(mol_b, mol_a, core[:, ::-1], 1.0)
 
-    _assert_u_and_grad_consistent(sys_fwd.bond, sys_rev.bond, conf_fwd, conf_rev, core)
+    _assert_u_and_grad_consistent(sys_fwd.bond, sys_rev.bond, conf_fwd, conf_rev, fused_map)
