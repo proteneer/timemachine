@@ -523,7 +523,7 @@ def test_canonicalize_chiral_atom_idxs(chiral_atom_idxs):
 @pytest.mark.nocuda
 def test_canonicalize_improper_idxs():
     # these are in the cw rotation set
-    improper_idxs = [(5, 0, 1, 3), (5, 1, 3, 0), (5, 3, 0, 1)]
+    improper_idxs = [(0, 5, 1, 3), (1, 5, 3, 0), (3, 5, 0, 1)]
 
     for idxs in improper_idxs:
         # we should do nothing here.
@@ -532,9 +532,9 @@ def test_canonicalize_improper_idxs():
     # these are in the ccw rotation set
     #                          1          2          0
     # bad_improper_idxs = [(5,1,0,3), (5,3,1,0), (5,0,3,1)]
-    assert canonicalize_improper_idxs((5, 1, 0, 3)) == (5, 1, 3, 0)
-    assert canonicalize_improper_idxs((5, 3, 1, 0)) == (5, 3, 0, 1)
-    assert canonicalize_improper_idxs((5, 0, 3, 1)) == (5, 0, 1, 3)
+    assert canonicalize_improper_idxs((1, 5, 0, 3)) == (1, 5, 3, 0)
+    assert canonicalize_improper_idxs((3, 5, 1, 0)) == (3, 5, 0, 1)
+    assert canonicalize_improper_idxs((0, 5, 3, 1)) == (0, 5, 1, 3)
 
 
 @pytest.mark.nocuda
