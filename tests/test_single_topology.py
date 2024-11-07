@@ -9,7 +9,7 @@ import networkx as nx
 import numpy as np
 import pytest
 from common import check_split_ixns, load_split_forcefields
-from hypothesis import assume, event, given, seed
+from hypothesis import event, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -23,27 +23,18 @@ from timemachine.constants import (
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.dummy import MultipleAnchorWarning
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.interpolate import (
-    align_harmonic_bond_idxs_and_params,
-    align_nonbonded_idxs_and_params,
-    linear_interpolation,
-    log_linear_interpolation,
-)
+from timemachine.fe.interpolate import align_nonbonded_idxs_and_params, linear_interpolation
 from timemachine.fe.single_topology import (
+    AtomMapMixin,
     ChargePertubationError,
     CoreBondChangeWarning,
-    DummyGroupAssignmentError,
     SingleTopology,
     canonicalize_bonds,
     canonicalize_chiral_atom_idxs,
     canonicalize_improper_idxs,
     cyclic_difference,
-    handle_ring_opening_closing,
-    interpolate_harmonic_bond_params,
-    interpolate_harmonic_force_constant,
     interpolate_w_coord,
     setup_dummy_interactions_from_ff,
-    verify_chiral_validity_of_core,
 )
 from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, read_sdf_mols_by_name, set_mol_name
@@ -671,41 +662,41 @@ def test_setup_intermediate_state_not_unreasonably_slow(arbitrary_transformation
     assert elapsed_time / n_states <= 1.0
 
 
-@pytest.mark.nocuda
-def test_setup_intermediate_bonded_term(arbitrary_transformation):
-    """Tests that the current vectorized implementation _setup_intermediate_bonded_term is consistent with the previous
-    implementation"""
-    st, _ = arbitrary_transformation
-    interpolate_fn = functools.partial(interpolate_harmonic_bond_params, k_min=0.1, lambda_min=0.0, lambda_max=0.7)
+# @pytest.mark.nocuda
+# def test_setup_intermediate_bonded_term(arbitrary_transformation):
+#     """Tests that the current vectorized implementation _setup_intermediate_bonded_term is consistent with the previous
+#     implementation"""
+#     st, _ = arbitrary_transformation
+#     interpolate_fn = functools.partial(interpolate_harmonic_bond_params, k_min=0.1, lambda_min=0.0, lambda_max=0.7)
 
-    def setup_intermediate_bonded_term_ref(src_bond, dst_bond, lamb, align_fn, interpolate_fn):
-        bond_idxs_and_params = align_fn(
-            src_bond.potential.idxs,
-            src_bond.params,
-            dst_bond.potential.idxs,
-            dst_bond.params,
-        )
+#     def setup_intermediate_bonded_term_ref(src_bond, dst_bond, lamb, align_fn, interpolate_fn):
+#         bond_idxs_and_params = align_fn(
+#             src_bond.potential.idxs,
+#             src_bond.params,
+#             dst_bond.potential.idxs,
+#             dst_bond.params,
+#         )
 
-        bond_idxs = []
-        bond_params = []
+#         bond_idxs = []
+#         bond_params = []
 
-        for idxs, src_params, dst_params in bond_idxs_and_params:
-            bond_idxs.append(idxs)
-            new_params = interpolate_fn(src_params, dst_params, lamb)
-            bond_params.append(new_params)
+#         for idxs, src_params, dst_params in bond_idxs_and_params:
+#             bond_idxs.append(idxs)
+#             new_params = interpolate_fn(src_params, dst_params, lamb)
+#             bond_params.append(new_params)
 
-        return type(src_bond.potential)(np.array(bond_idxs)).bind(jnp.array(bond_params))
+#         return type(src_bond.potential)(np.array(bond_idxs)).bind(jnp.array(bond_params))
 
-    for lamb in np.linspace(0.0, 1.0, 10):
-        bonded_ref = setup_intermediate_bonded_term_ref(
-            st.src_system.bond, st.dst_system.bond, lamb, align_harmonic_bond_idxs_and_params, interpolate_fn
-        )
-        bonded_test = st._setup_intermediate_bonded_term(
-            st.src_system.bond, st.dst_system.bond, lamb, align_harmonic_bond_idxs_and_params, interpolate_fn
-        )
+#     for lamb in np.linspace(0.0, 1.0, 10):
+#         bonded_ref = setup_intermediate_bonded_term_ref(
+#             st.src_system.bond, st.dst_system.bond, lamb, align_harmonic_bond_idxs_and_params, interpolate_fn
+#         )
+#         bonded_test = st._setup_intermediate_bonded_term(
+#             st.src_system.bond, st.dst_system.bond, lamb, align_harmonic_bond_idxs_and_params, interpolate_fn
+#         )
 
-        np.testing.assert_array_equal(bonded_ref.potential.idxs, bonded_test.potential.idxs)
-        np.testing.assert_array_equal(bonded_ref.params, bonded_test.params)
+#         np.testing.assert_array_equal(bonded_ref.potential.idxs, bonded_test.potential.idxs)
+#         np.testing.assert_array_equal(bonded_ref.params, bonded_test.params)
 
 
 @pytest.mark.nocuda
@@ -1119,108 +1110,6 @@ nonzero_force_constants = finite_floats(1e-9, 1e9)
 lambdas = finite_floats(0.0, 1.0)
 
 
-def pairs(elem, unique=False):
-    return st.lists(elem, min_size=2, max_size=2, unique=unique).map(tuple)
-
-
-# https://github.com/python/mypy/issues/12617
-lambda_intervals = pairs(finite_floats(1e-9, 1.0 - 1e-9), unique=True).map(sorted)  # type: ignore
-
-
-@pytest.mark.nocuda
-@pytest.mark.parametrize(
-    "interpolation_fn",
-    [
-        linear_interpolation,
-        functools.partial(log_linear_interpolation, min_value=0.01),
-    ],
-)
-@given(nonzero_force_constants, lambda_intervals, lambdas)
-@seed(2023)
-def test_handle_ring_opening_closing_symmetric(interpolation_fn, k, lambda_interval, lam):
-    lambda_min, lambda_max = lambda_interval
-
-    # avoid spurious failure due to loss of precision
-    assume((lam <= lambda_min) == (lam <= 1 - (1 - lambda_min)))
-
-    f = functools.partial(
-        handle_ring_opening_closing,
-        interpolation_fn,
-        lambda_min=lambda_min,
-        lambda_max=lambda_max,
-    )
-
-    np.testing.assert_allclose(
-        f(0.0, k, lam),
-        f(k, 0.0, 1.0 - lam),
-        atol=1e-6,
-    )
-
-
-# https://github.com/python/mypy/issues/12617
-@pytest.mark.nocuda
-@given(nonzero_force_constants, st.lists(lambdas, min_size=3, max_size=3, unique=True).map(sorted))  # type: ignore
-@seed(2022)
-def test_handle_ring_opening_closing_pin_to_end_states(k, lambdas):
-    lam, lambda_min, lambda_max = lambdas
-    assert handle_ring_opening_closing(linear_interpolation, 0.0, k, lam, lambda_min, lambda_max) == 0.0
-
-    lambda_min, lambda_max, lam = lambdas
-    assert handle_ring_opening_closing(linear_interpolation, 0.0, k, lam, lambda_min, lambda_max) == k
-
-
-@given(
-    nonzero_force_constants,
-    nonzero_force_constants,
-    nonzero_force_constants,
-    lambda_intervals,
-)
-@seed(2022)
-def test_interpolate_harmonic_force_constant(src_k, dst_k, k_min, lambda_interval):
-    lambda_min, lambda_max = lambda_interval
-
-    f = functools.partial(
-        interpolate_harmonic_force_constant,
-        k_min=k_min,
-        lambda_min=lambda_min,
-        lambda_max=lambda_max,
-    )
-
-    assert f(src_k, dst_k, 0.0) == src_k
-    assert f(src_k, dst_k, 1.0) == dst_k
-
-    lambdas = np.arange(0.01, 1.0, 0.01)
-
-    # all interpolated values >= k_min
-    np.testing.assert_array_less(1.0, f(src_k, dst_k, lambdas) / k_min + 1e-9)
-
-    def assert_nondecreasing(f):
-        y = f(lambdas)
-        np.testing.assert_array_less(y[:-1] / y[1:], 1.0 + 1e-9)
-
-    k1, k2 = sorted([src_k, dst_k])
-    assert_nondecreasing(lambda lam: f(k1, k2, lam))
-    assert_nondecreasing(lambda lam: f(k2, k1, 1.0 - lam))
-
-
-@pytest.mark.nocuda
-@given(pairs(nonzero_force_constants, unique=True).filter(lambda ks: np.abs(ks[0] - ks[1]) / ks[1] > 1e-6))
-@seed(2022)
-def test_interpolate_harmonic_force_constant_sublinear(ks):
-    src_k, dst_k = ks
-    lambdas = np.arange(0.01, 1.0, 0.01)
-    np.testing.assert_array_less(
-        interpolate_harmonic_force_constant(src_k, dst_k, lambdas, 1e-12, 0.0, 1.0)
-        / linear_interpolation(src_k, dst_k, lambdas),
-        1.0,
-    )
-
-
-@pytest.mark.nocuda
-def test_interpolate_harmonic_force_constant_jax_transformable():
-    _ = jax.jit(interpolate_harmonic_force_constant)(0.0, 1.0, 0.1, 1e-12, 0.0, 1.0)
-
-
 @pytest.mark.nocuda
 def test_cyclic_difference():
     assert cyclic_difference(0, 0, 1) == 0
@@ -1289,6 +1178,14 @@ def test_cyclic_difference_translation_invariant(a, b, t, period):
         cyclic_difference(a, b, period),
         period,
     )
+
+
+def pairs(elem, unique=False):
+    return st.lists(elem, min_size=2, max_size=2, unique=unique).map(tuple)
+
+
+# https://github.com/python/mypy/issues/12617
+lambda_intervals = pairs(finite_floats(1e-9, 1.0 - 1e-9), unique=True).map(sorted)  # type: ignore
 
 
 @pytest.mark.nocuda
@@ -1435,82 +1332,6 @@ def test_hif2a_pairs_setup_st():
         print(mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
         core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
         SingleTopology(mol_a, mol_b, core, ff)  # Test that this doesn't not throw assertion
-
-
-@pytest.mark.nocuda
-def test_chiral_volume_spiro_failure():
-    # test that single topology throws an assertion when morphing
-    #
-    #    c   c        c   c
-    #   / \ / \      / \ / \
-    #  c   c   c -> c   c   c
-    #   \ . . /      \ / \ /
-    #    c   c        c   c
-    #    0 restrs    4 restrs
-    #
-    # (we need at least one restraint to be turned on to enable this)
-    mol_a = Chem.MolFromMolBlock(
-        """
-  Mrv2311 02222400143D
-
-  7  8  0  0  0  0            999 V2000
-    1.3547    1.2351    0.0997 O   0  0  0  0  0  0  0  0  0  0  0  0
-    0.2235    1.1005    0.7916 O   0  0  0  0  0  0  0  0  0  0  0  0
-    0.0196   -0.0783    0.0627 C   0  0  2  0  0  0  0  0  0  0  0  0
-   -1.1709   -0.2545   -0.6537 O   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.3152   -1.3917    0.0257 O   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.1947   -1.2859    0.7396 O   0  0  0  0  0  0  0  0  0  0  0  0
-    1.2208    0.1268   -0.6279 O   0  0  0  0  0  0  0  0  0  0  0  0
-  2  3  1  0  0  0  0
-  1  2  1  0  0  0  0
-  7  3  1  0  0  0  0
-  1  7  1  0  0  0  0
-  6  3  1  0  0  0  0
-  3  4  1  0  0  0  0
-  5  6  1  0  0  0  0
-  4  5  1  0  0  0  0
-M  END
-$$$$""",
-        removeHs=False,
-    )
-
-    mol_b = Chem.MolFromMolBlock(
-        """
-  Mrv2311 02222400143D
-
-  7  6  0  0  0  0            999 V2000
-    1.3547    1.2351    0.0997 O   0  0  0  0  0  0  0  0  0  0  0  0
-    0.2235    1.1005    0.7916 O   0  0  0  0  0  0  0  0  0  0  0  0
-    0.0196   -0.0783    0.0627 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.1709   -0.2545   -0.6537 O   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.3152   -1.3917    0.0257 O   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.1947   -1.2859    0.7396 H   0  0  0  0  0  0  0  0  0  0  0  0
-    1.2208    0.1268   -0.6279 H   0  0  0  0  0  0  0  0  0  0  0  0
-  2  3  1  0  0  0  0
-  1  2  1  0  0  0  0
-  3  4  1  0  0  0  0
-  4  5  1  0  0  0  0
-  1  7  1  0  0  0  0
-  5  6  1  0  0  0  0
-M  END
-$$$$""",
-        removeHs=False,
-    )
-
-    ff = Forcefield.load_from_file("placeholder_ff.py")
-    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6]])
-
-    with pytest.raises(DummyGroupAssignmentError):
-        verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
-
-    with pytest.raises(DummyGroupAssignmentError):
-        SingleTopology(mol_a, mol_b, core, ff)
-
-    with pytest.raises(DummyGroupAssignmentError):
-        verify_chiral_validity_of_core(mol_b, mol_a, core, ff)
-
-    with pytest.raises(DummyGroupAssignmentError):
-        SingleTopology(mol_b, mol_a, core, ff)
 
 
 @pytest.mark.nocuda
@@ -1850,161 +1671,6 @@ def permute_atom_indices(mol_a, mol_b, core, seed):
     return mol_a, mol_b, core
 
 
-@pytest.mark.parametrize("seed", [2024, 2025])
-def test_chiral_core_bond_breaking_raises_error(seed):
-    """Test that we raise assertions for molecules that cannot generate valid dummy-group anchor assignments. In
-    particular, we break two core-core bonds under an identity mapping (with no dummy atoms).
-    """
-    mol_a = Chem.MolFromMolBlock(
-        """
-  Mrv2311 07312412093D
-
-  6  7  0  0  0  0            999 V2000
-    1.7504    0.2003    1.2663 N   0  0  2  0  0  0  0  0  0  0  0  0
-    0.8845   -0.7367    0.7929 O   0  0  0  0  0  0  0  0  0  0  0  0
-    0.0656    0.1573    0.2634 O   0  0  0  0  0  0  0  0  0  0  0  0
-    0.6778    2.1410    1.4645 F   0  0  0  0  0  0  0  0  0  0  0  0
-    0.9965    1.1853    0.5313 C   0  0  1  0  0  0  0  0  0  0  0  0
-    2.3507    0.8788    0.2466 O   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0  0  0  0
-  5  4  1  0  0  0  0
-  5  1  1  0  0  0  0
-  2  3  1  0  0  0  0
-  6  1  1  0  0  0  0
-  3  5  1  0  0  0  0
-  5  6  1  0  0  0  0
-M  END
-$$$$""",
-        removeHs=False,
-    )
-
-    mol_b = Chem.MolFromMolBlock(
-        """
-  Mrv2311 07312412083D
-
-  6  5  0  0  0  0            999 V2000
-    1.7504    0.2003    1.2663 N   0  0  2  0  0  0  0  0  0  0  0  0
-    0.8845   -0.7367    0.7929 O   0  0  0  0  0  0  0  0  0  0  0  0
-    0.0656    0.1573    0.2634 H   0  0  0  0  0  0  0  0  0  0  0  0
-    0.6778    2.1410    1.4645 F   0  0  0  0  0  0  0  0  0  0  0  0
-    0.9965    1.1853    0.5313 C   0  0  0  0  0  0  0  0  0  0  0  0
-    2.3507    0.8788    0.2466 H   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0  0  0  0
-  5  4  1  0  0  0  0
-  5  1  1  0  0  0  0
-  6  1  1  0  0  0  0
-  2  3  1  0  0  0  0
-M  END
-$$$$""",
-        removeHs=False,
-    )
-
-    ff = Forcefield.load_default()
-    core = np.array([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5]])
-
-    mol_a, mol_b, core = permute_atom_indices(mol_a, mol_b, core, seed)
-
-    with pytest.raises(DummyGroupAssignmentError):
-        verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
-
-
-@pytest.mark.parametrize("seed", [2024, 2025])
-def test_chiral_bond_breaking_1_core_1_dummy(seed):
-    mol_a = Chem.MolFromMolBlock(
-        """lhs
-                    3D
- Structure written by MMmdl.
- 15 16  0  0  1  0            999 V2000
-    2.1455    1.6402   -0.1409 O   0  0  0  0  0  0
-   -0.0529   -0.7121    0.3721 C   0  0  0  0  0  0
-   -1.4286   -0.4301   -0.2680 C   0  0  0  0  0  0
-   -0.9221    0.8962   -0.8723 C   0  0  0  0  0  0
-    1.7163    0.6542   -1.0827 C   0  0  0  0  0  0
-    0.4519    0.5990   -0.2512 C   0  0  0  0  0  0
-    1.0309    1.5756    0.6040 O   0  0  0  0  0  0
-   -0.0750   -0.6889    1.4650 H   0  0  0  0  0  0
-    0.4285   -1.6073   -0.0287 H   0  0  0  0  0  0
-   -2.2238   -0.2880    0.4685 H   0  0  0  0  0  0
-   -1.6971   -1.1659   -1.0311 H   0  0  0  0  0  0
-   -1.4047    1.7800   -0.4452 H   0  0  0  0  0  0
-   -0.9239    0.8937   -1.9651 H   0  0  0  0  0  0
-    1.5863    1.0639   -2.0863 H   0  0  0  0  0  0
-    2.3266   -0.2504   -1.0468 H   0  0  0  0  0  0
-  6  2  1  0  0  0
-  6  4  1  0  0  0
-  6  5  1  0  0  0
-  6  7  1  0  0  0
-  2  3  1  0  0  0
-  2  8  1  0  0  0
-  2  9  1  0  0  0
-  3  4  1  0  0  0
-  3 10  1  0  0  0
-  3 11  1  0  0  0
-  4 12  1  0  0  0
-  4 13  1  0  0  0
-  5  1  1  0  0  0
-  5 14  1  0  0  0
-  5 15  1  0  0  0
-  1  7  1  0  0  0
-M  END""",
-        removeHs=False,
-    )
-
-    mol_b = Chem.MolFromMolBlock(
-        """rhs
-                    3D
- Structure written by MMmdl.
- 12 11  0  0  1  0            999 V2000
-    0.4102    0.4907   -0.1997 O   0  0  0  0  0  0
-   -0.0529   -0.7121    0.3721 C   0  0  0  0  0  0
-   -1.4286   -0.4301   -0.2680 C   0  0  0  0  0  0
-   -1.0708    0.5068   -0.6949 H   0  0  0  0  0  0
-    1.5875    0.5421   -0.9739 C   0  0  0  0  0  0
-    1.9148    1.2939   -0.2558 H   0  0  0  0  0  0
-   -0.0750   -0.6889    1.4650 H   0  0  0  0  0  0
-    0.4285   -1.6073   -0.0287 H   0  0  0  0  0  0
-   -2.2238   -0.2880    0.4685 H   0  0  0  0  0  0
-   -1.6971   -1.1659   -1.0311 H   0  0  0  0  0  0
-    1.4575    0.9518   -1.9775 H   0  0  0  0  0  0
-    2.1978   -0.3625   -0.9380 H   0  0  0  0  0  0
-  1  2  1  0  0  0
-  1  5  1  0  0  0
-  2  3  1  0  0  0
-  2  7  1  0  0  0
-  2  8  1  0  0  0
-  3  4  1  0  0  0
-  3  9  1  0  0  0
-  3 10  1  0  0  0
-  5  6  1  0  0  0
-  5 11  1  0  0  0
-  5 12  1  0  0  0
-M  END
-""",
-        removeHs=False,
-    )
-
-    # need to generate SC charges on this mol - am1 fails
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    core = np.array(
-        [[5, 0], [1, 1], [2, 2], [3, 3], [4, 4], [0, 5], [7, 6], [8, 7], [9, 8], [10, 9], [13, 10], [14, 11]]
-    )
-
-    mol_a, mol_b, core = permute_atom_indices(mol_a, mol_b, core, seed)
-
-    # from timemachine.fe.utils import plot_atom_mapping_grid
-
-    # print("core", core)
-    # res = plot_atom_mapping_grid(mol_a, mol_b, core)
-    # fpath = f"atom_mapping.svg"
-    # print("core mapping written to", fpath)
-
-    # with open(fpath, "w") as fh:
-    #     fh.write(res)
-
-    # should not raise an assertion
-    verify_chiral_validity_of_core(mol_a, mol_b, core, ff)
-
-
 def get_vacuum_system_and_conf(mol_a, mol_b, core, lamb):
     ff = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, ff)
@@ -2012,9 +1678,6 @@ def get_vacuum_system_and_conf(mol_a, mol_b, core, lamb):
     conf_b = get_romol_conf(mol_b)
     conf = st.combine_confs(conf_a, conf_b, lamb)
     return st.setup_intermediate_state(lamb), conf
-
-
-from timemachine.fe.single_topology import AtomMapMixin
 
 
 def _assert_u_and_grad_consistent(u_fwd, u_rev, x_fwd, x_rev, fused_map):

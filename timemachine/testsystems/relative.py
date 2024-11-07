@@ -4,6 +4,8 @@ from importlib import resources
 
 import numpy as np
 
+from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
+from timemachine.fe import atom_mapping
 from timemachine.fe.rbfe import setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf, read_sdf
@@ -53,6 +55,42 @@ def get_hif2a_ligand_pair_single_topology():
             [21, 22],
         ]
     )
+    return mol_a, mol_b, core
+
+
+def get_hif2a_ligand_pair_single_topology_chiral_volume():
+    """hif2_pair with a chiral CF3 (mol_a) morphed to achiral NH2 (mol_b)"""
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        all_mols = read_sdf(str(path_to_ligand))
+
+    mol_a = all_mols[11]
+    mol_b = all_mols[-7]
+
+    core = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        **DEFAULT_ATOM_MAPPING_KWARGS,
+    )[0]
+
+    return mol_a, mol_b, core
+
+
+def get_hif2a_ligand_pair(src_idx, dst_idx):
+    """hif2_pair with a chiral CF3 (mol_a) morphed to achiral NH2 (mol_b)"""
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        all_mols = read_sdf(str(path_to_ligand))
+
+    mol_a = all_mols[src_idx]
+    mol_b = all_mols[dst_idx]
+
+    core = atom_mapping.get_cores(
+        mol_a,
+        mol_b,
+        **DEFAULT_ATOM_MAPPING_KWARGS,
+    )[0]
+
     return mol_a, mol_b, core
 
 

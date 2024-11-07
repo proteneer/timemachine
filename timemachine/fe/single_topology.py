@@ -1,8 +1,7 @@
 import warnings
-from collections import defaultdict
 from enum import IntEnum
 from functools import partial
-from typing import Any, Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple, TypeVar, Union, cast
+from typing import Any, Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -11,8 +10,13 @@ import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
 
-from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, NBParamIdx
-from timemachine.fe import chiral_utils, interpolate, model_utils, topology, utils
+from timemachine.constants import (
+    DEFAULT_BOND_IS_PRESENT_K,
+    DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
+    DEFAULT_CHIRAL_BOND_RESTRAINT_K,
+    NBParamIdx,
+)
+from timemachine.fe import interpolate, model_utils, topology, utils
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import (
     MultipleAnchorWarning,
@@ -20,6 +24,7 @@ from timemachine.fe.dummy import (
     generate_anchored_dummy_group_assignments,
     generate_dummy_group_assignments,
 )
+from timemachine.fe.interpolate import pad
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.fe.topology import get_ligand_ixn_pots_params
@@ -39,6 +44,56 @@ from timemachine.potentials import (
 from timemachine.utils import fair_product_2
 
 OpenMMTopology = Any
+
+
+# Master Schedule
+# tbd: separate torsions into proper and improper later
+def _flip_min_max(min_max):
+    """(0, 0.5) -> (1, 0.5); (0.2, 1) -> (0, 0.8); (0,1) -> (0,1)"""
+    lamb_min, lamb_max = min_max
+    return 1 - lamb_max, 1 - lamb_min
+
+
+# (ytz): note that the boundary values 0.0, 0.3, 0.5, 0.7 etc. below are arbitrary, and are free-ish parameters
+# that can overlap as well. Strict boundaries are probably the safest, but come at the cost of efficiency.
+
+# eg, an alternative, stricter, and safer dummy chiral/bond/interpolation scheme would be:
+# DUMMY_B_CHIRAL_BOND_CONVERTING_ON_MIN_MAX = [0.0, 0.3]
+# which would necessitate chiral bonds being *fully* turned on before the chiral volume and chiral angle terms are turned on.
+# however, this led to roughly a 10-15% increase in the # of windows. So instead, we can switch to a softer scheme by setting
+# the bond interpolation bounds to [0.0, 0.7]. This way, when lambda=0.3, the start of the chiral volume interpolation, the bonds
+# are still present with a force constant of ~30kJ/mol (still strong enough to keep the chiral volumes numerically stable)
+
+# core-bonds are never turned off if enforce_core_core=True
+CORE_BOND_MIN_MAX = [0.0, 1.0]
+CORE_ANGLE_MIN_MAX = [0.0, 1.0]
+CORE_TORSION_MIN_MAX = [0.0, 1.0]
+
+# core terms that are involved in chiral volumes being turned on or off
+CORE_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX = [0.0, 0.5]
+CORE_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX = [0.5, 1.0]
+CORE_CHIRAL_ATOM_CONVERTING_OFF_MIN_MAX = _flip_min_max(CORE_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX)
+CORE_CHIRAL_ANGLE_CONVERTING_OFF_MIN_MAX = _flip_min_max(CORE_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX)
+
+# non-converting (may be consistently in chirality or just achiral) dummy B groups that are turning on
+DUMMY_B_BOND_MIN_MAX = [0.0, 0.7]
+DUMMY_B_ANGLE_MIN_MAX = [0.0, 0.7]
+DUMMY_A_BOND_MIN_MAX = _flip_min_max(DUMMY_B_BOND_MIN_MAX)
+DUMMY_A_ANGLE_MIN_MAX = _flip_min_max(DUMMY_B_ANGLE_MIN_MAX)
+
+# chiral and converting dummy B groups are turning on
+DUMMY_B_CHIRAL_BOND_CONVERTING_ON_MIN_MAX = [0.0, 0.7]
+DUMMY_B_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX = [0.3, 0.5]
+DUMMY_B_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX = [0.5, 0.7]  # angles are all turned off
+
+# chiral and converting dummy A groups are turning off
+DUMMY_A_CHIRAL_BOND_CONVERTING_OFF_MIN_MAX = _flip_min_max(DUMMY_B_CHIRAL_BOND_CONVERTING_ON_MIN_MAX)
+DUMMY_A_CHIRAL_ATOM_CONVERTING_OFF_MIN_MAX = _flip_min_max(DUMMY_B_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX)
+DUMMY_A_CHIRAL_ANGLE_CONVERTING_OFF_MIN_MAX = _flip_min_max(DUMMY_B_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX)
+
+# torsions are the same throughout
+DUMMY_B_TORSION_MIN_MAX = [0.7, 1.0]  # chiral and achiral both use the same min/max for torsions
+DUMMY_A_TORSION_MIN_MAX = _flip_min_max(DUMMY_B_TORSION_MIN_MAX)
 
 
 class ChiralVolumeDisabledWarning(UserWarning):
@@ -506,13 +561,20 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
         # either 0 or 180, since the normalized chiral volume is still smooth wrt perturbations
         all_proper_dummy_chiral_atom_idxs_ = []
         all_proper_dummy_chiral_atom_params_ = []
+
         for (c, i, j, k), p in zip(all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params):
-            if all((c, x) in mol_c_bond_idxs_set or (x, c) in mol_c_bond_idxs_set for x in [i, j, k]):
+            missing_bonds = []
+            for x in [i, j, k]:
+                if (c, x) not in mol_c_bond_idxs_set and (x, c) not in mol_c_bond_idxs_set:
+                    missing_bonds.append((c, x))
+
+            if len(missing_bonds) == 0:
                 all_proper_dummy_chiral_atom_idxs_.append((c, i, j, k))
                 all_proper_dummy_chiral_atom_params_.append(p)
             elif verify:
                 warnings.warn(
-                    f"Chiral Volume {c, i, j, k} has a disabled bond, turning off.", ChiralVolumeDisabledWarning
+                    f"Chiral Volume {c, i, j, k} has disabled bonds {missing_bonds}, turning off.",
+                    ChiralVolumeDisabledWarning,
                 )
 
         all_proper_dummy_chiral_atom_idxs = np.array(all_proper_dummy_chiral_atom_idxs_, np.int32).reshape(-1, 4)
@@ -705,18 +767,9 @@ def make_find_chirally_valid_dummy_groups(
     bond_graph_a = convert_to_nx(mol_a)
     bond_graph_b = convert_to_nx(mol_b)
 
-    # Use placeholder forcefield with a minimal number of patterns for performance
-    ff = Forcefield.load_from_file("placeholder_ff.py")
-
-    check_chiral_validity = make_check_chiral_validity(mol_a, mol_b, ff)
-
     def find_chirally_valid_dummy_groups(core):
         def is_chirally_valid(dummy_groups_ab, dummy_groups_ba):
-            try:
-                check_chiral_validity(core, dummy_groups_ab, dummy_groups_ba)
-                return True
-            except ChiralConversionError:
-                return False
+            return True
 
         with warnings.catch_warnings():
             # Suppress warnings from end-state setup during the search; these are only relevant for the selected candidate,
@@ -750,7 +803,7 @@ def find_dummy_groups_and_anchors(
     To get a pair of dummy group assignments for A -> B and B -> A such that the implied hybrid mol is chirally
     valid, instead use :py:func:`find_chirally_valid_dummy_groups`.
 
-    Refer to :py:func:`assert_chiral_consistency_and_validity` for definition of "chiral consistency".
+    Refer to :py:func:`assert_chiral_consistency` for definition of "chiral consistency".
 
     Refer to :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
     information on dummy group assignment.
@@ -798,102 +851,6 @@ def find_dummy_groups_and_anchors(
     return arbitrary_anchored_dummy_groups
 
 
-def handle_ring_opening_closing(
-    f: Callable[[float, float, float], float],
-    src_k: float,
-    dst_k: float,
-    lamb: float,
-    lambda_min: float,
-    lambda_max: float,
-) -> float:
-    """
-    In the typical case (src_k != 0 and dst_k != 0), use the specified interpolation function, f.
-
-    In the case where src_k = 0 or dst_k = 0 (e.g. ring closing and ring opening, respectively), restrict interpolation
-    to the interval [lambda_min, lambda_max], and pin to the end state values outside of this range.
-
-    Parameters
-    ----------
-    f : callable, (src_k: float, dst_k: float, lam: float) -> float
-        interpolation function; should satisfy f(0) = src_k, f(1) = dst_k
-
-    src_k, dst_k : float, k >= 0
-        force constants at lambda=0 and lambda=1, respectively
-
-    lambda_min, lambda_max : float, in 0 < lambda_min < lambda_max < 1
-        interpolate in range [lambda_min, lambda_max] (pin to end states otherwise). Note that if dst_k=0, the
-        convention is flipped so that 1 - lambda_min corresponds to f(0) and 1 - lambda_max corresponds to f(1).
-
-    Returns
-    -------
-    float
-        interpolated force constant
-    """
-
-    def ring_closing(dst_k, lamb):
-        return interpolate.pad(f, 0.0, dst_k, lamb, lambda_min, lambda_max)
-
-    def ring_opening(src_k, lamb):
-        return ring_closing(src_k, 1.0 - lamb)
-
-    return jnp.where(
-        src_k == 0.0,
-        ring_closing(dst_k, lamb),
-        jnp.where(
-            dst_k == 0.0,
-            ring_opening(src_k, lamb),
-            f(src_k, dst_k, lamb),
-        ),
-    )
-
-
-def interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, lambda_max):
-    """
-    Interpolate between force constants using a log-linear functional form.
-
-    In the special case when src_k=0 or dst_k=0 (e.g. ring opening or closing transformations):
-
-    1. Intermediates are interpolated from k_min instead of zero (since 0 is not in the range of the interpolation
-       function)
-    2. Interpolation is restricted to the interval [lambda_min, lambda_max] and pinned to the end state values outside
-       of this range
-
-    Parameters
-    ----------
-    src_k, dst_k : float, k >= 0
-        force constants at lambda=0 and lambda=1, respectively
-
-    k_min : float, k_min > 0
-        minimum force constant for interpolation
-
-    lambda_min, lambda_max : float, in 0 < lambda_min < lambda_max < 1
-        interpolate in range [lambda_min, lambda_max] (pin to end states otherwise). Note that if dst_k=0, the
-        convention is flipped so that 1 - lambda_min corresponds to f(0) and 1 - lambda_max corresponds to f(1).
-
-    Returns
-    -------
-    float
-        interpolated force constant
-    """
-
-    return jnp.where(
-        lamb == 0.0,
-        src_k,
-        jnp.where(
-            lamb == 1.0,
-            dst_k,
-            handle_ring_opening_closing(
-                partial(interpolate.log_linear_interpolation, min_value=k_min),
-                src_k,
-                dst_k,
-                lamb,
-                lambda_min,
-                lambda_max,
-            ),
-        ),
-    )
-
-
 def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
     """
     Interpolate harmonic bond parameters using
@@ -922,14 +879,24 @@ def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda
     array, float, (2,)
         interpolated (force constant, equilibrium length)
     """
-
     src_k, src_x = src_params
     dst_k, dst_x = dst_params
 
-    k = interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, lambda_max)
-    x = interpolate.linear_interpolation(src_x, dst_x, lamb)
+    log_linear_fn = partial(interpolate.log_linear_interpolation, min_value=k_min)
+    k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
+    x = pad(interpolate.linear_interpolation, src_x, dst_x, lamb, lambda_min, lambda_max)
 
     return jnp.array([k, x])
+
+
+def interpolate_chiral_volume_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
+    src_k = src_params
+    dst_k = dst_params
+
+    log_linear_fn = partial(interpolate.log_linear_interpolation, min_value=k_min)
+    k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
+
+    return jnp.array(k)
 
 
 def cyclic_difference(a, b, period):
@@ -982,13 +949,12 @@ def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambd
     src_k, src_phase, _ = src_params
     dst_k, dst_phase, _ = dst_params
 
-    k = interpolate_harmonic_force_constant(src_k, dst_k, lamb, k_min, lambda_min, lambda_max)
+    log_linear_fn = partial(interpolate.log_linear_interpolation, min_value=k_min)
+    k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
 
-    phase = interpolate.linear_interpolation(
-        src_phase,
-        src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi),
-        lamb,
-    )
+    src_phase = src_phase
+    dst_phase = src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi)
+    phase = pad(interpolate.linear_interpolation, src_phase, dst_phase, lamb, lambda_min, lambda_max)
 
     # Use a stable functional form with small, finite `eps` for intermediate states only. The value of `eps` for
     # intermedates was chosen to be sufficiently large that no numerical instabilities were observed in testing (even
@@ -1032,13 +998,11 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
     src_k, src_phase, src_period = src_params
     dst_k, dst_phase, _ = dst_params
 
-    k = handle_ring_opening_closing(interpolate.linear_interpolation, src_k, dst_k, lamb, lambda_min, lambda_max)
+    k = pad(interpolate.linear_interpolation, src_k, dst_k, lamb, lambda_min, lambda_max)
 
-    phase = interpolate.linear_interpolation(
-        src_phase,
-        src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi),
-        lamb,
-    )
+    src_phase = src_phase
+    dst_phase = src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi)
+    phase = pad(interpolate.linear_interpolation, src_phase, dst_phase, lamb, lambda_min, lambda_max)
 
     return jnp.array([k, phase, src_period])
 
@@ -1125,6 +1089,15 @@ class AtomMapMixin:
         self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
         self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
 
+    def get_dummy_atoms_a(self):
+        return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_A}
+
+    def get_dummy_atoms_b(self):
+        return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_B}
+
+    def get_core_atoms(self):
+        return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.CORE}
+
     def get_num_atoms(self):
         """
         Get the total number of atoms in the alchemical hybrid.
@@ -1148,172 +1121,40 @@ class AtomMapMixin:
         return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core) - len(self.core)
 
 
-_Bonded = TypeVar("_Bonded", bound=Union[ChiralAtomRestraint, HarmonicAngleStable, HarmonicBond, PeriodicTorsion])
+class MissingBondsInChiralVolumeException(Exception):
+    pass
 
 
-def get_neighbors(bond_idxs: Collection[Tuple[int, int]]) -> Dict[int, List[int]]:
-    neighbors = defaultdict(list)
-    for i, j in bond_idxs:
-        neighbors[i].append(j)
-        neighbors[j].append(i)
-    return neighbors
+def assert_bonds_defined_for_chiral_volumes(vacuum_system, bond_k_min=DEFAULT_BOND_IS_PRESENT_K):
+    """
+    Assert that bonds defined for every chiral volume is present and has a force constant greater than bond_k_min
+    """
+    bonds_present = set()
+
+    for idxs, (bond_k, _) in zip(vacuum_system.bond.potential.idxs, vacuum_system.bond.params):
+        if bond_k > bond_k_min:
+            bonds_present.add(tuple(idxs))
+
+    for (c, i, j, k), chiral_k in zip(vacuum_system.chiral_atom.potential.idxs, vacuum_system.chiral_atom.params):
+        if chiral_k > 0:
+            if canonicalize_bond((c, i)) not in bonds_present:
+                raise MissingBondsInChiralVolumeException(f"bond {(c, i)} missing from Chiral Volume {(c, i, j, k)}")
+            if canonicalize_bond((c, j)) not in bonds_present:
+                raise MissingBondsInChiralVolumeException(f"bond {(c, j)} missing from Chiral Volume {(c, i, j, k)}")
+            if canonicalize_bond((c, k)) not in bonds_present:
+                raise MissingBondsInChiralVolumeException(f"bond {(c, k)} missing from Chiral Volume {(c, i, j, k)}")
 
 
-def check_chiral_validity_src_dst(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):
-    """Raise error unless, for every chiral center, at least 1 chiral volume is defined in both end-states."""
-    neighbors = get_neighbors(src_bond_idxs)
-    for c in src_chiral_centers_in_mol_c:
-        nbs = neighbors[c]
-        if len(nbs) == 4:
-            i, j, k, l = nbs
-            # (ytz): the ordering of i,j,k,l is random if we're reading directly from the mol graph,
-            # which can be inconsistent with the ordering used in the chiral volume definition.
-            nb_subsets = [(i, j, k), (i, j, l), (i, k, l), (j, k, l)]  # 4-choose-3 subsets
-            flags = [dst_chiral_restr_idx_set.defines((c, ii, jj, kk)) for (ii, jj, kk) in nb_subsets]
-
-            if sum(flags) == 0:
-                raise ChiralConversionError(f"len(nbs) == 4 {c, i, j, k, l}")
-
-        if len(nbs) == 3:
-            i, j, k = nbs
-            flag_0 = dst_chiral_restr_idx_set.defines((c, i, j, k))
-            if not flag_0:
-                raise ChiralConversionError(f"len(nbs) == 3 {c, i, j, k}")
-
-
-def assert_chiral_consistency(
-    src_chiral_restr_idx_set: ChiralRestrIdxSet,
-    dst_chiral_restr_idx_set: ChiralRestrIdxSet,
-    src_bond_idxs: NDArray,
-    dst_bond_idxs: NDArray,
-):
-    """Assert that there are no inversions at the end-states between chiral atoms and bonds are present."""
-
-    src_chiral_idxs = src_chiral_restr_idx_set.restr_idxs
-    dst_chiral_idxs = dst_chiral_restr_idx_set.restr_idxs
-
-    for c, i, j, k in src_chiral_idxs:
-        assert canonicalize_bond((c, i)) in src_bond_idxs
-        assert canonicalize_bond((c, j)) in src_bond_idxs
-        assert canonicalize_bond((c, k)) in src_bond_idxs
-
-    for c, i, j, k in dst_chiral_idxs:
-        assert canonicalize_bond((c, i)) in dst_bond_idxs
-        assert canonicalize_bond((c, j)) in dst_bond_idxs
-        assert canonicalize_bond((c, k)) in dst_bond_idxs
+def assert_chiral_consistency(src_chiral_idxs: NDArray, dst_chiral_idxs: NDArray):
+    """
+    Assert that the chiral volumes are not inverting in src and dst.
+    """
+    src_chiral_restr_idx_set = ChiralRestrIdxSet(src_chiral_idxs)
+    dst_chiral_restr_idx_set = ChiralRestrIdxSet(dst_chiral_idxs)
 
     # ensure that we don't have any chiral inversions between src and dst end states
     assert len(src_chiral_restr_idx_set.allowed_set.intersection(dst_chiral_restr_idx_set.disallowed_set)) == 0
     assert len(dst_chiral_restr_idx_set.allowed_set.intersection(src_chiral_restr_idx_set.disallowed_set)) == 0
-
-
-def check_chiral_validity_impl(
-    atom_map: AtomMapMixin,
-    src_chiral_restr_idx_set: ChiralRestrIdxSet,
-    dst_chiral_restr_idx_set: ChiralRestrIdxSet,
-    src_bond_idxs: NDArray,
-    dst_bond_idxs: NDArray,
-):
-    """Assert that we can directly turn on the chiral volumes (after bonds) without staggering angles."""
-
-    chiral_centers_in_mol_a = chiral_utils.find_chiral_atoms(atom_map.mol_a)
-    chiral_centers_in_mol_b = chiral_utils.find_chiral_atoms(atom_map.mol_b)
-
-    src_chiral_centers_in_mol_c = [atom_map.a_to_c[x] for x in chiral_centers_in_mol_a]
-    dst_chiral_centers_in_mol_c = [atom_map.b_to_c[x] for x in chiral_centers_in_mol_b]
-
-    check_chiral_validity_src_dst(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs)
-    check_chiral_validity_src_dst(dst_chiral_centers_in_mol_c, src_chiral_restr_idx_set, dst_bond_idxs)
-
-
-def assert_chiral_consistency_and_validity(
-    atom_map: AtomMapMixin,
-    src_chiral_idxs: NDArray,
-    dst_chiral_idxs: NDArray,
-    src_bond_idxs: NDArray,
-    dst_bond_idxs: NDArray,
-):
-    """
-    Assert that the given the two end states chiral and bond idxs it would be both consistent and valid.
-
-    consistency: if there are no inversions at the end-states between chiral atoms and bonds are present
-    validity: if we can directly turn on the chiral volumes (after bonds) without staggering angles
-    """
-
-    src_chiral_restr_idx_set = ChiralRestrIdxSet(src_chiral_idxs)
-    dst_chiral_restr_idx_set = ChiralRestrIdxSet(dst_chiral_idxs)
-
-    assert_chiral_consistency(src_chiral_restr_idx_set, dst_chiral_restr_idx_set, src_bond_idxs, dst_bond_idxs)
-    check_chiral_validity_impl(
-        atom_map, src_chiral_restr_idx_set, dst_chiral_restr_idx_set, src_bond_idxs, dst_bond_idxs
-    )
-
-
-def verify_chiral_validity_of_core(mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, forcefield):
-    """Verify that a core and forcefield would allow for valid chiral endstates.
-
-    Refer to `check_chiral_validity` for definition of validity.
-
-    Raises
-    ------
-        ChiralConversionError
-            If chiral end states are incompatible for the given core and forcefield
-        DummyGroupAssignmentError
-            If unable to find a chirally-valid dummy group assignment with respect to a placeholder forcefield
-    """
-    find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
-    dummy_groups = find_chirally_valid_dummy_groups(core)
-    if dummy_groups is None:
-        raise DummyGroupAssignmentError("Unable to find chirally-valid dummy group assignment")
-    dummy_groups_ab, dummy_groups_ba = dummy_groups
-    check_chiral_validity = make_check_chiral_validity(mol_a, mol_b, forcefield)
-    check_chiral_validity(core, dummy_groups_ab, dummy_groups_ba)
-
-
-def make_check_chiral_validity(
-    mol_a: Chem.Mol, mol_b: Chem.Mol, forcefield: Forcefield
-) -> Callable[[NDArray, Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]], None]:
-    setup_end_state_harmonic_bond_and_chiral_potentials_ab = make_setup_end_state_harmonic_bond_and_chiral_potentials(
-        mol_a, mol_b, forcefield, verify=False
-    )
-    setup_end_state_harmonic_bond_and_chiral_potentials_ba = make_setup_end_state_harmonic_bond_and_chiral_potentials(
-        mol_b, mol_a, forcefield, verify=False
-    )
-
-    def check_chiral_validity(
-        core: NDArray,
-        dummy_groups_ab: Dict[int, FrozenSet[int]],
-        dummy_groups_ba: Dict[int, FrozenSet[int]],
-    ):
-        """Verify that a core and dummy groups would allow for valid chiral endstates.
-
-        Refer to `check_chiral_validity` for definition of validity.
-
-        Raises
-        ------
-            ChiralConversionError
-                If chiral end states are incompatible for the given core and forcefield.
-        """
-        atom_map = AtomMapMixin(mol_a, mol_b, core)
-        bond_pot_src, chiral_atom_pot_src, _ = setup_end_state_harmonic_bond_and_chiral_potentials_ab(
-            core, atom_map.a_to_c, atom_map.b_to_c, dummy_groups_ab
-        )
-        bond_pot_dst, chiral_atom_pot_dst, _ = setup_end_state_harmonic_bond_and_chiral_potentials_ba(
-            core[:, ::-1], atom_map.b_to_c, atom_map.a_to_c, dummy_groups_ba
-        )
-
-        src_chiral_restr_idx_set = ChiralRestrIdxSet(chiral_atom_pot_src.potential.idxs)
-        dst_chiral_restr_idx_set = ChiralRestrIdxSet(chiral_atom_pot_dst.potential.idxs)
-
-        check_chiral_validity_impl(
-            atom_map,
-            src_chiral_restr_idx_set,
-            dst_chiral_restr_idx_set,
-            bond_pot_src.potential.idxs,
-            bond_pot_dst.potential.idxs,
-        )
-
-    return check_chiral_validity
 
 
 class SingleTopology(AtomMapMixin):
@@ -1361,13 +1202,13 @@ class SingleTopology(AtomMapMixin):
         self.src_system = self._setup_end_state_src()
         self.dst_system = self._setup_end_state_dst()
 
-        assert_chiral_consistency_and_validity(
-            self,
-            self.src_system.chiral_atom.potential.idxs,
-            self.dst_system.chiral_atom.potential.idxs,
-            self.src_system.bond.potential.idxs,
-            self.dst_system.bond.potential.idxs,
+        assert_chiral_consistency(
+            self.src_system.chiral_atom.potential.idxs, self.dst_system.chiral_atom.potential.idxs
         )
+
+        assert_bonds_defined_for_chiral_volumes(self.src_system, DEFAULT_BOND_IS_PRESENT_K)
+
+        assert_bonds_defined_for_chiral_volumes(self.dst_system, DEFAULT_BOND_IS_PRESENT_K)
 
     def combine_masses(self, use_hmr=False):
         """
@@ -1499,30 +1340,22 @@ class SingleTopology(AtomMapMixin):
             self.ff, self.mol_b, self.mol_a, self.core[:, ::-1], self.b_to_c, self.a_to_c, self.dummy_groups_ba
         )
 
-    def _setup_intermediate_bonded_term(
-        self, src_bond: BoundPotential[_Bonded], dst_bond: BoundPotential[_Bonded], lamb, align_fn, interpolate_fn
-    ) -> BoundPotential[_Bonded]:
-        src_cls_bond = type(src_bond.potential)
-        dst_cls_bond = type(dst_bond.potential)
-
-        assert src_cls_bond == dst_cls_bond
-
-        bond_idxs_and_params = align_fn(
-            src_bond.potential.idxs,
-            src_bond.params,
-            dst_bond.potential.idxs,
-            dst_bond.params,
+    def align_and_interpolate_intramolecular_nonbonded(self, lamb):
+        return self._setup_intermediate_nonbonded_term(
+            self.src_system.nonbonded,
+            self.dst_system.nonbonded,
+            lamb,
+            interpolate.align_nonbonded_idxs_and_params,
+            interpolate.linear_interpolation,
         )
-        bond_idxs = np.array([x for x, _, _ in bond_idxs_and_params], dtype=np.int32)
-        if bond_idxs_and_params:
-            src_params = jnp.array([x for _, x, _ in bond_idxs_and_params])
-            dst_params = jnp.array([x for _, _, x in bond_idxs_and_params])
-            bond_params = jax.vmap(interpolate_fn, (0, 0, None))(src_params, dst_params, lamb)
-        else:
-            bond_params = jnp.array([])
 
-        r = src_cls_bond(bond_idxs).bind(bond_params)
-        return cast(BoundPotential[_Bonded], r)  # unclear why cast is needed for mypy
+    @property
+    def src_chiral_idxs(self):
+        return set(tuple(x) for x in self.src_system.chiral_atom.potential.idxs)
+
+    @property
+    def dst_chiral_idxs(self):
+        return set(tuple(x) for x in self.dst_system.chiral_atom.potential.idxs)
 
     def _setup_intermediate_nonbonded_term(
         self,
@@ -1617,6 +1450,206 @@ class SingleTopology(AtomMapMixin):
 
         return ChiralBondRestraint(chiral_bond_idxs, np.array(chiral_bond_signs)).bind(jnp.array(chiral_bond_params))
 
+    def all_idxs_belong_to_core(self, idxs):
+        core_atoms = self.get_core_atoms()
+        return all([x in core_atoms for x in idxs])
+
+    def any_idxs_belong_to_dummy_a(self, idxs):
+        dummy_atoms = self.get_dummy_atoms_a()
+        return any([x in dummy_atoms for x in idxs])
+
+    def any_idxs_belong_to_dummy_b(self, idxs):
+        dummy_atoms = self.get_dummy_atoms_b()
+        return any([x in dummy_atoms for x in idxs])
+
+    def _chiral_volume_is_turning_on(self, idxs):
+        return tuple(idxs) in self.dst_chiral_idxs and tuple(idxs) not in self.src_chiral_idxs
+
+    def _chiral_volume_is_turning_off(self, idxs):
+        return tuple(idxs) in self.src_chiral_idxs and tuple(idxs) not in self.dst_chiral_idxs
+
+    def _bond_idxs_belong_to_chiral_volume_turning_on(self, idxs):
+        induced_bond_idxs = set()
+        for c, i, j, k in self.dst_chiral_idxs.difference(self.src_chiral_idxs):
+            induced_bond_idxs.add(canonicalize_bond((c, i)))
+            induced_bond_idxs.add(canonicalize_bond((c, j)))
+            induced_bond_idxs.add(canonicalize_bond((c, k)))
+        return idxs in induced_bond_idxs
+
+    def _bond_idxs_belong_to_chiral_volume_turning_off(self, idxs):
+        induced_bond_idxs = set()
+        for c, i, j, k in self.src_chiral_idxs.difference(self.dst_chiral_idxs):
+            induced_bond_idxs.add(canonicalize_bond((c, i)))
+            induced_bond_idxs.add(canonicalize_bond((c, j)))
+            induced_bond_idxs.add(canonicalize_bond((c, k)))
+        return idxs in induced_bond_idxs
+
+    def _angle_idxs_belong_to_chiral_volume_turning_on(self, idxs):
+        induced_angle_idxs = set()
+        for c, i, j, k in self.dst_chiral_idxs.difference(self.src_chiral_idxs):
+            induced_angle_idxs.add(canonicalize_bond((i, c, j)))
+            induced_angle_idxs.add(canonicalize_bond((i, c, k)))
+            induced_angle_idxs.add(canonicalize_bond((j, c, k)))
+
+        return idxs in induced_angle_idxs
+
+    def _angle_idxs_belong_to_chiral_volume_turning_off(self, idxs):
+        induced_angle_idxs = set()
+        for c, i, j, k in self.src_chiral_idxs.difference(self.dst_chiral_idxs):
+            induced_angle_idxs.add(canonicalize_bond((i, c, j)))
+            induced_angle_idxs.add(canonicalize_bond((i, c, k)))
+            induced_angle_idxs.add(canonicalize_bond((j, c, k)))
+
+        return idxs in induced_angle_idxs
+
+    def _interpolate_bond(self, idxs, src_params, dst_params, lamb):
+        if self.all_idxs_belong_to_core(idxs):
+            min_max = CORE_BOND_MIN_MAX
+        elif self.any_idxs_belong_to_dummy_a(idxs):
+            if self._bond_idxs_belong_to_chiral_volume_turning_on(idxs):
+                assert 0
+            elif self._bond_idxs_belong_to_chiral_volume_turning_off(idxs):
+                min_max = DUMMY_A_CHIRAL_BOND_CONVERTING_OFF_MIN_MAX
+            else:
+                min_max = DUMMY_A_BOND_MIN_MAX
+        elif self.any_idxs_belong_to_dummy_b(idxs):
+            if self._bond_idxs_belong_to_chiral_volume_turning_on(idxs):
+                min_max = DUMMY_B_CHIRAL_BOND_CONVERTING_ON_MIN_MAX
+            elif self._bond_idxs_belong_to_chiral_volume_turning_off(idxs):
+                assert 0
+            else:
+                min_max = DUMMY_B_BOND_MIN_MAX
+        else:
+            assert 0
+
+        k_min = 0.1
+        return interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, *min_max)
+
+    def _interpolate_angle(self, idxs, src_params, dst_params, lamb):
+        if self.all_idxs_belong_to_core(idxs):
+            if self._angle_idxs_belong_to_chiral_volume_turning_on(idxs):
+                min_max = CORE_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX
+            elif self._angle_idxs_belong_to_chiral_volume_turning_off(idxs):
+                min_max = CORE_CHIRAL_ANGLE_CONVERTING_OFF_MIN_MAX
+            else:
+                min_max = CORE_ANGLE_MIN_MAX
+        elif self.any_idxs_belong_to_dummy_a(idxs):
+            if self._angle_idxs_belong_to_chiral_volume_turning_on(idxs):
+                assert 0
+            elif self._angle_idxs_belong_to_chiral_volume_turning_off(idxs):
+                min_max = DUMMY_A_CHIRAL_ANGLE_CONVERTING_OFF_MIN_MAX
+            else:
+                min_max = DUMMY_A_ANGLE_MIN_MAX
+        elif self.any_idxs_belong_to_dummy_b(idxs):
+            if self._angle_idxs_belong_to_chiral_volume_turning_on(idxs):
+                min_max = DUMMY_B_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX
+            elif self._angle_idxs_belong_to_chiral_volume_turning_off(idxs):
+                assert 0
+            else:
+                min_max = DUMMY_B_ANGLE_MIN_MAX
+        else:
+            assert 0
+
+        k_min = 0.05
+        return interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, *min_max)
+
+    def _interpolate_chiral_atom(self, idxs, src_k, dst_k, lamb):
+        if self.all_idxs_belong_to_core(idxs):
+            if self._chiral_volume_is_turning_on(idxs):
+                min_max = CORE_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX
+            elif self._chiral_volume_is_turning_off(idxs):
+                min_max = CORE_CHIRAL_ATOM_CONVERTING_OFF_MIN_MAX
+            else:
+                assert src_k == dst_k
+                return src_k
+        elif self.any_idxs_belong_to_dummy_a(idxs):
+            if self._chiral_volume_is_turning_on(idxs):
+                assert 0
+            elif self._chiral_volume_is_turning_off(idxs):
+                min_max = DUMMY_A_CHIRAL_ATOM_CONVERTING_OFF_MIN_MAX
+            else:
+                assert src_k == dst_k
+                return src_k
+        elif self.any_idxs_belong_to_dummy_b(idxs):
+            if self._chiral_volume_is_turning_on(idxs):
+                min_max = DUMMY_B_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX
+            elif self._chiral_volume_is_turning_off(idxs):
+                assert 0
+            else:
+                assert src_k == dst_k
+                return src_k
+        else:
+            assert 0
+
+        k_min = 0.025
+        k_final = interpolate_chiral_volume_params(src_k, dst_k, lamb, k_min, *min_max)
+        return k_final
+
+    def _interpolate_torsion(self, idxs, src_params, dst_params, lamb):
+        if self.all_idxs_belong_to_core(idxs):
+            min_max = CORE_TORSION_MIN_MAX
+        elif self.any_idxs_belong_to_dummy_a(idxs):
+            min_max = DUMMY_A_TORSION_MIN_MAX
+        elif self.any_idxs_belong_to_dummy_b(idxs):
+            min_max = DUMMY_B_TORSION_MIN_MAX
+        else:
+            assert 0
+
+        return interpolate_periodic_torsion_params(src_params, dst_params, lamb, *min_max)
+
+    def _align_and_interpolate_bonded_term(self, lamb, src_potential, dst_potential, align_fn, interpolate_fn):
+        set_of_tuples = align_fn(
+            src_potential.potential.idxs,
+            src_potential.params,
+            dst_potential.potential.idxs,
+            dst_potential.params,
+        )
+        bonded_idxs = []
+        bonded_params = []
+        for idxs, src_params, dst_params in set_of_tuples:
+            bonded_idxs.append(idxs)
+            bonded_params.append(interpolate_fn(idxs, src_params, dst_params, lamb))
+        bonded_idxs = np.array(bonded_idxs)
+        bonded_params = jnp.array(bonded_params)
+        bond_class = type(src_potential.potential)
+        return bond_class(bonded_idxs).bind(bonded_params)
+
+    def align_and_interpolate_chiral_atoms(self, lamb):
+        return self._align_and_interpolate_bonded_term(
+            lamb,
+            self.src_system.chiral_atom,
+            self.dst_system.chiral_atom,
+            interpolate.align_chiral_atom_idxs_and_params,
+            self._interpolate_chiral_atom,
+        )
+
+    def align_and_interpolate_angles(self, lamb):
+        return self._align_and_interpolate_bonded_term(
+            lamb,
+            self.src_system.angle,
+            self.dst_system.angle,
+            interpolate.align_harmonic_angle_idxs_and_params,
+            self._interpolate_angle,
+        )
+
+    def align_and_interpolate_bonds(self, lamb):
+        return self._align_and_interpolate_bonded_term(
+            lamb,
+            self.src_system.bond,
+            self.dst_system.bond,
+            interpolate.align_harmonic_bond_idxs_and_params,
+            self._interpolate_bond,
+        )
+
+    def align_and_interpolate_torsions(self, lamb):
+        return self._align_and_interpolate_bonded_term(
+            lamb,
+            self.src_system.torsion,
+            self.dst_system.torsion,
+            interpolate.align_torsion_idxs_and_params,
+            self._interpolate_torsion,
+        )
+
     def setup_intermediate_state(self, lamb) -> VacuumSystem:
         r"""
         Set up intermediate states at some value of the alchemical parameter :math:`\lambda`.
@@ -1640,84 +1673,35 @@ class SingleTopology(AtomMapMixin):
         Note that the above only applies to the interactions whose force constant is zero in one end state; otherwise,
         valence terms are interpolated simultaneously in the interval :math:`0 \leq \lambda \leq 1`)
         """
+
+        # branching diagram for the interpolation of bonded parameters
+        #
+        #                     bonded terms
+        #                      /       \
+        #                     /         \_____
+        #                    /                \
+        #                  core              dummy
+        #                 /   \              |    \
+        #          ______/     \             |     \_________________
+        #         /             |            |                       \
+        #        /              |            |                        \
+        #   converting    non-converting     A                         B
+        #    /      \                       / \                       / \
+        #   /        \                     /   \                     /   \
+        # on->off   off->on        converting non-converting converting  non-converting
+        #                           (on->off)                (off->on)
         src_system = self.src_system
         dst_system = self.dst_system
 
-        # stagger the lambda schedule
-        bonds_min, bonds_max = [0.0, 0.7]
-        angles_min, angles_max = [0.0, 0.7]
-        torsions_min, torsions_max = [0.7, 1.0]
-        chiral_atoms_min, chiral_atoms_max = [0.7, 1.0]
-
-        bond = self._setup_intermediate_bonded_term(
-            src_system.bond,
-            dst_system.bond,
-            lamb,
-            interpolate.align_harmonic_bond_idxs_and_params,
-            partial(
-                interpolate_harmonic_bond_params,
-                k_min=0.1,  # ~ BOLTZ * (300 K) / (5 nm)^2
-                lambda_min=bonds_min,
-                lambda_max=bonds_max,
-            ),
-        )
-
-        angle = self._setup_intermediate_bonded_term(
-            src_system.angle,
-            dst_system.angle,
-            lamb,
-            interpolate.align_harmonic_angle_idxs_and_params,
-            partial(
-                interpolate_harmonic_angle_params,
-                k_min=0.05,  # ~ BOLTZ * (300 K) / (2 * pi)^2
-                lambda_min=angles_min,
-                lambda_max=angles_max,
-            ),
-        )
-
-        assert src_system.torsion
-        assert dst_system.torsion
-        torsion = self._setup_intermediate_bonded_term(
-            src_system.torsion,
-            dst_system.torsion,
-            lamb,
-            interpolate.align_torsion_idxs_and_params,
-            partial(interpolate_periodic_torsion_params, lambda_min=torsions_min, lambda_max=torsions_max),
-        )
-
-        nonbonded = self._setup_intermediate_nonbonded_term(
-            src_system.nonbonded,
-            dst_system.nonbonded,
-            lamb,
-            interpolate.align_nonbonded_idxs_and_params,
-            interpolate.linear_interpolation,
-        )
-
-        assert src_system.chiral_atom
-        assert dst_system.chiral_atom
-
-        assert len(set(tuple(x) for x in src_system.chiral_atom.potential.idxs)) == len(
-            src_system.chiral_atom.potential.idxs
-        )
-        assert len(set(tuple(x) for x in dst_system.chiral_atom.potential.idxs)) == len(
-            dst_system.chiral_atom.potential.idxs
-        )
-
-        chiral_atom = self._setup_intermediate_bonded_term(
-            src_system.chiral_atom,
-            dst_system.chiral_atom,
-            lamb,
-            interpolate.align_chiral_atom_idxs_and_params,
-            partial(
-                interpolate_harmonic_force_constant,
-                k_min=0.025,
-                lambda_min=chiral_atoms_min,
-                lambda_max=chiral_atoms_max,
-            ),
-        )
+        bond = self.align_and_interpolate_bonds(lamb)
+        angle = self.align_and_interpolate_angles(lamb)
+        chiral_atom = self.align_and_interpolate_chiral_atoms(lamb)
+        torsion = self.align_and_interpolate_torsions(lamb)
+        nonbonded = self.align_and_interpolate_intramolecular_nonbonded(lamb)
 
         assert src_system.chiral_bond
         assert dst_system.chiral_bond
+        # (ytz): dead code, not actually used in production
         chiral_bond = self._setup_intermediate_chiral_bond_term(
             src_system.chiral_bond,
             dst_system.chiral_bond,
@@ -1727,7 +1711,7 @@ class SingleTopology(AtomMapMixin):
 
         return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
 
-    def mol(self, lamb, min_bond_k=100.0) -> Chem.Mol:
+    def mol(self, lamb, min_bond_k=DEFAULT_BOND_IS_PRESENT_K) -> Chem.Mol:
         """
         Generate an RDKit mol, with the dummy atoms attached to the molecule. Atom types and bond parameters
         guesstimated from the corresponding bond orders.

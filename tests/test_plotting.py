@@ -4,7 +4,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from timemachine.fe.plots import plot_forward_and_reverse_ddg, plot_forward_and_reverse_dg, plot_work
+from timemachine.fe import single_topology
+from timemachine.fe.plots import (
+    plot_core_interpolation_schedule,
+    plot_dummy_a_interpolation_schedule,
+    plot_dummy_b_interpolation_schedule,
+    plot_forward_and_reverse_ddg,
+    plot_forward_and_reverse_dg,
+    plot_work,
+)
+from timemachine.ff import Forcefield
+from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 # Plotting code should not depend on CUDA
 pytestmark = [pytest.mark.nocuda]
@@ -83,3 +93,12 @@ def test_plot_work_with_infs():
     _, ax = plt.subplots()
     plot_work(nonfinite_values, -nonfinite_values, ax)
     plt.clf()
+
+
+def test_plot_interpolation_schedule():
+    ff = Forcefield.load_default()
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    st = single_topology.SingleTopology(mol_a, mol_b, core, ff)
+    plot_core_interpolation_schedule(st)
+    plot_dummy_a_interpolation_schedule(st)
+    plot_dummy_b_interpolation_schedule(st)

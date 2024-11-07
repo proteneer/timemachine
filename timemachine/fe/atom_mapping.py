@@ -1,3 +1,4 @@
+import warnings
 from collections import defaultdict
 from functools import partial
 from typing import List, Optional, Tuple
@@ -270,6 +271,10 @@ def _get_cores_impl(
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     if initial_mapping is None:
         initial_mapping = np.zeros((0, 2))
+
+    if enforce_chirally_valid_dummy_groups is True:
+        warnings.warn("enforce_chirally_valid_dummy_groups is deprecated and ignored", DeprecationWarning)
+        enforce_chirally_valid_dummy_groups = False
 
     mol_a, perm, initial_mapping = reorder_atoms_by_degree_and_initial_mapping(mol_a, initial_mapping)
 
