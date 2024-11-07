@@ -2016,9 +2016,19 @@ def get_vacuum_system_and_conf(mol_a, mol_b, core, lamb):
     return st.setup_intermediate_state(lamb), conf
 
 
+def _assert_u_and_grad_consistent(u_fwd, u_rev, x_fwd, x_rev, core):
+    box = 100.0 * np.eye(3)
+    np.testing.assert_allclose(u_fwd(x_fwd, box), u_rev(x_rev, box))
+
+    fwd_bond_grad_fn = jax.grad(u_fwd)
+    rev_bond_grad_fn = jax.grad(u_rev)
+
+    np.testing.assert_allclose(fwd_bond_grad_fn(x_fwd, box)[core[:, 0]], rev_bond_grad_fn(x_rev, box)[core[:, 1]])
+
+
 @pytest.mark.nocuda
 @pytest.mark.nightly(reason="slow")
-def test_hif2a_end_state_symmetry():
+def test_hif2a_end_state_symmetry_nightly_test():
     """
     Test that end-states are symmetric
     """
@@ -2032,15 +2042,22 @@ def test_hif2a_end_state_symmetry():
             sys_fwd, conf_fwd = get_vacuum_system_and_conf(mol_a, mol_b, core, 0.0)
             sys_rev, conf_rev = get_vacuum_system_and_conf(mol_b, mol_a, core[:, ::-1], 1.0)
 
-            box = 100.0 * np.eye(3)
+            _assert_u_and_grad_consistent(sys_fwd.bond, sys_rev.bond, conf_fwd, conf_rev, core)
+            _assert_u_and_grad_consistent(sys_fwd.angle, sys_rev.angle, conf_fwd, conf_rev, core)
+            _assert_u_and_grad_consistent(sys_fwd.nonbonded, sys_rev.nonbonded, conf_fwd, conf_rev, core)
+            _assert_u_and_grad_consistent(sys_fwd.torsion, sys_rev.torsion, conf_fwd, conf_rev, core)
+            _assert_u_and_grad_consistent(sys_fwd.chiral_atom, sys_rev.chiral_atom, conf_fwd, conf_rev, core)
 
-            assert sys_fwd.chiral_atom
-            assert sys_rev.chiral_atom
-            assert sys_fwd.torsion
-            assert sys_rev.torsion
 
-            np.testing.assert_allclose(sys_fwd.bond(conf_fwd, box), sys_rev.bond(conf_rev, box))
-            np.testing.assert_allclose(sys_fwd.angle(conf_fwd, box), sys_rev.angle(conf_rev, box))
-            np.testing.assert_allclose(sys_fwd.nonbonded(conf_fwd, box), sys_rev.nonbonded(conf_rev, box))
-            np.testing.assert_allclose(sys_fwd.chiral_atom(conf_fwd, box), sys_rev.chiral_atom(conf_rev, box))
-            np.testing.assert_allclose(sys_fwd.torsion(conf_fwd, box), sys_rev.torsion(conf_rev, box))
+@pytest.mark.nocuda
+def test_hif2a_end_state_symmetry_unit_test():
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
+
+    mol_a = mols[0]
+    mol_b = mols[1]
+    core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+    sys_fwd, conf_fwd = get_vacuum_system_and_conf(mol_a, mol_b, core, 0.0)
+    sys_rev, conf_rev = get_vacuum_system_and_conf(mol_b, mol_a, core[:, ::-1], 1.0)
+
+    _assert_u_and_grad_consistent(sys_fwd.bond, sys_rev.bond, conf_fwd, conf_rev, core)
