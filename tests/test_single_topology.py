@@ -2016,6 +2016,8 @@ def get_vacuum_system_and_conf(mol_a, mol_b, core, lamb):
     return st.setup_intermediate_state(lamb), conf
 
 
+@pytest.mark.nocuda
+@pytest.mark.nightly(reason="slow")
 def test_hif2a_end_state_symmetry():
     """
     Test that end-states are symmetric
@@ -2041,4 +2043,4 @@ def test_hif2a_end_state_symmetry():
             np.testing.assert_allclose(sys_fwd.angle(conf_fwd, box), sys_rev.angle(conf_rev, box))
             np.testing.assert_allclose(sys_fwd.nonbonded(conf_fwd, box), sys_rev.nonbonded(conf_rev, box))
             np.testing.assert_allclose(sys_fwd.chiral_atom(conf_fwd, box), sys_rev.chiral_atom(conf_rev, box))
-            np.testing.assert_allclose(sys_fwd.torsion(conf_fwd, box), sys_rev.torsion(conf_rev, box), rtol=1e-4)
+            np.testing.assert_allclose(sys_fwd.torsion(conf_fwd, box), sys_rev.torsion(conf_rev, box))

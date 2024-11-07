@@ -308,7 +308,7 @@ def canonicalize_improper_idxs(idxs) -> Tuple[int, int, int, int]:
     """
     Canonicalize an improper_idx while being symmetry aware.
 
-    Given idxs (i,j,k,l), where i is the center, and (j,k,l) are neighbors:
+    Given idxs (j,c,k,l), where c is the center, and (j,k,l) are neighbors:
 
     0) Canonicalize the (j,k,l) into (jj,kk,ll) by sorting
     1) Generate clockwise rotations of (jj,kk,ll)

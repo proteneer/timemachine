@@ -192,7 +192,6 @@ def periodic_torsion(conf, params, box, torsion_idxs):
     * box argument unused
     * if conf has more than 3 dimensions, this function only depends on the first 3
     """
-    print("CALLING PERIODIC TORSION")
     if torsion_idxs.shape[0] == 0:
         return 0.0
 
