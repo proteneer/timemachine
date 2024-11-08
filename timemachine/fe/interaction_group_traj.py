@@ -6,6 +6,7 @@ from jax import numpy as jnp
 from jax import vmap
 from numpy.typing import NDArray as Array
 
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF
 from timemachine.potentials import nonbonded
 from timemachine.potentials.jax_utils import distance2
 
@@ -54,7 +55,15 @@ def env_mask_within_cutoff(x_env, x_lig, box, cutoff):
 
 
 class InteractionGroupTraj:
-    def __init__(self, xs: Array, box_diags: Array, ligand_idxs: Array, env_idxs: Array, cutoff=1.2, verbose=True):
+    def __init__(
+        self,
+        xs: Array,
+        box_diags: Array,
+        ligand_idxs: Array,
+        env_idxs: Array,
+        cutoff=DEFAULT_NONBONDED_CUTOFF,
+        verbose=True,
+    ):
         r"""support [U_ig(x; params) for x in traj]
 
         where U_ig = \sum_i \sum_j pair_fxn(||x_j - x_j||; params_i, params_j)

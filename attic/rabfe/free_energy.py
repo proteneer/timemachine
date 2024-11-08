@@ -163,7 +163,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         ligand_masses_a = get_mol_masses(self.mol_a)
         ligand_masses_b = get_mol_masses(self.mol_b)
 
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
         hgt = topology.HostGuestTopology(host_bps, self.top)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)

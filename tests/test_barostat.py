@@ -1,7 +1,14 @@
 import numpy as np
 import pytest
 
-from timemachine.constants import AVOGADRO, BAR_TO_KJ_PER_NM3, BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.constants import (
+    AVOGADRO,
+    BAR_TO_KJ_PER_NM3,
+    BOLTZ,
+    DEFAULT_NONBONDED_CUTOFF,
+    DEFAULT_PRESSURE,
+    DEFAULT_TEMP,
+)
 from timemachine.fe import model_utils
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig
 from timemachine.fe.topology import BaseTopology
@@ -14,7 +21,7 @@ from timemachine.md.builders import build_water_system
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.potentials import HarmonicBond, SummedPotential
-from timemachine.potentials.potential import get_bound_potential_by_type, get_potential_by_type
+from timemachine.potentials.potential import get_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -309,19 +316,15 @@ def test_barostat_varying_pressure():
     pressure = 1013.0
     host_system, coords, box, host_top = build_water_system(3.0, ff.water_ff)
     box += np.eye(3) * 0.1
-    bps, masses_ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+    named_system, masses_ = openmm_deserializer.deserialize_system(host_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
     masses = np.array(masses_)
 
     # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = get_bound_potential_by_type(bps, HarmonicBond)
-    bond_list = get_bond_list(harmonic_bond_potential.potential)
+    bond_list = get_bond_list(named_system.bond.potential)
     group_indices = get_group_indices(bond_list, len(masses))
 
-    u_impls = []
-    for bp in bps:
-        bp_impl = bp.to_gpu(precision=np.float32).bound_impl
-        u_impls.append(bp_impl)
+    u_impls = [p.to_gpu(precision=np.float32).bound_impl for p in named_system.get_U_fns()]
 
     integrator = LangevinIntegrator(
         temperature,
@@ -424,8 +427,6 @@ def test_barostat_recentering_upon_acceptance():
 
 def test_molecular_ideal_gas():
     """
-
-
     References
     ----------
     OpenMM testIdealGas

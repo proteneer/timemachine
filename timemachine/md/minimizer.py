@@ -9,7 +9,7 @@ import scipy.optimize
 from numpy.typing import NDArray
 from rdkit import Chem
 
-from timemachine.constants import BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP, MAX_FORCE_NORM
+from timemachine.constants import BOLTZ, DEFAULT_NONBONDED_CUTOFF, DEFAULT_PRESSURE, DEFAULT_TEMP, MAX_FORCE_NORM
 from timemachine.fe import topology
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.utils import get_romol_conf, set_romol_conf
@@ -83,7 +83,8 @@ def parameterize_system(topo, ff: Forcefield, lamb: float) -> Tuple[List[Potenti
     params_potential_pairs = [
         topo.parameterize_harmonic_bond(ff_params.hb_params),
         topo.parameterize_harmonic_angle(ff_params.ha_params),
-        topo.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
+        topo.parameterize_proper_torsion(ff_params.pt_params),
+        topo.parameterize_improper_torsion(ff_params.it_params),
         topo.parameterize_nonbonded(
             ff_params.q_params,
             ff_params.q_params_intra,
@@ -232,7 +233,9 @@ def pre_equilibrate_host(
         max_lambda=minimizer_max_lambda,
     )
 
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+    named_system, host_masses = openmm_deserializer.deserialize_system(
+        host_config.omm_system, cutoff=DEFAULT_NONBONDED_CUTOFF
+    )
 
     num_host_atoms = host_config.conf.shape[0]
 
@@ -257,7 +260,7 @@ def pre_equilibrate_host(
     combined_masses = np.concatenate(mass_list)
     combined_coords = np.concatenate(conf_list)
 
-    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms, ff, host_config.omm_topology)
+    hgt = topology.HostGuestTopology(named_system, top, host_config.num_water_atoms, ff, host_config.omm_topology)
 
     dt = 1.5e-3
     friction = 1.0
@@ -379,7 +382,7 @@ def make_host_du_dx_fxn(
     assert host_config.box.shape == (3, 3)
 
     # openmm host_system -> timemachine host_bps
-    host_bps, _ = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
     # construct appropriate topology from (mols, ff)
     if len(mols) == 1:
@@ -389,7 +392,7 @@ def make_host_du_dx_fxn(
     else:
         raise ValueError("mols must be length 1 or 2")
 
-    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms, ff, host_config.omm_topology)
+    hgt = topology.HostGuestTopology(named_system, top, host_config.num_water_atoms, ff, host_config.omm_topology)
 
     # read conformers from mol_coords if given, or each mol's conf0 otherwise
     conf_list = [np.asarray(host_config.conf)]

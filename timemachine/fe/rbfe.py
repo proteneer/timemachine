@@ -9,7 +9,12 @@ from numpy.typing import NDArray
 from openmm import app
 from rdkit import Chem
 
-from timemachine.constants import DEFAULT_POSITIONAL_RESTRAINT_K, DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.constants import (
+    DEFAULT_NONBONDED_CUTOFF,
+    DEFAULT_POSITIONAL_RESTRAINT_K,
+    DEFAULT_PRESSURE,
+    DEFAULT_TEMP,
+)
 from timemachine.fe import model_utils
 from timemachine.fe.free_energy import (
     HostConfig,
@@ -33,9 +38,10 @@ from timemachine.fe.plots import (
     plot_hrex_transition_matrix,
 )
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology, assert_bonds_defined_for_chiral_volumes
-from timemachine.fe.system import VacuumSystem, convert_omm_system
+from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
@@ -208,9 +214,9 @@ def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
     Host
         Minimized host state
     """
-    system, masses = convert_omm_system(config.omm_system)
+    named_system, masses = openmm_deserializer.deserialize_system(config.omm_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
     conf, box = minimizer.pre_equilibrate_host([st.mol_a, st.mol_b], config, st.ff)
-    return Host(system, masses, conf, box, config.num_water_atoms, config.omm_topology)
+    return Host(named_system, masses, conf, box, config.num_water_atoms, config.omm_topology)
 
 
 def setup_initial_states(

@@ -339,27 +339,27 @@ $$$$""",
     ff = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, ff)
 
-    duplicate_torsion_idxs = (0, 1, 3, 4)
+    duplicate_proper_idxs = (0, 1, 3, 4)
 
     counts_kv_src = dict()
-    for idxs, p in zip(st.src_system.torsion.potential.idxs, st.src_system.torsion.params):
+    for idxs, p in zip(st.src_system.proper.potential.idxs, st.src_system.proper.params):
         key = tuple(idxs)
         if p[2] == 2.0:
             if key not in counts_kv_src:
                 counts_kv_src[key] = 0
             counts_kv_src[key] += 1  # store period
 
-    assert counts_kv_src[duplicate_torsion_idxs] == 2
+    assert counts_kv_src[duplicate_proper_idxs] == 2
 
     counts_kv_dst = dict()
-    for idxs, p in zip(st.dst_system.torsion.potential.idxs, st.dst_system.torsion.params):
+    for idxs, p in zip(st.dst_system.proper.potential.idxs, st.dst_system.proper.params):
         key = tuple(idxs)
         if p[2] == 2.0:
             if key not in counts_kv_dst:
                 counts_kv_dst[key] = 0
             counts_kv_dst[key] += 1  # store period
 
-    assert duplicate_torsion_idxs not in counts_kv_dst
+    assert duplicate_proper_idxs not in counts_kv_dst
 
     st.setup_intermediate_state(0.5)
 

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from common import fixed_overflowed
 
-from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.free_energy import HostConfig
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -12,8 +12,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.fixed_point import fixed_to_float
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
-from timemachine.potentials.potential import get_bound_potential_by_type
+from timemachine.potentials import SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 pytestmark = [pytest.mark.memcheck]
@@ -43,7 +42,7 @@ def test_deterministic_energies(precision, rtol, atol):
         complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
-    host_fns, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
+    named_system, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
     # resolve host clashes
     host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
@@ -52,8 +51,7 @@ def test_deterministic_energies(precision, rtol, atol):
     x0 = min_coords
     v0 = np.zeros_like(x0)
 
-    harmonic_bond_potential = get_bound_potential_by_type(host_fns, HarmonicBond)
-    bond_list = get_bond_list(harmonic_bond_potential.potential)
+    bond_list = get_bond_list(named_system.bond.potential)
     group_idxs = get_group_indices(bond_list, len(host_masses))
     water_idxs = [group for group in group_idxs if len(group) == 3]
 
@@ -66,8 +64,7 @@ def test_deterministic_energies(precision, rtol, atol):
         seed,
     )
 
-    nb = get_bound_potential_by_type(host_fns, Nonbonded)
-
+    nb = named_system.nonbonded
     # Select the protein as the target for targeted insertion
     radius = 1.0
     target_idxs = next(group for group in group_idxs if len(group) > 3)
@@ -87,6 +84,7 @@ def test_deterministic_energies(precision, rtol, atol):
 
     intg = LangevinIntegrator(temperature, dt, 1.0, np.array(host_masses), seed)
 
+    host_fns = named_system.get_U_fns()
     host_params = [bp.params for bp in host_fns]
     summed_pot = SummedPotential([bp.potential for bp in host_fns], host_params)
     bps = []

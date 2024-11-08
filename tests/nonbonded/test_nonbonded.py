@@ -7,10 +7,10 @@ from common import GradientTest, gen_nonbonded_params_with_4d_offsets, prepare_s
 from numpy.typing import NDArray
 
 from timemachine import potentials
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
-from timemachine.potentials.potential import get_bound_potential_by_type
 
 np.set_printoptions(linewidth=500)
 
@@ -169,11 +169,11 @@ def test_nblist_box_resize(precision, rtol, atol, du_dp_rtol, du_dp_atol):
     # since we should be rebuilding the nblist when the box sizes change.
     ff = Forcefield.load_default()
 
-    host_system, host_conf, box, top = builders.build_water_system(3.0, ff.water_ff)
+    host_system, host_conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
 
-    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(host_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    test_bp = get_bound_potential_by_type(host_fns, potentials.Nonbonded)
+    test_bp = named_system.nonbonded
     assert test_bp.params is not None
 
     big_box = box + np.eye(3) * 1000

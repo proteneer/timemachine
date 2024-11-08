@@ -152,10 +152,10 @@ def test_summed_potential_invalid_parameters_size(harmonic_bond):
     with pytest.raises(AssertionError):
         _ = bp(x, box)
 
-    # should assert flattened params
+    # should not assert because __post_init__ on BoundPotential
+    # will now automatically flatten params
     bp = sp.bind(harmonic_bond.params)
-    with pytest.raises(AssertionError):
-        _ = bp(x, box)
+    _ = bp(x, box)
 
 
 def test_summed_potential_nested(harmonic_bond):

@@ -48,6 +48,9 @@ class BoundPotential(Generic[_P]):
     def to_gpu(self, precision: Precision) -> "BoundGpuImplWrapper":
         return self.potential.to_gpu(precision).bind(np.asarray(self.params))
 
+    def __post_init__(self):
+        self.params = self.params.astype(np.float64).reshape(self.potential.params_shape())
+
 
 @dataclass
 class GpuImplWrapper:

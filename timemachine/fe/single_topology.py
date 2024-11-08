@@ -690,37 +690,22 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     mol_c_angle_idxs = np.concatenate([mol_a_angle_idxs, all_dummy_angle_idxs])
     mol_c_angle_params = np.concatenate([mol_a_angle_params, all_dummy_angle_params])
 
-    mol_c_proper_idxs = mol_a_proper_idxs
+    mol_c_proper_idxs = np.array([canonicalize_bond(idxs) for idxs in mol_a_proper_idxs])
     mol_c_proper_params = mol_a_proper_params
 
     mol_c_improper_idxs = np.concatenate([mol_a_improper_idxs, all_dummy_improper_idxs])
     mol_c_improper_params = np.concatenate([mol_a_improper_params, all_dummy_improper_params])
 
     # canonicalize improper with cw/ccw check
-    mol_c_improper_idxs = np.array(
-        [canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs], np.int32
-    ).reshape(-1, 4)
-
-    # check that the improper idxs are canonical
-    def assert_improper_idxs_are_canonical(all_idxs):
-        for j, _, k, l in all_idxs:
-            jj, kk, ll = sorted((j, k, l))
-            assert (jj, kk, ll) == (j, k, l) or (kk, ll, jj) == (j, k, l) or (ll, jj, kk) == (j, k, l)
-
-    assert_improper_idxs_are_canonical(mol_c_improper_idxs)
-
-    # combine proper + improper
-    mol_c_torsion_idxs = np.concatenate([mol_c_proper_idxs, mol_c_improper_idxs])
-    mol_c_torsion_params = np.concatenate([mol_c_proper_params, mol_c_improper_params])
+    mol_c_improper_idxs = np.array([canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs])
 
     # canonicalize angles
     mol_c_angle_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_angle_idxs])
     mol_c_stable_angle_params = np.hstack([mol_c_angle_params, np.zeros((len(mol_c_angle_params), 1))])
     angle_potential = HarmonicAngleStable(mol_c_angle_idxs_canon).bind(np.array(mol_c_stable_angle_params))
 
-    # canonicalize torsions with idxs[0] < idxs[-1] check
-    mol_c_torsion_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_torsion_idxs])
-    torsion_potential = PeriodicTorsion(mol_c_torsion_idxs_canon).bind(np.array(mol_c_torsion_params))
+    proper_potential = PeriodicTorsion(mol_c_proper_idxs).bind(mol_c_proper_params)
+    improper_potential = PeriodicTorsion(np.array(mol_c_improper_idxs)).bind(mol_c_improper_params)
 
     # dummy atoms do not have any nonbonded interactions, so we simply turn them off
     mol_c_nbpl_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_a_nbpl_idxs])
@@ -735,6 +720,7 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     )
 
     num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
+    # (ytz): TODO: need to check force constants too.
     assert (
         get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1
     ), "hybrid molecule has multiple connected components"
@@ -742,7 +728,8 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     return VacuumSystem(
         bond_potential,
         angle_potential,
-        torsion_potential,
+        proper_potential,
+        improper_potential,
         nonbonded_potential,
         chiral_atom_potential,
         chiral_bond_potential,
@@ -1436,19 +1423,18 @@ class SingleTopology(AtomMapMixin):
             dst_bond.params,
             dst_bond.potential.signs,
         )
-        chiral_bond_idxs_ = []
+        chiral_bond_idxs = []
         chiral_bond_params = []
         chiral_bond_signs = []
         for idxs, sign, src_k, dst_k in idxs_and_params:
-            chiral_bond_idxs_.append(idxs)
+            chiral_bond_idxs.append(idxs)
             new_params = interpolate_fn(src_k, dst_k, lamb)
             chiral_bond_params.append(new_params)
             chiral_bond_signs.append(sign)
 
-        # these should be properly sized
-        chiral_bond_idxs = np.array(chiral_bond_idxs_, dtype=np.int32).reshape((-1, 4))
-
-        return ChiralBondRestraint(chiral_bond_idxs, np.array(chiral_bond_signs)).bind(jnp.array(chiral_bond_params))
+        return ChiralBondRestraint(np.array(chiral_bond_idxs), np.array(chiral_bond_signs)).bind(
+            jnp.array(chiral_bond_params)
+        )
 
     def all_idxs_belong_to_core(self, idxs):
         core_atoms = self.get_core_atoms()
@@ -1641,11 +1627,20 @@ class SingleTopology(AtomMapMixin):
             self._interpolate_bond,
         )
 
-    def align_and_interpolate_torsions(self, lamb):
+    def align_and_interpolate_propers(self, lamb):
         return self._align_and_interpolate_bonded_term(
             lamb,
-            self.src_system.torsion,
-            self.dst_system.torsion,
+            self.src_system.proper,
+            self.dst_system.proper,
+            interpolate.align_torsion_idxs_and_params,
+            self._interpolate_torsion,
+        )
+
+    def align_and_interpolate_impropers(self, lamb):
+        return self._align_and_interpolate_bonded_term(
+            lamb,
+            self.src_system.improper,
+            self.dst_system.improper,
             interpolate.align_torsion_idxs_and_params,
             self._interpolate_torsion,
         )
@@ -1696,11 +1691,9 @@ class SingleTopology(AtomMapMixin):
         bond = self.align_and_interpolate_bonds(lamb)
         angle = self.align_and_interpolate_angles(lamb)
         chiral_atom = self.align_and_interpolate_chiral_atoms(lamb)
-        torsion = self.align_and_interpolate_torsions(lamb)
+        proper = self.align_and_interpolate_propers(lamb)
+        improper = self.align_and_interpolate_impropers(lamb)
         nonbonded = self.align_and_interpolate_intramolecular_nonbonded(lamb)
-
-        assert src_system.chiral_bond
-        assert dst_system.chiral_bond
         # (ytz): dead code, not actually used in production
         chiral_bond = self._setup_intermediate_chiral_bond_term(
             src_system.chiral_bond,
@@ -1709,7 +1702,7 @@ class SingleTopology(AtomMapMixin):
             interpolate.linear_interpolation,
         )
 
-        return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
+        return VacuumSystem(bond, angle, proper, improper, nonbonded, chiral_atom, chiral_bond)
 
     def mol(self, lamb, min_bond_k=DEFAULT_BOND_IS_PRESENT_K) -> Chem.Mol:
         """
@@ -1942,26 +1935,20 @@ class SingleTopology(AtomMapMixin):
         """
 
         guest_system = self.setup_intermediate_state(lamb=lamb)
-
         num_host_atoms = host_system.nonbonded.params.shape[0]
 
-        assert guest_system.chiral_atom
         guest_chiral_atom_idxs = np.array(guest_system.chiral_atom.potential.idxs, dtype=np.int32) + num_host_atoms
         guest_system.chiral_atom.potential.idxs = guest_chiral_atom_idxs
 
-        assert guest_system.chiral_bond
         guest_chiral_bond_idxs = np.array(guest_system.chiral_bond.potential.idxs, dtype=np.int32) + num_host_atoms
         guest_system.chiral_bond.potential.idxs = guest_chiral_bond_idxs
-
         guest_nonbonded_idxs = np.array(guest_system.nonbonded.potential.idxs, dtype=np.int32) + num_host_atoms
         guest_system.nonbonded.potential.idxs = guest_nonbonded_idxs
-
         combined_bond_idxs = np.concatenate(
             [host_system.bond.potential.idxs, guest_system.bond.potential.idxs + num_host_atoms]
         )
         combined_bond_params = jnp.concatenate([host_system.bond.params, guest_system.bond.params])
         combined_bond = HarmonicBond(combined_bond_idxs).bind(combined_bond_params)
-
         combined_angle_idxs = np.concatenate(
             [host_system.angle.potential.idxs, guest_system.angle.potential.idxs + num_host_atoms]
         )
@@ -1974,20 +1961,17 @@ class SingleTopology(AtomMapMixin):
         combined_angle_params = jnp.concatenate([host_angle_params, guest_system.angle.params])
         combined_angle = HarmonicAngleStable(combined_angle_idxs).bind(combined_angle_params)
 
-        assert guest_system.torsion
+        combined_proper_idxs = np.concatenate(
+            [host_system.proper.potential.idxs, guest_system.proper.potential.idxs + num_host_atoms]
+        )
+        combined_proper_params = jnp.concatenate([host_system.proper.params, guest_system.proper.params])
+        combined_proper = PeriodicTorsion(combined_proper_idxs).bind(combined_proper_params)
 
-        # complex proteins have torsions
-        if host_system.torsion:
-            combined_torsion_idxs = np.concatenate(
-                [host_system.torsion.potential.idxs, guest_system.torsion.potential.idxs + num_host_atoms]
-            )
-            combined_torsion_params = jnp.concatenate([host_system.torsion.params, guest_system.torsion.params])
-        else:
-            # solvent waters don't have torsions
-            combined_torsion_idxs = np.array(guest_system.torsion.potential.idxs, dtype=np.int32) + num_host_atoms
-            combined_torsion_params = jnp.array(guest_system.torsion.params)
-
-        combined_torsion = PeriodicTorsion(combined_torsion_idxs).bind(combined_torsion_params)
+        combined_improper_idxs = np.concatenate(
+            [host_system.improper.potential.idxs, guest_system.improper.potential.idxs + num_host_atoms]
+        )
+        combined_improper_params = jnp.concatenate([host_system.improper.params, guest_system.improper.params])
+        combined_improper = PeriodicTorsion(combined_improper_idxs).bind(combined_improper_params)
 
         host_nonbonded = self._parameterize_host_nonbonded(host_system.nonbonded)
         host_guest_nonbonded_ixn = self._parameterize_host_guest_nonbonded_ixn(
@@ -2001,7 +1985,8 @@ class SingleTopology(AtomMapMixin):
         return HostGuestSystem(
             combined_bond,
             combined_angle,
-            combined_torsion,
+            combined_proper,
+            combined_improper,
             guest_system.chiral_atom,
             guest_system.chiral_bond,
             guest_system.nonbonded,

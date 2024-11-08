@@ -5,9 +5,10 @@ import numpy as np
 import pytest
 
 from timemachine import potentials
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
+from timemachine.ff.handlers.openmm_deserializer import deserialize_system
 from timemachine.md import builders
 from timemachine.testsystems.dhfr import get_dhfr_system
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -27,14 +28,14 @@ def complex_host_system():
     host_sys_omm, host_top = get_dhfr_system()
     # Hardcoded to match 5dfr_solv_equil.pdb file
     num_water_atoms = 21069
-    return convert_omm_system(host_sys_omm), num_water_atoms, host_top
+    return deserialize_system(host_sys_omm, DEFAULT_NONBONDED_CUTOFF), num_water_atoms, host_top
 
 
 @pytest.fixture(scope="module")
 def solvent_host_system():
     ff = Forcefield.load_default()
     host_sys_omm, conf, _, top = builders.build_water_system(3.0, ff.water_ff)
-    return convert_omm_system(host_sys_omm), conf.shape[0], top
+    return deserialize_system(host_sys_omm, DEFAULT_NONBONDED_CUTOFF), conf.shape[0], top
 
 
 @pytest.mark.parametrize("lamb", [0.0, 1.0])
@@ -62,22 +63,10 @@ def test_combined_parameters_bonded(host_system_fixture, lamb, hif2a_ligand_pair
     # check bonds
     check_bonded_idxs_consistency(hgs.bond.potential.idxs, len(host_sys.bond.potential.idxs))
     check_bonded_idxs_consistency(hgs.angle.potential.idxs, len(host_sys.angle.potential.idxs))
-
-    if host_sys.torsion:
-        check_bonded_idxs_consistency(hgs.torsion.potential.idxs, len(host_sys.torsion.potential.idxs))
-    else:
-        check_bonded_idxs_consistency(hgs.torsion.potential.idxs, 0)
-
-    if host_sys.chiral_atom:
-        check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, len(host_sys.chiral_atom.potential.idxs))
-    else:
-        check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, 0)
-
-    if host_sys.chiral_bond:
-        check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, len(host_sys.chiral_bond.potential.idxs))
-    else:
-        check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, 0)
-
+    check_bonded_idxs_consistency(hgs.proper.potential.idxs, len(host_sys.proper.potential.idxs))
+    check_bonded_idxs_consistency(hgs.improper.potential.idxs, len(host_sys.improper.potential.idxs))
+    check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, len(host_sys.chiral_atom.potential.idxs))
+    check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, len(host_sys.chiral_bond.potential.idxs))
     check_bonded_idxs_consistency(hgs.nonbonded_guest_pairs.potential.idxs, 0)
 
 

@@ -2,15 +2,13 @@ import numpy as np
 import pytest
 from common import assert_energy_arrays_match
 
-from timemachine.constants import DEFAULT_TEMP
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF, DEFAULT_TEMP
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove
-from timemachine.potentials import HarmonicBond, Nonbonded
-from timemachine.potentials.potential import get_bound_potential_by_type
 
 
 @pytest.mark.memcheck
@@ -23,12 +21,11 @@ def test_nonbonded_atom_by_atom_energies_match(num_mols, adjustments, precision,
     """Verify that if looking at not computing the subsets of energies matches the references"""
     rng = np.random.default_rng(2023)
     ff = Forcefield.load_default()
-    system, conf, box, top = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    system, conf, box, _ = builders.build_water_system(4.0, ff.water_ff)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    nb = named_system.nonbonded
+    bond = named_system.bond
+    all_group_idxs = get_group_indices(get_bond_list(bond.potential), conf.shape[0])
 
     # Get the indices of atoms to compute per atom energies for
     target_atoms = np.concatenate([rng.choice(all_group_idxs) for _ in range(num_mols)]).reshape(-1)

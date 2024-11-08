@@ -466,7 +466,7 @@ def ligand_only_traj(xvbs: List[CoordsVelBox], num_lig_atoms: int) -> List[Coord
 def get_water_charges(ff: Forcefield) -> List[float]:
     # Return the O, H, H atomic partial charges for water.
     water_system, water_coords, water_box, water_top = build_water_system(0.5, ff.water_ff)
-    water_bps, water_masses = handlers.openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
+    water_bps, water_masses = handlers.openmm_deserializer.deserialize_system(water_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
     water_top = topology.HostGuestTopology(water_bps, None)
     water_charges = water_top.host_nonbonded.params[:, 0][:3]
     return water_charges
@@ -518,7 +518,7 @@ def compute_prefactors(
         ligand_idx = np.arange(num_lig_atoms) + num_water_atoms
 
         # prefactor data
-        data = coulomb_prefactors_on_traj(traj, boxes, charges, ligand_idx, env_idx, cutoff=1.2)
+        data = coulomb_prefactors_on_traj(traj, boxes, charges, ligand_idx, env_idx, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
         # samples
         samples = EndpointSamples(endpoint_sample.samples_0, ligand_only_traj(endpoint_sample.samples_1, num_lig_atoms))
@@ -543,7 +543,7 @@ def compute_prefactors(
     return prefactors
 
 
-def intramol_energy(ligand_charges: Array, traj: Samples, charge_rescale_mask: Array, beta=2.0, cutoff=1.2) -> Array:
+def intramol_energy(ligand_charges: Array, traj: Samples, charge_rescale_mask: Array, beta=2.0, cutoff=DEFAULT_NONBONDED_CUTOFF) -> Array:
     """
     Compute the intramolecular energy for the given molecule.
 

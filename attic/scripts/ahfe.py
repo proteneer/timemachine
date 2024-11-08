@@ -32,7 +32,7 @@ ligand_coords = get_romol_conf(romol)
 #   of a large pre-equilibrated water box snapshot)
 system, host_coords, box, omm_topology = builders.build_water_system(4.0)
 
-host_bps, host_masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+host_bps, host_masses = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
 combined_masses = np.concatenate([host_masses, ligand_masses])
 

@@ -13,28 +13,52 @@ from .potential import BoundGpuImplWrapper, BoundPotential, GpuImplWrapper, Pote
 from .types import Box, Conf, Params
 
 
+# classes that inherit from this will sanitize idxs to the expected shape and type
+class ShapedIdxsPotential(Potential):
+    def __post_init__(self):
+        self.idxs = np.array(self.idxs, dtype=np.int32).reshape(self.idxs_shape())
+
+
 @dataclass
-class HarmonicBond(Potential):
+class HarmonicBond(ShapedIdxsPotential):
     idxs: NDArray[np.int32]
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         return bonded.harmonic_bond(conf, params, box, self.idxs)
 
+    def idxs_shape(self):
+        return (-1, 2)
+
+    def params_shape(self):
+        return (-1, 2)
+
 
 @dataclass
-class HarmonicAngle(Potential):
+class HarmonicAngle(ShapedIdxsPotential):
     idxs: NDArray[np.int32]
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         return bonded.harmonic_angle(conf, params, box, self.idxs)
 
+    def idxs_shape(self):
+        return (-1, 3)
+
+    def params_shape(self):
+        return (-1, 2)
+
 
 @dataclass
-class HarmonicAngleStable(Potential):
+class HarmonicAngleStable(ShapedIdxsPotential):
     idxs: NDArray[np.int32]
 
     def __call__(self, conf: Conf, params: Params, _: Optional[Box]) -> float | Array:
         return bonded_stable.harmonic_angle_stable(conf, params, self.idxs)
+
+    def idxs_shape(self):
+        return (-1, 3)
+
+    def params_shape(self):
+        return (-1, 3)
 
 
 @dataclass
@@ -49,45 +73,75 @@ class CentroidRestraint(Potential):
 
 
 @dataclass
-class ChiralAtomRestraint(Potential):
+class ChiralAtomRestraint(ShapedIdxsPotential):
     idxs: NDArray[np.int32]
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         return chiral_restraints.chiral_atom_restraint(conf, params, box, self.idxs)
 
+    def idxs_shape(self):
+        return (-1, 4)
+
+    def params_shape(self):
+        return -1
+
 
 @dataclass
-class ChiralBondRestraint(Potential):
+class ChiralBondRestraint(ShapedIdxsPotential):
     idxs: NDArray[np.int32]
     signs: NDArray[np.int32]
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         return chiral_restraints.chiral_bond_restraint(conf, params, box, self.idxs, self.signs)
 
+    def idxs_shape(self):
+        return (-1, 4)
+
+    def params_shape(self):
+        return -1
+
 
 @dataclass
-class FlatBottomBond(Potential):
+class FlatBottomBond(ShapedIdxsPotential):
     idxs: NDArray[np.int32]
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         return bonded.flat_bottom_bond(conf, params, box, self.idxs)
 
+    def idxs_shape(self):
+        return (-1, 2)
+
+    def params_shape(self):
+        return (-1, 3)
+
 
 @dataclass
-class LogFlatBottomBond(Potential):
+class LogFlatBottomBond(ShapedIdxsPotential):
     idxs: NDArray[np.int32]
     beta: float
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         return bonded.log_flat_bottom_bond(conf, params, box, self.idxs, self.beta)
 
+    def idxs_shape(self):
+        return (-1, 2)
+
+    def params_shape(self):
+        return (-1, 3)
+
 
 @dataclass
-class PeriodicTorsion(Potential):
+class PeriodicTorsion(ShapedIdxsPotential):
     idxs: NDArray[np.int32]
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         return bonded.periodic_torsion(conf, params, box, self.idxs)
+
+    def idxs_shape(self):
+        return (-1, 4)
+
+    def params_shape(self):
+        return (-1, 3)
 
 
 @dataclass
@@ -128,6 +182,9 @@ class Nonbonded(Potential):
         exclusions = NonbondedExclusions(exclusion_idxs, scale_factors, self.beta, self.cutoff)
         return FanoutSummedPotential([all_pairs, exclusions]).to_gpu(precision)
 
+    def params_shape(self):
+        return (-1, 4)
+
 
 @dataclass
 class NonbondedAllPairs(Potential):
@@ -150,6 +207,9 @@ class NonbondedAllPairs(Potential):
             runtime_validate=False,  # needed for this to be JAX-transformable
             atom_idxs=self.atom_idxs,
         )
+
+    def params_shape(self):
+        return (-1, 4)
 
 
 @dataclass
@@ -176,9 +236,12 @@ class NonbondedInteractionGroup(Potential):
         )
         return jnp.sum(vdW) + jnp.sum(electrostatics)
 
+    def params_shape(self):
+        return (-1, 4)
+
 
 @dataclass
-class NonbondedPairList(Potential):
+class NonbondedPairList(ShapedIdxsPotential):
     idxs: NDArray[np.int32]
     rescale_mask: NDArray[np.float64]
     beta: float
@@ -190,9 +253,15 @@ class NonbondedPairList(Potential):
         )
         return jnp.sum(vdW) + jnp.sum(electrostatics)
 
+    def idxs_shape(self):
+        return (-1, 2)
+
+    def params_shape(self):
+        return (-1, 4)
+
 
 @dataclass
-class NonbondedExclusions(Potential):
+class NonbondedExclusions(ShapedIdxsPotential):
     idxs: NDArray[np.int32]
     rescale_mask: NDArray[np.float64]
     beta: float
@@ -205,9 +274,15 @@ class NonbondedExclusions(Potential):
         U = jnp.sum(vdW) + jnp.sum(electrostatics)
         return -U
 
+    def idxs_shape(self):
+        return (-1, 2)
+
+    def params_shape(self):
+        return (-1, 4)
+
 
 @dataclass
-class NonbondedPairListPrecomputed(Potential):
+class NonbondedPairListPrecomputed(ShapedIdxsPotential):
     """
     This implements a pairlist with precomputed parameters. It differs from the regular NonbondedPairlist in that it
     expects params of the form s0*q_ij, s_ij, s1*e_ij, and w_offsets_ij, where s are the scaling factors and combining
@@ -227,6 +302,12 @@ class NonbondedPairListPrecomputed(Potential):
         )
         return jnp.sum(vdW) + jnp.sum(electrostatics)
 
+    def idxs_shape(self):
+        return (-1, 2)
+
+    def params_shape(self):
+        return (-1, 4)  # q s e w
+
 
 @dataclass
 class SummedPotential(Potential):
@@ -239,7 +320,7 @@ class SummedPotential(Potential):
             raise ValueError("number of potentials != number of parameter arrays")
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
-        return summed.summed_potential(conf, params, box, self.potentials, self.params_shapes)
+        return summed.summed_potential(conf, params, box, self.potentials, self.params_shapes())
 
     def to_gpu(self, precision: Precision) -> "SummedPotentialGpuImplWrapper":
         impls = [p.to_gpu(precision).unbound_impl for p in self.potentials]
@@ -254,12 +335,14 @@ class SummedPotential(Potential):
         params_flat = jnp.concatenate([ps.reshape(-1) for ps in params])
         return BoundPotential(self, params_flat)
 
-    @property
     def params_shapes(self):
         return [ps.shape for ps in self.params_init]
 
     def unflatten_params(self, params: Params) -> List[Params]:
-        return summed.unflatten_params(params, self.params_shapes)
+        return summed.unflatten_params(params, self.params_shapes())
+
+    def params_shape(self):
+        return -1
 
 
 def make_summed_potential(bps: Sequence[BoundPotential]):
@@ -281,6 +364,9 @@ class SummedPotentialGpuImplWrapper(GpuImplWrapper):
         params_flat = np.concatenate([ps.reshape(-1) for ps in params])
         return BoundGpuImplWrapper(custom_ops.BoundPotential(self.unbound_impl, params_flat))
 
+    def params_shape(self):
+        return -1
+
 
 @dataclass
 class FanoutSummedPotential(Potential):
@@ -293,3 +379,6 @@ class FanoutSummedPotential(Potential):
     def to_gpu(self, precision: Precision) -> GpuImplWrapper:
         impls = [p.to_gpu(precision).unbound_impl for p in self.potentials]
         return GpuImplWrapper(custom_ops.FanoutSummedPotential(impls, self.parallel))
+
+    def params_shape(self):
+        return -1

@@ -19,9 +19,9 @@ def setup_dhfr():
     box = host_pdb.topology.getPeriodicBoxVectors()
     box = strip_units(box)
 
-    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
+    named_system, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
-    return host_fns, host_masses, np.array(host_coords), np.array(box)
+    return named_system, host_masses, np.array(host_coords), np.array(box)
 
 
 def get_dhfr_system():

@@ -15,6 +15,7 @@ from common import prepare_single_topology_initial_state
 from numpy.typing import NDArray
 
 from timemachine import constants
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF
 from timemachine.fe import absolute_hydration
 from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
@@ -443,14 +444,14 @@ def run_single_topology_benchmarks(
     initial_state = prepare_single_topology_initial_state(st, host_config)
     barostat_interval = 0
     if host_config is not None:
-        host_fns, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+        named_system, host_masses = openmm_deserializer.deserialize_system(
+            host_config.omm_system, cutoff=DEFAULT_NONBONDED_CUTOFF
+        )
 
         # RBFE
         x0 = initial_state.x0[: len(host_config.conf)]
         v0 = np.zeros_like(x0)
-
-        harmonic_bond_potential = get_bound_potential_by_type(host_fns, HarmonicBond).potential
-        bond_list = get_bond_list(harmonic_bond_potential)
+        bond_list = get_bond_list(named_system.bond.potential)
         dt = 2.5e-3
         hmr_masses = apply_hmr(host_masses, bond_list)
 
@@ -462,7 +463,7 @@ def run_single_topology_benchmarks(
                 x0,
                 v0,
                 initial_state.box0,
-                host_fns,
+                named_system.get_U_fns(),
                 barostat_interval=barostat_interval,
                 dt=dt,
             )
@@ -505,18 +506,27 @@ def run_single_topology_benchmarks(
 
 
 def benchmark_dhfr(config: BenchmarkConfig):
-    host_fns, host_masses, host_conf, box = setup_dhfr()
+    named_system, host_masses, host_conf, box = setup_dhfr()
 
     x0 = host_conf
     v0 = np.zeros_like(host_conf)
 
-    harmonic_bond_potential = get_bound_potential_by_type(host_fns, HarmonicBond).potential
-    bond_list = get_bond_list(harmonic_bond_potential)
+    bond_list = get_bond_list(named_system.bond.potential)
     dt = 2.5e-3
     hmr_masses = apply_hmr(host_masses, bond_list)
 
     for barostat_interval in [0, 25]:
-        benchmark(config, "dhfr-apo", hmr_masses, x0, v0, box, host_fns, barostat_interval=barostat_interval, dt=dt)
+        benchmark(
+            config,
+            "dhfr-apo",
+            hmr_masses,
+            x0,
+            v0,
+            box,
+            named_system.get_U_fns(),
+            barostat_interval=barostat_interval,
+            dt=dt,
+        )
 
 
 def benchmark_hif2a(config: BenchmarkConfig):

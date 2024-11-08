@@ -91,13 +91,11 @@ def align_idxs_and_params(
 
         if has_duplicates(k for k, _ in kvs):
             raise DuplicateAlignmentKeysError()
-
         return dict(kvs)
 
     src_kv = make_kv(src_idxs, src_params)
     dst_kv = make_kv(dst_idxs, dst_params)
-
-    return {
+    res = {
         (
             get_idxs(k),
             to_hashable(src_kv[k]) if k in src_kv else make_default(dst_kv[k]),
@@ -105,6 +103,8 @@ def align_idxs_and_params(
         )
         for k in set(src_kv.keys()).union(dst_kv.keys())
     }
+
+    return res
 
 
 def assert_canonical_bond(bond):

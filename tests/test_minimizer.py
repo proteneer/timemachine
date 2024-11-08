@@ -6,6 +6,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.model_utils import get_vacuum_val_and_grad_fn
 from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name
@@ -193,11 +194,10 @@ def test_local_minimize_water_box(minimizer_config):
     """
     ff = Forcefield.load_default()
 
-    system, x0, box0, top = builders.build_water_system(4.0, ff.water_ff)
-    host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    system, x0, box0, _ = builders.build_water_system(4.0, ff.water_ff)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
     box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
-
-    val_and_grad_fn = minimizer.get_val_and_grad_fn(host_fns, box0)
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(named_system.get_U_fns(), box0)
 
     free_idxs = [0, 2, 3, 6, 7, 9, 15, 16]
     frozen_idxs = set(range(len(x0))).difference(set(free_idxs))
@@ -224,9 +224,10 @@ def test_local_minimize_water_box_with_bounds():
     ff = Forcefield.load_default()
 
     system, x0, box0, top = builders.build_water_system(4.0, ff.water_ff)
-    host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
     box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
 
+    host_fns = named_system.get_U_fns()
     val_and_grad_fn = minimizer.get_val_and_grad_fn(host_fns, box0)
 
     free_idxs = [0, 2, 3, 6, 7, 9, 15, 16]

@@ -5,7 +5,7 @@ import pytest
 from common import assert_energy_arrays_match
 from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_KT, DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.constants import DEFAULT_KT, DEFAULT_NONBONDED_CUTOFF, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -14,8 +14,6 @@ from timemachine.lib.fixed_point import fixed_to_float
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove, randomly_rotate_and_translate
-from timemachine.potentials import HarmonicBond, Nonbonded
-from timemachine.potentials.potential import get_bound_potential_by_type
 
 
 @pytest.mark.memcheck
@@ -23,7 +21,7 @@ from timemachine.potentials.potential import get_bound_potential_by_type
 def test_nonbonded_mol_energy_potential_validation(precision):
     rng = np.random.default_rng(2023)
     ff = Forcefield.load_default()
-    system, conf, box, _ = builders.build_water_system(2.0, ff.water_ff)
+    _, conf, box, _ = builders.build_water_system(2.0, ff.water_ff)
 
     N = 10
     cutoff = 1.2
@@ -69,13 +67,11 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision
     """Assert that NonbondedMolEnergyPotential Cuda implementation produces the same
     energies as the reference jax version in the BDExchangeMover"""
     ff = Forcefield.load_default()
-    system, conf, box, top = builders.build_water_system(5.0, ff.water_ff)
+    system, conf, box, _ = builders.build_water_system(5.0, ff.water_ff)
     box += np.eye(3) * 0.1
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    nb = named_system.nonbonded
+    all_group_idxs = get_group_indices(get_bond_list(named_system.bond.potential), conf.shape[0])
 
     assert len(all_group_idxs) >= num_mols
 
@@ -123,11 +119,9 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
     ff = Forcefield.load_default()
 
     system, conf, _, top = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    nb = named_system.nonbonded
+    all_group_idxs = get_group_indices(get_bond_list(named_system.bond.potential), conf.shape[0])
 
     assert len(all_group_idxs) >= num_mols
 
@@ -206,11 +200,9 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         complex_system, conf, box, top, _ = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    bond_list = get_bond_list(bond_pot)
+    named_system, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    nb = named_system.nonbonded
+    bond_list = get_bond_list(named_system.bond.potential)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # Equilibrate the system a bit before hand, which reduces clashes in the system which results greater differences
@@ -222,12 +214,7 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
 
     masses = apply_hmr(masses, bond_list)
     intg = LangevinIntegrator(temperature, dt, 1.0, np.array(masses), seed).impl()
-
-    bound_impls = []
-
-    for potential in bps:
-        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
-
+    bound_impls = [p.to_gpu(precision=np.float32).bound_impl for p in named_system.get_U_fns()]
     barostat_interval = 5
     baro = MonteCarloBarostat(
         conf.shape[0],

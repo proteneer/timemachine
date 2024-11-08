@@ -18,6 +18,7 @@ from timemachine.constants import (
     DEFAULT_ATOM_MAPPING_KWARGS,
     DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
     DEFAULT_CHIRAL_BOND_RESTRAINT_K,
+    DEFAULT_NONBONDED_CUTOFF,
     NBParamIdx,
 )
 from timemachine.fe import atom_mapping, single_topology
@@ -36,7 +37,7 @@ from timemachine.fe.single_topology import (
     interpolate_w_coord,
     setup_dummy_interactions_from_ff,
 )
-from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simulate_system
+from timemachine.fe.system import minimize_scipy, simulate_system
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, read_sdf_mols_by_name, set_mol_name
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -406,6 +407,11 @@ def bond_idxs_are_canonical(all_idxs):
     return np.all(all_idxs[:, 0] < all_idxs[:, -1])
 
 
+def assert_improper_idxs_are_canonical(all_idxs):
+    for idxs in all_idxs:
+        np.testing.assert_array_equal(idxs, canonicalize_improper_idxs(idxs))
+
+
 def chiral_atom_idxs_are_canonical(all_idxs):
     return np.all((all_idxs[:, 1] < all_idxs[:, 2]) & (all_idxs[:, 1] < all_idxs[:, 3]))
 
@@ -450,7 +456,8 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
             # assert that the idxs are canonicalized.
             assert bond_idxs_are_canonical(system.bond.potential.idxs)
             assert bond_idxs_are_canonical(system.angle.potential.idxs)
-            assert bond_idxs_are_canonical(system.torsion.potential.idxs)
+            assert bond_idxs_are_canonical(system.proper.potential.idxs)
+            assert_improper_idxs_are_canonical(system.improper.potential.idxs)
             assert bond_idxs_are_canonical(system.nonbonded.potential.idxs)
             assert bond_idxs_are_canonical(system.chiral_bond.potential.idxs)
             assert chiral_atom_idxs_are_canonical(system.chiral_atom.potential.idxs)
@@ -662,43 +669,6 @@ def test_setup_intermediate_state_not_unreasonably_slow(arbitrary_transformation
     assert elapsed_time / n_states <= 1.0
 
 
-# @pytest.mark.nocuda
-# def test_setup_intermediate_bonded_term(arbitrary_transformation):
-#     """Tests that the current vectorized implementation _setup_intermediate_bonded_term is consistent with the previous
-#     implementation"""
-#     st, _ = arbitrary_transformation
-#     interpolate_fn = functools.partial(interpolate_harmonic_bond_params, k_min=0.1, lambda_min=0.0, lambda_max=0.7)
-
-#     def setup_intermediate_bonded_term_ref(src_bond, dst_bond, lamb, align_fn, interpolate_fn):
-#         bond_idxs_and_params = align_fn(
-#             src_bond.potential.idxs,
-#             src_bond.params,
-#             dst_bond.potential.idxs,
-#             dst_bond.params,
-#         )
-
-#         bond_idxs = []
-#         bond_params = []
-
-#         for idxs, src_params, dst_params in bond_idxs_and_params:
-#             bond_idxs.append(idxs)
-#             new_params = interpolate_fn(src_params, dst_params, lamb)
-#             bond_params.append(new_params)
-
-#         return type(src_bond.potential)(np.array(bond_idxs)).bind(jnp.array(bond_params))
-
-#     for lamb in np.linspace(0.0, 1.0, 10):
-#         bonded_ref = setup_intermediate_bonded_term_ref(
-#             st.src_system.bond, st.dst_system.bond, lamb, align_harmonic_bond_idxs_and_params, interpolate_fn
-#         )
-#         bonded_test = st._setup_intermediate_bonded_term(
-#             st.src_system.bond, st.dst_system.bond, lamb, align_harmonic_bond_idxs_and_params, interpolate_fn
-#         )
-
-#         np.testing.assert_array_equal(bonded_ref.potential.idxs, bonded_test.potential.idxs)
-#         np.testing.assert_array_equal(bonded_ref.params, bonded_test.params)
-
-
 @pytest.mark.nocuda
 def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
     """Tests that the current vectorized implementation _setup_intermediate_nonbonded_term is consistent with the
@@ -771,10 +741,10 @@ def test_combine_with_host():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     solvent_sys, solvent_conf, _, top = build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
-    host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
     st = SingleTopology(mol_a, mol_b, core, ff)
-    host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5, solvent_conf.shape[0], ff, top)
+    host_system = st.combine_with_host(named_system, 0.5, solvent_conf.shape[0], ff, top)
     assert set(type(bp.potential) for bp in host_system.get_U_fns()) == {
         potentials.HarmonicBond,
         potentials.HarmonicAngleStable,
@@ -812,8 +782,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
     solvent_conf = minimizer.fire_minimize_host(
         [mol_a, mol_b], HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top), ffs.ref
     )
-    solvent_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
-    solv_sys = convert_bps_into_system(solvent_bps)
+    named_system, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
     def get_vacuum_solvent_u_grads(ff, lamb):
         st = SingleTopology(mol_a, mol_b, core, ff)
@@ -825,7 +794,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
         val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_potentials, solvent_box, precision=precision)
         vacuum_u, vacuum_grad = val_and_grad_fn(ligand_conf)
 
-        solvent_system = st.combine_with_host(solv_sys, lamb, solvent_conf.shape[0], ff, solvent_top)
+        solvent_system = st.combine_with_host(named_system, lamb, solvent_conf.shape[0], ff, solvent_top)
         solvent_potentials = solvent_system.get_U_fns()
         solv_val_and_grad_fn = minimizer.get_val_and_grad_fn(solvent_potentials, solvent_box, precision=precision)
         solvent_u, solvent_grad = solv_val_and_grad_fn(combined_conf)
@@ -911,11 +880,10 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
         )
         box += np.diag([0.1, 0.1, 0.1])
 
-    host_bps, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
-    host_system = convert_bps_into_system(host_bps)
+    named_system, _ = openmm_deserializer.deserialize_system(complex_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
     st_ref = SingleTopologyRef(mol_a, mol_b, core, ff)
 
-    combined_ref = st_ref.combine_with_host(host_system, lamb, num_water_atoms, ff, complex_top)
+    combined_ref = st_ref.combine_with_host(named_system, lamb, num_water_atoms, ff, complex_top)
     ref_potentials = combined_ref.get_U_fns()
     ref_summed = potentials.SummedPotential(
         [bp.potential for bp in ref_potentials], [bp.params for bp in ref_potentials]
@@ -923,7 +891,7 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
     flattened_ref_params = np.concatenate([bp.params.reshape(-1) for bp in ref_potentials])
 
     st_split = SingleTopology(mol_a, mol_b, core, ff)
-    combined_split = st_split.combine_with_host(host_system, lamb, num_water_atoms, ff, complex_top)
+    combined_split = st_split.combine_with_host(named_system, lamb, num_water_atoms, ff, complex_top)
     split_potentials = combined_split.get_U_fns()
     split_summed = potentials.SummedPotential(
         [bp.potential for bp in split_potentials], [bp.params for bp in split_potentials]
@@ -954,27 +922,25 @@ def test_combine_with_host_split(precision, rtol, atol):
     mol_b = mols["43"]
     core = _get_core_by_mcs(mol_a, mol_b)
 
-    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
+    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, named_system, omm_topology):
         # Use the original code to compute the nb grads and potential
-        host_system = convert_bps_into_system(host_bps)
         st = SingleTopologyRef(mol_a, mol_b, core, ff)
         ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
         num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
         combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
 
-        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
+        combined_system = st.combine_with_host(named_system, lamb, num_water_atoms, ff, omm_topology)
         potentials = combined_system.get_U_fns()
         u, grad = minimizer.get_val_and_grad_fn(potentials, box, precision=precision)(combined_conf)
         return grad, u
 
-    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
-        host_system = convert_bps_into_system(host_bps)
+    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, named_system, omm_topology):
         st = SingleTopology(mol_a, mol_b, core, ff)
         ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
         num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
         combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
 
-        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
+        combined_system = st.combine_with_host(named_system, lamb, num_water_atoms, ff, omm_topology)
         potentials = combined_system.get_U_fns()
         u, grad = minimizer.get_val_and_grad_fn(potentials, box, precision=precision)(combined_conf)
         return grad, u
@@ -998,7 +964,7 @@ def test_combine_with_host_split(precision, rtol, atol):
         box,
         lamb,
         num_water_atoms,
-        host_bps,
+        named_system,
         water_idxs,
         ligand_idxs,
         protein_idxs,
@@ -1006,18 +972,17 @@ def test_combine_with_host_split(precision, rtol, atol):
         is_solvent=False,
     ):
         assert num_water_atoms == len(water_idxs)
-        host_system = convert_bps_into_system(host_bps)
         st = SingleTopology(mol_a, mol_b, core, ff)
         ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
         num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
         combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
         num_total_atoms = combined_conf.shape[0]
 
-        cutoff = host_system.nonbonded.potential.cutoff
+        cutoff = named_system.nonbonded.potential.cutoff
         u = potentials.NonbondedInteractionGroup(
             num_total_atoms,
             ligand_idxs,
-            host_system.nonbonded.potential.beta,
+            named_system.nonbonded.potential.beta,
             cutoff,
             col_atom_idxs=water_idxs if is_solvent else protein_idxs,
         )
@@ -1026,7 +991,7 @@ def test_combine_with_host_split(precision, rtol, atol):
         lj_handle = ff.lj_handle
         guest_params = st._get_guest_params(q_handle, lj_handle, lamb, cutoff)
 
-        host_ixn_params = host_system.nonbonded.params.copy()
+        host_ixn_params = named_system.nonbonded.params.copy()
         if not is_solvent and ff.env_bcc_handle is not None:  # protein
             env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
             host_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
@@ -1203,116 +1168,6 @@ def test_interpolate_w_coord_monotonic():
     lambdas = np.linspace(0.0, 1.0, 100)
     ws = interpolate_w_coord(0.0, 1.0, lambdas)
     assert np.all(np.diff(ws) >= 0.0)
-
-
-@pytest.mark.skip(reason="schedule debug")
-@pytest.mark.nocuda
-def test_hif2a_plot_force_constants():
-    # generate plots of force constants
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf(path_to_ligand)
-
-    pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
-
-    np.random.seed(2023)
-    np.random.shuffle(pairs)
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-
-    # this has been tested for up to 50 random pairs
-    for pair_idx, (mol_a, mol_b) in enumerate(pairs[:10]):
-        if mol_a.GetProp("_Name") == mol_b.GetProp("_Name"):
-            continue
-
-        print("Checking pair", pair_idx, " | ", get_mol_name(mol_a), "->", get_mol_name(mol_b))
-        core = _get_core_by_mcs(mol_a, mol_b)
-        st = SingleTopology(mol_a, mol_b, core, ff)
-
-        n_windows = 128
-
-        bond_ks = []
-        angle_ks = []
-        torsion_ks = []
-        chiral_atom_ks = []
-
-        xs = np.linspace(0, 1, n_windows)
-        for lamb in xs:
-            vac_sys = st.setup_intermediate_state(lamb)
-            lamb_bond_ks = []
-            for k, _ in vac_sys.bond.params:
-                lamb_bond_ks.append(k)
-            bond_ks.append(lamb_bond_ks)
-
-            lamb_angle_ks = []
-            for k, _, _ in vac_sys.angle.params:
-                lamb_angle_ks.append(k)
-            angle_ks.append(lamb_angle_ks)
-
-            lamb_torsion_ks = []
-            for k, _, _ in vac_sys.torsion.params:
-                lamb_torsion_ks.append(k)
-            torsion_ks.append(lamb_torsion_ks)
-
-            lamb_chiral_atom_ks = []
-            for k in vac_sys.chiral_atom.params:
-                lamb_chiral_atom_ks.append(k)
-            chiral_atom_ks.append(lamb_chiral_atom_ks)
-
-        bond_ks = np.array(bond_ks).T
-        angle_ks = np.array(angle_ks).T
-        torsion_ks = np.array(torsion_ks).T
-        chiral_atom_ks = np.array(chiral_atom_ks).T
-
-        bond_ks /= np.amax(bond_ks, axis=1, keepdims=True)
-        angle_ks /= np.amax(angle_ks, axis=1, keepdims=True)
-        torsion_ks /= np.amax(torsion_ks, axis=1, keepdims=True)
-        chiral_atom_ks /= np.amax(chiral_atom_ks, axis=1, keepdims=True)
-
-        import matplotlib.pyplot as plt
-
-        fig, all_axes = plt.subplots(4, 1, figsize=(1 * 5, 4 * 3))
-        fig.tight_layout()
-
-        for v in bond_ks:
-            all_axes[0].plot(xs, v)
-        all_axes[0].set_title("bond")
-        all_axes[0].set_ylabel("fraction of full strength")
-        all_axes[0].set_xlabel("lambda")
-        all_axes[0].axvline(0.3, ls="--", color="gray")
-        all_axes[0].axvline(0.6, ls="--", color="gray")
-        all_axes[0].axvline(0.8, ls="--", color="gray")
-        all_axes[0].set_ylim(0, 1)
-
-        for v in angle_ks:
-            all_axes[1].plot(xs, v)
-        all_axes[1].set_title("angle")
-        all_axes[1].set_ylabel("fraction of full strength")
-        all_axes[1].set_xlabel("lambda")
-        all_axes[1].axvline(0.3, ls="--", color="gray")
-        all_axes[1].axvline(0.6, ls="--", color="gray")
-        all_axes[1].axvline(0.8, ls="--", color="gray")
-        all_axes[1].set_ylim(0, 1)
-
-        for v in torsion_ks:
-            all_axes[2].plot(xs, v)
-        all_axes[2].set_title("torsion")
-        all_axes[2].set_ylabel("fraction of full strength")
-        all_axes[2].set_xlabel("lambda")
-        all_axes[2].axvline(0.3, ls="--", color="gray")
-        all_axes[2].axvline(0.6, ls="--", color="gray")
-        all_axes[2].axvline(0.8, ls="--", color="gray")
-        all_axes[2].set_ylim(0, 1)
-
-        for v in chiral_atom_ks:
-            all_axes[3].plot(xs, v)
-        all_axes[3].set_title("chiral atom")
-        all_axes[3].set_ylabel("fraction of full strength")
-        all_axes[3].set_xlabel("lambda")
-        all_axes[3].axvline(0.3, ls="--", color="gray")
-        all_axes[3].axvline(0.6, ls="--", color="gray")
-        all_axes[3].axvline(0.8, ls="--", color="gray")
-        all_axes[3].set_ylim(0, 1)
-
-        plt.show()
 
 
 @pytest.mark.nightly(reason="Test setting up hif2a pairs for single topology.")

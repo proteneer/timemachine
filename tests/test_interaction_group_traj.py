@@ -4,6 +4,7 @@ from jax import grad, jit
 from jax import numpy as jnp
 from jax.scipy.special import logsumexp
 
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF
 from timemachine.fe.interaction_group_traj import InteractionGroupTraj, nb_pair_fxn
 from timemachine.potentials.nonbonded import nonbonded_interaction_groups
 
@@ -81,7 +82,7 @@ def test_interaction_group_traj_correctness(config):
     U_0 = compute_Us(nb_params)
 
     def U_ref(x, box_diag):
-        kwargs = dict(beta=2.0, cutoff=1.2)
+        kwargs = dict(beta=2.0, cutoff=DEFAULT_NONBONDED_CUTOFF)
         vdw, es = nonbonded_interaction_groups(x, nb_params, jnp.diag(box_diag), lig_idxs, env_idxs, **kwargs)
         return jnp.sum(vdw) + jnp.sum(es)
 

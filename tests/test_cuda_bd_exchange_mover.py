@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from scipy.spatial.transform import Rotation
 from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.free_energy import HostConfig, InitialState, MDParams, get_water_sampler_params, sample
 from timemachine.fe.model_utils import apply_hmr, image_frame
 from timemachine.fe.single_topology import SingleTopology
@@ -201,12 +201,12 @@ def test_pair_of_waters_in_box(proposals_per_move, total_num_proposals, batch_si
     """Given two waters in a large box most moves should be accepted. This is a useful test for verifying memory doesn't leak"""
     ff = Forcefield.load_default()
     system, host_conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+    nb = named_system.nonbonded
+    bond_pot = named_system.bond
 
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot.potential), host_conf.shape[0])
 
     # Get first two mols
     group_idxs = all_group_idxs[:2]
@@ -262,12 +262,12 @@ def test_sampling_single_water_in_bulk(
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(2.5, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+    nb = named_system.nonbonded
+    bond_pot = named_system.bond
 
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot.potential), conf.shape[0])
 
     # Randomly select a water to sample
     rng = np.random.default_rng(seed)
@@ -314,24 +314,18 @@ def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(4.0, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+    named_system, masses = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    nb = named_system.nonbonded
+    bond_pot = named_system.bond
 
-    bond_list = get_bond_list(bond_pot)
+    bond_list = get_bond_list(bond_pot.potential)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
     water_idxs = get_water_idxs(all_group_idxs)
-
     dt = 2.5e-3
-
     masses = apply_hmr(masses, bond_list)
-
-    bound_impls = []
-
-    for potential in bps:
-        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)
+    bound_impls = [p.to_gpu(precision=np.float32).bound_impl for p in named_system.get_U_fns()]
 
     klass = custom_ops.BDExchangeMove_f32
     if precision == np.float64:
@@ -403,12 +397,12 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
     """
     ff = Forcefield.load_default()
     system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+    nb = named_system.nonbonded
+    bond = named_system.bond
 
-    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    group_idxs = get_group_indices(get_bond_list(bond.potential), conf.shape[0])
 
     box = np.eye(3) * 100.0
 
@@ -462,12 +456,12 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
     """
     ff = Forcefield.load_default()
     system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+    nb = named_system.nonbonded
+    bond = named_system.bond
 
-    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    group_idxs = get_group_indices(get_bond_list(bond.potential), conf.shape[0])
 
     rng = np.random.default_rng(seed)
 
@@ -545,12 +539,12 @@ def test_moves_in_a_water_box(
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(box_size, ff.water_ff)
     box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, masses = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+    nb = named_system.nonbonded
+    bond = named_system.bond
 
-    bond_list = get_bond_list(bond_pot)
+    bond_list = get_bond_list(bond.potential)
     group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     N = conf.shape[0]
@@ -560,10 +554,7 @@ def test_moves_in_a_water_box(
     dt = 2.5e-3
 
     masses = apply_hmr(masses, bond_list)
-    bound_impls = []
-
-    for potential in bps:
-        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)
+    bound_impls = [p.to_gpu(precision=np.float32).bound_impl for p in named_system.get_U_fns()]
 
     intg = LangevinIntegrator(DEFAULT_TEMP, dt, 1.0, np.array(masses), seed).impl()
 
@@ -713,12 +704,12 @@ def test_compute_incremental_log_weights(batch_size, samples, box_size, precisio
     proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+    nb = named_system.nonbonded
+    bond = named_system.bond
 
-    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    group_idxs = get_group_indices(get_bond_list(bond.potential), conf.shape[0])
 
     N = conf.shape[0]
 
@@ -783,10 +774,9 @@ def hif2a_complex():
             str(path_to_pdb), ff.protein_ff, ff.water_ff
         )
     box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    bond_list = get_bond_list(bond_pot)
+    named_system, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    bond = named_system.bond
+    bond_list = get_bond_list(bond.potential)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # Equilibrate the system a bit before hand, which reduces clashes in the system which results greater differences
@@ -797,12 +787,7 @@ def hif2a_complex():
 
     masses = apply_hmr(masses, bond_list)
     intg = LangevinIntegrator(temperature, dt, 1.0, np.array(masses), seed).impl()
-
-    bound_impls = []
-
-    for potential in bps:
-        bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
-
+    bound_impls = [p.to_gpu(precision=np.float32).bound_impl for p in named_system.get_U_fns()]
     barostat_interval = 5
     baro = MonteCarloBarostat(
         conf.shape[0],
@@ -843,11 +828,10 @@ def test_moves_with_complex(
     hif2a_complex, num_proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed
 ):
     complex_system, conf, box, complex_top = hif2a_complex
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    bond_list = get_bond_list(bond_pot)
+    named_system, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    nb = named_system.nonbonded
+    bond = named_system.bond
+    bond_list = get_bond_list(bond.potential)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
@@ -932,8 +916,8 @@ def test_bd_moves_with_complex_and_ligand(
 
     conf = initial_state.x0
     box = initial_state.box0
-
     bps = initial_state.potentials
+
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
     water_params = get_water_sampler_params(initial_state)

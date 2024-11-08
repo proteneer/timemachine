@@ -12,12 +12,11 @@ from jax import numpy as jnp
 from jax import value_and_grad, vmap
 from scipy.optimize import minimize
 
-from timemachine.constants import BOLTZ, DEFAULT_TEMP
+from timemachine.constants import BOLTZ, DEFAULT_NONBONDED_CUTOFF, DEFAULT_TEMP
 from timemachine.fe.reweighting import one_sided_exp
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
-from timemachine.potentials import Nonbonded
 from timemachine.potentials.jax_utils import get_all_pairs_indices, pairs_from_interaction_groups, pairwise_distances
 from timemachine.potentials.nonbonded import (
     basis_expand_lj_atom,
@@ -35,7 +34,6 @@ from timemachine.potentials.nonbonded import (
     nonbonded_block_unsummed,
     nonbonded_on_specific_pairs,
 )
-from timemachine.potentials.potential import get_bound_potential_by_type
 
 Array = Any
 Conf = Array
@@ -117,9 +115,9 @@ difficult_instance_flags = {key: True for key in easy_instance_flags}
 
 def generate_waterbox_nb_args() -> NonbondedArgs:
     ff = Forcefield.load_default()
-    system, conf, box, topology = builders.build_water_system(3.0, ff.water_ff)
-    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
+    system, conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    nb = named_system.nonbonded
     params = nb.params
 
     beta = nb.potential.beta
@@ -331,8 +329,8 @@ def test_jax_nonbonded_block():
     """Assert that nonbonded_block and nonbonded_on_specific_pairs agree"""
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(3.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    nb = named_system.nonbonded
     params = nb.params
 
     N = conf.shape[0]
@@ -365,8 +363,8 @@ def test_jax_nonbonded_block_unsummed():
     """Assert that unsummed nonbonded_block and nonbonded_on_specific_pairs agree"""
     ff = Forcefield.load_default()
     system, conf, box, top = builders.build_water_system(3.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    nb = named_system.nonbonded
     params = nb.params
 
     N = conf.shape[0]
@@ -437,9 +435,9 @@ def test_lj_basis():
 def test_precomputation():
     """Assert that nonbonded interaction groups using precomputation agree with reference nonbonded_on_specific_pairs"""
     ff = Forcefield.load_default()
-    system, conf, box, top = builders.build_water_system(3.0, ff.water_ff)
-    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
+    system, conf, box, _ = builders.build_water_system(3.0, ff.water_ff)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    nb = named_system.nonbonded
     params = nb.params
 
     n_atoms = conf.shape[0]

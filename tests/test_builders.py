@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from openmm import app, unit
 
-from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.fe.utils import get_romol_conf, read_sdf, set_romol_conf
 from timemachine.ff import sanitize_water_ff
 from timemachine.ff.handlers import openmm_deserializer
@@ -43,8 +43,8 @@ def test_build_water_system():
     box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     box_with_mols += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
 
-    water_system_bps, _ = openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
-    for bp in water_system_bps:
+    named_system, _ = openmm_deserializer.deserialize_system(water_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    for bp in named_system.get_U_fns():
         (
             du_dx,
             _,
@@ -53,8 +53,8 @@ def test_build_water_system():
         ).bound_impl.execute(water_coords, box, compute_u=False)
         check_force_norm(-du_dx)
 
-    water_system_bps, _ = openmm_deserializer.deserialize_system(water_with_mols, cutoff=1.2)
-    for bp in water_system_bps:
+    named_system, _ = openmm_deserializer.deserialize_system(water_with_mols, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    for bp in named_system.get_U_fns():
         (
             du_dx,
             _,
@@ -93,9 +93,9 @@ def test_deserialize_protein_system_1_4_exclusions():
         host_pdbfile = str(pdb_path)
     protein_system, _, box, _, _ = build_protein_system(host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
 
-    protein_system_bps, _ = openmm_deserializer.deserialize_system(protein_system, cutoff=1.2)
-    exclusion_idxs = protein_system_bps[-1].potential.exclusion_idxs
-    scale_factors = protein_system_bps[-1].potential.scale_factors
+    named_system, _ = openmm_deserializer.deserialize_system(protein_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    exclusion_idxs = named_system.nonbonded.potential.exclusion_idxs
+    scale_factors = named_system.nonbonded.potential.scale_factors
 
     kvs = dict()
     for (src, dst), (q_sf, lj_sf) in zip(exclusion_idxs, scale_factors):
@@ -171,8 +171,8 @@ def test_build_protein_system():
     box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     box_with_mols += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
 
-    protein_system_bps, _ = openmm_deserializer.deserialize_system(protein_system, cutoff=1.2)
-    for bp in protein_system_bps:
+    named_system, _ = openmm_deserializer.deserialize_system(protein_system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    for bp in named_system.get_U_fns():
         (
             du_dx,
             _,
@@ -181,8 +181,8 @@ def test_build_protein_system():
         ).bound_impl.execute(protein_coords, box, compute_u=False)
         check_force_norm(-du_dx)
 
-    protein_system_bps, _ = openmm_deserializer.deserialize_system(protein_with_mols, cutoff=1.2)
-    for bp in protein_system_bps:
+    named_system, _ = openmm_deserializer.deserialize_system(protein_with_mols, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    for bp in named_system.get_U_fns():
         (
             du_dx,
             _,

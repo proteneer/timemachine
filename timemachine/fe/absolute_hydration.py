@@ -24,7 +24,6 @@ from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lamb
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, enhanced, minimizer, smc
 from timemachine.md.barostat.moves import NPTMove
@@ -275,7 +274,6 @@ def setup_initial_states(
         Returns an initial state for each value of lambda.
 
     """
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
     host_conf = minimizer.fire_minimize_host(
         [afe.mol],
         host_config,
@@ -287,7 +285,7 @@ def setup_initial_states(
     # check that the lambda schedule is monotonically decreasing.
     assert np.all(np.diff(lambda_schedule) < 0)
 
-    for lamb_idx, lamb in enumerate(lambda_schedule):
+    for lamb in lambda_schedule:
         ligand_conf = get_romol_conf(afe.mol)
 
         ubps, params, masses = afe.prepare_host_edge(ff, host_config, lamb)

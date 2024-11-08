@@ -1,13 +1,12 @@
-from collections import defaultdict
-from typing import DefaultDict, List, Tuple
+from typing import List, Tuple
 
 import numpy as np
 import openmm as mm
 from openmm import unit
 
 from timemachine import constants, potentials
-
-ORDERED_FORCES = ["HarmonicBond", "HarmonicAngle", "PeriodicTorsion", "Nonbonded"]
+from timemachine.fe.system import VacuumSystem
+from timemachine.ff.handlers.utils import canonicalize_bond
 
 
 def value(quantity):
@@ -132,7 +131,7 @@ def deserialize_nonbonded_force(force, N):
     return nb_params, exclusion_idxs, beta, scale_factors
 
 
-def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.BoundPotential], List[float]]:
+def deserialize_system(system: mm.System, cutoff: float) -> Tuple[VacuumSystem, List[float]]:
     """
     Deserialize an OpenMM XML file
 
@@ -152,6 +151,8 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
     """
 
+    bond = angle = proper = improper = nonbonded = None
+
     masses = []
 
     for p in range(system.getNumParticles()):
@@ -162,8 +163,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
     # this should not be a dict since we may have more than one instance of a given
     # force.
 
-    bps_dict: DefaultDict[str, List[potentials.BoundPotential]] = defaultdict(list)
-
+    # process bonds and angles first to instantiate bond_idxs and angle_idxs
     for force in system.getForces():
         if isinstance(force, mm.HarmonicBondForce):
             bond_idxs_ = []
@@ -179,7 +179,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
             bond_idxs = np.array(bond_idxs_, dtype=np.int32)
             bond_params = np.array(bond_params_, dtype=np.float64)
-            bps_dict["HarmonicBond"].append(potentials.HarmonicBond(bond_idxs).bind(bond_params))
+            bond = potentials.HarmonicBond(bond_idxs).bind(bond_params)
 
         if isinstance(force, mm.HarmonicAngleForce):
             angle_idxs_ = []
@@ -195,9 +195,9 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
             angle_idxs = np.array(angle_idxs_, dtype=np.int32)
             angle_params = np.array(angle_params_, dtype=np.float64)
+            angle = potentials.HarmonicAngle(angle_idxs).bind(angle_params)
 
-            bps_dict["HarmonicAngle"].append(potentials.HarmonicAngle(angle_idxs).bind(angle_params))
-
+    for force in system.getForces():
         if isinstance(force, mm.PeriodicTorsionForce):
             torsion_idxs_ = []
             torsion_params_ = []
@@ -213,22 +213,48 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
 
             torsion_idxs = np.array(torsion_idxs_, dtype=np.int32)
             torsion_params = np.array(torsion_params_, dtype=np.float64)
-            bps_dict["PeriodicTorsion"].append(potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params))
+
+            # (ytz): split torsion into proper and impropers, if both angles are present
+            # then it's a proper torsion, otherwise it's an improper torsion
+            canonical_angle_idxs = set(canonicalize_bond(tuple(idxs)) for idxs in angle_idxs)
+
+            proper_idxs = []
+            proper_params = []
+            improper_idxs = []
+            improper_params = []
+
+            for idxs, params in zip(torsion_idxs, torsion_params):
+                i, j, k, l = idxs
+                angle_ijk = canonicalize_bond((i, j, k))
+                angle_jkl = canonicalize_bond((j, k, l))
+                if angle_ijk in canonical_angle_idxs and angle_jkl in canonical_angle_idxs:
+                    proper_idxs.append(idxs)
+                    proper_params.append(params)
+                elif angle_ijk not in canonical_angle_idxs and angle_jkl not in canonical_angle_idxs:
+                    assert 0
+                else:
+                    # xor case imply improper
+                    improper_idxs.append(idxs)
+                    improper_params.append(params)
+
+            proper = potentials.PeriodicTorsion(np.array(proper_idxs)).bind(np.array(proper_params))
+            improper = potentials.PeriodicTorsion(np.array(improper_idxs)).bind(np.array(improper_params))
 
         if isinstance(force, mm.NonbondedForce):
             nb_params, exclusion_idxs, beta, scale_factors = deserialize_nonbonded_force(force, N)
 
-            bps_dict["Nonbonded"].append(
-                potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff).bind(nb_params)
-            )
+            nonbonded = potentials.Nonbonded(N, exclusion_idxs, scale_factors, beta, cutoff).bind(nb_params)
 
-            # nrg_fns.append(('Exclusions', (exclusion_idxs, scale_factors, es_scale_factors)))
+    assert bond
+    assert angle
+    assert nonbonded
 
-    # ugh, ... various parts of our code assume the bps are in a certain order
-    # so put them back in that order here
-    bps = []
-    for k in ORDERED_FORCES:
-        if bps_dict.get(k):
-            bps.extend(bps_dict[k])
+    if proper is None:
+        proper = potentials.PeriodicTorsion(np.array([])).bind(np.array([]))
+    if improper is None:
+        improper = potentials.PeriodicTorsion(np.array([])).bind(np.array([]))
 
-    return bps, masses
+    chiral_atom = potentials.ChiralAtomRestraint(np.array([])).bind(np.array([]))
+    chiral_bond = potentials.ChiralBondRestraint(np.array([]), np.array([])).bind(np.array([]))
+
+    return VacuumSystem(bond, angle, proper, improper, nonbonded, chiral_atom, chiral_bond), masses

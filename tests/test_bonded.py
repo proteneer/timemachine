@@ -389,7 +389,7 @@ class TestBonded(GradientTest):
         for precision, rtol in relative_tolerance_at_precision.items():
             self.compare_forces(x, params, box, potential, potential.to_gpu(precision), rtol)
 
-            with self.assertRaises(Exception):
+            with self.assertRaises(ValueError):
                 # wrong length
                 bad_idxs = np.array([[0, 1, 2, 3, 4], [4, 4, 3, 2, 1]])
                 bad_potential = ChiralAtomRestraint(bad_idxs)
@@ -422,7 +422,7 @@ class TestBonded(GradientTest):
         for precision, rtol in relative_tolerance_at_precision.items():
             self.compare_forces(x, params, box, potential, potential.to_gpu(precision), rtol)
 
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 # wrong length idxs
                 bad_idxs = np.array([[0, 1, 2, 3, 4], [4, 4, 3, 2, 1]], dtype=np.int32)
                 bad_signs = np.array([1, -1], dtype=np.int32)

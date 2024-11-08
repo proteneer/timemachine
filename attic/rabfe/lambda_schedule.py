@@ -8,7 +8,7 @@ def construct_conversion_lambda_schedule(num_windows):
     return lambda_schedule
 
 
-def construct_absolute_lambda_schedule_complex(num_windows, nonbonded_cutoff=1.2):
+def construct_absolute_lambda_schedule_complex(num_windows, nonbonded_cutoff=DEFAULT_NONBONDED_CUTOFF):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
 
     Notes
@@ -37,7 +37,7 @@ def construct_absolute_lambda_schedule_complex(num_windows, nonbonded_cutoff=1.2
     return lambda_schedule
 
 
-def construct_absolute_lambda_schedule_solvent(num_windows, nonbonded_cutoff=1.2):
+def construct_absolute_lambda_schedule_solvent(num_windows, nonbonded_cutoff=DEFAULT_NONBONDED_CUTOFF):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
 
     Notes

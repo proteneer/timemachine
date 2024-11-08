@@ -10,7 +10,7 @@ from common import prepare_single_topology_initial_state
 from numpy.typing import NDArray
 from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
+from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_NONBONDED_CUTOFF, DEFAULT_TEMP
 from timemachine.fe import atom_mapping
 from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
@@ -178,11 +178,8 @@ def test_inner_and_outer_water_groups(seed, radius, precision):
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
     system, coords, box, top = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), coords.shape[0])
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    all_group_idxs = get_group_indices(get_bond_list(named_system.bond.potential), coords.shape[0])
 
     center_group_idx = rng.choice(np.arange(len(all_group_idxs)))
 
@@ -218,11 +215,8 @@ def test_translations_inside_and_outside_sphere(seed, n_translations, radius, pr
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
     system, coords, box, top = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), coords.shape[0])
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
+    all_group_idxs = get_group_indices(get_bond_list(named_system.bond.potential), coords.shape[0])
 
     center_group_idx = rng.choice(np.arange(len(all_group_idxs)))
 
@@ -577,12 +571,10 @@ def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, bat
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
     system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    nb = named_system.nonbonded
+    all_group_idxs = get_group_indices(get_bond_list(named_system.bond.potential), conf.shape[0])
 
     group_idxs = all_group_idxs[1:]
 
@@ -765,12 +757,10 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
     """
     ff = Forcefield.load_default()
     system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    nb = named_system.nonbonded
+    all_group_idxs = get_group_indices(get_bond_list(named_system.bond.potential), conf.shape[0])
 
     group_idxs = all_group_idxs[1:]
 
@@ -855,12 +845,10 @@ def test_targeted_moves_in_bulk_water(
     """Given bulk water molecules with one of them treated as the targeted region"""
     ff = Forcefield.load_default()
     system, conf, ref_box, top = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    nb = named_system.nonbonded
+    all_group_idxs = get_group_indices(get_bond_list(named_system.bond.potential), conf.shape[0])
 
     center_group = all_group_idxs[-1]
     box = np.eye(3) * (radius * 2)
@@ -922,12 +910,10 @@ def test_moves_with_three_waters(
     """Given three water molecules with one of them treated as the targeted region."""
     ff = Forcefield.load_default()
     system, host_conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    named_system, _ = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
+    nb = named_system.nonbonded
+    all_group_idxs = get_group_indices(get_bond_list(named_system.bond.potential), host_conf.shape[0])
 
     # Get first two mols as the ones two move
     group_idxs = all_group_idxs[:2]

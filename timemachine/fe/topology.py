@@ -35,7 +35,7 @@ class UnsupportedPotential(Exception):
 
 class HostGuestTopology:
     def __init__(
-        self, host_potentials, guest_topology, num_water_atoms: int, ff: Forcefield, omm_topology: OpenMMTopology
+        self, named_system, guest_topology, num_water_atoms: int, ff: Forcefield, omm_topology: OpenMMTopology
     ):
         """
         Utility tool for combining host with a guest, in that order. host_potentials must be comprised
@@ -43,8 +43,8 @@ class HostGuestTopology:
 
         Parameters
         ----------
-        host_potentials:
-            Bound potentials for the host.
+        named_system: VacuumSystem
+            vacuum system
 
         guest_topology:
             Guest's Topology {Base, Dual, Single}Topology.
@@ -58,29 +58,13 @@ class HostGuestTopology:
         """
         self.guest_topology = guest_topology
 
-        self.host_nonbonded = None
-        self.host_harmonic_bond = None
-        self.host_harmonic_angle = None
-        self.host_periodic_torsion = None
+        self.host_nonbonded = named_system.nonbonded
+        self.host_harmonic_bond = named_system.bond
+        self.host_harmonic_angle = named_system.angle
+        self.host_proper_torsion = named_system.proper
+        self.host_improper_torsion = named_system.improper
         self.ff = ff
         self.omm_topology = omm_topology
-
-        # (ytz): extra assertions inside are to ensure we don't have duplicate terms
-        for bp in host_potentials:
-            if isinstance(bp.potential, potentials.HarmonicBond):
-                assert self.host_harmonic_bond is None
-                self.host_harmonic_bond = bp
-            elif isinstance(bp.potential, potentials.HarmonicAngle):
-                assert self.host_harmonic_angle is None
-                self.host_harmonic_angle = bp
-            elif isinstance(bp.potential, potentials.PeriodicTorsion):
-                assert self.host_periodic_torsion is None
-                self.host_periodic_torsion = bp
-            elif isinstance(bp.potential, potentials.Nonbonded):
-                assert self.host_nonbonded is None
-                self.host_nonbonded = bp
-            else:
-                raise UnsupportedPotential("Unsupported host potential")
 
         assert self.host_nonbonded is not None
         self.num_host_atoms = self.host_nonbonded.potential.num_atoms
@@ -164,11 +148,13 @@ class HostGuestTopology:
         guest_params, guest_potential = self.guest_topology.parameterize_harmonic_angle(ff_params)
         return self._parameterize_bonded_term(guest_params, guest_potential, self.host_harmonic_angle)
 
-    def parameterize_periodic_torsion(self, proper_params, improper_params):
-        guest_params, guest_potential = self.guest_topology.parameterize_periodic_torsion(
-            proper_params, improper_params
-        )
-        return self._parameterize_bonded_term(guest_params, guest_potential, self.host_periodic_torsion)
+    def parameterize_proper_torsion(self, proper_params):
+        guest_params, guest_potential = self.guest_topology.parameterize_proper_torsion(proper_params)
+        return self._parameterize_bonded_term(guest_params, guest_potential, self.host_proper_torsion)
+
+    def parameterize_improper_torsion(self, improper_params):
+        guest_params, guest_potential = self.guest_topology.parameterize_improper_torsion(improper_params)
+        return self._parameterize_bonded_term(guest_params, guest_potential, self.host_improper_torsion)
 
     def parameterize_nonbonded(
         self,
@@ -387,17 +373,6 @@ class BaseTopology:
         params, idxs = self.ff.it_handle.partial_parameterize(ff_params, self.mol)
         return params, potentials.PeriodicTorsion(idxs)
 
-    def parameterize_periodic_torsion(self, proper_params, improper_params):
-        """
-        Parameterize all periodic torsions in the system.
-        """
-        proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
-        improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
-        combined_params = jnp.concatenate([proper_params, improper_params])
-        combined_idxs = np.concatenate([proper_potential.idxs, improper_potential.idxs])
-        combined_potential = potentials.PeriodicTorsion(combined_idxs)
-        return combined_params, combined_potential
-
     def setup_chiral_restraints(self, chiral_atom_restraint_k, chiral_bond_restraint_k):
         """
         Create chiral atom and bond potentials.
@@ -477,12 +452,20 @@ class BaseTopology:
         bond_potential = mol_hb.bind(mol_bond_params)
         angle_potential = mol_ha.bind(mol_angle_params)
 
-        torsion_params = np.concatenate([mol_proper_params, mol_improper_params])
-        torsion_idxs = np.concatenate([mol_pt.idxs, mol_it.idxs])
-        torsion_potential = potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params)
+        proper_potential = mol_pt.bind(mol_proper_params)
+        improper_potential = mol_it.bind(mol_improper_params)
+
         nonbonded_potential = mol_nbpl.bind(mol_nbpl_params)
 
-        system = VacuumSystem(bond_potential, angle_potential, torsion_potential, nonbonded_potential, None, None)
+        system = VacuumSystem(
+            bond_potential,
+            angle_potential,
+            proper_potential,
+            improper_potential,
+            nonbonded_potential,
+            None,
+            None,
+        )
 
         return system
 

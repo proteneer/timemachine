@@ -8,6 +8,7 @@ from jax.typing import ArrayLike
 from numpy.typing import NDArray
 from scipy.special import binom
 
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF
 from timemachine.potentials import jax_utils
 from timemachine.potentials.jax_utils import (
     DEFAULT_CHUNK_SIZE,
@@ -19,7 +20,7 @@ from timemachine.potentials.jax_utils import (
 )
 
 
-def switch_fn(dij, cutoff=1.2):
+def switch_fn(dij, cutoff=DEFAULT_NONBONDED_CUTOFF):
     """heuristic switching function
 
     intended to:

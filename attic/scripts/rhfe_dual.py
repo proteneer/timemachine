@@ -35,7 +35,7 @@ system, host_coords, box, omm_topology = builders.build_water_system(4.0)
 # padding to avoid jank
 box = box + np.eye(3) * 0.1
 
-host_bps, host_masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+host_bps, host_masses = openmm_deserializer.deserialize_system(system, cutoff=DEFAULT_NONBONDED_CUTOFF)
 
 combined_masses = np.concatenate([host_masses, ligand_masses_a, ligand_masses_b])
 

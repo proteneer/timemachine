@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
 
-from timemachine.constants import DEFAULT_TEMP
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.free_energy import HostConfig, HREXParams, InitialState, MDParams, run_sims_bisection, run_sims_hrex
 from timemachine.fe.plots import plot_hrex_replica_state_distribution_heatmap, plot_hrex_transition_matrix
@@ -94,7 +94,8 @@ def get_potentials_solvent(
     hb_params, hb_pot = top.parameterize_harmonic_bond(ff_params.hb_params)
     ha_params, ha_pot = top.parameterize_harmonic_angle(ff_params.ha_params)
 
-    pt_params, pt_pot = top.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params)
+    pt_params, pt_pot = top.parameterize_proper_torsion(ff_params.pt_params)
+    it_params, it_pot = top.parameterize_improper_torsion(ff_params.it_params)
     nb_params, nb_pot = top.parameterize_nonbonded(
         ff_params.q_params,
         ff_params.q_params_intra,
@@ -131,6 +132,7 @@ def get_potentials_solvent(
         hb_pot.bind(hb_params),
         ha_pot.bind(ha_params),
         pt_pot.bind(pt_params),
+        it_pot.bind(it_params),
         nb_pot.bind(nb_params),
     ]
 
@@ -171,9 +173,11 @@ def sample_biphenyl_hrex(
         water_box += 0.5 * np.eye(3)  # add a small margin around the box for stability
         num_water_atoms = water_coords.shape[0]
         host_config = HostConfig(water_system, water_coords, water_box, num_water_atoms, water_top)
-        host_bps, host_masses = openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
+        named_system, host_masses = openmm_deserializer.deserialize_system(
+            water_system, cutoff=DEFAULT_NONBONDED_CUTOFF
+        )
 
-        top = HostGuestTopology(host_bps, bt, num_water_atoms, ff, water_top)
+        top = HostGuestTopology(named_system, bt, num_water_atoms, ff, water_top)
 
         # translate ligand indices to system indices
         intramol_atom_pairs_to_decouple += num_water_atoms

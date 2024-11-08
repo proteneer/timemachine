@@ -590,12 +590,12 @@ def _plot_chiral_atom_interpolation(xs, systems, filter_fn, axs, row):
     # axs[row, 0].legend()
 
 
-def _plot_torsion_interpolation(xs, systems, filter_fn, axs, row):
+def _plot_proper_interpolation(xs, systems, filter_fn, axs, row):
     torsion_ks = []  # K x # torsions
     torsion_bs = []  # K x # torsions
     for sys in systems:
-        torsion_idxs = sys.torsion.potential.idxs
-        torsion_params = sys.torsion.params
+        torsion_idxs = sys.proper.potential.idxs
+        torsion_params = sys.proper.params
         keep_idxs = []
         for b_idx, idxs in enumerate(torsion_idxs):
             if filter_fn(idxs):
@@ -635,6 +635,48 @@ def _plot_torsion_interpolation(xs, systems, filter_fn, axs, row):
     # axs[row, 1].legend(bbox_to_anchor=(1, 0.5))
 
 
+def _plot_improper_interpolation(xs, systems, filter_fn, axs, row):
+    torsion_ks = []  # K x # torsions
+    torsion_bs = []  # K x # torsions
+    for sys in systems:
+        torsion_idxs = sys.improper.potential.idxs
+        torsion_params = sys.improper.params
+        keep_idxs = []
+        for b_idx, idxs in enumerate(torsion_idxs):
+            if filter_fn(idxs):
+                keep_idxs.append(b_idx)
+        keep_idxs = np.array(keep_idxs, dtype=np.int32)
+        torsion_ks.append(torsion_params[keep_idxs, 0])
+        torsion_bs.append(torsion_params[keep_idxs, 1])
+
+    torsion_idxs = torsion_idxs[keep_idxs]
+    torsion_ks = np.array(torsion_ks).T  # torsions x K
+    torsion_bs = np.array(torsion_bs).T * (180 / np.pi)  # torsions x K *
+    num_torsions = torsion_ks.shape[0]
+
+    for b_idx in range(num_torsions):
+        if torsion_ks[b_idx][0] != torsion_ks[b_idx][-1]:
+            linestyle = "solid"
+            label = f"{torsion_idxs[b_idx]}"
+            alpha = 1.0
+        else:
+            linestyle = "dotted"
+            label = None
+            alpha = 0.1
+
+        axs[row, 0].plot(xs, torsion_ks[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+        axs[row, 1].plot(xs, torsion_bs[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+
+    axs[row, 0].set_title("torsion force constants")
+    axs[row, 1].set_title("torsion degrees")
+
+    axs[row, 0].set_ylabel("force constant")
+    axs[row, 1].set_ylabel("torsion degree")
+
+    axs[row, 0].set_xlabel("lambda window")
+    axs[row, 1].set_xlabel("lambda window")
+
+
 def plot_interpolation_schedule(st, filter_fn, fig_title, n_windows):
     fig, axs = plt.subplots(5, 2, figsize=(9, 12))
     # plot the force constant and equilibrium bond lengths along lambda
@@ -645,7 +687,8 @@ def plot_interpolation_schedule(st, filter_fn, fig_title, n_windows):
     _plot_bond_interpolation(st, lambdas, systems, filter_fn, axs, row=0)
     _plot_chiral_atom_interpolation(lambdas, systems, filter_fn, axs, row=1)
     _plot_angle_interpolation(st, lambdas, systems, filter_fn, axs, row=2)
-    _plot_torsion_interpolation(lambdas, systems, filter_fn, axs, row=3)
+    _plot_proper_interpolation(lambdas, systems, filter_fn, axs, row=3)
+    _plot_improper_interpolation(lambdas, systems, filter_fn, axs, row=4)
     fig.suptitle(fig_title, fontsize=12)
     plt.tight_layout()
     # plt.show()

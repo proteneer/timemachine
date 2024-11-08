@@ -22,7 +22,7 @@ from timemachine.parallel.client import CUDAPoolClient, GRPCClient
 from timemachine.parallel.utils import get_gpu_count
 from timemachine.training.dataset import Dataset
 
-def construct_relative_lambda_schedule(num_windows, nonbonded_cutoff=1.2):
+def construct_relative_lambda_schedule(num_windows, nonbonded_cutoff=DEFAULT_NONBONDED_CUTOFF):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
     Notes
     -----

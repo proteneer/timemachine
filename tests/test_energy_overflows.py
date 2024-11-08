@@ -4,6 +4,7 @@ import pytest
 import scipy
 from common import GradientTest, fixed_overflowed, prepare_nb_system, prepare_water_system
 
+from timemachine.constants import DEFAULT_NONBONDED_CUTOFF
 from timemachine.lib import custom_ops
 from timemachine.lib.fixed_point import fixed_to_float
 from timemachine.potentials import Nonbonded, NonbondedAllPairs, NonbondedExclusions
@@ -265,7 +266,7 @@ def test_energy_overflows_with_summation_of_energies(precision):
         exclusion_idxs=np.array([(0, num_atoms - 1)], dtype=np.int32),
         scale_factors=np.zeros((1, 2)),
         beta=2.0,
-        cutoff=1.2,
+        cutoff=DEFAULT_NONBONDED_CUTOFF,
     )
     nonbonded_gpu = nonbonded.to_gpu(precision)
 

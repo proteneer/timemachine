@@ -99,8 +99,8 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params: MDParams, protein_path
             assert res.overlap_by_component_by_lambda.shape[0] == n_pairs
             assert res.overlap_by_component_by_lambda.shape[1] == res.dG_err_by_component_by_lambda.shape[1]
             for overlaps in [res.overlaps, res.overlap_by_component_by_lambda]:
-                assert np.all(0.0 < np.asarray(overlaps))
-                assert np.all(np.asarray(overlaps) < 1.0)
+                assert np.all(0.0 <= np.asarray(overlaps))
+                assert np.all(np.asarray(overlaps) <= (1.0 + 1e-5))  # need to add a small epsilon for loss of precision
 
             assert np.all(0.0 <= np.asarray(res.dG_err_by_component_by_lambda))
             assert np.linalg.norm(res.dG_err_by_component_by_lambda) < 0.1
