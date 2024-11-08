@@ -1708,14 +1708,15 @@ def test_hif2a_end_state_symmetry_nightly_test():
             amm_rev = AtomMapMixin(mol_b, mol_a, core[:, ::-1])
             fused_map = np.concatenate(
                 [
-                    np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)]),
+                    np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)], dtype=np.int32).reshape(-1, 2),
                     np.array(
                         [
                             [x, y]
                             for x, y in zip(amm_fwd.b_to_c, amm_rev.a_to_c)
                             if x not in core[:, 0] and y not in core[:, 1]
-                        ]
-                    ),
+                        ],
+                        dtype=np.int32,
+                    ).reshape(-1, 2),
                 ]
             )
             sys_fwd, conf_fwd = get_vacuum_system_and_conf(mol_a, mol_b, core, 0.0)
