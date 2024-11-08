@@ -305,6 +305,7 @@ def test_water_sampling_mc_bulk_water(insertion_type):
             insertion_type=insertion_type,
             use_hmr=1,
             save_last_frame="comp_frame.npz",
+            # save_last_frame=reference_data_path, # uncomment me to manually update the data folders.
         )
 
     with temporary_working_dir() as temp_dir:
@@ -324,9 +325,15 @@ def test_water_sampling_mc_bulk_water(insertion_type):
 @pytest.mark.parametrize("batch_size", [1, 250, 512, 1000])
 @pytest.mark.parametrize("insertion_type", ["targeted", "untargeted"])
 def test_water_sampling_mc_buckyball(batch_size, insertion_type):
+    # Expectations of the test:
+    # 1) Different batch_sizes produces identical final frames
+    # 2) Different insertion_types produces different final frames, but bitwise identical to a reference final frame.
+
     reference_data_path = EXAMPLES_DIR.parent / "tests" / "data" / f"reference_6_water_{insertion_type}.npz"
     assert reference_data_path.is_file()
     reference_data = np.load(reference_data_path)
+
+    # setup cli kwargs for the run_example_script
     with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
         config = dict(
             out_cif="bulk.cif",
@@ -340,16 +347,17 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
             use_hmr=1,
             batch_size=batch_size,
             save_last_frame="comp_frame.npz",
+            # save_last_frame=reference_data_path, # uncomment me to manually update the data folders.
         )
+
     with temporary_working_dir() as temp_dir:
-        # expect running this script to write summary_result_result_{mol_name}_*.pkl files
         proc = run_example("water_sampling_mc.py", get_cli_args(config), cwd=temp_dir)
         assert proc.returncode == 0
         assert (Path(temp_dir) / str(config["out_cif"])).is_file()
         last_frame = Path(temp_dir) / str(config["save_last_frame"])
         assert last_frame.is_file()
-
         test_data = np.load(last_frame)
         assert test_data.files == reference_data.files
+
         for key in reference_data.files:
             np.testing.assert_array_equal(test_data[key], reference_data[key])
