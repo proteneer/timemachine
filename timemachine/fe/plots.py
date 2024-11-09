@@ -179,6 +179,7 @@ def plot_forward_and_reverse_ddg(
     complex_ukln_by_lambda: NDArray,
     temperature: float = DEFAULT_TEMP,
     frames_per_step: int = 100,
+    prefix: str = "",
 ) -> bytes:
     """Forward and reverse ddG plot given a solvent and complex ukln.
     In the case of good convergence, the forward and reverse ddGs should be similar and the ddG should
@@ -196,6 +197,8 @@ def plot_forward_and_reverse_ddg(
         Temperature that samples were collected at.
     frames_per_step: int
         Number of frames to include in a sample when computing u_kln over time
+    prefix: string
+        Title prefix
 
     Returns
     -------
@@ -217,13 +220,11 @@ def plot_forward_and_reverse_ddg(
     fwd_err = np.linalg.norm([complex_fwd_err, solvent_fwd_err], axis=0) * kBT / KCAL_TO_KJ
     rev_err = np.linalg.norm([complex_rev_err, solvent_rev_err], axis=0) * kBT / KCAL_TO_KJ
 
-    return plot_as_png_fxn(plot_fwd_reverse_predictions, fwd, fwd_err, rev, rev_err)
+    return plot_as_png_fxn(plot_fwd_reverse_predictions, fwd, fwd_err, rev, rev_err, prefix=prefix)
 
 
 def plot_forward_and_reverse_dg(
-    ukln_by_lambda: NDArray,
-    temperature: float = DEFAULT_TEMP,
-    frames_per_step: int = 100,
+    ukln_by_lambda: NDArray, temperature: float = DEFAULT_TEMP, frames_per_step: int = 100, prefix: str = ""
 ) -> bytes:
     """Forward and reverse dG plot given a ukln.
     In the case of good convergence, the forward and reverse dGs should be similar and the dG should
@@ -239,6 +240,8 @@ def plot_forward_and_reverse_dg(
         Temperature that samples were collected at.
     frames_per_step: int
         Number of frames to include in a sample when computing u_kln over time
+    prefix: string
+        Title prefix
 
     Returns
     -------
@@ -256,11 +259,12 @@ def plot_forward_and_reverse_dg(
         rev * kBT / KCAL_TO_KJ,
         rev_err * kBT / KCAL_TO_KJ,
         energy_type="∆G",
+        prefix=prefix,
     )
 
 
 def plot_fwd_reverse_predictions(
-    fwd: NDArray, fwd_err: NDArray, rev: NDArray, rev_err: NDArray, energy_type: str = "∆∆G"
+    fwd: NDArray, fwd_err: NDArray, rev: NDArray, rev_err: NDArray, energy_type: str = "∆∆G", prefix: str = ""
 ):
     """Forward and reverse plot given forward and reverse estimates of energies.
     In the case of good convergence, the forward and reverse predictions should be similar and the energies should
@@ -280,6 +284,8 @@ def plot_fwd_reverse_predictions(
         Energies std errors computed in reverse direction, in units of kcal/mol
     energy_type: string
         The type of free energy that is being plotted, typically '∆∆G' or '∆G'
+    prefix: string
+        Title prefix
     """
     assert len(fwd) == len(rev)
     assert len(fwd) == len(fwd_err)
@@ -307,7 +313,7 @@ def plot_fwd_reverse_predictions(
     max_error = np.abs(np.concatenate([fwd_err, rev_err])).max()
     fig.text(0.55, 0.15, f"Max error = {max_error:.2g} kcal/mol")
 
-    plt.title(f"{energy_type} Convergence Over Time")
+    plt.title(f"{prefix} {energy_type} Convergence Over Time")
     plt.plot(xs, fwd, label=f"Forward {energy_type}", marker="o")
     plt.fill_between(xs[fwd_mask], fwd[fwd_mask] - fwd_err[fwd_mask], fwd[fwd_mask] + fwd_err[fwd_mask], alpha=0.25)
     plt.plot(xs, rev, label=f"Reverse {energy_type}", marker="o")
@@ -318,7 +324,7 @@ def plot_fwd_reverse_predictions(
     plt.legend()
 
 
-def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[float, float] = (13, 10)):
+def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[float, float] = (13, 10), prefix: str = ""):
     """Plot matrix of chiral restraint energies as a heatmap.
 
     For use with the outputs of timemachine.fe.chiral_utils.make_chiral_flip_heatmaps.
@@ -345,6 +351,7 @@ def plot_hrex_transition_matrix(
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
     format_annotation: Callable[[float], str] = lambda x: f"{100.0*x:.2g}",
     format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0*x:.2g}%",
+    prefix: str = "",
 ):
     """Plot matrix of estimated transition probabilities for permutation moves as a heatmap."""
     n_states, _ = transition_probability.shape
@@ -369,13 +376,14 @@ def plot_hrex_transition_matrix(
     ax.set_aspect("equal")
 
     fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_cbar_tick(x))
+    fig.suptitle(f"{prefix} HREX Transition Matrix")
 
 
-def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates: NDArray):
+def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates: NDArray, prefix: str = ""):
     """Plot swap acceptance rates averaged over previous iterations as a function of iteration for each pair of
     neighbors."""
     _, n_pairs = cumulative_swap_acceptance_rates.shape
-    _, ax = plt.subplots()
+    fig, ax = plt.subplots()
     ax.plot(cumulative_swap_acceptance_rates)
     ax.axhline(1.0, linestyle="--", color="gray")
     ax.set_ylim(0, 1.1)
@@ -388,24 +396,7 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
         loc="center left",
         bbox_to_anchor=(1, 0.5),
     )
-
-
-def plot_hrex_replica_state_distribution(cumulative_replica_state_counts: NDArray):
-    """Plot distribution of (replica, state) pairs as a stacked bar plot."""
-    n_iters, n_states, n_replicas = cumulative_replica_state_counts.shape
-    count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (state, replica) -> int
-    fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (state, replica) -> float
-
-    bottom = np.zeros(n_states)
-    _, ax = plt.subplots()
-    for state_idx, fraction_by_replica in enumerate(fraction_by_replica_by_state):
-        ax.bar(np.arange(n_replicas), fraction_by_replica, bottom=bottom, width=0.5, label=str(state_idx))
-        bottom += fraction_by_replica
-
-    ax.set_xlabel("replica")
-    ax.set_ylabel("fraction of iterations")
-    ax.xaxis.get_major_locator().set_params(integer=True)
-    ax.legend(title="state", loc="center left", bbox_to_anchor=(1, 0.5))
+    fig.suptitle(f"{prefix} HREX Swap Acceptance Rates")
 
 
 def plot_hrex_replica_state_distribution_heatmap(
@@ -414,6 +405,7 @@ def plot_hrex_replica_state_distribution_heatmap(
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
     format_annotation: Callable[[float], str] = lambda x: f"{100.0*x:.2g}",
     format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0*x:.2g}%",
+    prefix: str = "",
 ):
     """Plot distribution of (replica, state) pairs as a heatmap."""
     n_iters, n_states, n_replicas = cumulative_replica_state_counts.shape
@@ -440,6 +432,8 @@ def plot_hrex_replica_state_distribution_heatmap(
     ax.set_aspect("equal")
 
     fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_cbar_tick(x))
+
+    fig.suptitle(f"{prefix} HREX State Distribution Heatmap")
 
 
 def plot_as_png_fxn(f, *args, **kwargs) -> bytes:

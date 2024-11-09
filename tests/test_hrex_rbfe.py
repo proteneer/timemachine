@@ -131,6 +131,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
             forcefield,
             host_config,
             md_params,
+            prefix=host_name if host_name is not None else "vacuum",
             lambda_interval=(0.0, 0.15),
             n_windows=n_windows,
             min_cutoff=0.7 if host_name == "complex" else None,

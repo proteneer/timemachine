@@ -11,7 +11,6 @@ from water_sampling_common import DEFAULT_BB_RADIUS, compute_occupancy, get_init
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe.free_energy import HREXParams, InitialState, MDParams, SimulationResult
 from timemachine.fe.plots import (
-    plot_hrex_replica_state_distribution,
     plot_hrex_replica_state_distribution_heatmap,
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
@@ -175,11 +174,6 @@ def test_hrex():
         plot_hrex_transition_matrix,
         "plot_hrex_transition_matrix.png",
         sim_res.hrex_diagnostics.transition_matrix,
-    )
-    plot_and_save(
-        plot_hrex_replica_state_distribution,
-        "plot_hrex_replica_state_distribution.png",
-        sim_res.hrex_diagnostics.cumulative_replica_state_counts,
     )
     plot_and_save(
         plot_hrex_replica_state_distribution_heatmap,
