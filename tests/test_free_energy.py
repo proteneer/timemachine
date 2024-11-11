@@ -485,7 +485,6 @@ def test_run_sims_bisection_early_stopping(hif2a_ligand_pair_single_topology_lam
         assert len(results) == 1 + 2
 
 
-@pytest.mark.skip(reason="BUGGY")
 @pytest.mark.nocuda
 def test_estimate_free_energy_bar_with_energy_overflow():
     """Ensure that we handle NaNs in u_kln inputs (e.g. due to overflow in potential evaluation)."""
