@@ -1125,6 +1125,10 @@ class MissingBondsInChiralVolumeException(Exception):
     pass
 
 
+class TorsionsDefinedOverLinearAngleException(Exception):
+    pass
+
+
 def assert_bonds_defined_for_chiral_volumes(vacuum_system, bond_k_min=DEFAULT_BOND_IS_PRESENT_K):
     """
     Assert that bonds defined for every chiral volume is present and has a force constant greater than bond_k_min
@@ -1143,6 +1147,27 @@ def assert_bonds_defined_for_chiral_volumes(vacuum_system, bond_k_min=DEFAULT_BO
                 raise MissingBondsInChiralVolumeException(f"bond {(c, j)} missing from Chiral Volume {(c, i, j, k)}")
             if canonicalize_bond((c, k)) not in bonds_present:
                 raise MissingBondsInChiralVolumeException(f"bond {(c, k)} missing from Chiral Volume {(c, i, j, k)}")
+
+
+def assert_torsions_defined_over_non_linear_angles(vacuum_system):
+    """
+    Assert that torsions are never defined over angle terms with an equilibrium value close to 180.
+    """
+    linear_angles = set()
+
+    for idxs, angle_params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        angle_k, angle_a0 = angle_params[0], angle_params[1]
+
+        if angle_k > 0:
+            if abs(angle_a0 - np.pi) < 0.174533:  # 10 degrees, arbitrary but conservative threshold
+                linear_angles.add(tuple(idxs))
+
+    for (i, j, k, l), (torsion_k, _, _) in zip(vacuum_system.torsion.potential.idxs, vacuum_system.torsion.params):
+        if torsion_k > 0:
+            if canonicalize_bond((i, j, k)) in linear_angles:
+                raise TorsionsDefinedOverLinearAngleException(f"angle {(i,j,k)} is linear in torsion {(i,j,k,l)}")
+            if canonicalize_bond((j, k, l)) in linear_angles:
+                raise TorsionsDefinedOverLinearAngleException(f"angle {(j,k,l)} is linear in torsion {(i,j,k,l)}")
 
 
 def assert_chiral_consistency(src_chiral_idxs: NDArray, dst_chiral_idxs: NDArray):
