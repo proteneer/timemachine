@@ -480,6 +480,8 @@ def get_val_and_grad_fn(bps: Sequence[BoundPotential], box: NDArray, precision=n
 
     box: np.array (3,3)
 
+    precision: np.float64 or np.float32
+
     Returns
     -------
     Energy function with gradient
