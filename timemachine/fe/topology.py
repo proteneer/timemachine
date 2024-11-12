@@ -57,30 +57,21 @@ class HostGuestTopology:
 
         """
         self.guest_topology = guest_topology
-
-        self.host_nonbonded = None
-        self.host_harmonic_bond = None
-        self.host_harmonic_angle = None
-        self.host_periodic_torsion = None
         self.ff = ff
         self.omm_topology = omm_topology
 
-        # (ytz): extra assertions inside are to ensure we don't have duplicate terms
-        for bp in host_potentials:
-            if isinstance(bp.potential, potentials.HarmonicBond):
-                assert self.host_harmonic_bond is None
-                self.host_harmonic_bond = bp
-            elif isinstance(bp.potential, potentials.HarmonicAngle):
-                assert self.host_harmonic_angle is None
-                self.host_harmonic_angle = bp
-            elif isinstance(bp.potential, potentials.PeriodicTorsion):
-                assert self.host_periodic_torsion is None
-                self.host_periodic_torsion = bp
-            elif isinstance(bp.potential, potentials.Nonbonded):
-                assert self.host_nonbonded is None
-                self.host_nonbonded = bp
-            else:
-                raise UnsupportedPotential("Unsupported host potential")
+        assert len(host_potentials) == 5
+        assert isinstance(host_potentials[0].potential, potentials.HarmonicBond)
+        assert isinstance(host_potentials[1].potential, potentials.HarmonicAngle)
+        assert isinstance(host_potentials[2].potential, potentials.PeriodicTorsion)  # proper
+        assert isinstance(host_potentials[3].potential, potentials.PeriodicTorsion)  # improper
+        assert isinstance(host_potentials[4].potential, potentials.Nonbonded)
+
+        self.host_harmonic_bond = host_potentials[0]
+        self.host_harmonic_angle = host_potentials[1]
+        self.host_proper_torsion = host_potentials[2]
+        self.host_improper_torsion = host_potentials[3]
+        self.host_nonbonded = host_potentials[4]
 
         assert self.host_nonbonded is not None
         self.num_host_atoms = self.host_nonbonded.potential.num_atoms
@@ -164,11 +155,13 @@ class HostGuestTopology:
         guest_params, guest_potential = self.guest_topology.parameterize_harmonic_angle(ff_params)
         return self._parameterize_bonded_term(guest_params, guest_potential, self.host_harmonic_angle)
 
-    def parameterize_periodic_torsion(self, proper_params, improper_params):
-        guest_params, guest_potential = self.guest_topology.parameterize_periodic_torsion(
-            proper_params, improper_params
-        )
-        return self._parameterize_bonded_term(guest_params, guest_potential, self.host_periodic_torsion)
+    def parameterize_proper_torsion(self, proper_params):
+        guest_params, guest_potential = self.guest_topology.parameterize_proper_torsion(proper_params)
+        return self._parameterize_bonded_term(guest_params, guest_potential, self.host_proper_torsion)
+
+    def parameterize_improper_torsion(self, improper_params):
+        guest_params, guest_potential = self.guest_topology.parameterize_improper_torsion(improper_params)
+        return self._parameterize_bonded_term(guest_params, guest_potential, self.host_improper_torsion)
 
     def parameterize_nonbonded(
         self,
@@ -387,16 +380,16 @@ class BaseTopology:
         params, idxs = self.ff.it_handle.partial_parameterize(ff_params, self.mol)
         return params, potentials.PeriodicTorsion(idxs)
 
-    def parameterize_periodic_torsion(self, proper_params, improper_params):
-        """
-        Parameterize all periodic torsions in the system.
-        """
-        proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
-        improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
-        combined_params = jnp.concatenate([proper_params, improper_params])
-        combined_idxs = np.concatenate([proper_potential.idxs, improper_potential.idxs])
-        combined_potential = potentials.PeriodicTorsion(combined_idxs)
-        return combined_params, combined_potential
+    # def parameterize_periodic_torsion(self, proper_params, improper_params):
+    #     """
+    #     Parameterize all periodic torsions in the system.
+    #     """
+    #     proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
+    #     improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
+    #     combined_params = jnp.concatenate([proper_params, improper_params])
+    #     combined_idxs = np.concatenate([proper_potential.idxs, improper_potential.idxs])
+    #     combined_potential = potentials.PeriodicTorsion(combined_idxs)
+    #     return combined_params, combined_potential
 
     def setup_chiral_restraints(self, chiral_atom_restraint_k, chiral_bond_restraint_k):
         """
@@ -642,18 +635,18 @@ class DualTopology(BaseTopology):
     def parameterize_harmonic_angle(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.ha_handle, potentials.HarmonicAngle)
 
-    def parameterize_periodic_torsion(self, proper_params, improper_params):
-        """
-        Parameterize all periodic torsions in the system.
-        """
-        proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
-        improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
+    # def parameterize_periodic_torsion(self, proper_params, improper_params):
+    #     """
+    #     Parameterize all periodic torsions in the system.
+    #     """
+    #     proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
+    #     improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
 
-        combined_params = jnp.concatenate([proper_params, improper_params])
-        combined_idxs = np.concatenate([proper_potential.idxs, improper_potential.idxs])
+    #     combined_params = jnp.concatenate([proper_params, improper_params])
+    #     combined_idxs = np.concatenate([proper_potential.idxs, improper_potential.idxs])
 
-        combined_potential = potentials.PeriodicTorsion(combined_idxs)
-        return combined_params, combined_potential
+    #     combined_potential = potentials.PeriodicTorsion(combined_idxs)
+    #     return combined_params, combined_potential
 
     def parameterize_proper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.pt_handle, potentials.PeriodicTorsion)

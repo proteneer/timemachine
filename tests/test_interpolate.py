@@ -90,10 +90,10 @@ def test_align_harmonic_angle():
     assert test_set == ref_set
 
 
-def test_align_torsion():
+def test_align_proper():
     """
-    Test that we can align idxs and parameters correctly for periodic torsions.
-    Periodic torsions differ from bonds and angles in that their uniqueness is
+    Test that we can align idxs and parameters correctly for proper torsions.
+    Proper torsions differ from bonds and angles in that their uniqueness is
     also determined by the "period", which is currently encoded as one of the parameters.
 
     We expect that decoupled terms have their force constants turned set to zero,
@@ -109,7 +109,7 @@ def test_align_torsion():
     dst_idxs = [(2, 3, 9, 4), (2, 3, 9, 4), (0, 1, 4, 2), (3, 0, 2, 6)]
     dst_params = [(i, b, 2), (j, k, 1), (l, f, 3), (m, n, 4)]
 
-    test_set = interpolate.align_torsion_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+    test_set = interpolate.align_proper_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
 
     ref_set = {
         ((2, 3, 9, 4), (a, b, 2), (i, b, 2)),
@@ -121,6 +121,9 @@ def test_align_torsion():
     }
 
     assert test_set == ref_set
+
+
+# TBD: implement a test_align_improper
 
 
 def test_align_nonbonded():
@@ -339,27 +342,27 @@ $$$$""",
     ff = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, ff)
 
-    duplicate_torsion_idxs = (0, 1, 3, 4)
+    duplicate_proper_idxs = (0, 1, 3, 4)
 
     counts_kv_src = dict()
-    for idxs, p in zip(st.src_system.torsion.potential.idxs, st.src_system.torsion.params):
+    for idxs, p in zip(st.src_system.proper.potential.idxs, st.src_system.proper.params):
         key = tuple(idxs)
         if p[2] == 2.0:
             if key not in counts_kv_src:
                 counts_kv_src[key] = 0
             counts_kv_src[key] += 1  # store period
 
-    assert counts_kv_src[duplicate_torsion_idxs] == 2
+    assert counts_kv_src[duplicate_proper_idxs] == 2
 
     counts_kv_dst = dict()
-    for idxs, p in zip(st.dst_system.torsion.potential.idxs, st.dst_system.torsion.params):
+    for idxs, p in zip(st.dst_system.proper.potential.idxs, st.dst_system.proper.params):
         key = tuple(idxs)
         if p[2] == 2.0:
             if key not in counts_kv_dst:
                 counts_kv_dst[key] = 0
             counts_kv_dst[key] += 1  # store period
 
-    assert duplicate_torsion_idxs not in counts_kv_dst
+    assert duplicate_proper_idxs not in counts_kv_dst
 
     st.setup_intermediate_state(0.5)
 

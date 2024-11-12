@@ -119,12 +119,14 @@ align_harmonic_bond_idxs_and_params = partial(
 align_harmonic_angle_idxs_and_params = partial(align_idxs_and_params, make_default=lambda p: (0, p[1], 0))
 align_nonbonded_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: (0, 0, 0, 0))
 align_chiral_atom_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: 0)
-align_torsion_idxs_and_params = partial(
+align_proper_idxs_and_params = partial(
     align_idxs_and_params,
     make_default=lambda p: (0, p[1], p[2]),  # p[1], p[2] is phase, period
     key=lambda idxs, p: (idxs, p[1], p[2]),  # align on idxs, phase, period
     get_idxs=lambda key: key[0],
 )
+# impropers do not require key'ing on phase, period
+align_improper_idxs_and_params = partial(align_idxs_and_params, make_default=lambda p: (0, p[1], p[2]))
 
 
 def align_chiral_bond_idxs_and_params(src_idxs, src_params, src_signs, dst_idxs, dst_params, dst_signs):

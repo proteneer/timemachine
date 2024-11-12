@@ -62,11 +62,8 @@ def test_combined_parameters_bonded(host_system_fixture, lamb, hif2a_ligand_pair
     # check bonds
     check_bonded_idxs_consistency(hgs.bond.potential.idxs, len(host_sys.bond.potential.idxs))
     check_bonded_idxs_consistency(hgs.angle.potential.idxs, len(host_sys.angle.potential.idxs))
-
-    if host_sys.torsion:
-        check_bonded_idxs_consistency(hgs.torsion.potential.idxs, len(host_sys.torsion.potential.idxs))
-    else:
-        check_bonded_idxs_consistency(hgs.torsion.potential.idxs, 0)
+    check_bonded_idxs_consistency(hgs.proper.potential.idxs, len(host_sys.proper.potential.idxs))
+    check_bonded_idxs_consistency(hgs.improper.potential.idxs, len(host_sys.improper.potential.idxs))
 
     if host_sys.chiral_atom:
         check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, len(host_sys.chiral_atom.potential.idxs))
