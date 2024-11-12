@@ -186,20 +186,8 @@ def setup_initial_state(
     else:
         interacting_atoms = ligand_idxs[st.c_flags == AtomMapFlags.CORE]
 
-    ligand_elements = st.get_alchemical_elements(lamb)
-
     return InitialState(
-        potentials,
-        intg,
-        baro,
-        x0,
-        v0,
-        box0,
-        lamb,
-        ligand_idxs,
-        protein_idxs,
-        interacting_atoms=interacting_atoms,
-        ligand_atom_elements=ligand_elements,
+        potentials, intg, baro, x0, v0, box0, lamb, ligand_idxs, protein_idxs, interacting_atoms=interacting_atoms
     )
 
 
@@ -328,6 +316,7 @@ def setup_optimized_initial_state(
             free_idxs,
             # assertion can lead to spurious errors when new state is close to an existing one
             assert_energy_decreased=False,
+            restrained_idxs=initial_state.interacting_atoms,
             k=k,
         )
         return initial_state
@@ -384,10 +373,6 @@ def _optimize_coords_along_states(
     for idx, initial_state in enumerate(initial_states):
         print(f"Optimizing initial state at λ={initial_state.lamb}")
         free_idxs = get_free_idxs(initial_state)
-        restrained_idxs = None
-        if initial_state.ligand_atom_elements is not None:
-            # Only restraint heavy atoms
-            restrained_idxs = initial_state.ligand_idxs[initial_state.ligand_atom_elements != 1]
         try:
             x_opt = optimize_coords_state(
                 initial_state.potentials,
@@ -396,7 +381,7 @@ def _optimize_coords_along_states(
                 free_idxs,
                 minimization_config=minimization_config,
                 assert_energy_decreased=idx == 0,
-                restrained_idxs=restrained_idxs,
+                restrained_idxs=initial_state.interacting_atoms,
                 k=k,
             )
         except (AssertionError, minimizer.MinimizationError) as e:

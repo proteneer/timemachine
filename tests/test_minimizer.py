@@ -283,14 +283,13 @@ def test_local_minimize_restrained_subset(seed, minimizer_config):
         minimizer.ScipyMinimizationConfig("L-BFGS-B"),
     ],
 )
-def test_local_minimize_restrained_water_trigger_failure(seed, minimizer_config):
+def test_local_minimize_restrained_waters_trigger_failure(seed, minimizer_config):
     """Construct a water box and attempt to minimize a benzene mol into it without removing clashy waters. Verify
-    that if restraining the water atoms, minimization fails.
+    that if the water atoms are restrained that minimization fails and without restraints the minimization succeeds.
     """
     benzene = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
     AllChem.EmbedMolecule(benzene, randomSeed=seed)
 
-    rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
 
     # Use non-zero lambda to ensure forces are large to start

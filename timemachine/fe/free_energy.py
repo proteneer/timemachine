@@ -166,8 +166,6 @@ class InitialState:
     protein_idxs: NDArray
     # The atoms that are in the 4d plane defined by w_coord == 0.0
     interacting_atoms: Optional[NDArray] = None
-    # The atomic number of each ligand atom, used for restraining heavy-atoms when minimizing.
-    ligand_atom_elements: Optional[NDArray] = None
 
     def __post_init__(self):
         assert self.ligand_idxs.dtype == np.int32 or self.ligand_idxs.dtype == np.int64
