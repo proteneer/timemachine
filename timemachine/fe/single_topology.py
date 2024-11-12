@@ -1641,7 +1641,9 @@ class SingleTopology(AtomMapMixin):
         assert bonded_idxs.ndim == src_idxs_ndim
         assert bonded_idxs.dtype == src_idxs_dtype
         assert bonded_params.ndim == src_params_ndim
-        assert bonded_params.dtype == src_params_dtype
+        # this will downcast automatically if 64bit jax is disabled
+        if jax.config.read("jax_enable_x64") is True:
+            assert bonded_params.dtype == src_params_dtype
 
         # if we had automatic reshaping, then bond_class automatically reshape everything down below
         bond_class = type(src_potential.potential)
