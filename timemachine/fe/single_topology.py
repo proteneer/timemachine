@@ -1048,7 +1048,7 @@ class AtomMapMixin:
     self.c_flags
     """
 
-    def __init__(self, mol_a, mol_b, core):
+    def __init__(self, mol_a, mol_b, core: NDArray):
         assert core.shape[1] == 2
         assert mol_a is not None
         assert mol_b is not None
@@ -1089,16 +1089,16 @@ class AtomMapMixin:
         self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
         self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
 
-    def get_dummy_atoms_a(self):
+    def get_dummy_atoms_a(self) -> set[int]:
         return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_A}
 
-    def get_dummy_atoms_b(self):
+    def get_dummy_atoms_b(self) -> set[int]:
         return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_B}
 
-    def get_core_atoms(self):
+    def get_core_atoms(self) -> set[int]:
         return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.CORE}
 
-    def get_num_atoms(self):
+    def get_num_atoms(self) -> int:
         """
         Get the total number of atoms in the alchemical hybrid.
 
@@ -1109,7 +1109,7 @@ class AtomMapMixin:
         """
         return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core)
 
-    def get_num_dummy_atoms(self):
+    def get_num_dummy_atoms(self) -> int:
         """
         Get the total number of dummy atoms in the alchemical hybrid.
 
@@ -1120,7 +1120,15 @@ class AtomMapMixin:
         """
         return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core) - len(self.core)
 
-    def get_alchemical_elements(self, lamb: float) -> NDArray:
+    def get_alchemical_elements(self, lamb: float) -> NDArray[np.int32]:
+        """
+        Get the elements of the atoms in the alchemical hybrid.
+
+        Returns
+        -------
+        np.ndarray[np.int32]
+            The atomic number of each atom
+        """
         ligand_elements = []
         for idx, flag in enumerate(self.c_flags):
             if flag == AtomMapFlags.CORE:

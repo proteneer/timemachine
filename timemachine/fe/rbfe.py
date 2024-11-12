@@ -384,6 +384,10 @@ def _optimize_coords_along_states(
     for idx, initial_state in enumerate(initial_states):
         print(f"Optimizing initial state at λ={initial_state.lamb}")
         free_idxs = get_free_idxs(initial_state)
+        restrained_idxs = None
+        if initial_state.ligand_atom_elements is not None:
+            # Only restraint heavy atoms
+            restrained_idxs = initial_state.ligand_idxs[initial_state.ligand_atom_elements != 1]
         try:
             x_opt = optimize_coords_state(
                 initial_state.potentials,
@@ -392,8 +396,7 @@ def _optimize_coords_along_states(
                 free_idxs,
                 minimization_config=minimization_config,
                 assert_energy_decreased=idx == 0,
-                # Only restraint heavy atom
-                restrained_idxs=initial_state.ligand_idxs[initial_state.ligand_atom_elements != 1],
+                restrained_idxs=restrained_idxs,
                 k=k,
             )
         except (AssertionError, minimizer.MinimizationError) as e:
