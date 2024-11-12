@@ -11,6 +11,7 @@ from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import nonbonded
+from timemachine.potentials import ChiralAtomRestraint, ChiralBondRestraint
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
 from timemachine.potentials.types import Params
 
@@ -431,7 +432,7 @@ class BaseTopology:
 
         return chiral_atom_potential, chiral_bond_potential
 
-    def setup_chiral_end_state(self):
+    def setup_chiral_end_state(self) -> VacuumSystem:
         """
         Setup an end-state with chiral restraints attached.
         """
@@ -444,7 +445,7 @@ class BaseTopology:
         system.chiral_bond = chiral_bond_potential
         return system
 
-    def setup_end_state(self):
+    def setup_end_state(self) -> VacuumSystem:
         mol_bond_params, mol_hb = self.parameterize_harmonic_bond(self.ff.hb_handle.params)
         mol_angle_params, mol_ha = self.parameterize_harmonic_angle(self.ff.ha_handle.params)
         mol_proper_params, mol_pt = self.parameterize_proper_torsion(self.ff.pt_handle.params)
@@ -462,8 +463,21 @@ class BaseTopology:
         improper_potential = mol_it.bind(mol_improper_params)
         nonbonded_potential = mol_nbpl.bind(mol_nbpl_params)
 
+        chiral_atom = ChiralAtomRestraint(np.array([[]], dtype=np.int32).reshape(-1, 4)).bind(
+            np.array([], dtype=np.float64).reshape(-1)
+        )
+        idxs = np.array([[]], dtype=np.int32).reshape(-1, 4)
+        signs = np.array([[]], dtype=np.int32).reshape(-1)
+        chiral_bond = ChiralBondRestraint(idxs, signs).bind(np.array([], dtype=np.float64).reshape(-1))
+
         system = VacuumSystem(
-            bond_potential, angle_potential, proper_potential, improper_potential, nonbonded_potential, None, None
+            bond_potential,
+            angle_potential,
+            proper_potential,
+            improper_potential,
+            nonbonded_potential,
+            chiral_atom,
+            chiral_bond,
         )
 
         return system
