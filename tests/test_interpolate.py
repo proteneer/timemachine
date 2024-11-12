@@ -123,7 +123,40 @@ def test_align_proper():
     assert test_set == ref_set
 
 
-# TBD: implement a test_align_improper
+def test_align_improper():
+    """
+    Test that we can align idxs and parameters correctly for improper torsions.
+
+    Currently, improper torsions all have period == 2 and phase == pi
+    """
+    a, b, c, d, e, f, g, h, i, j, k, l, m, n = np.random.rand(14)
+
+    src_idxs = [(0, 1, 2, 3), (2, 1, 3, 0), (3, 1, 0, 2)]
+    src_params = [(a, b, 2), (c, d, 1), (e, f, 3)]
+    dst_idxs = [(2, 1, 3, 0), (3, 1, 0, 2), (0, 1, 2, 3)]
+    dst_params = [(i, b, 2), (j, k, 1), (l, f, 3)]
+
+    test_set = interpolate.align_improper_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+    ref_set = {
+        ((0, 1, 2, 3), (a, b, 2), (l, f, 3)),
+        ((2, 1, 3, 0), (c, d, 1), (i, b, 2)),
+        ((3, 1, 0, 2), (e, f, 3), (j, k, 1)),
+    }
+
+    assert test_set == ref_set
+
+    src_idxs = [(0, 1, 2, 3)]
+    src_params = [(a, b, 2)]
+    dst_idxs = [(0, 1, 3, 2)]
+    dst_params = [(i, c, 2)]
+
+    test_set = interpolate.align_improper_idxs_and_params(src_idxs, src_params, dst_idxs, dst_params)
+    ref_set = {
+        ((0, 1, 2, 3), (a, b, 2), (0, b, 2)),
+        ((0, 1, 3, 2), (0, c, 2), (i, c, 2)),
+    }
+
+    assert test_set == ref_set
 
 
 def test_align_nonbonded():
