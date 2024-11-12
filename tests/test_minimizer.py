@@ -217,6 +217,61 @@ def test_local_minimize_water_box(minimizer_config):
     np.testing.assert_array_equal(g_init, g_init_test)
 
 
+@pytest.mark.parametrize("seed", [2024])
+@pytest.mark.parametrize(
+    "minimizer_config",
+    [
+        minimizer.FireMinimizationConfig(100),
+        minimizer.ScipyMinimizationConfig("BFGS"),
+        minimizer.ScipyMinimizationConfig("L-BFGS-B"),
+    ],
+)
+def test_local_minimize_restrained_subset(seed, minimizer_config):
+    """
+    Test that we can locally relax a box of water by selecting some random indices.
+    """
+    rng = np.random.default_rng(seed)
+    ff = Forcefield.load_default()
+
+    system, x0, box0, top = builders.build_water_system(4.0, ff.water_ff)
+    host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
+
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(host_fns, box0)
+
+    free_idxs = rng.choice(np.arange(len(x0), dtype=np.int32), size=128, replace=False)
+    frozen_idxs = set(range(len(x0))).difference(set(free_idxs))
+    frozen_idxs = list(frozen_idxs)
+
+    u_init, g_init = val_and_grad_fn(x0)
+
+    with pytest.raises(AssertionError, match="Restraint k must be provided if restrained idxs provided"):
+        minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restrained_idxs=frozen_idxs)
+
+    # Set a large k, to ensure movement of restrained idxs is minimal
+    k = 500_000
+
+    with pytest.raises(AssertionError, match="Restrained indices must be a subset of local indices"):
+        minimizer.local_minimize(
+            x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restraint_k=k, restrained_idxs=frozen_idxs
+        )
+
+    restrained_idxs = rng.choice(free_idxs, replace=False, size=len(free_idxs) // 2)
+    unrestrained_idxs = np.array(list(set(free_idxs).difference(restrained_idxs)))
+
+    x_opt = minimizer.local_minimize(
+        x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restraint_k=k, restrained_idxs=restrained_idxs
+    )
+
+    np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
+    # All free atoms should have moved
+    assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.0
+    # Restrained atoms should have moved very slightly
+    assert np.linalg.norm(x0[restrained_idxs] - x_opt[restrained_idxs]) < 0.01
+    # Unrestrained atoms should have moved more
+    assert np.linalg.norm(x0[unrestrained_idxs] - x_opt[unrestrained_idxs]) > 0.01
+
+
 def test_local_minimize_water_box_with_bounds():
     """
     Test that we can locally relax a box of water using L-BFGS-B with bounds

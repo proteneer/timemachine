@@ -328,6 +328,7 @@ def optimize_coords_state(
     free_idxs: List[int],
     assert_energy_decreased: bool,
     k: Optional[float],
+    restrained_idxs: Optional[NDArray] = None,
     minimization_config: Optional[minimizer.MinimizationConfig] = None,
 ) -> NDArray:
     val_and_grad_fn = minimizer.get_val_and_grad_fn(potentials, box)
@@ -343,6 +344,7 @@ def optimize_coords_state(
         free_idxs,
         minimization_config,
         assert_energy_decreased=assert_energy_decreased,
+        restrained_idxs=restrained_idxs,
         restraint_k=k,
     )
     assert np.all(np.isfinite(x_opt)), "Minimization resulted in a nan"
