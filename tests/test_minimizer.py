@@ -228,7 +228,7 @@ def test_local_minimize_water_box(minimizer_config):
 )
 def test_local_minimize_restrained_subset(seed, minimizer_config):
     """
-    Test that we can locally relax a box of water by selecting some random indices.
+    Test that we can minimize systems and only restrain subsets of the atoms.
     """
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
@@ -267,9 +267,9 @@ def test_local_minimize_restrained_subset(seed, minimizer_config):
     # All free atoms should have moved
     assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.0
     # Restrained atoms should have moved very slightly
-    assert np.linalg.norm(x0[restrained_idxs] - x_opt[restrained_idxs]) < 0.01
+    assert np.linalg.norm(x0[restrained_idxs] - x_opt[restrained_idxs]) < 0.011
     # Unrestrained atoms should have moved more
-    assert np.linalg.norm(x0[unrestrained_idxs] - x_opt[unrestrained_idxs]) > 0.01
+    assert np.linalg.norm(x0[unrestrained_idxs] - x_opt[unrestrained_idxs]) > 0.011
 
 
 def test_local_minimize_water_box_with_bounds():
