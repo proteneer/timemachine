@@ -257,13 +257,6 @@ def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potential
             np.array([], dtype=np.float64).reshape(-1, 3)
         )
 
-    # chiral_atom = potentials.ChiralAtomRestraint(np.array([], dtype=np.int32).reshape(-1, 4)).bind(
-    #     np.array([], dtype=np.float64)
-    # )
-    # chiral_bond = potentials.ChiralBondRestraint(np.array([], dtype=np.int32).reshape(-1, 4)).bind(
-    #     np.array([], dtype=np.float64)
-    # )
-
     bps = [bond, angle, proper, improper, nonbonded]
 
     return bps, masses

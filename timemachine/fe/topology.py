@@ -380,17 +380,6 @@ class BaseTopology:
         params, idxs = self.ff.it_handle.partial_parameterize(ff_params, self.mol)
         return params, potentials.PeriodicTorsion(idxs)
 
-    # def parameterize_periodic_torsion(self, proper_params, improper_params):
-    #     """
-    #     Parameterize all periodic torsions in the system.
-    #     """
-    #     proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
-    #     improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
-    #     combined_params = jnp.concatenate([proper_params, improper_params])
-    #     combined_idxs = np.concatenate([proper_potential.idxs, improper_potential.idxs])
-    #     combined_potential = potentials.PeriodicTorsion(combined_idxs)
-    #     return combined_params, combined_potential
-
     def setup_chiral_restraints(self, chiral_atom_restraint_k, chiral_bond_restraint_k):
         """
         Create chiral atom and bond potentials.
@@ -634,19 +623,6 @@ class DualTopology(BaseTopology):
 
     def parameterize_harmonic_angle(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.ha_handle, potentials.HarmonicAngle)
-
-    # def parameterize_periodic_torsion(self, proper_params, improper_params):
-    #     """
-    #     Parameterize all periodic torsions in the system.
-    #     """
-    #     proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
-    #     improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
-
-    #     combined_params = jnp.concatenate([proper_params, improper_params])
-    #     combined_idxs = np.concatenate([proper_potential.idxs, improper_potential.idxs])
-
-    #     combined_potential = potentials.PeriodicTorsion(combined_idxs)
-    #     return combined_params, combined_potential
 
     def parameterize_proper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.pt_handle, potentials.PeriodicTorsion)
