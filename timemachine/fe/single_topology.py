@@ -1120,6 +1120,22 @@ class AtomMapMixin:
         """
         return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core) - len(self.core)
 
+    def get_alchemical_elements(self, lamb: float) -> NDArray:
+        ligand_elements = []
+        for idx, flag in enumerate(self.c_flags):
+            if flag == AtomMapFlags.CORE:
+                if lamb <= 0.5:
+                    ligand_elements.append(self.mol_a.GetAtomWithIdx(self.c_to_a[idx]).GetAtomicNum())
+                else:
+                    ligand_elements.append(self.mol_b.GetAtomWithIdx(self.c_to_b[idx]).GetAtomicNum())
+            elif flag == AtomMapFlags.MOL_A:
+                ligand_elements.append(self.mol_a.GetAtomWithIdx(self.c_to_a[idx]).GetAtomicNum())
+            elif flag == AtomMapFlags.MOL_B:
+                ligand_elements.append(self.mol_b.GetAtomWithIdx(self.c_to_b[idx]).GetAtomicNum())
+            else:
+                assert False
+        return np.array(ligand_elements, dtype=np.int32)
+
 
 class MissingBondsInChiralVolumeException(Exception):
     pass
