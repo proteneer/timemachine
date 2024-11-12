@@ -1683,10 +1683,30 @@ from timemachine.ff.handlers.utils import canonicalize_bond
 def _assert_consistent_hamiltonian_term_impl(fwd_bonded_term, rev_bonded_term, rev_kv, canon_fn):
     fwd_canonical_map = dict()
     for fwd_idxs, fwd_params in zip(fwd_bonded_term.potential.idxs, fwd_bonded_term.params):
-        fwd_canonical_map[tuple(fwd_idxs)] = fwd_params
+        fwd_key = canon_fn(fwd_idxs, fwd_params)
+        fwd_canonical_map[fwd_key] = fwd_params
+
+    # tbd: if fwd has more terms than rev then this logic will miss the inconsistency, this checks
+    # only for subset equivalence
     for rev_idxs, rev_params in zip(rev_bonded_term.potential.idxs, rev_bonded_term.params):
-        rev_canonical_idxs = tuple(canon_fn([rev_kv[x] for x in rev_idxs]))
-        np.testing.assert_allclose(fwd_canonical_map[rev_canonical_idxs], rev_params)
+        rev_key = canon_fn([rev_kv[x] for x in rev_idxs], rev_params)
+        np.testing.assert_allclose(fwd_canonical_map[rev_key], rev_params)
+
+
+def _canonicalize_bond_based_on_idxs(idxs, _):
+    return tuple(canonicalize_bond(idxs))
+
+
+def _canonicalize_chiral_atom_idxs_impl(idxs, _):
+    # canonicalize_chiral_atom_idxs works on batches
+    return tuple(canonicalize_chiral_atom_idxs(np.array(idxs).reshape(-1, 4))[0])
+
+
+def _canonicalize_torsion_idxs(idxs, params):
+    _, phase, period = np.asarray(params)
+    # canonicalize phase to 4 decimal places to deal with accidental loss of precision
+    key = [*canonicalize_bond(idxs), f"{phase:.4f}", round(period)]
+    return tuple(key)
 
 
 def _assert_consistent_hamiltonian(fwd_sys, rev_sys, fused_map):
@@ -1694,10 +1714,16 @@ def _assert_consistent_hamiltonian(fwd_sys, rev_sys, fused_map):
     for x, y in fused_map:
         rev_kv[y] = x
 
-    _assert_consistent_hamiltonian_term_impl(fwd_sys.bond, rev_sys.bond, rev_kv, canonicalize_bond)
-    _assert_consistent_hamiltonian_term_impl(fwd_sys.angle, rev_sys.angle, rev_kv, canonicalize_bond)
-    # _assert_consistent_hamiltonian_term_impl(fwd_sys.torsion, rev_sys.torsion, rev_kv, canonicalize_bond) # failing - ugh
-    # _assert_consistent_hamiltonian_term_impl(fwd_sys.chiral_atom, rev_sys.chiral_atom, rev_kv, canonicalize_chiral_atom_idxs) # failing - ugh
+    _assert_consistent_hamiltonian_term_impl(fwd_sys.bond, rev_sys.bond, rev_kv, _canonicalize_bond_based_on_idxs)
+    _assert_consistent_hamiltonian_term_impl(fwd_sys.angle, rev_sys.angle, rev_kv, _canonicalize_bond_based_on_idxs)
+    _assert_consistent_hamiltonian_term_impl(
+        fwd_sys.chiral_atom, rev_sys.chiral_atom, rev_kv, _canonicalize_chiral_atom_idxs_impl
+    )
+
+    # propers are okay, impropers are cursed, lhs emits cw, rhs emits ccw impropers
+    _assert_consistent_hamiltonian_term_impl(
+        fwd_sys.torsion, rev_sys.torsion, rev_kv, _canonicalize_torsion_idxs
+    )  # replace
 
 
 # @pytest.mark.nocuda
@@ -1759,7 +1785,6 @@ def test_hif2a_end_state_symmetry_unit_test():
     )
 
     for lamb in np.linspace(0, 1, 12):
-        print("TESTING LAMBDA", lamb)
         fwd_sys = get_vacuum_system(mol_a, mol_b, core, lamb)
         rev_sys = get_vacuum_system(mol_b, mol_a, core[:, ::-1], 1 - lamb)
         _assert_consistent_hamiltonian(fwd_sys, rev_sys, fused_map)
