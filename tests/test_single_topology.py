@@ -1577,16 +1577,17 @@ def get_vacuum_system_and_conf(mol_a, mol_b, core, lamb):
 
 
 def _assert_consistent_hamiltonian_term_impl(fwd_bonded_term, rev_bonded_term, rev_kv, canon_fn):
-    fwd_canonical_map = dict()
+    canonical_map = dict()
     for fwd_idxs, fwd_params in zip(fwd_bonded_term.potential.idxs, fwd_bonded_term.params):
         fwd_key = canon_fn(fwd_idxs, fwd_params)
-        fwd_canonical_map[fwd_key] = fwd_params
+        canonical_map[fwd_key] = [fwd_params, None]
 
-    # tbd: if fwd has more terms than rev then this logic will miss the inconsistency, this checks
-    # only for subset equivalence
     for rev_idxs, rev_params in zip(rev_bonded_term.potential.idxs, rev_bonded_term.params):
         rev_key = canon_fn([rev_kv[x] for x in rev_idxs], rev_params)
-        np.testing.assert_allclose(fwd_canonical_map[rev_key], rev_params)
+        canonical_map[rev_key][1] = rev_params
+
+    for fwd_params, rev_params in canonical_map.values():
+        np.testing.assert_allclose(fwd_params, rev_params)
 
 
 def _assert_u_and_grad_consistent(u_fwd, u_rev, x_fwd, fused_map, canon_fn):
@@ -1613,70 +1614,34 @@ def _assert_u_and_grad_consistent(u_fwd, u_rev, x_fwd, fused_map, canon_fn):
     )
 
 
-# @pytest.mark.nocuda
-# @pytest.mark.nightly(reason="slow")
-# def test_hif2a_end_state_symmetry_nightly_test():
-#     """
-#     Test that end-states are symmetric
-#     """
-#     with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-#         mols = read_sdf(path_to_ligand)
-
-#     for idx, mol_a in enumerate(mols):
-#         for mol_b in mols[idx + 1 :]:
-#             print("testing", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
-#             core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
-#             amm_fwd = AtomMapMixin(mol_a, mol_b, core)
-#             amm_rev = AtomMapMixin(mol_b, mol_a, core[:, ::-1])
-#             fused_map = np.concatenate(
-#                 [
-#                     np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)], dtype=np.int32).reshape(-1, 2),
-#                     np.array(
-#                         [
-#                             [x, y]
-#                             for x, y in zip(amm_fwd.b_to_c, amm_rev.a_to_c)
-#                             if x not in core[:, 0] and y not in core[:, 1]
-#                         ],
-#                         dtype=np.int32,
-#                     ).reshape(-1, 2),
-#                 ]
-#             )
-#             sys_fwd, conf_fwd = get_vacuum_system_and_conf(mol_a, mol_b, core, 0.0)
-#             sys_rev, conf_rev = get_vacuum_system_and_conf(mol_b, mol_a, core[:, ::-1], 1.0)
-
-#             _assert_u_and_grad_consistent(sys_fwd.bond, sys_rev.bond, conf_fwd, conf_rev, fused_map)
-#             _assert_u_and_grad_consistent(sys_fwd.angle, sys_rev.angle, conf_fwd, conf_rev, fused_map)
-#             _assert_u_and_grad_consistent(sys_fwd.nonbonded, sys_rev.nonbonded, conf_fwd, conf_rev, fused_map)
-#             _assert_u_and_grad_consistent(sys_fwd.proper, sys_rev.proper, conf_fwd, conf_rev, fused_map)
-#             _assert_u_and_grad_consistent(sys_fwd.improper, sys_rev.improper, conf_fwd, conf_rev, fused_map)
-#             _assert_u_and_grad_consistent(sys_fwd.chiral_atom, sys_rev.chiral_atom, conf_fwd, conf_rev, fused_map)
-
-
-def get_fused_map(mol_a, mol_b, core):
+def _get_fused_map(mol_a, mol_b, core):
     amm_fwd = AtomMapMixin(mol_a, mol_b, core)
     amm_rev = AtomMapMixin(mol_b, mol_a, core[:, ::-1])
     fused_map = np.concatenate(
         [
-            np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)]),
+            np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)], dtype=np.int32).reshape(-1, 2),
             np.array(
-                [[x, y] for x, y in zip(amm_fwd.b_to_c, amm_rev.a_to_c) if x not in core[:, 0] and y not in core[:, 1]]
-            ),
+                [[x, y] for x, y in zip(amm_fwd.b_to_c, amm_rev.a_to_c) if x not in core[:, 0] and y not in core[:, 1]],
+                dtype=np.int32,
+            ).reshape(-1, 2),
         ]
     )
     return fused_map
 
 
-@pytest.mark.nocuda
-def test_hif2a_end_state_symmetry_unit_test():
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf(path_to_ligand)
+def assert_symmetric_interpolation(mol_a, mol_b, core):
+    """
+    Assert that the Single Topology interpolation code is symmetric, i.e. ST(mol_a, mol_b, lamb) == ST(mol_b, mol_a, 1-lamb)
 
+    Where for each of the bond, angle, proper torsion, improper torsion, nonbonded, terms
+        - the idxs, params are identical under atom-mapping + canonicalization
+        - u_fwd, u_rev for an arbitrary conformation is identical under atom mapping
+        - grad_fwd, grad_rev for an arbitrary conformation is identical under atom mapping
+
+    """
     ff = Forcefield.load_default()
-    mol_a = mols[0]
-    mol_b = mols[1]
-    core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
     # map atoms in the combined mol_ab to the atoms in the combined mol_ba
-    fused_map = get_fused_map(mol_a, mol_b, core)
+    fused_map = _get_fused_map(mol_a, mol_b, core)
 
     st_fwd = SingleTopology(mol_a, mol_b, core, ff)
     st_rev = SingleTopology(mol_b, mol_a, core[:, ::-1], ff)
@@ -1684,7 +1649,6 @@ def test_hif2a_end_state_symmetry_unit_test():
     conf_b = get_romol_conf(mol_b)
     test_conf = st_fwd.combine_confs(conf_a, conf_b, 0)
 
-    # We expect that SingleTopology(mol_a, mol_b, lamb) == SingleTopology(mol_b, mol_a, 1-lamb)
     for lamb in np.linspace(0, 1, 12):
         sys_fwd = st_fwd.setup_intermediate_state(lamb)
         sys_rev = st_rev.setup_intermediate_state(1 - lamb)
@@ -1697,7 +1661,7 @@ def test_hif2a_end_state_symmetry_unit_test():
             sys_fwd.angle, sys_rev.angle, test_conf, fused_map, canon_fn=lambda idxs, _: tuple(canonicalize_bond(idxs))
         )
 
-        # # for propers, we format the phase as a 5 decimal string to guard against loss of precision
+        # for propers, we format the phase as a 5 decimal string to guard against loss of precision
         _assert_u_and_grad_consistent(
             sys_fwd.proper,
             sys_rev.proper,
@@ -1729,3 +1693,32 @@ def test_hif2a_end_state_symmetry_unit_test():
             fused_map,
             canon_fn=lambda idxs, _: tuple(canonicalize_bond(idxs)),
         )
+
+
+@pytest.mark.nocuda
+def test_hif2a_end_state_symmetry_unit_test():
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
+
+    mol_a = mols[0]
+    mol_b = mols[1]
+    core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+    assert_symmetric_interpolation(mol_a, mol_b, core)
+
+
+@pytest.mark.nocuda
+@pytest.mark.nightly(reason="slow")
+def test_hif2a_end_state_symmetry_nightly_test():
+    """
+    Test that end-states are symmetric for a large number of random pairs
+    """
+    seed = 2029
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
+    pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
+    np.random.seed(seed)
+    np.random.shuffle(pairs)
+    for mol_a, mol_b in pairs[:25]:
+        print("testing", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
+        core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+        assert_symmetric_interpolation(mol_a, mol_b, core)
