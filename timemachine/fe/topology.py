@@ -458,13 +458,13 @@ class BaseTopology:
         )
         bond_potential = mol_hb.bind(mol_bond_params)
         angle_potential = mol_ha.bind(mol_angle_params)
-
-        torsion_params = np.concatenate([mol_proper_params, mol_improper_params])
-        torsion_idxs = np.concatenate([mol_pt.idxs, mol_it.idxs])
-        torsion_potential = potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params)
+        proper_potential = mol_pt.bind(mol_proper_params)
+        improper_potential = mol_it.bind(mol_improper_params)
         nonbonded_potential = mol_nbpl.bind(mol_nbpl_params)
 
-        system = VacuumSystem(bond_potential, angle_potential, torsion_potential, nonbonded_potential, None, None)
+        system = VacuumSystem(
+            bond_potential, angle_potential, proper_potential, improper_potential, nonbonded_potential, None, None
+        )
 
         return system
 
