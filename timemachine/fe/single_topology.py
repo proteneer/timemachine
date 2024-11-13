@@ -1164,16 +1164,24 @@ def assert_torsions_defined_over_non_linear_angles(vacuum_system):
     for (i, j, k, l), (proper_k, _, _) in zip(vacuum_system.proper.potential.idxs, vacuum_system.proper.params):
         if proper_k > 0:
             if canonicalize_bond((i, j, k)) in linear_angles:
-                raise TorsionsDefinedOverLinearAngleException(f"angle {(i,j,k)} is linear in torsion {(i,j,k,l)}")
+                raise TorsionsDefinedOverLinearAngleException(
+                    f"angle {(i,j,k)} is linear in proper torsion {(i,j,k,l)}"
+                )
             if canonicalize_bond((j, k, l)) in linear_angles:
-                raise TorsionsDefinedOverLinearAngleException(f"angle {(j,k,l)} is linear in torsion {(i,j,k,l)}")
+                raise TorsionsDefinedOverLinearAngleException(
+                    f"angle {(j,k,l)} is linear in proper torsion {(i,j,k,l)}"
+                )
 
     for (i, j, k, l), (improper_k, _, _) in zip(vacuum_system.improper.potential.idxs, vacuum_system.improper.params):
         if improper_k > 0:
             if canonicalize_bond((i, j, k)) in linear_angles:
-                raise TorsionsDefinedOverLinearAngleException(f"angle {(i,j,k)} is linear in torsion {(i,j,k,l)}")
+                raise TorsionsDefinedOverLinearAngleException(
+                    f"angle {(i,j,k)} is linear in improper torsion {(i,j,k,l)}"
+                )
             if canonicalize_bond((j, k, l)) in linear_angles:
-                raise TorsionsDefinedOverLinearAngleException(f"angle {(j,k,l)} is linear in torsion {(i,j,k,l)}")
+                raise TorsionsDefinedOverLinearAngleException(
+                    f"angle {(j,k,l)} is linear in improper torsion {(i,j,k,l)}"
+                )
 
 
 def assert_chiral_consistency(src_chiral_idxs: NDArray, dst_chiral_idxs: NDArray):
