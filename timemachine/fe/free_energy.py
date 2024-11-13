@@ -392,7 +392,8 @@ class BaseFreeEnergy:
         params_potential_pairs = [
             topology.parameterize_harmonic_bond(ff_params.hb_params),
             topology.parameterize_harmonic_angle(ff_params.ha_params),
-            topology.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params),
+            topology.parameterize_proper_torsion(ff_params.pt_params),
+            topology.parameterize_improper_torsion(ff_params.it_params),
             topology.parameterize_nonbonded(
                 ff_params.q_params,
                 ff_params.q_params_intra,

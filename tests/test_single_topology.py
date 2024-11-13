@@ -21,7 +21,7 @@ from timemachine.constants import (
     NBParamIdx,
 )
 from timemachine.fe import atom_mapping, single_topology
-from timemachine.fe.dummy import MultipleAnchorWarning
+from timemachine.fe.dummy import MultipleAnchorWarning, canonicalize_bond
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.interpolate import align_nonbonded_idxs_and_params, linear_interpolation
 from timemachine.fe.single_topology import (
@@ -410,6 +410,11 @@ def chiral_atom_idxs_are_canonical(all_idxs):
     return np.all((all_idxs[:, 1] < all_idxs[:, 2]) & (all_idxs[:, 1] < all_idxs[:, 3]))
 
 
+def assert_improper_idxs_are_canonical(all_idxs):
+    for idxs in all_idxs:
+        np.testing.assert_array_equal(idxs, canonicalize_improper_idxs(idxs))
+
+
 @pytest.mark.nogpu
 @pytest.mark.nightly(reason="Takes awhile to run")
 def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=5):
@@ -450,7 +455,8 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
             # assert that the idxs are canonicalized.
             assert bond_idxs_are_canonical(system.bond.potential.idxs)
             assert bond_idxs_are_canonical(system.angle.potential.idxs)
-            assert bond_idxs_are_canonical(system.torsion.potential.idxs)
+            assert bond_idxs_are_canonical(system.proper.potential.idxs)
+            assert_improper_idxs_are_canonical(system.improper.potential.idxs)
             assert bond_idxs_are_canonical(system.nonbonded.potential.idxs)
             assert bond_idxs_are_canonical(system.chiral_bond.potential.idxs)
             assert chiral_atom_idxs_are_canonical(system.chiral_atom.potential.idxs)
@@ -1205,116 +1211,6 @@ def test_interpolate_w_coord_monotonic():
     assert np.all(np.diff(ws) >= 0.0)
 
 
-@pytest.mark.skip(reason="schedule debug")
-@pytest.mark.nocuda
-def test_hif2a_plot_force_constants():
-    # generate plots of force constants
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf(path_to_ligand)
-
-    pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
-
-    np.random.seed(2023)
-    np.random.shuffle(pairs)
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-
-    # this has been tested for up to 50 random pairs
-    for pair_idx, (mol_a, mol_b) in enumerate(pairs[:10]):
-        if mol_a.GetProp("_Name") == mol_b.GetProp("_Name"):
-            continue
-
-        print("Checking pair", pair_idx, " | ", get_mol_name(mol_a), "->", get_mol_name(mol_b))
-        core = _get_core_by_mcs(mol_a, mol_b)
-        st = SingleTopology(mol_a, mol_b, core, ff)
-
-        n_windows = 128
-
-        bond_ks = []
-        angle_ks = []
-        torsion_ks = []
-        chiral_atom_ks = []
-
-        xs = np.linspace(0, 1, n_windows)
-        for lamb in xs:
-            vac_sys = st.setup_intermediate_state(lamb)
-            lamb_bond_ks = []
-            for k, _ in vac_sys.bond.params:
-                lamb_bond_ks.append(k)
-            bond_ks.append(lamb_bond_ks)
-
-            lamb_angle_ks = []
-            for k, _, _ in vac_sys.angle.params:
-                lamb_angle_ks.append(k)
-            angle_ks.append(lamb_angle_ks)
-
-            lamb_torsion_ks = []
-            for k, _, _ in vac_sys.torsion.params:
-                lamb_torsion_ks.append(k)
-            torsion_ks.append(lamb_torsion_ks)
-
-            lamb_chiral_atom_ks = []
-            for k in vac_sys.chiral_atom.params:
-                lamb_chiral_atom_ks.append(k)
-            chiral_atom_ks.append(lamb_chiral_atom_ks)
-
-        bond_ks = np.array(bond_ks).T
-        angle_ks = np.array(angle_ks).T
-        torsion_ks = np.array(torsion_ks).T
-        chiral_atom_ks = np.array(chiral_atom_ks).T
-
-        bond_ks /= np.amax(bond_ks, axis=1, keepdims=True)
-        angle_ks /= np.amax(angle_ks, axis=1, keepdims=True)
-        torsion_ks /= np.amax(torsion_ks, axis=1, keepdims=True)
-        chiral_atom_ks /= np.amax(chiral_atom_ks, axis=1, keepdims=True)
-
-        import matplotlib.pyplot as plt
-
-        fig, all_axes = plt.subplots(4, 1, figsize=(1 * 5, 4 * 3))
-        fig.tight_layout()
-
-        for v in bond_ks:
-            all_axes[0].plot(xs, v)
-        all_axes[0].set_title("bond")
-        all_axes[0].set_ylabel("fraction of full strength")
-        all_axes[0].set_xlabel("lambda")
-        all_axes[0].axvline(0.3, ls="--", color="gray")
-        all_axes[0].axvline(0.6, ls="--", color="gray")
-        all_axes[0].axvline(0.8, ls="--", color="gray")
-        all_axes[0].set_ylim(0, 1)
-
-        for v in angle_ks:
-            all_axes[1].plot(xs, v)
-        all_axes[1].set_title("angle")
-        all_axes[1].set_ylabel("fraction of full strength")
-        all_axes[1].set_xlabel("lambda")
-        all_axes[1].axvline(0.3, ls="--", color="gray")
-        all_axes[1].axvline(0.6, ls="--", color="gray")
-        all_axes[1].axvline(0.8, ls="--", color="gray")
-        all_axes[1].set_ylim(0, 1)
-
-        for v in torsion_ks:
-            all_axes[2].plot(xs, v)
-        all_axes[2].set_title("torsion")
-        all_axes[2].set_ylabel("fraction of full strength")
-        all_axes[2].set_xlabel("lambda")
-        all_axes[2].axvline(0.3, ls="--", color="gray")
-        all_axes[2].axvline(0.6, ls="--", color="gray")
-        all_axes[2].axvline(0.8, ls="--", color="gray")
-        all_axes[2].set_ylim(0, 1)
-
-        for v in chiral_atom_ks:
-            all_axes[3].plot(xs, v)
-        all_axes[3].set_title("chiral atom")
-        all_axes[3].set_ylabel("fraction of full strength")
-        all_axes[3].set_xlabel("lambda")
-        all_axes[3].axvline(0.3, ls="--", color="gray")
-        all_axes[3].axvline(0.6, ls="--", color="gray")
-        all_axes[3].axvline(0.8, ls="--", color="gray")
-        all_axes[3].set_ylim(0, 1)
-
-        plt.show()
-
-
 @pytest.mark.nightly(reason="Test setting up hif2a pairs for single topology.")
 @pytest.mark.nocuda
 def test_hif2a_pairs_setup_st():
@@ -1680,8 +1576,35 @@ def get_vacuum_system_and_conf(mol_a, mol_b, core, lamb):
     return st.setup_intermediate_state(lamb), conf
 
 
-def _assert_u_and_grad_consistent(u_fwd, u_rev, x_fwd, x_rev, fused_map):
-    assert len(fused_map) == len(x_fwd)
+def _assert_consistent_hamiltonian_term_impl(fwd_bonded_term, rev_bonded_term, rev_kv, canon_fn):
+    canonical_map = dict()
+    for fwd_idxs, fwd_params in zip(fwd_bonded_term.potential.idxs, fwd_bonded_term.params):
+        fwd_key = canon_fn(fwd_idxs, fwd_params)
+        canonical_map[fwd_key] = [fwd_params, None]
+
+    for rev_idxs, rev_params in zip(rev_bonded_term.potential.idxs, rev_bonded_term.params):
+        rev_key = canon_fn([rev_kv[x] for x in rev_idxs], rev_params)
+        canonical_map[rev_key][1] = rev_params
+
+    for fwd_params, rev_params in canonical_map.values():
+        np.testing.assert_allclose(fwd_params, rev_params)
+
+
+def _assert_u_and_grad_consistent(u_fwd, u_rev, x_fwd, fused_map, canon_fn):
+    # test that the definition of the hamiltonian, the energies, and the forces are all consistent
+    rev_kv = dict()
+    fwd_kv = dict()
+    for x, y in fused_map:
+        fwd_kv[x] = y
+        rev_kv[y] = x
+    x_rev = np.zeros_like(x_fwd)
+    for atom_idx, xyz in enumerate(x_fwd):
+        x_rev[fwd_kv[atom_idx]] = xyz
+
+    # check hamiltonian
+    _assert_consistent_hamiltonian_term_impl(u_fwd, u_rev, rev_kv, canon_fn)
+
+    # check energies and forces
     box = 100.0 * np.eye(3)
     np.testing.assert_allclose(u_fwd(x_fwd, box), u_rev(x_rev, box))
     fwd_bond_grad_fn = jax.grad(u_fwd)
@@ -1691,42 +1614,89 @@ def _assert_u_and_grad_consistent(u_fwd, u_rev, x_fwd, x_rev, fused_map):
     )
 
 
-@pytest.mark.nocuda
-@pytest.mark.nightly(reason="slow")
-def test_hif2a_end_state_symmetry_nightly_test():
-    """
-    Test that end-states are symmetric
-    """
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf(path_to_ligand)
+def _get_fused_map(mol_a, mol_b, core):
+    amm_fwd = AtomMapMixin(mol_a, mol_b, core)
+    amm_rev = AtomMapMixin(mol_b, mol_a, core[:, ::-1])
+    fused_map = np.concatenate(
+        [
+            np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)], dtype=np.int32).reshape(-1, 2),
+            np.array(
+                [[x, y] for x, y in zip(amm_fwd.b_to_c, amm_rev.a_to_c) if x not in core[:, 0] and y not in core[:, 1]],
+                dtype=np.int32,
+            ).reshape(-1, 2),
+        ]
+    )
+    return fused_map
 
-    for idx, mol_a in enumerate(mols):
-        for mol_b in mols[idx + 1 :]:
-            print("testing", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
-            core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
-            amm_fwd = AtomMapMixin(mol_a, mol_b, core)
-            amm_rev = AtomMapMixin(mol_b, mol_a, core[:, ::-1])
-            fused_map = np.concatenate(
-                [
-                    np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)], dtype=np.int32).reshape(-1, 2),
-                    np.array(
-                        [
-                            [x, y]
-                            for x, y in zip(amm_fwd.b_to_c, amm_rev.a_to_c)
-                            if x not in core[:, 0] and y not in core[:, 1]
-                        ],
-                        dtype=np.int32,
-                    ).reshape(-1, 2),
-                ]
-            )
-            sys_fwd, conf_fwd = get_vacuum_system_and_conf(mol_a, mol_b, core, 0.0)
-            sys_rev, conf_rev = get_vacuum_system_and_conf(mol_b, mol_a, core[:, ::-1], 1.0)
 
-            _assert_u_and_grad_consistent(sys_fwd.bond, sys_rev.bond, conf_fwd, conf_rev, fused_map)
-            _assert_u_and_grad_consistent(sys_fwd.angle, sys_rev.angle, conf_fwd, conf_rev, fused_map)
-            _assert_u_and_grad_consistent(sys_fwd.nonbonded, sys_rev.nonbonded, conf_fwd, conf_rev, fused_map)
-            _assert_u_and_grad_consistent(sys_fwd.torsion, sys_rev.torsion, conf_fwd, conf_rev, fused_map)
-            _assert_u_and_grad_consistent(sys_fwd.chiral_atom, sys_rev.chiral_atom, conf_fwd, conf_rev, fused_map)
+def assert_symmetric_interpolation(mol_a, mol_b, core):
+    """
+    Assert that the Single Topology interpolation code is symmetric, i.e. ST(mol_a, mol_b, lamb) == ST(mol_b, mol_a, 1-lamb)
+
+    Where for each of the bond, angle, proper torsion, improper torsion, nonbonded, terms
+        - the idxs, params are identical under atom-mapping + canonicalization
+        - u_fwd, u_rev for an arbitrary conformation is identical under atom mapping
+        - grad_fwd, grad_rev for an arbitrary conformation is identical under atom mapping
+
+    """
+    ff = Forcefield.load_default()
+    # map atoms in the combined mol_ab to the atoms in the combined mol_ba
+    fused_map = _get_fused_map(mol_a, mol_b, core)
+
+    st_fwd = SingleTopology(mol_a, mol_b, core, ff)
+    st_rev = SingleTopology(mol_b, mol_a, core[:, ::-1], ff)
+    conf_a = get_romol_conf(mol_a)
+    conf_b = get_romol_conf(mol_b)
+    test_conf = st_fwd.combine_confs(conf_a, conf_b, 0)
+
+    seed = 2024
+    np.random.seed(seed)
+    lambda_schedule = np.concatenate([np.linspace(0, 1, 12), np.random.rand(10)])
+
+    for lamb in lambda_schedule:
+        sys_fwd = st_fwd.setup_intermediate_state(lamb)
+        sys_rev = st_rev.setup_intermediate_state(1 - lamb)
+
+        _assert_u_and_grad_consistent(
+            sys_fwd.bond, sys_rev.bond, test_conf, fused_map, canon_fn=lambda idxs, _: tuple(canonicalize_bond(idxs))
+        )
+
+        _assert_u_and_grad_consistent(
+            sys_fwd.angle, sys_rev.angle, test_conf, fused_map, canon_fn=lambda idxs, _: tuple(canonicalize_bond(idxs))
+        )
+
+        # for propers, we format the phase as a 5 decimal string to guard against loss of precision
+        _assert_u_and_grad_consistent(
+            sys_fwd.proper,
+            sys_rev.proper,
+            test_conf,
+            fused_map,
+            canon_fn=lambda idxs, params: tuple([*canonicalize_bond(idxs), f"{params[1]:.5f}", int(round(params[2]))]),
+        )
+
+        _assert_u_and_grad_consistent(
+            sys_fwd.improper,
+            sys_rev.improper,
+            test_conf,
+            fused_map,
+            canon_fn=lambda idxs, _: tuple(canonicalize_improper_idxs(idxs)),
+        )
+
+        _assert_u_and_grad_consistent(
+            sys_fwd.chiral_atom,
+            sys_rev.chiral_atom,
+            test_conf,
+            fused_map,
+            canon_fn=lambda idxs, _: tuple(canonicalize_chiral_atom_idxs(np.array([idxs]))[0]),  # fn assumes ndim=2
+        )
+
+        _assert_u_and_grad_consistent(
+            sys_fwd.nonbonded,
+            sys_rev.nonbonded,
+            test_conf,
+            fused_map,
+            canon_fn=lambda idxs, _: tuple(canonicalize_bond(idxs)),
+        )
 
 
 @pytest.mark.nocuda
@@ -1737,18 +1707,22 @@ def test_hif2a_end_state_symmetry_unit_test():
     mol_a = mols[0]
     mol_b = mols[1]
     core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
-    amm_fwd = AtomMapMixin(mol_a, mol_b, core)
-    amm_rev = AtomMapMixin(mol_b, mol_a, core[:, ::-1])
-    fused_map = np.concatenate(
-        [
-            np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)]),
-            np.array(
-                [[x, y] for x, y in zip(amm_fwd.b_to_c, amm_rev.a_to_c) if x not in core[:, 0] and y not in core[:, 1]]
-            ),
-        ]
-    )
+    assert_symmetric_interpolation(mol_a, mol_b, core)
 
-    sys_fwd, conf_fwd = get_vacuum_system_and_conf(mol_a, mol_b, core, 0.0)
-    sys_rev, conf_rev = get_vacuum_system_and_conf(mol_b, mol_a, core[:, ::-1], 1.0)
 
-    _assert_u_and_grad_consistent(sys_fwd.bond, sys_rev.bond, conf_fwd, conf_rev, fused_map)
+@pytest.mark.nocuda
+@pytest.mark.nightly(reason="slow")
+def test_hif2a_end_state_symmetry_nightly_test():
+    """
+    Test that end-states are symmetric for a large number of random pairs
+    """
+    seed = 2029
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
+    pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
+    np.random.seed(seed)
+    np.random.shuffle(pairs)
+    for mol_a, mol_b in pairs[:25]:
+        print("testing", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
+        core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+        assert_symmetric_interpolation(mol_a, mol_b, core)
