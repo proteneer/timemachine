@@ -68,6 +68,9 @@ def _flip_min_max(min_max):
 CORE_BOND_MIN_MAX = [0.0, 1.0]
 CORE_ANGLE_MIN_MAX = [0.0, 1.0]
 CORE_TORSION_MIN_MAX = [0.0, 1.0]
+CORE_TORSION_OFF_TO_ON_MIN_MAX = [0.7, 1.0]
+CORE_TORSION_ON_TO_OFF_MIN_MAX = _flip_min_max(CORE_TORSION_OFF_TO_ON_MIN_MAX)
+
 
 # core terms that are involved in chiral volumes being turned on or off
 CORE_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX = [0.0, 0.5]
@@ -1115,6 +1118,16 @@ class MissingBondsInChiralVolumeException(Exception):
     pass
 
 
+class TorsionsDefinedOverLinearAngleException(Exception):
+    pass
+
+
+def assert_default_system_constraints(vacuum_system):
+    # Assert that the vacuum_system objects satisfy a set of constraints
+    assert_bonds_defined_for_chiral_volumes(vacuum_system)
+    assert_torsions_defined_over_non_linear_angles(vacuum_system)
+
+
 def assert_bonds_defined_for_chiral_volumes(vacuum_system, bond_k_min=DEFAULT_BOND_IS_PRESENT_K):
     """
     Assert that bonds defined for every chiral volume is present and has a force constant greater than bond_k_min
@@ -1133,6 +1146,42 @@ def assert_bonds_defined_for_chiral_volumes(vacuum_system, bond_k_min=DEFAULT_BO
                 raise MissingBondsInChiralVolumeException(f"bond {(c, j)} missing from Chiral Volume {(c, i, j, k)}")
             if canonicalize_bond((c, k)) not in bonds_present:
                 raise MissingBondsInChiralVolumeException(f"bond {(c, k)} missing from Chiral Volume {(c, i, j, k)}")
+
+
+def assert_torsions_defined_over_non_linear_angles(vacuum_system):
+    """
+    Assert that torsions are never defined over angle terms with an equilibrium value close to 180.
+    """
+    linear_angles = set()
+
+    for idxs, angle_params in zip(vacuum_system.angle.potential.idxs, vacuum_system.angle.params):
+        angle_k, angle_a0 = angle_params[0], angle_params[1]
+
+        if angle_k > 0:
+            if abs(angle_a0 - np.pi) < 0.174533:  # 10 degrees, arbitrary but conservative threshold
+                linear_angles.add(tuple(idxs))
+
+    for (i, j, k, l), (proper_k, _, _) in zip(vacuum_system.proper.potential.idxs, vacuum_system.proper.params):
+        if proper_k > 0:
+            if canonicalize_bond((i, j, k)) in linear_angles:
+                raise TorsionsDefinedOverLinearAngleException(
+                    f"angle {(i,j,k)} is linear in proper torsion {(i,j,k,l)}"
+                )
+            if canonicalize_bond((j, k, l)) in linear_angles:
+                raise TorsionsDefinedOverLinearAngleException(
+                    f"angle {(j,k,l)} is linear in proper torsion {(i,j,k,l)}"
+                )
+
+    for (i, j, k, l), (improper_k, _, _) in zip(vacuum_system.improper.potential.idxs, vacuum_system.improper.params):
+        if improper_k > 0:
+            if canonicalize_bond((i, j, k)) in linear_angles:
+                raise TorsionsDefinedOverLinearAngleException(
+                    f"angle {(i,j,k)} is linear in improper torsion {(i,j,k,l)}"
+                )
+            if canonicalize_bond((j, k, l)) in linear_angles:
+                raise TorsionsDefinedOverLinearAngleException(
+                    f"angle {(j,k,l)} is linear in improper torsion {(i,j,k,l)}"
+                )
 
 
 def assert_chiral_consistency(src_chiral_idxs: NDArray, dst_chiral_idxs: NDArray):
@@ -1195,10 +1244,8 @@ class SingleTopology(AtomMapMixin):
         assert_chiral_consistency(
             self.src_system.chiral_atom.potential.idxs, self.dst_system.chiral_atom.potential.idxs
         )
-
-        assert_bonds_defined_for_chiral_volumes(self.src_system, DEFAULT_BOND_IS_PRESENT_K)
-
-        assert_bonds_defined_for_chiral_volumes(self.dst_system, DEFAULT_BOND_IS_PRESENT_K)
+        assert_default_system_constraints(self.src_system)
+        assert_default_system_constraints(self.dst_system)
 
     def combine_masses(self, use_hmr=False):
         """
@@ -1577,7 +1624,12 @@ class SingleTopology(AtomMapMixin):
 
     def _interpolate_torsion(self, idxs, src_params, dst_params, lamb):
         if self.all_idxs_belong_to_core(idxs):
-            min_max = CORE_TORSION_MIN_MAX
+            if src_params[0] == 0:
+                min_max = CORE_TORSION_OFF_TO_ON_MIN_MAX
+            elif dst_params[0] == 0:
+                min_max = CORE_TORSION_ON_TO_OFF_MIN_MAX
+            else:
+                min_max = CORE_TORSION_MIN_MAX
         elif self.any_idxs_belong_to_dummy_a(idxs):
             min_max = DUMMY_A_TORSION_MIN_MAX
         elif self.any_idxs_belong_to_dummy_b(idxs):

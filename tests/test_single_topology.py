@@ -29,6 +29,7 @@ from timemachine.fe.single_topology import (
     ChargePertubationError,
     CoreBondChangeWarning,
     SingleTopology,
+    assert_default_system_constraints,
     canonicalize_bonds,
     canonicalize_chiral_atom_idxs,
     canonicalize_improper_idxs,
@@ -1656,6 +1657,9 @@ def assert_symmetric_interpolation(mol_a, mol_b, core):
     for lamb in lambda_schedule:
         sys_fwd = st_fwd.setup_intermediate_state(lamb)
         sys_rev = st_rev.setup_intermediate_state(1 - lamb)
+
+        assert_default_system_constraints(sys_fwd)
+        assert_default_system_constraints(sys_rev)
 
         _assert_u_and_grad_consistent(
             sys_fwd.bond, sys_rev.bond, test_conf, fused_map, canon_fn=lambda idxs, _: tuple(canonicalize_bond(idxs))

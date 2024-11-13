@@ -16,9 +16,11 @@ from timemachine.fe.single_topology import (
     DUMMY_B_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX,
     MissingBondsInChiralVolumeException,
     SingleTopology,
+    TorsionsDefinedOverLinearAngleException,
     assert_bonds_defined_for_chiral_volumes,
+    assert_torsions_defined_over_non_linear_angles,
 )
-from timemachine.fe.utils import get_romol_conf, read_sdf
+from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 
 pytestmark = [pytest.mark.nocuda]
@@ -1011,4 +1013,103 @@ def test_assert_bonds_present_during_chiral_interpolation():
     )
     _assert_exception_raised_at_least_once_in_interval(
         lambdas, DUMMY_A_CHIRAL_ATOM_CONVERTING_OFF_MIN_MAX, assert_fn, MissingBondsInChiralVolumeException
+    )
+
+
+def get_pfkfb3_nitrile_to_amide_fwd():
+    mols_by_name = read_sdf_mols_by_name(resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"))
+    mol_a = mols_by_name["24"]
+    mol_b = mols_by_name["26"]
+    core = np.array(
+        [
+            [20, 20],
+            [26, 22],
+            [25, 23],
+            [24, 24],
+            [23, 25],
+            [22, 26],
+            [21, 21],
+            [19, 19],
+            [18, 18],
+            [17, 17],
+            [16, 16],
+            [15, 15],
+            [14, 14],
+            [13, 13],
+            [12, 12],
+            [11, 11],
+            [10, 10],
+            [9, 3],
+            [8, 2],
+            [7, 1],
+            [6, 0],
+            [5, 4],
+            [4, 5],
+            [3, 8],
+            [2, 7],
+            [27, 27],
+            [1, 6],
+            [0, 9],
+            [45, 43],
+            [44, 44],
+            [43, 45],
+            [42, 46],
+            [41, 42],
+            [40, 41],
+            [39, 40],
+            [38, 39],
+            [37, 38],
+            [36, 37],
+            [35, 36],
+            [34, 35],
+            [33, 34],
+            [32, 31],
+            [31, 30],
+            [30, 33],
+            [29, 32],
+            [28, 29],
+        ]
+    )
+
+    return mol_a, mol_b, core
+
+
+def get_pfkfb3_nitrile_to_amide_rev():
+    mol_a, mol_b, core = get_pfkfb3_nitrile_to_amide_fwd()
+    return mol_b, mol_a, core[:, ::-1]
+
+
+@pytest.mark.parametrize(
+    "mol_a, mol_b, core",
+    [
+        get_pfkfb3_nitrile_to_amide_fwd(),
+        get_pfkfb3_nitrile_to_amide_rev(),
+    ],
+)
+def test_assert_torsions_defined_over_non_linear_angles(mol_a, mol_b, core, monkeypatch):
+    """We expect that if we set the threshold criteria (defining whether or not a bond is present based on the force constant)
+    too low, then we should raise MissingBondsInChiralVolumeException exceptions at the intermediate states."""
+
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+
+    # plot_and_save(plot_core_interpolation_schedule, "pfkfb3_interpolation_schedule_core.png", st)
+    # plot_and_save(plot_dummy_a_interpolation_schedule, "pfkfb3_interpolation_schedule_dummy_a.png", st)
+    # plot_and_save(plot_dummy_b_interpolation_schedule, "pfkfb3_interpolation_schedule_dummy_b.png", st)
+
+    lambdas = np.linspace(0, 1, 12)
+
+    for lam in lambdas:
+        vs = st.setup_intermediate_state(lam)
+        assert_torsions_defined_over_non_linear_angles(vs)
+
+    monkeypatch.setattr(single_topology, "CORE_TORSION_OFF_TO_ON_MIN_MAX", [0.0, 1.0])
+    monkeypatch.setattr(single_topology, "CORE_TORSION_ON_TO_OFF_MIN_MAX", [0.0, 1.0])
+
+    def assert_fn(lam):
+        vs = st.setup_intermediate_state(lam)
+        assert_torsions_defined_over_non_linear_angles(vs)
+
+    _assert_exception_raised_at_least_once_in_interval(
+        lambdas, (0.0, 1.0), assert_fn, TorsionsDefinedOverLinearAngleException
     )
