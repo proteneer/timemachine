@@ -384,8 +384,6 @@ $$$$""",
             if key not in counts_kv_src:
                 counts_kv_src[key] = 0
             counts_kv_src[key] += 1  # store period
-        else:
-            assert 0
 
     assert counts_kv_src[duplicate_proper_idxs] == 2
 
@@ -396,8 +394,6 @@ $$$$""",
             if key not in counts_kv_dst:
                 counts_kv_dst[key] = 0
             counts_kv_dst[key] += 1  # store period
-        else:
-            assert 0
 
     assert duplicate_proper_idxs not in counts_kv_dst
 
