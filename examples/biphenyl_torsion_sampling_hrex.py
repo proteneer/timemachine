@@ -94,7 +94,8 @@ def get_potentials_solvent(
     hb_params, hb_pot = top.parameterize_harmonic_bond(ff_params.hb_params)
     ha_params, ha_pot = top.parameterize_harmonic_angle(ff_params.ha_params)
 
-    pt_params, pt_pot = top.parameterize_periodic_torsion(ff_params.pt_params, ff_params.it_params)
+    pt_params, pt_pot = top.parameterize_proper_torsion(ff_params.pt_params)
+    it_params, it_pot = top.parameterize_improper_torsion(ff_params.it_params)
     nb_params, nb_pot = top.parameterize_nonbonded(
         ff_params.q_params,
         ff_params.q_params_intra,
@@ -131,6 +132,7 @@ def get_potentials_solvent(
         hb_pot.bind(hb_params),
         ha_pot.bind(ha_params),
         pt_pot.bind(pt_params),
+        it_pot.bind(it_params),
         nb_pot.bind(nb_params),
     ]
 

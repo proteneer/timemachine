@@ -1,6 +1,6 @@
 import multiprocessing
 from dataclasses import dataclass
-from typing import Generic, List, Optional, Sequence, Tuple, TypeVar, Union, cast
+from typing import Generic, List, Sequence, Tuple, TypeVar, Union, cast
 
 import jax
 import numpy as np
@@ -86,30 +86,20 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
 
 
 def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
-    bond = angle = torsion = nonbonded = chiral_atom = chiral_bond = None
+    assert isinstance(bps[0].potential, potentials.HarmonicBond)
+    assert isinstance(bps[1].potential, potentials.HarmonicAngle)
+    assert isinstance(bps[2].potential, potentials.PeriodicTorsion)  # proper
+    assert isinstance(bps[3].potential, potentials.PeriodicTorsion)  # improper
+    assert isinstance(bps[4].potential, potentials.Nonbonded)  # cursed: NB AllPairs in VacuumSystem
 
-    for bp in bps:
-        if isinstance(bp.potential, potentials.HarmonicBond):
-            bond = bp
-        elif isinstance(bp.potential, potentials.HarmonicAngle):
-            angle = bp
-        elif isinstance(bp.potential, potentials.PeriodicTorsion):
-            torsion = bp
-        elif isinstance(bp.potential, potentials.Nonbonded):
-            nonbonded = bp
-        elif isinstance(bp.potential, potentials.ChiralAtomRestraint):
-            chiral_atom = bp
-        # TODO: uncomment when re-enabling chiral_bond
-        # elif isinstance(bp.potential, potentials.ChiralBondRestraint):
-        #     chiral_bond = bp
-        else:
-            assert 0, "Unknown potential"
+    chiral_atom = ChiralAtomRestraint(np.array([[]], dtype=np.int32).reshape(-1, 4)).bind(
+        np.array([], dtype=np.float64).reshape(-1)
+    )
+    idxs = np.array([[]], dtype=np.int32).reshape(-1, 4)
+    signs = np.array([[]], dtype=np.int32).reshape(-1)
+    chiral_bond = ChiralBondRestraint(idxs, signs).bind(np.array([], dtype=np.float64).reshape(-1))
 
-    assert bond
-    assert angle
-    assert nonbonded
-
-    return VacuumSystem(bond, angle, torsion, nonbonded, chiral_atom, chiral_bond)
+    return VacuumSystem(bps[0], bps[1], bps[2], bps[3], bps[4], chiral_atom, chiral_bond)
 
 
 def convert_omm_system(omm_system) -> Tuple["VacuumSystem", List[float]]:
@@ -130,16 +120,16 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
     # utility system container
     bond: BoundPotential[HarmonicBond]
     angle: BoundPotential[_HarmonicAngle]
-    torsion: Optional[BoundPotential[PeriodicTorsion]]
+    proper: BoundPotential[PeriodicTorsion]
+    improper: BoundPotential[PeriodicTorsion]
     nonbonded: BoundPotential[_Nonbonded]
-    chiral_atom: Optional[BoundPotential[ChiralAtomRestraint]]
-    chiral_bond: Optional[BoundPotential[ChiralBondRestraint]]
+    chiral_atom: BoundPotential[ChiralAtomRestraint]
+    chiral_bond: BoundPotential[ChiralBondRestraint]
 
     def get_U_fn(self):
         """
         Return a jax function that evaluates the potential energy of a set of coordinates.
         """
-        assert self.torsion
         U_fns = self.get_U_fns()
 
         def U_fn(x):
@@ -151,7 +141,7 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
         # For molecules too small for to have certain terms,
         # skip when no params are present
         # Chiral bond restraints are disabled until checks are added (see GH #815)
-        potentials = [self.bond, self.angle, self.torsion, self.chiral_atom, self.nonbonded]
+        potentials = [self.bond, self.angle, self.proper, self.improper, self.chiral_atom, self.nonbonded]
         terms = cast(
             List[BoundPotential[Potential]],
             [p for p in potentials if p],
@@ -163,7 +153,8 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
 class HostGuestSystem:
     bond: BoundPotential[HarmonicBond]
     angle: BoundPotential[HarmonicAngleStable]
-    torsion: BoundPotential[PeriodicTorsion]
+    proper: BoundPotential[PeriodicTorsion]
+    improper: BoundPotential[PeriodicTorsion]
     chiral_atom: BoundPotential[ChiralAtomRestraint]
     chiral_bond: BoundPotential[ChiralBondRestraint]
     nonbonded_guest_pairs: BoundPotential[NonbondedPairListPrecomputed]
@@ -174,7 +165,8 @@ class HostGuestSystem:
         return [
             self.bond,
             self.angle,
-            self.torsion,
+            self.proper,
+            self.improper,
             # Chiral bond restraints are disabled until checks are added
             # for consistency.
             self.chiral_atom,
