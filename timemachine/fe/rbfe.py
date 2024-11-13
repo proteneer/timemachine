@@ -32,7 +32,7 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
-from timemachine.fe.single_topology import AtomMapFlags, SingleTopology, assert_bonds_defined_for_chiral_volumes
+from timemachine.fe.single_topology import AtomMapFlags, SingleTopology, assert_default_system_constraints
 from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
@@ -72,7 +72,7 @@ def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
     """Prepare potentials, initial coords, large 10x10x10nm box, and HMR masses"""
 
     system = st.setup_intermediate_state(lamb)
-    assert_bonds_defined_for_chiral_volumes(system)
+    assert_default_system_constraints(system)
     hmr_masses = np.array(st.combine_masses(use_hmr=True))
 
     potentials = system.get_U_fns()
@@ -95,7 +95,7 @@ def setup_in_env(
     """Prepare potentials, concatenate environment and ligand coords, apply HMR, and construct barostat"""
     barostat_interval = 25
     system = st.combine_with_host(host.system, lamb, host.num_water_atoms, st.ff, host.omm_topology)
-    assert_bonds_defined_for_chiral_volumes(system)
+    assert_default_system_constraints(system)
     host_hmr_masses = model_utils.apply_hmr(host.physical_masses, host.system.bond.potential.idxs)
     hmr_masses = np.concatenate([host_hmr_masses, st.combine_masses(use_hmr=True)])
 
