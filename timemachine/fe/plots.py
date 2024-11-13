@@ -606,7 +606,7 @@ def _plot_proper_interpolation(xs, systems, filter_fn, axs, row):
 
     proper_idxs = proper_idxs[keep_idxs]
     proper_ks = np.array(proper_ks).T  # propers x K
-    proper_bs = np.array(proper_bs).T * (180 / np.pi)  # propers x K *
+    proper_bs = np.array(proper_bs).T * (180 / np.pi)  # propers x K (in degrees)
     num_propers = proper_ks.shape[0]
 
     for b_idx in range(num_propers):
@@ -651,7 +651,7 @@ def _plot_improper_interpolation(xs, systems, filter_fn, axs, row):
 
     improper_idxs = improper_idxs[keep_idxs]
     improper_ks = np.array(improper_ks).T  # impropers x K
-    improper_bs = np.array(improper_bs).T * (180 / np.pi)  # impropers x K *
+    improper_bs = np.array(improper_bs).T * (180 / np.pi)  # of impropers x K (in degrees)
     num_impropers = improper_ks.shape[0]
 
     for b_idx in range(num_impropers):

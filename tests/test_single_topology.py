@@ -1649,7 +1649,11 @@ def assert_symmetric_interpolation(mol_a, mol_b, core):
     conf_b = get_romol_conf(mol_b)
     test_conf = st_fwd.combine_confs(conf_a, conf_b, 0)
 
-    for lamb in np.linspace(0, 1, 12):
+    seed = 2024
+    np.random.seed(seed)
+    lambda_schedule = np.concatenate([np.linspace(0, 1, 12), np.random.rand(10)])
+
+    for lamb in lambda_schedule:
         sys_fwd = st_fwd.setup_intermediate_state(lamb)
         sys_rev = st_rev.setup_intermediate_state(1 - lamb)
 
@@ -1667,7 +1671,7 @@ def assert_symmetric_interpolation(mol_a, mol_b, core):
             sys_rev.proper,
             test_conf,
             fused_map,
-            canon_fn=lambda idxs, params: tuple([*canonicalize_bond(idxs), f"{params[1]:.5f}", int(params[2])]),
+            canon_fn=lambda idxs, params: tuple([*canonicalize_bond(idxs), f"{params[1]:.5f}", int(round(params[2]))]),
         )
 
         _assert_u_and_grad_consistent(
