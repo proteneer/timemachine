@@ -18,6 +18,7 @@ from timemachine.fe.free_energy import (
     HREXSimulationResult,
     InitialState,
     MDParams,
+    RESTParams,
     SimulationResult,
     Trajectory,
     make_pair_bar_plots,
@@ -32,7 +33,8 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
-from timemachine.fe.rest import InterpolationFxn, SingleTopologyREST, Symmetric
+from timemachine.fe.rest import SingleTopologyREST, Symmetric
+from timemachine.fe.rest.interpolation import Quadratic
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology, assert_default_system_constraints
 from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
@@ -52,6 +54,16 @@ MAX_SEED_VALUE = 10000
 DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023, hrex_params=None)
 
 DEFAULT_HREX_PARAMS = replace(DEFAULT_MD_PARAMS, hrex_params=HREXParams(n_frames_bisection=100))
+
+assert DEFAULT_HREX_PARAMS.hrex_params
+
+DEFAULT_REST_PARAMS = replace(
+    DEFAULT_HREX_PARAMS,
+    hrex_params=replace(
+        DEFAULT_HREX_PARAMS.hrex_params,
+        rest_params=RESTParams(temperature_scale_interpolation_fxn=Symmetric(Quadratic(1.0, 2.0))),
+    ),
+)
 
 
 @dataclass
@@ -567,7 +579,6 @@ def estimate_relative_free_energy_bisection_or_hrex(*args, **kwargs) -> Simulati
     if hrex_params is not None:
         return estimate_relative_free_energy_bisection_hrex(*args, **kwargs)
     else:
-        assert not kwargs["rest_params"]
         return estimate_relative_free_energy_bisection(*args, **kwargs)
 
 
@@ -786,11 +797,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         raise err
 
 
-@dataclass(frozen=True)
-class RESTParams:
-    temperature_scale_interpolation_fxn: Symmetric[InterpolationFxn]
-
-
 def estimate_relative_free_energy_bisection_hrex(
     mol_a: Chem.rdchem.Mol,
     mol_b: Chem.rdchem.Mol,
@@ -803,7 +809,6 @@ def estimate_relative_free_energy_bisection_hrex(
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
-    rest_params: Optional[RESTParams] = None,
 ) -> HREXSimulationResult:
     """
     Estimate relative free energy between mol_a and mol_b using Hamiltonian Replica EXchange (HREX) sampling of a
@@ -848,15 +853,14 @@ def estimate_relative_free_energy_bisection_hrex(
     min_cutoff: float or None, optional
         Throw error if any atom moves more than this distance (nm) after minimization
 
-    rest_params: RESTParams or None, optional
-        If given, parameters to use for REST. If None, do not use REST.
-
     Returns
     -------
     HREXSimulationResult
         Collected data from the simulation (see class for storage information).
 
     """
+    hrex_params = md_params.hrex_params
+    assert hrex_params
 
     if n_windows is None:
         n_windows = DEFAULT_NUM_WINDOWS
@@ -868,9 +872,9 @@ def estimate_relative_free_energy_bisection_hrex(
             mol_b,
             core,
             ff,
-            temperature_scale_interpolation_fxn=rest_params.temperature_scale_interpolation_fxn,
+            temperature_scale_interpolation_fxn=hrex_params.rest_params.temperature_scale_interpolation_fxn,
         )
-        if rest_params
+        if hrex_params.rest_params
         else SingleTopology(mol_a, mol_b, core, ff)
     )
 
@@ -920,7 +924,6 @@ def run_vacuum(
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = None,
-    rest_params: Optional[RESTParams] = None,
 ):
     if md_params is not None and md_params.local_steps > 0:
         md_params = replace(md_params, local_steps=0)
@@ -940,7 +943,6 @@ def run_vacuum(
         n_windows=n_windows,
         min_overlap=min_overlap,
         min_cutoff=min_cutoff,
-        rest_params=rest_params,
     )
 
 
@@ -954,7 +956,6 @@ def run_solvent(
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = None,
-    rest_params: Optional[RESTParams] = None,
 ):
     if md_params is not None and md_params.water_sampling_params is not None:
         md_params = replace(md_params, water_sampling_params=None)
@@ -978,7 +979,6 @@ def run_solvent(
         n_windows=n_windows,
         min_overlap=min_overlap,
         min_cutoff=min_cutoff,
-        rest_params=rest_params,
     )
     return solvent_res, solvent_top, solvent_host_config
 
@@ -993,7 +993,6 @@ def run_complex(
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
-    rest_params: Optional[RESTParams] = None,
 ):
     complex_sys, complex_conf, complex_box, complex_top, nwa = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
@@ -1011,6 +1010,5 @@ def run_complex(
         n_windows=n_windows,
         min_overlap=min_overlap,
         min_cutoff=min_cutoff,
-        rest_params=rest_params,
     )
     return complex_res, complex_top, complex_host_config
