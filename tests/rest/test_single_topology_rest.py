@@ -149,17 +149,17 @@ def test_single_topology_rest_solvent(mol_pair, functional_form: InterpolationFx
     host, host_config = get_solvent_host(st)
 
     ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
+    conf = np.concatenate([host.conf, ligand_conf])
 
-    def get_nonbonded_host_guest_ixn_energy(st: SingleTopology, lamb: float):
+    def get_nonbonded_host_guest_ixn_energy(st: SingleTopology):
         hgs = st.combine_with_host(host.system, lamb, host_config.num_water_atoms, st.ff, host_config.omm_topology)
-        conf = np.concatenate([host.conf, ligand_conf])
         return hgs.nonbonded_host_guest_ixn(conf, host_config.box)
 
-    U = get_nonbonded_host_guest_ixn_energy(st_rest, lamb)
-    U_ref = get_nonbonded_host_guest_ixn_energy(st, lamb)
+    U = get_nonbonded_host_guest_ixn_energy(st_rest)
+    U_ref = get_nonbonded_host_guest_ixn_energy(st)
 
-    scale = st_rest.get_energy_scale_factor(lamb)
-    np.testing.assert_allclose(U, scale * U_ref, rtol=1e-5)
+    energy_scale = st_rest.get_energy_scale_factor(lamb)
+    np.testing.assert_allclose(U, energy_scale * U_ref, rtol=1e-5)
 
 
 def get_mol(smiles: str):
