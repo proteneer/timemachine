@@ -171,10 +171,7 @@ def get_mol(smiles: str):
 def get_identity_transformation(mol):
     n_atoms = mol.GetNumAtoms()
     core = np.tile(np.arange(n_atoms)[:, None], (1, 2))  # identity
-
-    ff = Forcefield.load_default()
-
-    return SingleTopologyREST(mol, mol, core, ff, Symmetric(Linear(1.0, 2.0)))
+    return SingleTopologyREST(mol, mol, core, forcefield, Symmetric(Linear(1.0, 2.0)))
 
 
 def test_single_topology_rest_propers():

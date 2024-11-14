@@ -6,13 +6,13 @@ import numpy as np
 from numpy.typing import NDArray
 from openmm import app
 
-from timemachine.fe.bond import CanonicalBond, mkbond
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.ff import Forcefield
 from timemachine.md.enhanced import identify_rotatable_bonds
 from timemachine.potentials import HarmonicAngleStable, NonbondedPairListPrecomputed
 
+from .bond import CanonicalBond, mkbond
 from .interpolation import InterpolationFxn, Symmetric
 
 
