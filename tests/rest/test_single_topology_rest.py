@@ -164,7 +164,7 @@ def test_single_topology_rest_solvent(mol_pair, functional_form: InterpolationFx
 
 def get_mol(smiles: str):
     mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
-    AllChem.EmbedMolecule(mol)
+    AllChem.EmbedMolecule(mol, randomSeed=2024)
     return mol
 
 
