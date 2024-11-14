@@ -1,6 +1,6 @@
 import pytest
 
-from timemachine.fe.bond import CanonicalAngle, CanonicalBond, CanonicalTorsion
+from timemachine.fe.rest.bond import CanonicalAngle, CanonicalBond, CanonicalTorsion
 
 
 def test_rejects_non_canonical():
