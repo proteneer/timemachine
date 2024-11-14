@@ -18,7 +18,6 @@ from timemachine.fe.bar import (
     works_from_ukln,
 )
 from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
-from timemachine.fe.host_config import HostConfig
 from timemachine.fe.plots import (
     plot_as_png_fxn,
     plot_dG_errs_figure,
@@ -26,7 +25,6 @@ from timemachine.fe.plots import (
     plot_overlap_summary_figure,
 )
 from timemachine.fe.protocol_refinement import greedy_bisection_step
-from timemachine.fe.rest.interpolation import InterpolationFxn, Symmetric
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield, ForcefieldParams
@@ -54,9 +52,13 @@ WATER_SAMPLER_MOVERS = (
 )
 
 
-@dataclass(frozen=True)
-class RESTParams:
-    temperature_scale_interpolation_fxn: Symmetric[InterpolationFxn]
+class HostConfig:
+    def __init__(self, omm_system, conf, box, num_water_atoms, omm_topology):
+        self.omm_system = omm_system
+        self.conf = conf
+        self.box = box
+        self.num_water_atoms = num_water_atoms
+        self.omm_topology = omm_topology
 
 
 @dataclass(frozen=True)
@@ -80,7 +82,6 @@ class HREXParams:
     n_frames_bisection: int = 100
     n_frames_per_iter: int = 1
     max_delta_states: Optional[int] = 4
-    rest_params: Optional[RESTParams] = None
 
     def __post_init__(self):
         assert self.n_frames_bisection > 0
