@@ -65,16 +65,11 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def target_proper_idxs(self) -> list[int]:
-        def is_rotatable(_i, j, k, _l):
-            return mkbond(j, k) in self.rotatable_bonds
-
-        def in_aliphatic_ring(_i, j, k, _l):
-            return mkbond(j, k) in self.aliphatic_ring_bonds
-
         return [
             idx
-            for idx, (i, j, k, l) in enumerate(self.propers)
-            if is_rotatable(i, j, k, l) or in_aliphatic_ring(i, j, k, l)
+            for idx, (_, j, k, _) in enumerate(self.propers)
+            for bond in [mkbond(j, k)]
+            if bond in self.rotatable_bonds or bond in self.aliphatic_ring_bonds
         ]
 
     @cached_property
