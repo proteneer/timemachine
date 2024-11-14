@@ -11,8 +11,8 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.rbfe import Host, setup_optimized_host
-from timemachine.fe.rest import Exponential, Linear, Quadratic, SingleTopologyREST, Symmetric, plot_interpolation_fxn
-from timemachine.fe.rest.interpolation import InterpolationFxn
+from timemachine.fe.rest import InterpolationFxn, SingleTopologyREST, Symmetric
+from timemachine.fe.rest.interpolation import Exponential, Linear, Quadratic, plot_interpolation_fxn
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf, read_sdf_mols_by_name
