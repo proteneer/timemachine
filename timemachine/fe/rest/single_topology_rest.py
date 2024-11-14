@@ -9,11 +9,11 @@ from openmm import app
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.ff import Forcefield
-from timemachine.md.enhanced import identify_rotatable_bonds
 from timemachine.potentials import HarmonicAngleStable, NonbondedPairListPrecomputed
 
 from .bond import CanonicalBond, mkbond
 from .interpolation import InterpolationFxn, Symmetric
+from .queries import get_rotatable_bonds
 
 
 class SingleTopologyREST(SingleTopology):
@@ -33,10 +33,10 @@ class SingleTopologyREST(SingleTopology):
         self._temperature_scale_interpolation_fxn = temperature_scale_interpolation_fxn
 
     @cached_property
-    def aliphatic_ring_bonds(self):
+    def aliphatic_ring_bonds(self) -> set[CanonicalBond]:
         def get_aliphatic_ring_bonds(mol):
             return [
-                (
+                mkbond(
                     mol.GetBondWithIdx(bond_idx).GetBeginAtomIdx(),
                     mol.GetBondWithIdx(bond_idx).GetEndAtomIdx(),
                 )
@@ -46,15 +46,15 @@ class SingleTopologyREST(SingleTopology):
                 for bond_idx in ring_bond_idxs
             ]
 
-        ring_bonds_a = {mkbond(i, j).translate(self.a_to_c) for i, j in get_aliphatic_ring_bonds(self.mol_a)}
-        ring_bonds_b = {mkbond(i, j).translate(self.b_to_c) for i, j in get_aliphatic_ring_bonds(self.mol_b)}
+        ring_bonds_a = {bond.translate(self.a_to_c) for bond in get_aliphatic_ring_bonds(self.mol_a)}
+        ring_bonds_b = {bond.translate(self.b_to_c) for bond in get_aliphatic_ring_bonds(self.mol_b)}
         ring_bonds_c = ring_bonds_a | ring_bonds_b
         return ring_bonds_c
 
     @cached_property
     def rotatable_bonds(self) -> set[CanonicalBond]:
-        rotatable_bonds_a = {mkbond(i, j).translate(self.a_to_c) for i, j in identify_rotatable_bonds(self.mol_a)}
-        rotatable_bonds_b = {mkbond(i, j).translate(self.b_to_c) for i, j in identify_rotatable_bonds(self.mol_b)}
+        rotatable_bonds_a = {bond.translate(self.a_to_c) for bond in get_rotatable_bonds(self.mol_a)}
+        rotatable_bonds_b = {bond.translate(self.b_to_c) for bond in get_rotatable_bonds(self.mol_b)}
         rotatable_bonds_c = rotatable_bonds_a | rotatable_bonds_b
         return rotatable_bonds_c
 
