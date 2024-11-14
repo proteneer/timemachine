@@ -16,14 +16,8 @@ from numpy.typing import NDArray
 
 from timemachine import constants
 from timemachine.fe import absolute_hydration
-from timemachine.fe.free_energy import (
-    AbsoluteFreeEnergy,
-    HostConfig,
-    InitialState,
-    MDParams,
-    WaterSamplingParams,
-    get_context,
-)
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, InitialState, MDParams, WaterSamplingParams, get_context
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.topology import BaseTopology
@@ -84,6 +78,7 @@ def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], 
 
     plt.title(label)
     fig, axes = plt.subplots(ncols=2)
+    assert isinstance(axes, np.ndarray)
     fig.suptitle(label)
     axes[0].plot(ns_per_day)
     axes[0].axhline(np.mean(ns_per_day), linestyle="--", c="gray", label="Mean")

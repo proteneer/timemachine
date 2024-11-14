@@ -10,7 +10,8 @@ from scipy.spatial.transform import Rotation
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
-from timemachine.fe.free_energy import HostConfig, InitialState, MDParams, get_water_sampler_params, sample
+from timemachine.fe.free_energy import InitialState, MDParams, get_water_sampler_params, sample
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.model_utils import apply_hmr, image_frame
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield

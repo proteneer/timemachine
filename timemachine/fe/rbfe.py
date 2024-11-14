@@ -12,7 +12,6 @@ from rdkit import Chem
 from timemachine.constants import DEFAULT_POSITIONAL_RESTRAINT_K, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.free_energy import (
-    HostConfig,
     HREXParams,
     HREXPlots,
     HREXSimulationResult,
@@ -25,6 +24,7 @@ from timemachine.fe.free_energy import (
     run_sims_hrex,
     run_sims_sequential,
 )
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.lambda_schedule import bisection_lambda_schedule
 from timemachine.fe.plots import (
     plot_as_png_fxn,

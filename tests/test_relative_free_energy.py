@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 
 from timemachine.fe.free_energy import (
-    HostConfig,
     HREXParams,
     HREXSimulationResult,
     MDParams,
@@ -16,6 +15,7 @@ from timemachine.fe.free_energy import (
     image_frames,
     sample,
 )
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.rbfe import (
     estimate_relative_free_energy,
     estimate_relative_free_energy_bisection,

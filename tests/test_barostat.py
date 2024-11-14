@@ -3,7 +3,8 @@ import pytest
 
 from timemachine.constants import AVOGADRO, BAR_TO_KJ_PER_NM3, BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import model_utils
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig
+from timemachine.fe.free_energy import AbsoluteFreeEnergy
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer

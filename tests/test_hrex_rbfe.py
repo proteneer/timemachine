@@ -13,13 +13,13 @@ from psutil import Process
 from scipy import stats
 
 from timemachine.fe.free_energy import (
-    HostConfig,
     HREXParams,
     HREXSimulationResult,
     MDParams,
     WaterSamplingParams,
     sample_with_context_iter,
 )
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.plots import (
     plot_hrex_replica_state_distribution_heatmap,
     plot_hrex_swap_acceptance_rates_convergence,

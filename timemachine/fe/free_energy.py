@@ -18,6 +18,7 @@ from timemachine.fe.bar import (
     works_from_ukln,
 )
 from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.plots import (
     plot_as_png_fxn,
     plot_dG_errs_figure,
@@ -50,15 +51,6 @@ WATER_SAMPLER_MOVERS = (
     custom_ops.TIBDExchangeMove_f32,
     custom_ops.TIBDExchangeMove_f64,
 )
-
-
-class HostConfig:
-    def __init__(self, omm_system, conf, box, num_water_atoms, omm_topology):
-        self.omm_system = omm_system
-        self.conf = conf
-        self.box = box
-        self.num_water_atoms = num_water_atoms
-        self.omm_topology = omm_topology
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,8 @@ import numpy as np
 from openmm import app
 
 from timemachine.constants import AVOGADRO, DEFAULT_PRESSURE, DEFAULT_TEMP
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, InitialState
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf

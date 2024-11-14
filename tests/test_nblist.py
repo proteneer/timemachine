@@ -7,7 +7,8 @@ from common import hilbert_sort
 from numpy.typing import NDArray
 
 from timemachine.constants import DEFAULT_TEMP
-from timemachine.fe.free_energy import HostConfig, MDParams, sample
+from timemachine.fe.free_energy import MDParams, sample
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.rbfe import setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf
