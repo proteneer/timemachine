@@ -22,7 +22,7 @@ from timemachine.constants import (
 )
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.dummy import MultipleAnchorWarning, canonicalize_bond
-from timemachine.fe.free_energy import HostConfig
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.interpolate import align_nonbonded_idxs_and_params, linear_interpolation
 from timemachine.fe.single_topology import (
     AtomMapMixin,

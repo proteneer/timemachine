@@ -13,13 +13,13 @@ from timemachine.constants import BOLTZ, DEFAULT_TEMP
 from timemachine.fe import model_utils
 from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
-    HostConfig,
     InitialState,
     MDParams,
     SimulationResult,
     make_pair_bar_plots,
     run_sims_sequential,
 )
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.lambda_schedule import construct_pre_optimized_absolute_lambda_schedule_solvent
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_mol_name, get_romol_conf

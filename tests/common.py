@@ -15,7 +15,7 @@ from numpy.typing import NDArray
 
 from timemachine.constants import DEFAULT_TEMP, ONE_4PI_EPS0
 from timemachine.fe import rbfe
-from timemachine.fe.free_energy import HostConfig
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import nonbonded, openmm_deserializer

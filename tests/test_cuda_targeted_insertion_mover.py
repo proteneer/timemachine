@@ -12,14 +12,8 @@ from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping
-from timemachine.fe.free_energy import (
-    AbsoluteFreeEnergy,
-    HostConfig,
-    InitialState,
-    MDParams,
-    get_water_sampler_params,
-    sample,
-)
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, InitialState, MDParams, get_water_sampler_params, sample
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.model_utils import image_frame
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.topology import BaseTopology

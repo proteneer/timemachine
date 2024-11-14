@@ -18,7 +18,7 @@ from scipy.special import logsumexp
 from timemachine import lib
 from timemachine.constants import BOLTZ
 from timemachine.fe import free_energy, topology
-from timemachine.fe.free_energy import HostConfig
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.integrator import simulate
 from timemachine.lib import custom_ops

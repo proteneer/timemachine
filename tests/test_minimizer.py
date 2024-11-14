@@ -6,7 +6,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.fe.free_energy import HostConfig
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.model_utils import get_vacuum_val_and_grad_fn
 from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield

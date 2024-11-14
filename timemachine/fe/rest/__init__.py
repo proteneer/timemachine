@@ -1,12 +1,4 @@
-from .interpolation import Exponential, InterpolationFxn, Linear, Quadratic, Symmetric, plot_interpolation_fxn
+from .interpolation import InterpolationFxn, Symmetric
 from .single_topology_rest import SingleTopologyREST
 
-__all__ = [
-    "SingleTopologyREST",
-    "InterpolationFxn",
-    "Linear",
-    "Quadratic",
-    "Exponential",
-    "Symmetric",
-    "plot_interpolation_fxn",
-]
+__all__ = ["SingleTopologyREST", "InterpolationFxn", "Symmetric"]

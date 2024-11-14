@@ -19,7 +19,8 @@ from numpy.typing import NDArray
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import model_utils
-from timemachine.fe.free_energy import HostConfig, HREXParams, InitialState, MDParams, run_sims_bisection, run_sims_hrex
+from timemachine.fe.free_energy import HREXParams, InitialState, MDParams, run_sims_bisection, run_sims_hrex
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.plots import plot_hrex_replica_state_distribution_heatmap, plot_hrex_transition_matrix
 from timemachine.fe.topology import BaseTopology, HostGuestTopology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf

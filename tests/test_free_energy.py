@@ -19,7 +19,6 @@ from timemachine.fe import free_energy, topology, utils
 from timemachine.fe.bar import ukln_to_ukn
 from timemachine.fe.free_energy import (
     BarResult,
-    HostConfig,
     HREXSimulationResult,
     IndeterminateEnergyWarning,
     MDParams,
@@ -27,7 +26,6 @@ from timemachine.fe.free_energy import (
     PairBarResult,
     Trajectory,
     assert_potentials_compatible,
-    batches,
     compute_potential_matrix,
     estimate_free_energy_bar,
     get_water_sampler_params,
@@ -36,6 +34,7 @@ from timemachine.fe.free_energy import (
     sample,
     trajectories_by_replica_to_by_state,
 )
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.rbfe import Host, setup_initial_state, setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
@@ -54,6 +53,7 @@ from timemachine.potentials import (
 )
 from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import batches
 
 
 def assert_shapes_consistent(U, coords, sys_params, box):

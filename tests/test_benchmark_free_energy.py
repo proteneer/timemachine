@@ -14,13 +14,13 @@ import pytest
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe.free_energy import (
-    HostConfig,
     MDParams,
     WaterSamplingParams,
     run_sims_bisection,
     run_sims_hrex,
     run_sims_sequential,
 )
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.lambda_schedule import bisection_lambda_schedule
 from timemachine.fe.rbfe import (
     DEFAULT_HREX_PARAMS,
@@ -213,7 +213,8 @@ if __name__ == "__main__":
         )
     fig, axes = plt.subplots(ncols=len(args.modes), sharey=True)
     if len(args.modes) == 1:
-        axes = [axes]
+        axes = np.array([axes])
+    assert isinstance(axes, np.ndarray)
     fig.suptitle(f"Leg: {args.leg}, Frames {args.n_frames}, Water Sampling {args.water_sampling}")
     for i, (ax, mode) in enumerate(zip(axes, args.modes)):
         ax.set_title(mode)

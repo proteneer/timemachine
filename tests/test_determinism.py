@@ -5,7 +5,7 @@ import pytest
 from common import fixed_overflowed
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
-from timemachine.fe.free_energy import HostConfig
+from timemachine.fe.host_config import HostConfig
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops

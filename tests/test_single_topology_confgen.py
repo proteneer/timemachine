@@ -6,7 +6,7 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, cif_writer, utils
-from timemachine.fe.free_energy import HostConfig
+from timemachine.fe.host_config import HostConfig
 from timemachine.fe.rbfe import (
     get_free_idxs,
     optimize_coords_state,
