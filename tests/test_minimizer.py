@@ -384,7 +384,7 @@ def test_local_minimize_water_box_with_bounds():
         minimizer.ScipyMinimizationConfig("L-BFGS-B"),
     ],
 )
-@pytest.mark.parametrize("restraint_k", [None, 3_000.0])
+@pytest.mark.parametrize("restraint_k", [0.0, 3_000.0])
 def test_local_minimize_strained_ligand(minimizer_config, restraint_k):
     """
     Test that we can minimize a ligand in vacuum using local_minimize when the ligand is strained.

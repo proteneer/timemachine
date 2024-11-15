@@ -552,7 +552,7 @@ def local_minimize(
     minimizer_config: MinimizationConfig,
     verbose: bool = True,
     assert_energy_decreased: bool = True,
-    restraint_k: Optional[float] = None,
+    restraint_k: float = 0.0,
     restrained_idxs: Optional[NDArray] = None,
 ):
     """
@@ -581,14 +581,12 @@ def local_minimize(
     assert_energy_decreased: bool
         Throw an assertion if the energy does not decrease
 
-    restraint_k: float, optional
+    restraint_k: float
         Restraint k to wrap val_and_grad_fn in a positional harmonic restraint to the input positions of the local_idxs.
-        If None, minimize with no positional restraint. Refer to `timemachine.potentials.bonded.harmonic_positional_restraint`
-        for implementation.
+        Refer to `timemachine.potentials.bonded.harmonic_positional_restraint` for implementation.
 
     restrained_idxs: np.ndarray, optional
-        A subset of idxs to restrain, must be a subset of local_idxs. If not provided and
-        restraint_k is not None, all local_idxs are restrained.
+        A subset of idxs to restrain, must be a subset of local_idxs. If restrained_idxs is None, all local_idxs are restrained.
 
 
     Returns
@@ -605,8 +603,8 @@ def local_minimize(
     if not isinstance(minimizer_config, (FireMinimizationConfig, ScipyMinimizationConfig)):
         raise ValueError(f"Invalid minimizer config: {type(minimizer_config)}")
     if restrained_idxs is not None:
-        assert restraint_k is not None, "Restraint k must be provided if restrained idxs provided"
         assert set(restrained_idxs).issubset(set(local_idxs)), "Restrained indices must be a subset of local indices"
+    assert restraint_k >= 0.0, "Restraint k must be greater than or equal to 0.0"
 
     method = "FIRE"
     if isinstance(minimizer_config, ScipyMinimizationConfig):
@@ -621,9 +619,7 @@ def local_minimize(
 
     # Only use the restrained function when minimizing, don't otherwise use to compute energy/forces
     minimizer_val_and_grad = val_and_grad_fn
-    if restraint_k is not None:
-        assert restraint_k > 0.0
-
+    if restraint_k > 0.0:
         if restrained_idxs is None:
             restrained_idxs = free_idxs
         minimizer_val_and_grad = wrap_val_and_grad_with_positional_restraint(

@@ -281,7 +281,7 @@ def setup_optimized_initial_state(
     optimized_initial_states: Sequence[InitialState],
     temperature: float,
     seed: int,
-    k: Optional[float] = DEFAULT_POSITIONAL_RESTRAINT_K,
+    k: float = DEFAULT_POSITIONAL_RESTRAINT_K,
 ) -> InitialState:
     """Setup an InitialState for the specified lambda and optimize the coordinates given a list of pre-optimized IntialStates.
     If the specified lambda exists within the list of optimized_initial_states list, return the existing InitialState.
@@ -328,7 +328,7 @@ def optimize_coords_state(
     box: NDArray,
     free_idxs: List[int],
     assert_energy_decreased: bool,
-    k: Optional[float],
+    k: float,
     restrained_idxs: Optional[NDArray] = None,
     minimization_config: Optional[minimizer.MinimizationConfig] = None,
 ) -> NDArray:
@@ -362,7 +362,7 @@ def get_free_idxs(initial_state: InitialState, cutoff: float = 0.5) -> List[int]
 
 
 def _optimize_coords_along_states(
-    initial_states: List[InitialState], k: Optional[float], minimization_config: minimizer.MinimizationConfig
+    initial_states: List[InitialState], k: float, minimization_config: minimizer.MinimizationConfig
 ) -> List[NDArray]:
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
@@ -394,7 +394,7 @@ def _optimize_coords_along_states(
 def optimize_coordinates(
     initial_states: List[InitialState],
     min_cutoff: Optional[float] = 0.7,
-    k: Optional[float] = DEFAULT_POSITIONAL_RESTRAINT_K,
+    k: float = DEFAULT_POSITIONAL_RESTRAINT_K,
     minimization_config: Optional[minimizer.MinimizationConfig] = None,
 ) -> List[NDArray]:
     """
@@ -407,10 +407,9 @@ def optimize_coordinates(
     min_cutoff: float, optional
         Throw error if any atom moves more than this distance (nm) after minimization
 
-    k: float, optional
+    k: float
         force constant for a positional harmonic restraint potential to apply to the initial positions.
-        If None, minimize with no positional restraint. Refer to `timemachine.potentials.bonded.harmonic_positional_restraint`
-        for implementation.
+        Refer to `timemachine.potentials.bonded.harmonic_positional_restraint` for implementation.
 
     minimization_config: minimizer.MinimizationConfig, optional
         Options to define the type of minimization for the states
