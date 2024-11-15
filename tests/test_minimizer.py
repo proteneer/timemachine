@@ -251,7 +251,7 @@ def test_local_minimize_restrained_subset(seed, minimizer_config):
         minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restrained_idxs=frozen_idxs)
 
     # Set a large k, to ensure movement of restrained idxs is minimal
-    k = 500_000
+    k = 500_000.0
 
     with pytest.raises(AssertionError, match="Restrained indices must be a subset of local indices"):
         minimizer.local_minimize(
@@ -316,7 +316,7 @@ def test_local_minimize_restrained_waters_trigger_failure(seed, minimizer_config
     free_idxs = idxs_within_cutoff(coords, coords[ligand_idxs], box, cutoff=0.5).tolist()
 
     # Set a large k, making it difficult to move waters out of the way if restrained
-    k = 500_000
+    k = 500_000.0
 
     # Restraining all atoms should trigger a failure
     with pytest.raises(minimizer.MinimizationError):
