@@ -1,4 +1,5 @@
 from functools import cache
+from importlib import resources
 
 import jax
 import matplotlib.pyplot as plt
@@ -20,7 +21,8 @@ from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.potentials import PeriodicTorsion
 
-hif2a_ligands = read_sdf_mols_by_name("timemachine/datasets/fep_benchmark/hif2a/ligands.sdf")
+with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_data:
+    hif2a_ligands = read_sdf_mols_by_name(hif2a_data / "ligands.sdf")
 
 hif2a_ligand_pairs = [
     (mol_a, mol_b)
