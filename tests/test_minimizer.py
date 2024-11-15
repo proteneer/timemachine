@@ -6,8 +6,10 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.fe.free_energy import HostConfig
+from timemachine.constants import MAX_FORCE_NORM
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig
 from timemachine.fe.model_utils import get_vacuum_val_and_grad_fn
+from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
@@ -15,7 +17,7 @@ from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import compute_box_volume
 from timemachine.md.minimizer import equilibrate_host_barker, make_host_du_dx_fxn
 from timemachine.potentials import NonbondedPairList
-from timemachine.potentials.jax_utils import distance_on_pairs
+from timemachine.potentials.jax_utils import distance_on_pairs, idxs_within_cutoff
 
 
 @pytest.mark.parametrize(
@@ -217,6 +219,121 @@ def test_local_minimize_water_box(minimizer_config):
     np.testing.assert_array_equal(g_init, g_init_test)
 
 
+@pytest.mark.parametrize("seed", [2024])
+@pytest.mark.parametrize(
+    "minimizer_config",
+    [
+        minimizer.FireMinimizationConfig(100),
+        minimizer.ScipyMinimizationConfig("BFGS"),
+        minimizer.ScipyMinimizationConfig("L-BFGS-B"),
+    ],
+)
+def test_local_minimize_restrained_subset(seed, minimizer_config):
+    """
+    Test that we can minimize systems and only restrain subsets of the atoms.
+    """
+    rng = np.random.default_rng(seed)
+    ff = Forcefield.load_default()
+
+    system, x0, box0, top = builders.build_water_system(4.0, ff.water_ff)
+    host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
+
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(host_fns, box0)
+
+    free_idxs = rng.choice(np.arange(len(x0), dtype=np.int32), size=128, replace=False)
+    frozen_idxs = set(range(len(x0))).difference(set(free_idxs))
+    frozen_idxs = list(frozen_idxs)
+
+    u_init, g_init = val_and_grad_fn(x0)
+
+    with pytest.raises(AssertionError, match="Restraint k be greater than 0.0 if restrained indices provided"):
+        minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restrained_idxs=frozen_idxs)
+
+    # Set a large k, to ensure movement of restrained idxs is minimal
+    k = 500_000.0
+
+    with pytest.raises(AssertionError, match="Restrained indices must be a subset of local indices"):
+        minimizer.local_minimize(
+            x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restraint_k=k, restrained_idxs=frozen_idxs
+        )
+
+    restrained_idxs = rng.choice(free_idxs, replace=False, size=len(free_idxs) // 2)
+    unrestrained_idxs = np.array(list(set(free_idxs).difference(restrained_idxs)))
+
+    x_opt = minimizer.local_minimize(
+        x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restraint_k=k, restrained_idxs=restrained_idxs
+    )
+
+    np.testing.assert_array_equal(x0[frozen_idxs], x_opt[frozen_idxs])
+    # All free atoms should have moved
+    assert np.linalg.norm(x0[free_idxs] - x_opt[free_idxs]) > 0.0
+    # Restrained atoms should have moved very slightly
+    assert np.linalg.norm(x0[restrained_idxs] - x_opt[restrained_idxs]) < 0.011
+    # Unrestrained atoms should have moved more
+    assert np.linalg.norm(x0[unrestrained_idxs] - x_opt[unrestrained_idxs]) > 0.011
+
+
+@pytest.mark.parametrize("seed", [2024])
+@pytest.mark.parametrize(
+    "minimizer_config",
+    [
+        minimizer.FireMinimizationConfig(100),
+        minimizer.ScipyMinimizationConfig("BFGS"),
+        minimizer.ScipyMinimizationConfig("L-BFGS-B"),
+    ],
+)
+def test_local_minimize_restrained_waters_trigger_failure(seed, minimizer_config):
+    """Construct a water box and attempt to minimize a benzene mol into it without removing clashy waters. Verify
+    that if the water atoms are restrained that minimization fails and without restraints the minimization succeeds.
+    """
+    benzene = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
+    AllChem.EmbedMolecule(benzene, randomSeed=seed)
+
+    ff = Forcefield.load_default()
+
+    # Use non-zero lambda to ensure forces are large to start
+    lamb = 0.1
+
+    # Setup a water box without a void for the mol
+    host_system, host_coords, box, host_top = builders.build_water_system(4.0, ff.water_ff)
+    box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
+
+    bt = BaseTopology(benzene, ff)
+    afe = AbsoluteFreeEnergy(benzene, bt)
+    host_config = HostConfig(host_system, host_coords, box, host_coords.shape[0], host_top)
+    unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff, host_config, lamb)
+    coords = afe.prepare_combined_coords(host_coords=host_coords)
+
+    bps = [pot.bind(p) for pot, p in zip(unbound_potentials, sys_params)]
+    val_and_grad_fn = minimizer.get_val_and_grad_fn(bps, box)
+    # Forces should be beyond the max force norm to start
+    _, g_init = val_and_grad_fn(coords)
+    assert np.max(np.linalg.norm(g_init, axis=-1)) > MAX_FORCE_NORM
+
+    ligand_idxs = np.arange(benzene.GetNumAtoms()) + len(host_coords)
+
+    free_idxs = idxs_within_cutoff(coords, coords[ligand_idxs], box, cutoff=0.5).tolist()
+
+    # Set a large k, making it difficult to move waters out of the way if restrained
+    k = 500_000.0
+
+    # Restraining all atoms should trigger a failure
+    with pytest.raises(minimizer.MinimizationError):
+        minimizer.local_minimize(coords, box, val_and_grad_fn, free_idxs, minimizer_config, restraint_k=k)
+
+    unrestrained_idxs = np.array(list(set(free_idxs).difference(ligand_idxs)))
+
+    # Only restraining the ligand should work, since water is free to move
+    minimized_coords = minimizer.local_minimize(
+        coords, box, val_and_grad_fn, free_idxs, minimizer_config, restraint_k=k, restrained_idxs=ligand_idxs
+    )
+    np.testing.assert_allclose(minimized_coords[ligand_idxs], coords[ligand_idxs], atol=0.005)
+
+    # At least one water atom will need to have moved an angstrom to allow the ligand to be in the water
+    assert np.any(np.linalg.norm(minimized_coords[unrestrained_idxs] - coords[unrestrained_idxs], axis=-1) > 0.1)
+
+
 def test_local_minimize_water_box_with_bounds():
     """
     Test that we can locally relax a box of water using L-BFGS-B with bounds
@@ -267,7 +384,7 @@ def test_local_minimize_water_box_with_bounds():
         minimizer.ScipyMinimizationConfig("L-BFGS-B"),
     ],
 )
-@pytest.mark.parametrize("restraint_k", [None, 3_000.0])
+@pytest.mark.parametrize("restraint_k", [0.0, 3_000.0])
 def test_local_minimize_strained_ligand(minimizer_config, restraint_k):
     """
     Test that we can minimize a ligand in vacuum using local_minimize when the ligand is strained.

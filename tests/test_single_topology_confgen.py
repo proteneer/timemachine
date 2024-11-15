@@ -269,7 +269,7 @@ $$$$
         state = setup_initial_state(st, lamb, None, DEFAULT_TEMP, 2024)
 
         free_idxs = get_free_idxs(state)
-        x_opt_unrestrained = optimize_coords_state(state.potentials, state.x0, state.box0, free_idxs, False, k=None)
+        x_opt_unrestrained = optimize_coords_state(state.potentials, state.x0, state.box0, free_idxs, False, k=0.0)
         x_opt_restrained = optimize_coords_state(state.potentials, state.x0, state.box0, free_idxs, False, k=2000.0)
         interacting_atoms = state.interacting_atoms
         displacement_distances_unrestrained = distance_on_pairs(
