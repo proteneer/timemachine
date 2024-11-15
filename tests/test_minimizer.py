@@ -247,7 +247,7 @@ def test_local_minimize_restrained_subset(seed, minimizer_config):
 
     u_init, g_init = val_and_grad_fn(x0)
 
-    with pytest.raises(AssertionError, match="Restraint k must be provided if restrained idxs provided"):
+    with pytest.raises(AssertionError, match="Restraint k be greater than 0.0 if restrained indices provided"):
         minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restrained_idxs=frozen_idxs)
 
     # Set a large k, to ensure movement of restrained idxs is minimal

@@ -602,9 +602,10 @@ def local_minimize(
 
     if not isinstance(minimizer_config, (FireMinimizationConfig, ScipyMinimizationConfig)):
         raise ValueError(f"Invalid minimizer config: {type(minimizer_config)}")
-    if restrained_idxs is not None:
-        assert set(restrained_idxs).issubset(set(local_idxs)), "Restrained indices must be a subset of local indices"
     assert restraint_k >= 0.0, "Restraint k must be greater than or equal to 0.0"
+    if restrained_idxs is not None:
+        assert restraint_k > 0.0, "Restraint k be greater than 0.0 if restrained indices provided"
+        assert set(restrained_idxs).issubset(set(local_idxs)), "Restrained indices must be a subset of local indices"
 
     method = "FIRE"
     if isinstance(minimizer_config, ScipyMinimizationConfig):
