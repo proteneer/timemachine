@@ -92,7 +92,7 @@ class HREXParams:
         assert self.n_frames_bisection > 0
         assert self.n_frames_per_iter == 1, "n_frames_per_iter must be 1"
         assert self.max_delta_states is None or self.max_delta_states > 0
-        assert self.optimize_target_overlap is None or 0.0 < self.optimize_target_overlap <= 1.0
+        assert self.optimize_target_overlap is None or 0.0 < self.optimize_target_overlap < 1.0
 
 
 @dataclass(frozen=True)
