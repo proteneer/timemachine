@@ -21,8 +21,7 @@ docker_build:
   stage: build-docker
   image: docker:20.10
   tags:
-    - gpu
-    - docker
+    - aws-tardis-gpu
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
     # Prune images older than 2 days
@@ -39,8 +38,7 @@ lint:
   image: $DOCKER_TAG
   needs: ["docker_build"]
   tags:
-    - timemachine
-    - gpu
+    - aws-tardis-gpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
     - if: $NIGHTLY_TESTS
@@ -52,8 +50,7 @@ nocuda-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - timemachine
-    - cpu
+    - aws-tardis
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
@@ -71,8 +68,7 @@ nogpu-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - timemachine
-    - cpu
+    - aws-tardis
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   # Build custom ops with fixed cuda arch, to test C++ that is CPU only
@@ -93,7 +89,7 @@ memory-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - aws-tardis-gpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
@@ -111,7 +107,7 @@ unit-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - aws-tardis-gpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
@@ -129,7 +125,7 @@ nightly-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - aws-tardis-gpu
   rules:
     - if: $NIGHTLY_TESTS
   script:
@@ -147,7 +143,7 @@ nightly-memcheck-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - aws-tardis-gpu
   rules:
     - if: $NIGHTLY_TESTS
   script:
@@ -165,8 +161,7 @@ nightly-tests-nocuda:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - timemachine
-    - cpu
+    - aws-tardis
   rules:
     - if: $NIGHTLY_TESTS
   script:
@@ -184,8 +179,7 @@ nightly-tests-nogpu:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - timemachine
-    - cpu
+    - aws-tardis
   rules:
     - if: $NIGHTLY_TESTS
   # Build custom ops with fixed cuda arch, to test C++ that is CPU only
