@@ -9,7 +9,6 @@ from rdkit import Chem
 
 from timemachine.fe import mcgregor
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
-from timemachine.fe.single_topology import make_find_chirally_valid_dummy_groups
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
@@ -346,15 +345,8 @@ def _get_cores_impl(
         return all(f(trial_core) for f in filter_fxns)
 
     def make_leaf_filter_fxn():
-        find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
-
-        def leaf_filter_fxn(trial_core) -> bool:
-            if enforce_chirally_valid_dummy_groups:
-                core = mcgregor.perm_to_core(trial_core)
-                chirally_valid_dummy_groups = find_chirally_valid_dummy_groups(core)
-                return chirally_valid_dummy_groups is not None
-            else:
-                return True
+        def leaf_filter_fxn(_) -> bool:
+            return True
 
         return leaf_filter_fxn
 

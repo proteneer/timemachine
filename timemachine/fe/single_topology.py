@@ -17,9 +17,8 @@ from timemachine.constants import (
     NBParamIdx,
 )
 from timemachine.fe import interpolate, model_utils, topology, utils
-from timemachine.fe.chiral_utils import ChiralRestrIdxSet
+from timemachine.fe.chiral_utils import ChiralRestrIdxSet, setup_all_chiral_atom_restr_idxs
 from timemachine.fe.dummy import (
-    MultipleAnchorWarning,
     canonicalize_bond,
     generate_anchored_dummy_group_assignments,
     generate_dummy_group_assignments,
@@ -28,6 +27,7 @@ from timemachine.fe.interpolate import pad
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.fe.topology import get_ligand_ixn_pots_params
+from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.graph_utils import convert_to_nx
 from timemachine.potentials import (
@@ -41,7 +41,6 @@ from timemachine.potentials import (
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
 )
-from timemachine.utils import fair_product_2
 
 OpenMMTopology = Any
 
@@ -121,6 +120,78 @@ class ChiralConversionError(RuntimeError):
 
 class DummyGroupAssignmentError(RuntimeError):
     pass
+
+
+def find_disabled_dummy_bonds_and_chiral_volumes(dummy_groups_ab, bond_graph_b, mol_b_chiral_idxs):
+    """
+    Find disabled dummy bonds and disabled chiral volumes given a dummy group assignment
+    """
+    induced_dummy_bonds = set()
+    dummy_atoms = set()
+    for anchor, dummy_group in dummy_groups_ab.items():
+        for dummy_atom_a in dummy_group:
+            dummy_atoms.add(dummy_atom_a)
+            # dummy-core bonds
+            if bond_graph_b.has_edge(anchor, dummy_atom_a):
+                induced_dummy_bonds.add(canonicalize_bond((anchor, dummy_atom_a)))
+            # dummy-dummy bonds
+            for dummy_atom_b in dummy_group:
+                if bond_graph_b.has_edge(dummy_atom_b, dummy_atom_a):
+                    induced_dummy_bonds.add(canonicalize_bond((dummy_atom_a, dummy_atom_b)))
+
+    full_dummy_bonds = set()
+    for u, v in bond_graph_b.edges():
+        if u in dummy_atoms or v in dummy_atoms:
+            full_dummy_bonds.add(canonicalize_bond((u, v)))
+
+    disabled_dummy_bonds = full_dummy_bonds.difference(induced_dummy_bonds)
+    disabled_dummy_chiral_volumes = set()
+    for c, i, j, k in mol_b_chiral_idxs:
+        if c in dummy_atoms or i in dummy_atoms or j in dummy_atoms or k in dummy_atoms:
+            if (
+                canonicalize_bond((c, i)) in disabled_dummy_bonds
+                or canonicalize_bond((c, j)) in disabled_dummy_bonds
+                or canonicalize_bond((c, k)) in disabled_dummy_bonds
+            ):
+                disabled_dummy_chiral_volumes.add((c, i, j, k))
+
+    return disabled_dummy_bonds, disabled_dummy_chiral_volumes
+
+
+def get_dummy_group_assignments_ordered_by_score(mol, core_atoms):
+    """
+    Generate a dummy group assigned based on score (lower is better). The heuristic tries to
+    minimize the # of core-bonds broken, followed by the number of chiral-volumes broken.
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+        Input molecule
+
+    core_atoms: list of int
+        Atoms in the core of the molecule
+
+    Returns
+    -------
+    List of dummy_group_assignments, list of scores.
+        Sorted by ascending order based on list of scores.
+
+    """
+    bond_graph_b = convert_to_nx(mol)
+    mol_chiral_idxs = setup_all_chiral_atom_restr_idxs(mol, get_romol_conf(mol))
+    all_dummy_groups_ab = list(generate_dummy_group_assignments(bond_graph_b, core_atoms))
+
+    scores_for_mol = []
+    for dummy_groups_ab in all_dummy_groups_ab:
+        b_disabled_bonds, b_disabled_chiral_volumes = find_disabled_dummy_bonds_and_chiral_volumes(
+            dummy_groups_ab, bond_graph_b, mol_chiral_idxs
+        )
+        scores_for_mol.append((len(b_disabled_bonds), len(b_disabled_chiral_volumes)))
+
+    scores_for_mol = np.array(scores_for_mol, dtype=[("first", "int"), ("second", "int")])
+    perm = np.argsort(scores_for_mol, order=["first", "second"])
+
+    return [all_dummy_groups_ab[p] for p in perm], scores_for_mol[perm].tolist()
 
 
 def bond_isin(bonds: NDArray[np.int32], idxs: NDArray[np.int32]) -> NDArray[np.bool_]:
@@ -742,52 +813,6 @@ def setup_end_state(ff, mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups: Dict[i
     )
 
 
-def make_find_chirally_valid_dummy_groups(
-    mol_a, mol_b
-) -> Callable[[NDArray], Optional[Tuple[Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]]]]:
-    """Returns a function that, given a core, returns a pair of dummy group assignments for the A -> B and B -> A
-    transformations such that the implied hybrid mol is chirally valid, or None if no such pair exists.
-
-    Refer to :py:func:`check_chiral_validity` for definition of "chiral validity".
-
-    Refer to :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
-    information on dummy group assignment.
-
-    For the A -> B transformation, dummy group indices refer to atoms in mol_b.
-    For the B -> A transformation, dummy group indices refer to atoms in mol_a.
-    """
-
-    bond_graph_a = convert_to_nx(mol_a)
-    bond_graph_b = convert_to_nx(mol_b)
-
-    def find_chirally_valid_dummy_groups(core):
-        def is_chirally_valid(dummy_groups_ab, dummy_groups_ba):
-            return True
-
-        with warnings.catch_warnings():
-            # Suppress warnings from end-state setup during the search; these are only relevant for the selected candidate,
-            # and will be raised again when we construct the final SingleTopology instance
-            warnings.simplefilter("ignore", ChiralVolumeDisabledWarning)
-            warnings.simplefilter("ignore", MultipleAnchorWarning)
-
-            pairs = (
-                (dummy_groups_ab, dummy_groups_ba)
-                # NOTE: We use fair_product_2 instead of itertools.product to avoid iterating over all possible candidates
-                # for A -> B before trying the second candidate for B -> A
-                for dummy_groups_ab, dummy_groups_ba in fair_product_2(
-                    list(generate_dummy_group_assignments(bond_graph_b, core[:, 1])),
-                    list(generate_dummy_group_assignments(bond_graph_a, core[:, 0])),
-                )
-                if is_chirally_valid(dummy_groups_ab, dummy_groups_ba)
-            )
-
-            arbitrary_pair = next(pairs, None)
-
-        return arbitrary_pair
-
-    return find_chirally_valid_dummy_groups
-
-
 def find_dummy_groups_and_anchors(
     mol_a, mol_b, core_atoms_a: Sequence[int], core_atoms_b: Sequence[int]
 ) -> Dict[int, Tuple[Optional[int], FrozenSet[int]]]:
@@ -1228,14 +1253,11 @@ class SingleTopology(AtomMapMixin):
         if a_charge != b_charge:
             raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
-        find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
-        dummy_groups = find_chirally_valid_dummy_groups(core)
-        if dummy_groups is None:
-            raise DummyGroupAssignmentError("Unable to find chirally-valid dummy group assignment")
-        dummy_groups_ab, dummy_groups_ba = dummy_groups
+        dgas_bas, _ = get_dummy_group_assignments_ordered_by_score(mol_a, core[:, 0])
+        dgas_abs, _ = get_dummy_group_assignments_ordered_by_score(mol_b, core[:, 1])
 
-        self.dummy_groups_ab = dummy_groups_ab
-        self.dummy_groups_ba = dummy_groups_ba
+        self.dummy_groups_ab = dgas_abs[0]
+        self.dummy_groups_ba = dgas_bas[0]
 
         # setup end states
         self.src_system = self._setup_end_state_src()
