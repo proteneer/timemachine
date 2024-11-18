@@ -80,7 +80,7 @@ class HREXParams:
 
     optimize_target_overlap: float or None
         If given, optimize the lambda schedule out of the initial bisection phase to target a specific minimum overlap
-        between all adjacent windows. Must be in the interval (0.0, 1.0] if provided.
+        between all adjacent windows. Must be in the interval (0.0, 1.0) if provided.
     """
 
     n_frames_bisection: int = 100
