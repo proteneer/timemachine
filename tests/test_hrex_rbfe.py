@@ -131,6 +131,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed, max_bisection_windows,
             forcefield,
             host_config,
             md_params,
+            prefix=host_name if host_name is not None else "vacuum",
             lambda_interval=(0.0, 0.15),
             n_windows=max_bisection_windows,
             min_cutoff=0.7 if host_name == "complex" else None,
@@ -218,7 +219,10 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed, max_bisection_windows,
 def plot_hrex_rbfe_hif2a(result: HREXSimulationResult):
     plot_hrex_swap_acceptance_rates_convergence(result.hrex_diagnostics.cumulative_swap_acceptance_rates)
     plot_hrex_transition_matrix(result.hrex_diagnostics.transition_matrix)
-    plot_hrex_replica_state_distribution_heatmap(result.hrex_diagnostics.cumulative_replica_state_counts)
+    plot_hrex_replica_state_distribution_heatmap(
+        result.hrex_diagnostics.cumulative_replica_state_counts,
+        [state.lamb for state in result.final_result.initial_states],
+    )
     plt.show()
 
 

@@ -887,12 +887,19 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
 
         hrex_plots = HREXPlots(
-            transition_matrix_png=plot_as_png_fxn(plot_hrex_transition_matrix, diagnostics.transition_matrix),
+            transition_matrix_png=plot_as_png_fxn(
+                plot_hrex_transition_matrix, diagnostics.transition_matrix, prefix=combined_prefix
+            ),
             swap_acceptance_rates_convergence_png=plot_as_png_fxn(
-                plot_hrex_swap_acceptance_rates_convergence, diagnostics.cumulative_swap_acceptance_rates
+                plot_hrex_swap_acceptance_rates_convergence,
+                diagnostics.cumulative_swap_acceptance_rates,
+                prefix=combined_prefix,
             ),
             replica_state_distribution_heatmap_png=plot_as_png_fxn(
-                plot_hrex_replica_state_distribution_heatmap, diagnostics.cumulative_replica_state_counts
+                plot_hrex_replica_state_distribution_heatmap,
+                diagnostics.cumulative_replica_state_counts,
+                [state.lamb for state in initial_states_hrex],
+                prefix=combined_prefix,
             ),
         )
         return HREXSimulationResult(
