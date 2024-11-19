@@ -1,6 +1,6 @@
 import io
 import warnings
-from typing import Callable, Tuple, cast
+from typing import Callable, Sequence, Tuple, cast
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -405,6 +405,7 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
 
 def plot_hrex_replica_state_distribution_heatmap(
     cumulative_replica_state_counts: NDArray,
+    lambdas: Sequence[float],
     figsize: Tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
     format_annotation: Callable[[float], str] = lambda x: f"{100.0*x:.2g}",
@@ -413,6 +414,7 @@ def plot_hrex_replica_state_distribution_heatmap(
 ):
     """Plot distribution of (replica, state) pairs as a heatmap."""
     n_iters, n_states, n_replicas = cumulative_replica_state_counts.shape
+    assert n_replicas == len(lambdas), "Number of lambdas and replicas must match"
     replicas = np.arange(n_replicas)
     states = np.arange(n_states)
     count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (state, replica) -> int
@@ -434,6 +436,11 @@ def plot_hrex_replica_state_distribution_heatmap(
     ax.xaxis.get_major_locator().set_params(integer=True)
     ax.yaxis.get_major_locator().set_params(integer=True)
     ax.set_aspect("equal")
+
+    # Add labels at the top of the x axis that include the replica lambda values
+    top_ax = ax.secondary_xaxis("top")
+    top_ax.set_xlabel(r"$\lambda$")
+    top_ax.set_xticks(replicas, labels=[f"{lamb:.2f}" for lamb in lambdas], rotation=60)
 
     fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_cbar_tick(x))
 

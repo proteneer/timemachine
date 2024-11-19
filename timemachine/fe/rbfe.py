@@ -783,6 +783,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
             replica_state_distribution_heatmap_png=plot_as_png_fxn(
                 plot_hrex_replica_state_distribution_heatmap,
                 diagnostics.cumulative_replica_state_counts,
+                [state.lamb for state in initial_states_hrex],
                 prefix=combined_prefix,
             ),
         )

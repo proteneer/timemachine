@@ -209,7 +209,10 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
 def plot_hrex_rbfe_hif2a(result: HREXSimulationResult):
     plot_hrex_swap_acceptance_rates_convergence(result.hrex_diagnostics.cumulative_swap_acceptance_rates)
     plot_hrex_transition_matrix(result.hrex_diagnostics.transition_matrix)
-    plot_hrex_replica_state_distribution_heatmap(result.hrex_diagnostics.cumulative_replica_state_counts)
+    plot_hrex_replica_state_distribution_heatmap(
+        result.hrex_diagnostics.cumulative_replica_state_counts,
+        [state.lamb for state in result.final_result.initial_states],
+    )
     plt.show()
 
 
