@@ -322,6 +322,7 @@ def plot_fwd_reverse_predictions(
     plt.xlabel("Fraction of simulation time")
     plt.ylabel(f"{energy_type} (kcal/mol)")
     plt.legend()
+    plt.tight_layout()
 
 
 def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[float, float] = (13, 10), prefix: str = ""):
@@ -342,7 +343,8 @@ def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[floa
     ax.yaxis.get_major_locator().set_params(integer=True)
 
     fig.colorbar(p, label="chiral restraint energy")
-    fig.suptitle("Chiral Restraint Energies")
+    fig.suptitle(f"{prefix} Chiral Restraint Energies")
+    fig.tight_layout()
 
 
 def plot_hrex_transition_matrix(
@@ -377,6 +379,7 @@ def plot_hrex_transition_matrix(
 
     fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_cbar_tick(x))
     fig.suptitle(f"{prefix} HREX Transition Matrix")
+    fig.tight_layout()
 
 
 def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates: NDArray, prefix: str = ""):
@@ -397,6 +400,7 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
         bbox_to_anchor=(1, 0.5),
     )
     fig.suptitle(f"{prefix} HREX Swap Acceptance Rates")
+    fig.tight_layout()
 
 
 def plot_hrex_replica_state_distribution_heatmap(
@@ -434,6 +438,7 @@ def plot_hrex_replica_state_distribution_heatmap(
     fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_cbar_tick(x))
 
     fig.suptitle(f"{prefix} HREX State Distribution Heatmap")
+    fig.tight_layout()
 
 
 def plot_as_png_fxn(f, *args, **kwargs) -> bytes:
