@@ -414,7 +414,7 @@ def plot_hrex_replica_state_distribution_heatmap(
 ):
     """Plot distribution of (replica, state) pairs as a heatmap."""
     n_iters, n_states, n_replicas = cumulative_replica_state_counts.shape
-    assert n_replicas == len(lambdas), "Number of lambdas and replicas must match"
+    assert n_states == len(lambdas), "Number of lambdas and states must match"
     replicas = np.arange(n_replicas)
     states = np.arange(n_states)
     count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (state, replica) -> int
@@ -438,9 +438,9 @@ def plot_hrex_replica_state_distribution_heatmap(
     ax.set_aspect("equal")
 
     # Add labels at the top of the x axis that include the replica lambda values
-    top_ax = ax.secondary_xaxis("top")
-    top_ax.set_xlabel(r"$\lambda$")
-    top_ax.set_xticks(replicas, labels=[f"{lamb:.2f}" for lamb in lambdas], rotation=60)
+    top_ax = ax.secondary_yaxis("right")
+    top_ax.set_ylabel(r"$\lambda$")
+    top_ax.set_yticks(replicas, labels=[f"{lamb:.2f}" for lamb in lambdas])
 
     fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_cbar_tick(x))
 
