@@ -10,7 +10,6 @@ from numpy.typing import NDArray
 from scipy.special import logsumexp
 
 from timemachine.fe.plots import (
-    plot_hrex_replica_state_distribution,
     plot_hrex_replica_state_distribution_heatmap,
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
@@ -135,7 +134,7 @@ def run_hrex_with_local_proposal(
     )
 
     if DEBUG:
-        plot_hrex_diagnostics(diagnostics)
+        plot_hrex_diagnostics(initial_replicas, diagnostics)
         plt.show()
 
     return samples_by_state_by_iter, diagnostics
@@ -272,11 +271,10 @@ def test_hrex_gaussian_mixture(seed):
     assert final_swap_acceptance_rates[0] > 0.2
 
 
-def plot_hrex_diagnostics(diagnostics: HREXDiagnostics):
+def plot_hrex_diagnostics(lambdas: Sequence[float], diagnostics: HREXDiagnostics):
     plot_hrex_swap_acceptance_rates_convergence(diagnostics.cumulative_swap_acceptance_rates)
     plot_hrex_transition_matrix(diagnostics.transition_matrix)
-    plot_hrex_replica_state_distribution(diagnostics.cumulative_replica_state_counts)
-    plot_hrex_replica_state_distribution_heatmap(diagnostics.cumulative_replica_state_counts)
+    plot_hrex_replica_state_distribution_heatmap(diagnostics.cumulative_replica_state_counts, lambdas)
 
 
 @pytest.mark.parametrize("num_states", [5])
