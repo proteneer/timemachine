@@ -437,7 +437,7 @@ def plot_hrex_replica_state_distribution_heatmap(
 
     fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_cbar_tick(x))
 
-    fig.suptitle(f"{prefix} HREX State Distribution Heatmap")
+    fig.suptitle(f"{prefix} HREX Replica-State Distribution Heatmap")
     fig.tight_layout()
 
 
