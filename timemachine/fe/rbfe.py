@@ -315,9 +315,10 @@ def rebalance_lambda_schedule(
 
 def get_nearest_state_idx(lamb: float, initial_states: Sequence[InitialState]) -> int:
     """
-    Return the index of the initial state with the closest lambda value. When determining the nearest initial state, will only consider states on the same side of
-    lambda=0.5 as the specified lambda value. This imitates the behavior of `optimize_coordinates` which minimizes from
-    the endstate conformations towards lambda 0.5, resulting in a discontinuity in the conformation at lambda=0.5.
+    Return the index of the initial state with the closest lambda value. When determining the nearest initial state,
+    will only consider states on the same side of lambda=0.5 as the specified lambda value. This imitates the behavior
+    of `optimize_coordinates` which minimizes from the endstate conformations towards lambda 0.5, resulting in a discontinuity
+    in the conformation at lambda=0.5.
     """
     states_subset = [(i, s.lamb) for i, s in enumerate(initial_states) if (s.lamb <= 0.5) == (lamb <= 0.5)]
     nearest_optimized = min(states_subset, key=lambda s: abs(lamb - s[1]))
