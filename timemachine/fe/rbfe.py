@@ -325,17 +325,12 @@ def get_nearest_state_idx(lamb: float, initial_states: Sequence[InitialState]) -
     return nearest_optimized[0]
 
 
-def setup_optimized_initial_state(
-    st: SingleTopology,
-    lamb: float,
-    optimize: bool,
-    host: Optional[Host],
+def optimize_initial_state_from_pre_optimized(
+    initial_state: InitialState,
     optimized_initial_states: Sequence[InitialState],
-    temperature: float,
-    seed: int,
     k: float = DEFAULT_POSITIONAL_RESTRAINT_K,
 ) -> InitialState:
-    """Setup an InitialState for the specified lambda and optimize the coordinates given a list of pre-optimized IntialStates.
+    """Optimize an initial state's coordinates given a list of pre-optimized IntialStates.
     If the specified lambda exists within the list of optimized_initial_states list, return the existing InitialState.
     The coordinates of the pre-optimized initial state with the closest value of lambda will be optimized to the new lambda value.
 
@@ -350,24 +345,22 @@ def setup_optimized_initial_state(
     InitialState
         Optimized at the specified lambda value
     """
-    nearest_optimized_idx = get_nearest_state_idx(lamb, optimized_initial_states)
+    nearest_optimized_idx = get_nearest_state_idx(initial_state.lamb, optimized_initial_states)
     nearest_optimized = optimized_initial_states[nearest_optimized_idx]
 
-    if np.isclose(lamb, nearest_optimized.lamb):
+    if np.isclose(initial_state.lamb, nearest_optimized.lamb):
         return nearest_optimized
     else:
-        initial_state = setup_initial_state(st, lamb, host, temperature, seed)
-        if optimize:
-            free_idxs = get_free_idxs(nearest_optimized)
-            initial_state.x0 = optimize_coords_state(
-                initial_state.potentials,
-                nearest_optimized.x0,
-                initial_state.box0,
-                free_idxs,
-                # assertion can lead to spurious errors when new state is close to an existing one
-                assert_energy_decreased=False,
-                k=k,
-            )
+        free_idxs = get_free_idxs(nearest_optimized)
+        initial_state.x0 = optimize_coords_state(
+            initial_state.potentials,
+            nearest_optimized.x0,
+            initial_state.box0,
+            free_idxs,
+            # assertion can lead to spurious errors when new state is close to an existing one
+            assert_energy_decreased=False,
+            k=k,
+        )
         return initial_state
 
 
@@ -703,15 +696,20 @@ def estimate_relative_free_energy_bisection(
         single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
     )
 
-    make_optimized_initial_state = partial(
-        setup_optimized_initial_state,
+    make_initial_state_fn = partial(
+        setup_initial_state,
         single_topology,
-        optimize=True,
         host=host,
-        optimized_initial_states=initial_states,
         temperature=temperature,
         seed=md_params.seed,
     )
+
+    make_optimized_initial_state_fn = partial(
+        optimize_initial_state_from_pre_optimized,
+        optimized_initial_states=initial_states,
+    )
+
+    make_bisection_state = lambda lamb: make_optimized_initial_state_fn(make_initial_state_fn(lamb))
 
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
@@ -719,7 +717,7 @@ def estimate_relative_free_energy_bisection(
     try:
         results, trajectories = run_sims_bisection(
             [lambda_min, lambda_max],
-            make_optimized_initial_state,
+            make_bisection_state,
             md_params,
             n_bisections=n_windows - 2,
             temperature=temperature,
@@ -752,7 +750,8 @@ def estimate_relative_free_energy_bisection_hrex_impl(
     lambda_max: float,
     md_params: MDParams,
     n_windows: int,
-    make_initial_state_fn: Callable[[float, bool], InitialState],
+    make_initial_state_fn: Callable[[float], InitialState],
+    optimize_initial_state_fn: Callable[[InitialState], InitialState],
     combined_prefix: str,
     min_overlap: Optional[float] = None,
 ) -> HREXSimulationResult:
@@ -774,9 +773,11 @@ def estimate_relative_free_energy_bisection_hrex_impl(
     n_windows: int
         Maximum number of windows to run simulations with, must be at least 2.
 
-    make_initial_state_fn: callable(lambda: float, optimize_state: bool) -> InitialState
-        Function that constructs an InitialState object given a lambda and a flag indicating whether to
-        optimize the coordinates of the InitialState. Optimization is performed during bisection, but disabled
+    make_initial_state_fn: callable(lambda: float) -> InitialState
+        Function that constructs an InitialState object given a lambda.
+
+    optimize_initial_state_fn: callable(state: InitialState) -> InitialState
+        Optimize an initial state object. Optimization is performed during bisection, but disabled
         when re-balancing the lambda schedule.
 
     combined_prefix: str
@@ -807,7 +808,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         md_params_bisection = replace(md_params, n_frames=md_params.hrex_params.n_frames_bisection)
 
         # Always optimize during bisection
-        make_optimized_initial_state_fn = lambda lamb: make_initial_state_fn(lamb, True)
+        make_optimized_initial_state_fn = lambda lamb: optimize_initial_state_fn(make_initial_state_fn(lamb))
 
         results, trajectories_by_state = run_sims_bisection(
             [lambda_min, lambda_max],
@@ -844,7 +845,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
                 state = nearest_state
             else:
                 # If the lambda value is different, reconstruct the initial state to the correct parameters
-                state = make_initial_state_fn(lamb, False)
+                state = make_initial_state_fn(lamb)
 
                 # Verify that the forces of the nearest lambda value's frames are stable, since frames were not generated
                 # with the same parameters
@@ -985,13 +986,17 @@ def estimate_relative_free_energy_bisection_hrex(
         single_topology, host, temperature, lambda_grid, md_params.seed, min_cutoff=min_cutoff
     )
 
-    make_optimized_initial_state_fn = partial(
-        setup_optimized_initial_state,
+    make_initial_state_fn = partial(
+        setup_initial_state,
         single_topology,
         host=host,
-        optimized_initial_states=initial_states,
         temperature=temperature,
         seed=md_params.seed,
+    )
+
+    make_optimized_initial_state_fn = partial(
+        optimize_initial_state_from_pre_optimized,
+        optimized_initial_states=initial_states,
     )
 
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
@@ -1003,6 +1008,7 @@ def estimate_relative_free_energy_bisection_hrex(
         lambda_max,
         md_params,
         n_windows,
+        make_initial_state_fn,
         make_optimized_initial_state_fn,
         combined_prefix,
         min_overlap,
