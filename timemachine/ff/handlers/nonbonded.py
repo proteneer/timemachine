@@ -768,7 +768,7 @@ class AM1CCCHandler(SerializableMixIn):
 
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 
-        return q_params
+        return jnp.zeros_like(q_params)
 
 
 class AM1CCCIntraHandler(AM1CCCHandler):

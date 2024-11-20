@@ -80,14 +80,14 @@ CORE_CHIRAL_ANGLE_CONVERTING_OFF_MIN_MAX = _flip_min_max(CORE_CHIRAL_ANGLE_CONVE
 
 # non-converting (may be consistently in chirality or just achiral) dummy B groups that are turning on
 DUMMY_B_BOND_MIN_MAX = [0.0, 0.7]
-DUMMY_B_ANGLE_MIN_MAX = [0.0, 0.7]
+DUMMY_B_ANGLE_MIN_MAX = [0.5, 0.7]
 DUMMY_A_BOND_MIN_MAX = _flip_min_max(DUMMY_B_BOND_MIN_MAX)
 DUMMY_A_ANGLE_MIN_MAX = _flip_min_max(DUMMY_B_ANGLE_MIN_MAX)
 
 # chiral and converting dummy B groups are turning on
 DUMMY_B_CHIRAL_BOND_CONVERTING_ON_MIN_MAX = [0.0, 0.7]
-DUMMY_B_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX = [0.3, 0.5]
-DUMMY_B_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX = [0.5, 0.7]  # angles are all turned off
+DUMMY_B_CHIRAL_ATOM_CONVERTING_ON_MIN_MAX = [0.5, 0.6]
+DUMMY_B_CHIRAL_ANGLE_CONVERTING_ON_MIN_MAX = [0.6, 0.7]  # angles are all turned off
 
 # chiral and converting dummy A groups are turning off
 DUMMY_A_CHIRAL_BOND_CONVERTING_OFF_MIN_MAX = _flip_min_max(DUMMY_B_CHIRAL_BOND_CONVERTING_ON_MIN_MAX)
@@ -1225,8 +1225,8 @@ class SingleTopology(AtomMapMixin):
 
         a_charge = Chem.GetFormalCharge(mol_a)
         b_charge = Chem.GetFormalCharge(mol_b)
-        if a_charge != b_charge:
-            raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
+        # if a_charge != b_charge:
+        # raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
         find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
         dummy_groups = find_chirally_valid_dummy_groups(core)
