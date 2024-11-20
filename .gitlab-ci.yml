@@ -30,7 +30,11 @@ docker_build:
     - docker pull $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH || true
     - docker pull $DOCKER_TAG || true
     # Cache from default branch and most recent image to get most out of the caching
-    - docker build -t $DOCKER_TAG --cache-from type=registry,ref=$CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH --cache-from type=registry,ref=$DOCKER_TAG --target timemachine_ci .
+    - docker build -t $DOCKER_TAG \
+      --cache-from type=registry,ref=$CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH \
+      --cache-from type=registry,ref=$DOCKER_TAG \
+      --cache-to type=registry,ref=$DOCKER_TAG \
+      --target timemachine_ci .
     - docker push $DOCKER_TAG
 
 lint:
