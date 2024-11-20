@@ -21,6 +21,7 @@ from timemachine.constants import (
     NBParamIdx,
 )
 from timemachine.fe import atom_mapping, single_topology
+from timemachine.fe.chiral_utils import setup_all_chiral_atom_restr_idxs
 from timemachine.fe.dummy import MultipleAnchorWarning, canonicalize_bond
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.interpolate import align_nonbonded_idxs_and_params, linear_interpolation
@@ -34,6 +35,8 @@ from timemachine.fe.single_topology import (
     canonicalize_chiral_atom_idxs,
     canonicalize_improper_idxs,
     cyclic_difference,
+    find_disabled_dummy_bonds_and_chiral_volumes,
+    get_dummy_group_assignments_ordered_by_score,
     interpolate_w_coord,
     setup_dummy_interactions_from_ff,
 )
@@ -41,6 +44,7 @@ from timemachine.fe.system import convert_bps_into_system, minimize_scipy, simul
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, read_sdf_mols_by_name, set_mol_name
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import openmm_deserializer
+from timemachine.graph_utils import convert_to_nx
 from timemachine.md import minimizer
 from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.potentials.jax_utils import pairwise_distances
@@ -1730,3 +1734,105 @@ def test_hif2a_end_state_symmetry_nightly_test():
         print("testing", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
         core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
         assert_symmetric_interpolation(mol_a, mol_b, core)
+
+
+def get_mol():
+    mol = Chem.MolFromMolBlock(
+        """
+  Mrv2311 11182420203D
+
+  0  0  0     0  0            999 V3000
+M  V30 BEGIN CTAB
+M  V30 COUNTS 12 13 0 0 0
+M  V30 BEGIN ATOM
+M  V30 1 O -1.6635 -0.735 0.5133 0
+M  V30 2 O -0.4789 -1.2617 0.8465 0
+M  V30 3 C -1.3048 0.5746 0.9531 0 CFG=1
+M  V30 4 C 0.0318 -0.0228 1.3371 0 CFG=2
+M  V30 5 C -0.6104 1.5328 -0.0329 0 CFG=2
+M  V30 6 C 0.7498 0.9324 0.3644 0 CFG=1
+M  V30 7 F -1.8602 1.0028 1.7925 0
+M  V30 8 Cl 0.2628 0.042 2.4031 0
+M  V30 9 H -0.718 2.5833 0.2502 0
+M  V30 10 H -0.886 1.3434 -1.0734 0
+M  V30 11 H 1.3995 1.6467 0.8767 0
+M  V30 12 H 1.2546 0.413 -0.4544 0
+M  V30 END ATOM
+M  V30 BEGIN BOND
+M  V30 1 1 3 4
+M  V30 2 1 3 5
+M  V30 3 1 5 6
+M  V30 4 1 6 4
+M  V30 5 1 1 3
+M  V30 6 1 4 2
+M  V30 7 1 1 2
+M  V30 8 1 5 9
+M  V30 9 1 5 10
+M  V30 10 1 6 11
+M  V30 11 1 6 12
+M  V30 12 1 3 7
+M  V30 13 1 4 8
+M  V30 END BOND
+M  V30 END CTAB
+M  END""",
+        removeHs=False,
+    )
+    return mol
+
+
+def test_find_disabled_dummy_bonds_and_chiral_volumes():
+    mol = get_mol()
+    conf = get_romol_conf(mol)
+    bond_graph = convert_to_nx(mol)
+    chiral_restr_idxs = setup_all_chiral_atom_restr_idxs(mol, conf)
+
+    # code used to generate the dgs below
+    # core = [0, 1, 2, 3]
+    # dga = generate_dummy_group_assignments(bond_graph, core)
+    dg = {2: frozenset({4, 5, 6, 8, 9, 10, 11}), 3: frozenset({7})}
+
+    disabled_bonds, disabled_chiral_volumes = find_disabled_dummy_bonds_and_chiral_volumes(
+        dg, bond_graph, chiral_restr_idxs
+    )
+
+    assert disabled_bonds == {(3, 5)}
+    assert len(disabled_chiral_volumes) == 6
+
+    for idxs in disabled_chiral_volumes:
+        assert 3 in idxs
+        assert 5 in idxs
+
+
+def test_get_dummy_group_assignments_ordered_by_score():
+    mol = Chem.MolFromMolBlock(
+        """
+  Mrv2311 11182422073D
+
+  8  8  0  0  0  0            999 V2000
+    1.7111    0.8319    2.2237 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5754    2.1601    2.1378 S   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6851    2.0842    1.0319 C   0  0  1  0  0  0  0  0  0  0  0  0
+    0.8276    0.5794    1.1367 C   0  0  2  0  0  0  0  0  0  0  0  0
+   -0.3099   -0.0779    1.5408 F   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6335   -0.2034   -0.2211 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3121    2.4201    1.3162 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1559    2.4765    0.1305 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  1  4  1  0  0  0  0
+  4  5  1  0  0  0  0
+  4  6  1  0  0  0  0
+  3  7  1  0  0  0  0
+  3  8  1  0  0  0  0
+M  END
+$$$$""",
+        removeHs=False,
+    )
+
+    core = [0, 2, 3, 4, 5, 6, 7]
+    dgas, scores = get_dummy_group_assignments_ordered_by_score(mol, core)
+    assert dgas[0] == {2: set([1])}
+    assert scores[0] == (1, 0)
+    assert dgas[1] == {0: set([1])}
+    assert scores[1] == (1, 3)
