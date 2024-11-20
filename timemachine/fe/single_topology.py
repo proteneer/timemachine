@@ -80,7 +80,7 @@ CORE_CHIRAL_ANGLE_CONVERTING_OFF_MIN_MAX = _flip_min_max(CORE_CHIRAL_ANGLE_CONVE
 
 # non-converting (may be consistently in chirality or just achiral) dummy B groups that are turning on
 DUMMY_B_BOND_MIN_MAX = [0.0, 0.7]
-DUMMY_B_ANGLE_MIN_MAX = [0.0, 0.7]
+DUMMY_B_ANGLE_MIN_MAX = [0.5, 0.7]
 DUMMY_A_BOND_MIN_MAX = _flip_min_max(DUMMY_B_BOND_MIN_MAX)
 DUMMY_A_ANGLE_MIN_MAX = _flip_min_max(DUMMY_B_ANGLE_MIN_MAX)
 
@@ -1427,11 +1427,12 @@ class SingleTopology(AtomMapMixin):
             is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
 
             # parameters for pairs that do not interact in the src state
-            w = interpolate_w_coord(cutoff, dst_w, lamb)
+
+            w = jnp.where(lamb >= 0.5, cutoff, interpolate_w_coord(cutoff, dst_w, 2 * lamb))
             pair_params_excluded_src = jnp.concatenate((dst_qlj, w[:, None]), axis=1)
 
             # parameters for pairs that do not interact in the dst state
-            w = interpolate_w_coord(src_w, cutoff, lamb)
+            w = jnp.where(lamb <= 0.5, 0, interpolate_w_coord(src_w, cutoff, (lamb - 0.5) * 2))
             pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
 
             # parameters for pairs that interact in both src and dst states
