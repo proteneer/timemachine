@@ -27,8 +27,7 @@ docker_build:
     # Prune images older than 2 days
     - docker system prune --filter "until=48h" -f -a
     # Pull the docker containers
-    - docker pull $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH || true
-    - docker pull $DOCKER_TAG || true
+    - docker pull $DOCKER_TAG || docker pull $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH || true
     # Cache from default branch and most recent image to get most out of the caching
     - docker build -t $DOCKER_TAG --cache-from $DOCKER_TAG --cache-from $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH --target timemachine_ci .
     - docker push $DOCKER_TAG
