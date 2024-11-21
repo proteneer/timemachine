@@ -19,7 +19,7 @@ workflow:
 
 docker_build:
   stage: build-docker
-  image: docker:20.10
+  image: docker:27.3.1
   tags:
     - aws-tardis-gpu
   script:
