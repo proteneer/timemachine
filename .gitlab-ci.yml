@@ -49,7 +49,7 @@ nocuda-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - aws-tardis
+    - aws-tardis-cpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
@@ -67,7 +67,7 @@ nogpu-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - aws-tardis
+    - aws-tardis-cpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   # Build custom ops with fixed cuda arch, to test C++ that is CPU only
@@ -160,7 +160,7 @@ nightly-tests-nocuda:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - aws-tardis
+    - aws-tardis-cpu
   rules:
     - if: $NIGHTLY_TESTS
   script:
@@ -178,7 +178,7 @@ nightly-tests-nogpu:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - aws-tardis
+    - aws-tardis-cpu
   rules:
     - if: $NIGHTLY_TESTS
   # Build custom ops with fixed cuda arch, to test C++ that is CPU only
