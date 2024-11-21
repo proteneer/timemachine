@@ -551,20 +551,60 @@ class AM1BCCSolventHandler(AM1BCCHandler):
     pass
 
 
-def make_residue_mol(atoms, bonds):
+SMILES_BY_RES_NAME = {
+    "ACE": "CC=O",
+    "NME": "CN",
+    # 'ARG': 'N[C@@H](CCCNC(N)=[NH2+])C(O)=O',
+    # to preserve symmetry use symmetric resonance structure
+    "ARG": "N[C@@H](CCC[NH+]=C(N)N)C(O)=O",
+    "HID": "C1=C(NC=N1)C[C@@H](C(=O)O)N",
+    "HIE": "N[C@@H](CC1=CNC=N1)C(O)=O",
+    "HIP": "N[C@@H](CC1=CNC=[NH+]1)C(O)=O",
+    "LYS": "N[C@@H](CCCC[NH3+])C(O)=O",
+    "ASP": "N[C@@H](CC([O-])=O)C(O)=O",
+    "ASH": "N[C@@H](CC(O)=O)C(O)=O",
+    "GLU": "N[C@@H](CCC([O-])=O)C(O)=O",
+    "GLH": "N[C@@H](CCC(O)=O)C(O)=O",
+    "SER": "C([C@@H](C(=O)O)N)O",
+    "THR": "C[C@H]([C@@H](C(=O)O)N)O",
+    "ASN": "C([C@@H](C(=O)O)N)C(=O)N",
+    "GLN": "C(CC(=O)N)[C@@H](C(=O)O)N",
+    "CYS": "C([C@@H](C(=O)O)N)S",
+    "CYM": "N[C@@H](C[S-])C(O)=O",
+    "GLY": "C(C(=O)O)N",
+    "PRO": "C1C[C@H](NC1)C(=O)O",
+    "ALA": "O=C(O)C(N)C",
+    "VAL": "CC(C)[C@@H](C(=O)O)N",
+    "ILE": "CC[C@H](C)[C@@H](C(=O)O)N",
+    "LEU": "CC(C)C[C@@H](C(=O)O)N",
+    "MET": "CSCC[C@@H](C(=O)O)N",
+    "PHE": "C1=CC=C(C=C1)C[C@@H](C(=O)O)N",
+    "TYR": "C1=CC(=CC=C1C[C@@H](C(=O)O)N)O",
+    "TRP": "C1=CC=C2C(=C1)C(=CN2)C[C@@H](C(=O)O)N",
+}
+
+
+def make_residue_mol(name, atoms, bonds, name_list):
     # Generate an rdkit molecule given a list of atoms and a list of bonds
     mw = Chem.RWMol()
     mw.BeginBatchEdit()
-    for atom in atoms:
+    for i, atom in enumerate(atoms):
         aa = Chem.Atom(atom)
+        aa.SetProp("molAtomMapNumber", str(i))  # f'Z{name_list[i]}Z')
+        aa.SetProp("origAtomName", name_list[i])
+        aa.SetProp("origAtomIdx", str(i))
         mw.AddAtom(aa)
 
     for src, dst in bonds:
-        mw.AddBond(src, dst, Chem.BondType.SINGLE)
+        bond_tuple = name_list[src], name_list[dst]
+        if bond_tuple in [("C", "O"), ("O", "C")]:
+            mw.AddBond(src, dst, Chem.BondType.DOUBLE)
+        else:
+            mw.AddBond(src, dst, Chem.BondType.SINGLE)
     mw.CommitBatchEdit()
+    mw = Chem.RemoveHs(mw, implicitOnly=True, sanitize=False)
 
-    for atom in mw.GetAtoms():
-        atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
+    mw.SetProp("_Name", name)
     return mw
 
 
@@ -591,7 +631,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
         self.topology = topology
         residueTemplates = dict()
         ignoreExternalBonds = False
-        data = ForceField._SystemData(topology)
+        self.data = ForceField._SystemData(topology)
 
         # template_for_residue is list a of _templateData objects,
         # where the index is the residue index and the value is a template type, which
@@ -599,7 +639,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
         # a standard HIS tag in the input PDB is processed into the specific template type:
         # {HID,HIE,HIP}
         self.template_for_residue = self.env_ff._matchAllResiduesToTemplates(
-            data, topology, residueTemplates, ignoreExternalBonds
+            self.data, topology, residueTemplates, ignoreExternalBonds
         )
 
         env_system = self.env_ff.createSystem(
@@ -618,28 +658,183 @@ class EnvironmentBCCHandler(SerializableMixIn):
     def parameterize(self, params):
         cur_atom = 0
         final_charges = []
+        all_res_mols_by_name = {}
         for i in range(len(self.template_for_residue)):
+            # print('-' * 80)
             tfr = self.template_for_residue[i]
             symbol_list = [atm.element.symbol for atm in tfr.atoms]
+            n_atoms = len(tfr.atoms)
+            name_list = [atm.name for atm in tfr.atoms]
             bond_list = tfr.bonds
-            res_mol = make_residue_mol(symbol_list, bond_list)
-            amber_charges = self.initial_charges[cur_atom : cur_atom + res_mol.GetNumAtoms()]
-            assert len(amber_charges) == res_mol.GetNumAtoms()
-            cur_atom += res_mol.GetNumAtoms()
+            initial_res_charges = self.initial_charges[cur_atom : cur_atom + n_atoms]
+            # print('initial_res_charges', tfr.name, initial_res_charges)
+            omm_res_mol = make_residue_mol(tfr.name + "_omm", symbol_list, bond_list, name_list)
 
-            if res_mol.GetNumAtoms() == 3:  # water
-                final_charges.append(amber_charges)
+            res_name = tfr.name
+            is_nh3_capped = False
+            if len(res_name) == 4 and res_name[0] == "C":
+                res_name = res_name[1:]
+            if len(res_name) == 4 and res_name[0] == "N":
+                is_nh3_capped = True
+                res_name = res_name[1:]
+
+            if res_name not in SMILES_BY_RES_NAME:
+                # print('SKIPPING RESIDUE', tfr.name)
+                final_charges.append(initial_res_charges)
+                cur_atom += n_atoms
+                all_res_mols_by_name[tfr.name + "_omm"] = omm_res_mol
                 continue
 
-            bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(res_mol, self.patterns)
+            proper_res_mol = Chem.AddHs(Chem.MolFromSmiles(SMILES_BY_RES_NAME[res_name]))
+            if is_nh3_capped:
+                mw = Chem.RWMol(proper_res_mol)
+                mw.BeginBatchEdit()
+                # Need to adjust charge of the N to +1
+                query_mol = Chem.MolFromSmiles("NCC(O)=O")
+                query_params = Chem.AdjustQueryParameters.NoAdjustments()
+                query_params.makeBondsGeneric = True
+                query_mol = Chem.AdjustQueryProperties(query_mol, query_params)
+                matches = proper_res_mol.GetSubstructMatches(query_mol)
+                # print(matches)
+                for i, atom in enumerate(mw.GetAtoms()):
+                    if i not in matches[0]:
+                        continue
+                    if atom.GetSymbol() == "N":
+                        atom.SetFormalCharge(+1)
+                        atm_h = mw.AddAtom(Chem.Atom("H"))
+                        mw.AddBond(atm_h, atom.GetIdx())
+                        break
+                mw.CommitBatchEdit()
+                proper_res_mol = mw
+
+            # for i, atom in enumerate(proper_res_mol.GetAtoms()):
+            #     atom.SetProp("molAtomMapNumber", str(i))
+            proper_res_mol.SetProp("_Name", tfr.name + "_proper")
+
+            query_params = Chem.AdjustQueryParameters.NoAdjustments()
+            query_params.makeBondsGeneric = True
+            query_generic_bonds = Chem.AdjustQueryProperties(omm_res_mol, query_params)
+            match = proper_res_mol.GetSubstructMatch(query_generic_bonds)
+
+            # Match maps the rdkit res mol (used for the SMIRKS assignment)
+            # back to the omm_res_mol (used for the charges)
+            # print(tfr.name, match, len(match), omm_res_mol.GetNumAtoms(), proper_res_mol.GetNumAtoms())
+            # raise
+
+            fwd_map = {i: v for i, v in enumerate(match)}  # from proper_res to omm
+
+            # print('fwd_map', fwd_map)
+            # print('rev_map', rev_map)
+
+            proper_res_atoms = {i: atom for i, atom in enumerate(proper_res_mol.GetAtoms())}
+            proper_res_mol.UpdatePropertyCache()
+
+            for atom in omm_res_mol.GetAtoms():
+                proper_res_idx = fwd_map[atom.GetIdx()]
+                proper_res_atom = proper_res_atoms[proper_res_idx]
+
+                # TODO CLEANUP
+                if proper_res_atom.GetFormalCharge() != 0 or name_list[atom.GetIdx()] == "OXT":
+                    new_charge = proper_res_atom.GetFormalCharge()
+                    if (
+                        name_list[atom.GetIdx()] == "OXT"
+                    ):  # For capped residues, need to get the charge right for symmtery
+                        new_charge = -1
+                    atom.SetFormalCharge(new_charge)
+
+            proper_bonds = {}
+            for bond in proper_res_mol.GetBonds():
+                src_idx = bond.GetBeginAtomIdx()
+                dst_idx = bond.GetEndAtomIdx()
+                proper_bonds[(src_idx, dst_idx)] = bond
+                proper_bonds[(dst_idx, src_idx)] = bond
+            # print('proper_bonds', proper_bonds)
+
+            omm_res_mol.UpdatePropertyCache()
+            for bond in omm_res_mol.GetBonds():
+                src_idx = bond.GetBeginAtomIdx()
+                dst_idx = bond.GetEndAtomIdx()
+
+                bond_tuple = name_list[src_idx], name_list[dst_idx]
+                # may not be matched and already handled in make_residue_mol
+                if bond_tuple in [("C", "O"), ("O", "C"), ("C", "OXT"), ("OXT", "C")]:
+                    continue
+
+                proper_src_idx = fwd_map[src_idx]
+                proper_dst_idx = fwd_map[dst_idx]
+                k = (proper_src_idx, proper_dst_idx)
+                bond.SetBondType(proper_bonds[k].GetBondType())
+                bond.SetIsAromatic(proper_bonds[k].GetIsAromatic())
+
+            proper_res_mol.UpdatePropertyCache()
+            omm_res_mol.UpdatePropertyCache()
+
+            # initial_res_charges is in the topology ordering
+            # so map to the template/omm_res_mol ordering
+            topology_idx_to_template_idx = {atm.index: j for atm, j in self.data.atomTemplateIndexes.items()}
+
+            omm_res_mol_charges = {}
+            # print('self.data.atomTemplateIndexes', topology_idx_to_template_idx)
+            for i in range(n_atoms):
+                tmpl_atom_idx = topology_idx_to_template_idx[cur_atom + i]
+                omm_res_mol_charges[tmpl_atom_idx] = initial_res_charges[i]
+
+            # print('omm_res_mol_charges', omm_res_mol_charges, n_atoms)
+            omm_res_mol_charges_ordered = jnp.array([omm_res_mol_charges[i] for i in range(n_atoms)])
+
+            bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(omm_res_mol, self.patterns)
             deltas = params[type_idxs]
-            q_params = apply_bond_charge_corrections(
-                amber_charges,
+            tmpl_q_params = apply_bond_charge_corrections(
+                omm_res_mol_charges_ordered,
                 bond_idxs,
                 deltas,
                 runtime_validate=False,  # required for jit
             )
-            final_charges.append(q_params)
+
+            # map back from the template ordering to the topology order
+            q_params = {}
+            for i in range(n_atoms):
+                tmpl_atom_idx = topology_idx_to_template_idx[cur_atom + i]
+                q_params[i] = tmpl_q_params[tmpl_atom_idx]
+            q_params_ordered = jnp.array([q_params[i] for i in range(n_atoms)])
+
+            # print('q_params', tfr.name, tmpl_q_params, q_params)
+
+            final_charges.append(q_params_ordered)
+
+            # for i, atom in enumerate(omm_res_mol.GetAtoms()):
+            #     atom.SetProp("molAtomMapNumber", f'{i}:{q_params_ordered[i]:0.2f}')
+
+            # for i, atom in enumerate(omm_res_mol.GetAtoms()):
+            #     atom.SetProp("molAtomMapNumber", f'{name_list[i]}:{initial_res_charges[i]:0.2f}')
+
+            all_res_mols_by_name[tfr.name + "_omm"] = omm_res_mol
+            all_res_mols_by_name[tfr.name + "_proper"] = proper_res_mol
+            # final_charges.append(initial_res_charges)
+            cur_atom += n_atoms
+
+        # all_res_mols = list(all_res_mols_by_name.values())
+        # from rdkit.Chem import Draw
+        # from rdkit.Chem.Draw import rdMolDraw2D
+        # with open(f"all_res_mols.svg", "w") as fh:
+        #     n_res = len(all_res_mols)
+        #     n_mols_per_row = 4
+        #     drawer = rdMolDraw2D.MolDraw2DSVG(200 * n_mols_per_row, 180 * ((n_res // n_mols_per_row)+1), 200, 180)
+        #     # drawer.drawOptions().useBWAtomPalette()
+        #     # drawer.drawOptions().baseFontSize = 0.025
+        #     dopts = drawer.drawOptions()
+        #     dopts.baseFontSize = 0.025
+        #     dopts.minFontSize = 3
+        #     dopts.maxFontSize = 40
+
+        #     drawer.DrawMolecules(
+        #         all_res_mols,
+        #         legends=[x.GetProp("_Name") for x in all_res_mols],
+        #     )
+
+        #     drawer.FinishDrawing()
+        #     fh.write(drawer.GetDrawingText())
+
         return jnp.concatenate(final_charges, axis=0)
 
 

@@ -1,4 +1,5 @@
 import functools
+from collections import defaultdict
 from copy import deepcopy
 from importlib import resources
 
@@ -17,7 +18,6 @@ from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.md import builders
-from timemachine.testsystems.data.ildn_params import get_amber99ildn_patterns
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -1145,32 +1145,26 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries):
     Test that we can compute BCCs to generate per atom charge offsets and that they can be differentiated
     """
     protein_path, expected_symmetries = protein_path_and_symmetries
-    patterns = get_amber99ildn_patterns()
-
-    smirks = [x[0] for x in patterns]
+    smirks = [x[0] for x in AM1CCC_CHARGES["patterns"]]
     params = np.random.rand(len(smirks)) - 0.5
 
     with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
         host_pdb = app.PDBFile(str(path_to_pdb))
         topology = host_pdb.topology
-
-    pbcc = nonbonded.EnvironmentBCCHandler(smirks, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
-
-    assert len(pbcc.bond_atomic_numbers) == len(pbcc.bond_idxs)
-    assert (6, 6) in pbcc.bond_atomic_numbers
+        pbcc = nonbonded.EnvironmentBCCHandler(smirks, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
 
     # raw charges are correct are in the order of atoms in the topology
     raw_charges = np.array(pbcc.parameterize(np.zeros_like(params)))
     bcc_charges = np.array(pbcc.parameterize(params))
 
-    atoms = []
-    bonds = []
+    # atoms = []
+    # bonds = []
 
-    for atom in topology.atoms():
-        atoms.append(atom.element.symbol)
+    # for atom in topology.atoms():
+    #     atoms.append(atom.element.symbol)
 
-    for src_atom, dst_atom in topology.bonds():
-        bonds.append((src_atom.index, dst_atom.index))
+    # for src_atom, dst_atom in topology.bonds():
+    #     bonds.append((src_atom.index, dst_atom.index))
 
     # mol = make_residue_mol(atoms, bonds)
     # from rdkit.Chem import Draw
@@ -1194,11 +1188,8 @@ def test_environment_bcc_full_protein(protein_path):
     Test that we can compute BCCs to generate per atom charge offsets and that they can be differentiated
     """
     patterns = [smirks for (smirks, param) in AM1CCC_CHARGES["patterns"]]
-    # patterns = get_amber99ildn_patterns()
-    # smirks = [x[0] for x in patterns]
-    # params = [x[1] for x in patterns]
+    np.random.seed(2024)
     params = np.random.rand(len(patterns)) - 0.5
-    # params = np.zeros((len(patterns),))
 
     with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
         host_pdb = app.PDBFile(str(path_to_pdb))
@@ -1207,7 +1198,7 @@ def test_environment_bcc_full_protein(protein_path):
     pbcc = nonbonded.EnvironmentBCCHandler(patterns, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
 
     # test that we can mechanically parameterize everything
-    pbcc.parameterize(params)
+    final_q_params = pbcc.parameterize(params)
 
     def loss_fn(bcc_params):
         res = pbcc.parameterize(bcc_params)
@@ -1233,3 +1224,27 @@ def test_environment_bcc_full_protein(protein_path):
 
     assert loss_fn(params) == loss_fn2(params)
     np.testing.assert_array_equal(grad_fn(params), grad_fn2(params))
+
+    # now check for correctness on the full protein set
+    # if the initial charges are the same, then the final charges should
+    # also be the same by symmetry
+    atom_idx_to_res_name = {}
+    cur_atom = 0
+    for i in range(len(pbcc.template_for_residue)):
+        tfr = pbcc.template_for_residue[i]
+        n_atoms = len(tfr.atoms)
+        for j in range(n_atoms):
+            atom_idx_to_res_name[cur_atom + j] = f"{tfr.name}"
+        cur_atom += n_atoms
+
+    # charges that are the same and belong to the same residue should
+    # be the same after applying the corrections
+    init_q_params = pbcc.initial_charges
+    sym_charge_idxs = defaultdict(list)
+    for i, q in enumerate(init_q_params):
+        sym_charge_idxs[(q, atom_idx_to_res_name[i])].append(i)
+
+    for group in sym_charge_idxs.values():
+        first = group[0]
+        for other in group[1:]:
+            np.testing.assert_almost_equal(final_q_params[other], final_q_params[first])
