@@ -754,6 +754,8 @@ class EnvironmentBCCHandler(SerializableMixIn):
             proper_res_mol.UpdatePropertyCache()
             omm_res_mol.UpdatePropertyCache()
 
+            # cache smirks patterns to speed up parameterize
+            compute_or_load_bond_smirks_matches(omm_res_mol, self.patterns)
             self.all_res_mols_by_name[tfr.name] = omm_res_mol
             # self.all_res_mols_by_name[tfr.name + "_proper"] = proper_res_mol
 
