@@ -176,7 +176,7 @@ def test_functional():
 
             for perturb in perturbations:
                 abs_err = check_grad(low_dim_f, grad(low_dim_f), perturb, epsilon=1e-4)
-                assert abs_err < 2.5e-3
+                assert abs_err < 1.5e-3
 
         # grad w.r.t. box shouldn't be allowed
         with pytest.raises(RuntimeError) as e:

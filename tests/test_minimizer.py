@@ -109,10 +109,7 @@ def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
         host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
     x_host, x_box = minimizer.pre_equilibrate_host(mols, host_config, ff)
     assert x_host.shape == host_config.conf.shape
-    box_vol_before = compute_box_volume(host_config.box)
-    box_vol_after = compute_box_volume(x_box)
-    # assert box_vol_after < box_vol_before
-    assert box_vol_after < 1.1 * box_vol_before
+    assert compute_box_volume(x_box) < compute_box_volume(host_config.box)
 
 
 def test_fire_minimize_host_adamantane():

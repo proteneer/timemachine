@@ -1,5 +1,4 @@
 import functools
-from copy import deepcopy
 from importlib import resources
 
 import jax
@@ -11,7 +10,6 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, ONE_4PI_EPS0
-from timemachine.datasets import fetch_freesolv
 from timemachine.fe import topology, utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
@@ -420,10 +418,10 @@ $$$$
 
     # fmt: off
     ligand_params = np.array([
-        -5.32765, 6.89144, -1.62909, -4.01409, 1.99603, -2.32088,
-        -0.89641, -1.86649, -0.65583, -1.64725, 7.67398, -6.09888,
-        -7.27287, 0.95122, 0.95122, 0.95122, 1.78079, 1.65102,
-        1.74095, 1.87874, 5.26282,
+        -5.36348, 6.98008, -1.68885, -4.04439, 1.93568, -2.25534,
+        -0.87637, -1.8679, -0.66892, -1.6588, 7.67174, -6.1465,
+        -7.26945, 0.93978, 0.93978, 0.93978, 1.83702, 1.69675,
+        1.71667, 1.90762, 5.27508,
         ]
     )
     # fmt: on
@@ -724,28 +722,45 @@ def test_compute_or_load_am1_charges():
         np.testing.assert_array_equal(fresh, cached)
 
 
-def assert_permutation_equivariance(mol, fxn, perm):
-    """fxn(mol[perm]) == fxn(mol)[perm]"""
-    mol = deepcopy(mol)
-    qs = fxn(mol)
+@pytest.fixture
+def mol_with_precomputed_charges():
+    """Provide a test mol with partial charges precomputed on two different versions of Ubuntu"""
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = utils.read_sdf(path_to_ligand)
+    test_mol = mols[0]
 
-    permuted_mol = Chem.RenumberAtoms(mol, list(int(idx) for idx in perm))
-    qs_perm = fxn(permuted_mol)
+    # fmt: off
+    precomputed_charges = dict()
+    precomputed_charges['ubuntu-18.04.4'] = np.array([
+        -3.385959, 0.26308782, 2.30802986, 1.11718023, -2.11460365,
+        0.9725527, -9.18744615, 0.04042971, -2.49344069, 1.87709392,
+        -1.64877796, 0.57591713, -1.68873618, 1.19414994, -1.04834368,
+        -1.52407053, 0.30670004, -1.26003975, -1.3233364, 33.79971321,
+        -10.86357005, -10.86357005, -1.72362592, -0.10184044, -1.47951542,
+        -1.72362592, -11.32255943, 2.74250182, 1.64583123, 1.55000221,
+        1.69816584, 1.83477824, 2.11436794, 1.99956175, 1.98447416,
+        2.86426252, 2.86426252])
+    precomputed_charges['ubuntu-20.04.2'] = np.array([
+       -3.38772701, 0.26721331, 2.30272567, 1.11670881, -2.10741359,
+       0.96123709, -9.15420638, 0.03088217, -2.48495405, 1.872379,
+       -1.65467143, 0.58181069, -1.6896792, 1.19155677, -1.04775431,
+       -1.51994506, 0.3044605, -1.25933253, -1.32628322, 33.75586471,
+       -10.85178312, -10.85178312, -1.72386163, -0.10278342, -1.4785724,
+       -1.72386163, -11.31914145, 2.74450571, 1.64253075, 1.55165236,
+       1.69875511, 1.83418879, 2.1147215, 1.99413971, 1.98565289,
+       2.86638427, 2.86638427])
+    # fmt: on
 
-    np.testing.assert_allclose(qs_perm, qs[perm])
+    return dict(mol=test_mol, precomputed_charges=precomputed_charges)
 
 
-@pytest.mark.parametrize("mol_idx", [0, 1, 2, 3, 4, 5])
-def test_partial_charge_equivariance_on_freesolv(mol_idx):
-    ff = Forcefield.load_default()
+def test_am1_platform_dependence(mol_with_precomputed_charges):
+    """Assert AM1 charges computed on test runner ~equal to those previously computed on 1 of 3 supported platforms"""
 
-    seed = 2024
-    rng = np.random.default_rng(seed)
-
-    mol = fetch_freesolv()[mol_idx]
-    perm = rng.permutation(mol.GetNumAtoms())
-
-    assert_permutation_equivariance(mol, ff.q_handle.parameterize, perm)
+    mol = mol_with_precomputed_charges["mol"]
+    local_am1_charges = nonbonded.compute_or_load_am1_charges(mol)
+    allowable_charges = mol_with_precomputed_charges["precomputed_charges"].values()
+    assert any(np.isclose(local_am1_charges, expected_charges).all() for expected_charges in allowable_charges)
 
 
 def test_charging_compounds_with_non_zero_charge():

@@ -51,19 +51,14 @@ def oe_generate_conformations(oemol, sample_hydrogens=True):
     Note: This currently does not filter out trans carboxylic acids.
     See https://github.com/openforcefield/openff-toolkit/pull/1171
 
-    Note: This may permute the molecule in-place during canonicalization.
-        (If the original atom ordering needs to be recovered, modify calling context using {Set/Get}MapIdx.)
-
     Parameters
     ----------
     oemol: oechem.OEMol
-    sample_hydrogens: bool
 
     References
     ----------
     [1] https://docs.eyesopen.com/toolkits/cookbook/python/modeling/am1-bcc.html
     """
-
     from openeye import oeomega
 
     # generate conformations using omega
@@ -72,7 +67,8 @@ def oe_generate_conformations(oemol, sample_hydrogens=True):
     omega = oeomega.OEOmega(omegaOpts)
     # exclude the initial input conformer
     omega.SetIncludeInput(False)
-    omega.SetCanonOrder(True)  # may not preserve input atom ordering
+    # needed to preserve the atom ordering
+    omega.SetCanonOrder(False)
     omega.SetSampleHydrogens(sample_hydrogens)
     omega.SetEnergyWindow(15.0)
     omega.SetMaxConfs(800)
@@ -87,13 +83,6 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
     """assign partial charges, then premultiply by sqrt(ONE_4PI_EPS0)
     as an optimization"""
 
-    oemol = convert_to_oe(mol)
-
-    # this is to recover the ordering of atoms from input mol (current state of oemol),
-    # since canonicalization in oe_generate_conformations(oemol) may modify oemol's atom order in-place
-    for i, atom in enumerate(oemol.GetAtoms()):
-        atom.SetMapIdx(i + 1)
-
     # imported here for optional dependency
     from openeye import oequacpac
 
@@ -105,6 +94,7 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
     }
     charge_engine = charge_engines[charge_model]
 
+    oemol = convert_to_oe(mol)
     if charge_model in ELF10_MODELS:
         oe_generate_conformations(oemol)
 
@@ -131,11 +121,7 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
     # "The charges have been multiplied by sqrt(ONE_4PI_EPS0) as an optimization."
     inlined_constant = np.sqrt(constants.ONE_4PI_EPS0)
 
-    # recover original atom order
-    inv_permutation = np.argsort([(atom.GetMapIdx() - 1) for atom in oemol.GetAtoms()])
-
-    # returned charges are in TM units, in original atom ordering
-    return inlined_constant * partial_charges[inv_permutation]
+    return inlined_constant * partial_charges
 
 
 def generate_exclusion_idxs(mol, scale12, scale13, scale14_lj, scale14_q):
