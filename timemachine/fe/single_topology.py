@@ -80,7 +80,7 @@ CORE_CHIRAL_ANGLE_CONVERTING_OFF_MIN_MAX = _flip_min_max(CORE_CHIRAL_ANGLE_CONVE
 
 # non-converting (may be consistently in chirality or just achiral) dummy B groups that are turning on
 DUMMY_B_BOND_MIN_MAX = [0.0, 0.7]
-DUMMY_B_ANGLE_MIN_MAX = [0.5, 0.7]
+DUMMY_B_ANGLE_MIN_MAX = [0.0, 0.7]
 DUMMY_A_BOND_MIN_MAX = _flip_min_max(DUMMY_B_BOND_MIN_MAX)
 DUMMY_A_ANGLE_MIN_MAX = _flip_min_max(DUMMY_B_ANGLE_MIN_MAX)
 
@@ -1082,14 +1082,18 @@ class AtomMapMixin:
         self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
         self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
 
+        self._dummy_atoms_a = {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_A}
+        self._dummy_atoms_b = {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_B}
+        self._core_atoms = {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.CORE}
+
     def get_dummy_atoms_a(self) -> set[int]:
-        return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_A}
+        return self._dummy_atoms_a
 
     def get_dummy_atoms_b(self) -> set[int]:
-        return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_B}
+        return self._dummy_atoms_b
 
     def get_core_atoms(self) -> set[int]:
-        return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.CORE}
+        return self._core_atoms
 
     def get_num_atoms(self) -> int:
         """
@@ -1225,8 +1229,8 @@ class SingleTopology(AtomMapMixin):
 
         a_charge = Chem.GetFormalCharge(mol_a)
         b_charge = Chem.GetFormalCharge(mol_b)
-        if a_charge != b_charge:
-            raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
+        # if a_charge != b_charge:
+        # raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
         find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
         dummy_groups = find_chirally_valid_dummy_groups(core)
@@ -1426,13 +1430,12 @@ class SingleTopology(AtomMapMixin):
             is_excluded_src = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
             is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
 
-            # parameters for pairs that do not interact in the src state
+            w = interpolate.pad(interpolate_w_coord, cutoff, dst_w, lamb, 0.7, 1.0)
 
-            w = jnp.where(lamb >= 0.5, cutoff, interpolate_w_coord(cutoff, dst_w, 2 * lamb))
+            # interpolate_w_coord(src_w, cutoff, lamb)
             pair_params_excluded_src = jnp.concatenate((dst_qlj, w[:, None]), axis=1)
+            w = interpolate.pad(interpolate_w_coord, src_w, cutoff, lamb, 0.0, 0.3)
 
-            # parameters for pairs that do not interact in the dst state
-            w = jnp.where(lamb <= 0.5, 0, interpolate_w_coord(src_w, cutoff, (lamb - 0.5) * 2))
             pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
 
             # parameters for pairs that interact in both src and dst states

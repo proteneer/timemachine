@@ -754,7 +754,7 @@ class AM1CCCHandler(SerializableMixIn):
 
         """
         # (ytz): leave this comment here, useful for quickly disable AM1 calculations for large mols
-        # return np.zeros(mol.GetNumAtoms())
+        return jnp.zeros(mol.GetNumAtoms(), dtype=np.float64)
         am1_charges = compute_or_load_am1_charges(mol)
         bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
 

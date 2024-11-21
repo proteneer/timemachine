@@ -683,8 +683,47 @@ def _plot_improper_interpolation(xs, systems, filter_fn, axs, row):
     axs[row, 1].set_xlabel("lambda window")
 
 
+def _plot_intramolecular_nonbonded_interpolation(xs, systems, filter_fn, axs, row):
+    nonbonded_ws = []
+    nonbonded_qs = []
+    for sys in systems:
+        nonbonded_idxs = sys.nonbonded.potential.idxs
+        keep_idxs = []
+        for b_idx, idxs in enumerate(nonbonded_idxs):
+            if filter_fn(idxs):
+                keep_idxs.append(b_idx)
+        keep_idxs = np.array(keep_idxs, dtype=np.int32)
+        nonbonded_params = sys.nonbonded.params
+        nonbonded_ws.append(nonbonded_params[keep_idxs, -1])
+        nonbonded_qs.append(nonbonded_params[keep_idxs, 0])
+
+    nonbonded_idxs = nonbonded_idxs[keep_idxs]
+    nonbonded_ws = np.array(nonbonded_ws).T
+    nonbonded_qs = np.array(nonbonded_qs).T
+    num_bonds = nonbonded_ws.shape[0]
+    for b_idx in range(num_bonds):
+        linestyle = "solid"
+        label = None
+        alpha = 0.2
+        axs[row, 0].plot(xs, nonbonded_ws[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+        axs[row, 1].plot(xs, nonbonded_qs[b_idx], linestyle=linestyle, label=label, alpha=alpha)
+        break
+
+    axs[row, 0].set_title("nonbonded ws")
+    axs[row, 1].set_title("nonbonded qs")
+
+    axs[row, 0].set_ylabel("w")
+    axs[row, 1].set_ylabel("q")
+
+    axs[row, 0].set_xlabel("lambda window")
+    axs[row, 1].set_xlabel("lambda window")
+
+    # axs[row, 0].legend()
+    # axs[row, 1].legend()
+
+
 def plot_interpolation_schedule(st, filter_fn, fig_title, n_windows):
-    fig, axs = plt.subplots(5, 2, figsize=(9, 12))
+    fig, axs = plt.subplots(6, 2, figsize=(9, 12))
     # plot the force constant and equilibrium bond lengths along lambda
     lambdas = np.linspace(0, 1.0, n_windows)
     systems = []
@@ -695,6 +734,7 @@ def plot_interpolation_schedule(st, filter_fn, fig_title, n_windows):
     _plot_angle_interpolation(st, lambdas, systems, filter_fn, axs, row=2)
     _plot_proper_interpolation(lambdas, systems, filter_fn, axs, row=3)
     _plot_improper_interpolation(lambdas, systems, filter_fn, axs, row=4)
+    _plot_intramolecular_nonbonded_interpolation(lambdas, systems, filter_fn, axs, row=5)
     fig.suptitle(fig_title, fontsize=12)
     plt.tight_layout()
     # plt.show()
