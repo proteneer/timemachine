@@ -590,9 +590,7 @@ def make_residue_mol(name, atoms, bonds, name_list):
     mw.BeginBatchEdit()
     for i, atom in enumerate(atoms):
         aa = Chem.Atom(atom)
-        aa.SetProp("molAtomMapNumber", str(i))  # f'Z{name_list[i]}Z')
-        aa.SetProp("origAtomName", name_list[i])
-        aa.SetProp("origAtomIdx", str(i))
+        aa.SetProp("molAtomMapNumber", str(i))
         mw.AddAtom(aa)
 
     for src, dst in bonds:
@@ -655,19 +653,19 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 self.initial_charges = nb_params[:, 0]  # already scaled by sqrt(ONE_4PI_EPS0)
         assert self.initial_charges is not None
 
-    def parameterize(self, params):
-        cur_atom = 0
-        final_charges = []
-        all_res_mols_by_name = {}
-        for i in range(len(self.template_for_residue)):
-            # print('-' * 80)
-            tfr = self.template_for_residue[i]
+        # initial_charges is in the topology ordering
+        # so map to the template/omm_res_mol ordering
+        self.topology_idx_to_template_idx = {atm.index: j for atm, j in self.data.atomTemplateIndexes.items()}
+
+        self.all_res_mols_by_name = {}
+        for tfr in self.template_for_residue:
+            if tfr.name in self.all_res_mols_by_name:
+                # already processed this residue
+                continue
+
             symbol_list = [atm.element.symbol for atm in tfr.atoms]
-            n_atoms = len(tfr.atoms)
             name_list = [atm.name for atm in tfr.atoms]
             bond_list = tfr.bonds
-            initial_res_charges = self.initial_charges[cur_atom : cur_atom + n_atoms]
-            # print('initial_res_charges', tfr.name, initial_res_charges)
             omm_res_mol = make_residue_mol(tfr.name + "_omm", symbol_list, bond_list, name_list)
 
             res_name = tfr.name
@@ -679,10 +677,6 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 res_name = res_name[1:]
 
             if res_name not in SMILES_BY_RES_NAME:
-                # print('SKIPPING RESIDUE', tfr.name)
-                final_charges.append(initial_res_charges)
-                cur_atom += n_atoms
-                all_res_mols_by_name[tfr.name + "_omm"] = omm_res_mol
                 continue
 
             proper_res_mol = Chem.AddHs(Chem.MolFromSmiles(SMILES_BY_RES_NAME[res_name]))
@@ -707,8 +701,6 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 mw.CommitBatchEdit()
                 proper_res_mol = mw
 
-            # for i, atom in enumerate(proper_res_mol.GetAtoms()):
-            #     atom.SetProp("molAtomMapNumber", str(i))
             proper_res_mol.SetProp("_Name", tfr.name + "_proper")
 
             query_params = Chem.AdjustQueryParameters.NoAdjustments()
@@ -716,16 +708,9 @@ class EnvironmentBCCHandler(SerializableMixIn):
             query_generic_bonds = Chem.AdjustQueryProperties(omm_res_mol, query_params)
             match = proper_res_mol.GetSubstructMatch(query_generic_bonds)
 
-            # Match maps the rdkit res mol (used for the SMIRKS assignment)
-            # back to the omm_res_mol (used for the charges)
-            # print(tfr.name, match, len(match), omm_res_mol.GetNumAtoms(), proper_res_mol.GetNumAtoms())
-            # raise
-
+            # Match maps the proper res mol (which has the proper bond types and charges)
+            # back to the omm_res_mol (used for the smirks assignment)
             fwd_map = {i: v for i, v in enumerate(match)}  # from proper_res to omm
-
-            # print('fwd_map', fwd_map)
-            # print('rev_map', rev_map)
-
             proper_res_atoms = {i: atom for i, atom in enumerate(proper_res_mol.GetAtoms())}
             proper_res_mol.UpdatePropertyCache()
 
@@ -769,49 +754,8 @@ class EnvironmentBCCHandler(SerializableMixIn):
             proper_res_mol.UpdatePropertyCache()
             omm_res_mol.UpdatePropertyCache()
 
-            # initial_res_charges is in the topology ordering
-            # so map to the template/omm_res_mol ordering
-            topology_idx_to_template_idx = {atm.index: j for atm, j in self.data.atomTemplateIndexes.items()}
-
-            omm_res_mol_charges = {}
-            # print('self.data.atomTemplateIndexes', topology_idx_to_template_idx)
-            for i in range(n_atoms):
-                tmpl_atom_idx = topology_idx_to_template_idx[cur_atom + i]
-                omm_res_mol_charges[tmpl_atom_idx] = initial_res_charges[i]
-
-            # print('omm_res_mol_charges', omm_res_mol_charges, n_atoms)
-            omm_res_mol_charges_ordered = jnp.array([omm_res_mol_charges[i] for i in range(n_atoms)])
-
-            bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(omm_res_mol, self.patterns)
-            deltas = params[type_idxs]
-            tmpl_q_params = apply_bond_charge_corrections(
-                omm_res_mol_charges_ordered,
-                bond_idxs,
-                deltas,
-                runtime_validate=False,  # required for jit
-            )
-
-            # map back from the template ordering to the topology order
-            q_params = {}
-            for i in range(n_atoms):
-                tmpl_atom_idx = topology_idx_to_template_idx[cur_atom + i]
-                q_params[i] = tmpl_q_params[tmpl_atom_idx]
-            q_params_ordered = jnp.array([q_params[i] for i in range(n_atoms)])
-
-            # print('q_params', tfr.name, tmpl_q_params, q_params)
-
-            final_charges.append(q_params_ordered)
-
-            # for i, atom in enumerate(omm_res_mol.GetAtoms()):
-            #     atom.SetProp("molAtomMapNumber", f'{i}:{q_params_ordered[i]:0.2f}')
-
-            # for i, atom in enumerate(omm_res_mol.GetAtoms()):
-            #     atom.SetProp("molAtomMapNumber", f'{name_list[i]}:{initial_res_charges[i]:0.2f}')
-
-            all_res_mols_by_name[tfr.name + "_omm"] = omm_res_mol
-            all_res_mols_by_name[tfr.name + "_proper"] = proper_res_mol
-            # final_charges.append(initial_res_charges)
-            cur_atom += n_atoms
+            self.all_res_mols_by_name[tfr.name] = omm_res_mol
+            # self.all_res_mols_by_name[tfr.name + "_proper"] = proper_res_mol
 
         # all_res_mols = list(all_res_mols_by_name.values())
         # from rdkit.Chem import Draw
@@ -834,6 +778,53 @@ class EnvironmentBCCHandler(SerializableMixIn):
 
         #     drawer.FinishDrawing()
         #     fh.write(drawer.GetDrawingText())
+
+    def parameterize(self, params):
+        cur_atom = 0
+        final_charges = []
+        for tfr in self.template_for_residue:
+            n_atoms = len(tfr.atoms)
+            initial_res_charges = self.initial_charges[cur_atom : cur_atom + n_atoms]
+
+            if tfr.name not in self.all_res_mols_by_name:
+                final_charges.append(initial_res_charges)
+                cur_atom += n_atoms
+                continue
+
+            # extract the charges in the order of the template residue
+            omm_res_mol = self.all_res_mols_by_name[tfr.name]
+            omm_res_mol_charges = {}
+            for i in range(n_atoms):
+                tmpl_atom_idx = self.topology_idx_to_template_idx[cur_atom + i]
+                omm_res_mol_charges[tmpl_atom_idx] = initial_res_charges[i]
+            omm_res_mol_charges_ordered = jnp.array([omm_res_mol_charges[i] for i in range(n_atoms)])
+
+            # compute smirks on the template residue
+            bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(omm_res_mol, self.patterns)
+            deltas = params[type_idxs]
+            tmpl_q_params = apply_bond_charge_corrections(
+                omm_res_mol_charges_ordered,
+                bond_idxs,
+                deltas,
+                runtime_validate=False,  # required for jit
+            )
+
+            # map back from the template ordering to the topology order
+            q_params = {}
+            for i in range(n_atoms):
+                tmpl_atom_idx = self.topology_idx_to_template_idx[cur_atom + i]
+                q_params[i] = tmpl_q_params[tmpl_atom_idx]
+            q_params_ordered = jnp.array([q_params[i] for i in range(n_atoms)])
+            final_charges.append(q_params_ordered)
+
+            # for i, atom in enumerate(omm_res_mol.GetAtoms()):
+            #     atom.SetProp("molAtomMapNumber", f'{i}:{q_params_ordered[i]:0.2f}')
+
+            # for i, atom in enumerate(omm_res_mol.GetAtoms()):
+            #     atom.SetProp("molAtomMapNumber", f'{name_list[i]}:{initial_res_charges[i]:0.2f}')
+
+            # final_charges.append(initial_res_charges)
+            cur_atom += n_atoms
 
         return jnp.concatenate(final_charges, axis=0)
 
