@@ -1,4 +1,5 @@
 import warnings
+from collections import defaultdict
 from enum import IntEnum
 from functools import partial
 from typing import Any, Callable, Collection, Dict, FrozenSet, List, Optional, Sequence, Tuple
@@ -16,7 +17,7 @@ from timemachine.constants import (
     DEFAULT_CHIRAL_BOND_RESTRAINT_K,
     NBParamIdx,
 )
-from timemachine.fe import interpolate, model_utils, topology, utils
+from timemachine.fe import chiral_utils, interpolate, model_utils, topology, utils
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import (
     MultipleAnchorWarning,
@@ -760,9 +761,17 @@ def make_find_chirally_valid_dummy_groups(
     bond_graph_a = convert_to_nx(mol_a)
     bond_graph_b = convert_to_nx(mol_b)
 
+    ff = Forcefield.load_from_file("placeholder_ff.py")
+
+    check_chiral_validity = make_check_chiral_validity(mol_a, mol_b, ff)
+
     def find_chirally_valid_dummy_groups(core):
         def is_chirally_valid(dummy_groups_ab, dummy_groups_ba):
-            return True
+            try:
+                check_chiral_validity(core, dummy_groups_ab, dummy_groups_ba)
+                return True
+            except ChiralConversionError:
+                return False
 
         with warnings.catch_warnings():
             # Suppress warnings from end-state setup during the search; these are only relevant for the selected candidate,
@@ -1184,6 +1193,36 @@ def assert_torsions_defined_over_non_linear_angles(vacuum_system):
                 )
 
 
+def get_neighbors(bond_idxs: Collection[Tuple[int, int]]) -> Dict[int, List[int]]:
+    neighbors = defaultdict(list)
+    for i, j in bond_idxs:
+        neighbors[i].append(j)
+        neighbors[j].append(i)
+    return neighbors
+
+
+def check_chiral_validity_src_dst(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs):
+    """Raise error unless, for every chiral center, at least 1 chiral volume is defined in both end-states."""
+    neighbors = get_neighbors(src_bond_idxs)
+    for c in src_chiral_centers_in_mol_c:
+        nbs = neighbors[c]
+        if len(nbs) == 4:
+            i, j, k, l = nbs
+            # (ytz): the ordering of i,j,k,l is random if we're reading directly from the mol graph,
+            # which can be inconsistent with the ordering used in the chiral volume definition.
+            nb_subsets = [(i, j, k), (i, j, l), (i, k, l), (j, k, l)]  # 4-choose-3 subsets
+            flags = [dst_chiral_restr_idx_set.defines((c, ii, jj, kk)) for (ii, jj, kk) in nb_subsets]
+
+            if sum(flags) == 0:
+                raise ChiralConversionError(f"len(nbs) == 4 {c, i, j, k, l}")
+
+        if len(nbs) == 3:
+            i, j, k = nbs
+            flag_0 = dst_chiral_restr_idx_set.defines((c, i, j, k))
+            if not flag_0:
+                raise ChiralConversionError(f"len(nbs) == 3 {c, i, j, k}")
+
+
 def assert_chiral_consistency(src_chiral_idxs: NDArray, dst_chiral_idxs: NDArray):
     """
     Assert that the chiral volumes are not inverting in src and dst.
@@ -1194,6 +1233,71 @@ def assert_chiral_consistency(src_chiral_idxs: NDArray, dst_chiral_idxs: NDArray
     # ensure that we don't have any chiral inversions between src and dst end states
     assert len(src_chiral_restr_idx_set.allowed_set.intersection(dst_chiral_restr_idx_set.disallowed_set)) == 0
     assert len(dst_chiral_restr_idx_set.allowed_set.intersection(src_chiral_restr_idx_set.disallowed_set)) == 0
+
+
+def check_chiral_validity_impl(
+    atom_map: AtomMapMixin,
+    src_chiral_restr_idx_set: ChiralRestrIdxSet,
+    dst_chiral_restr_idx_set: ChiralRestrIdxSet,
+    src_bond_idxs: NDArray,
+    dst_bond_idxs: NDArray,
+):
+    """Assert that we can directly turn on the chiral volumes (after bonds) without staggering angles."""
+
+    chiral_centers_in_mol_a = chiral_utils.find_chiral_atoms(atom_map.mol_a)
+    chiral_centers_in_mol_b = chiral_utils.find_chiral_atoms(atom_map.mol_b)
+
+    src_chiral_centers_in_mol_c = [atom_map.a_to_c[x] for x in chiral_centers_in_mol_a]
+    dst_chiral_centers_in_mol_c = [atom_map.b_to_c[x] for x in chiral_centers_in_mol_b]
+
+    check_chiral_validity_src_dst(src_chiral_centers_in_mol_c, dst_chiral_restr_idx_set, src_bond_idxs)
+    check_chiral_validity_src_dst(dst_chiral_centers_in_mol_c, src_chiral_restr_idx_set, dst_bond_idxs)
+
+
+def make_check_chiral_validity(
+    mol_a: Chem.Mol, mol_b: Chem.Mol, forcefield: Forcefield
+) -> Callable[[NDArray, Dict[int, FrozenSet[int]], Dict[int, FrozenSet[int]]], None]:
+    setup_end_state_harmonic_bond_and_chiral_potentials_ab = make_setup_end_state_harmonic_bond_and_chiral_potentials(
+        mol_a, mol_b, forcefield, verify=False
+    )
+    setup_end_state_harmonic_bond_and_chiral_potentials_ba = make_setup_end_state_harmonic_bond_and_chiral_potentials(
+        mol_b, mol_a, forcefield, verify=False
+    )
+
+    def check_chiral_validity(
+        core: NDArray,
+        dummy_groups_ab: Dict[int, FrozenSet[int]],
+        dummy_groups_ba: Dict[int, FrozenSet[int]],
+    ):
+        """Verify that a core and dummy groups would allow for valid chiral endstates.
+
+        Refer to `check_chiral_validity` for definition of validity.
+
+        Raises
+        ------
+            ChiralConversionError
+                If chiral end states are incompatible for the given core and forcefield.
+        """
+        atom_map = AtomMapMixin(mol_a, mol_b, core)
+        bond_pot_src, chiral_atom_pot_src, _ = setup_end_state_harmonic_bond_and_chiral_potentials_ab(
+            core, atom_map.a_to_c, atom_map.b_to_c, dummy_groups_ab
+        )
+        bond_pot_dst, chiral_atom_pot_dst, _ = setup_end_state_harmonic_bond_and_chiral_potentials_ba(
+            core[:, ::-1], atom_map.b_to_c, atom_map.a_to_c, dummy_groups_ba
+        )
+
+        src_chiral_restr_idx_set = ChiralRestrIdxSet(chiral_atom_pot_src.potential.idxs)
+        dst_chiral_restr_idx_set = ChiralRestrIdxSet(chiral_atom_pot_dst.potential.idxs)
+
+        check_chiral_validity_impl(
+            atom_map,
+            src_chiral_restr_idx_set,
+            dst_chiral_restr_idx_set,
+            bond_pot_src.potential.idxs,
+            bond_pot_dst.potential.idxs,
+        )
+
+    return check_chiral_validity
 
 
 class SingleTopology(AtomMapMixin):
@@ -1231,8 +1335,13 @@ class SingleTopology(AtomMapMixin):
         find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
         dummy_groups = find_chirally_valid_dummy_groups(core)
         if dummy_groups is None:
-            raise DummyGroupAssignmentError("Unable to find chirally-valid dummy group assignment")
-        dummy_groups_ab, dummy_groups_ba = dummy_groups
+            warnings.warn("Could not find a chirally valid dummy group assignment.")
+            bond_graph_a = convert_to_nx(mol_a)
+            bond_graph_b = convert_to_nx(mol_b)
+            dummy_groups_ab = list(generate_dummy_group_assignments(bond_graph_b, core[:, 1]))[0]
+            dummy_groups_ba = list(generate_dummy_group_assignments(bond_graph_a, core[:, 0]))[0]
+        else:
+            dummy_groups_ab, dummy_groups_ba = dummy_groups
 
         self.dummy_groups_ab = dummy_groups_ab
         self.dummy_groups_ba = dummy_groups_ba
