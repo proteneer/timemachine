@@ -1244,7 +1244,7 @@ def test_environment_bcc_full_protein(protein_path):
     for i, q in enumerate(init_q_params):
         sym_charge_idxs[(q, atom_idx_to_res_name[i])].append(i)
 
-    for group in sym_charge_idxs.values():
+    for k, group in sym_charge_idxs.items():
         first = group[0]
         for other in group[1:]:
             np.testing.assert_almost_equal(final_q_params[other], final_q_params[first])
