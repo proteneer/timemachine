@@ -759,37 +759,32 @@ class EnvironmentBCCHandler(SerializableMixIn):
             self.all_res_mols_by_name[tfr.name] = omm_res_mol
             # self.all_res_mols_by_name[tfr.name + "_proper"] = proper_res_mol
 
-        # all_res_mols = list(all_res_mols_by_name.values())
-        # from rdkit.Chem import Draw
-        # from rdkit.Chem.Draw import rdMolDraw2D
-        # with open(f"all_res_mols.svg", "w") as fh:
-        #     n_res = len(all_res_mols)
-        #     n_mols_per_row = 4
-        #     drawer = rdMolDraw2D.MolDraw2DSVG(200 * n_mols_per_row, 180 * ((n_res // n_mols_per_row)+1), 200, 180)
-        #     # drawer.drawOptions().useBWAtomPalette()
-        #     # drawer.drawOptions().baseFontSize = 0.025
-        #     dopts = drawer.drawOptions()
-        #     dopts.baseFontSize = 0.025
-        #     dopts.minFontSize = 3
-        #     dopts.maxFontSize = 40
-
-        #     drawer.DrawMolecules(
-        #         all_res_mols,
-        #         legends=[x.GetProp("_Name") for x in all_res_mols],
-        #     )
-
-        #     drawer.FinishDrawing()
-        #     fh.write(drawer.GetDrawingText())
-
     def parameterize(self, params):
         cur_atom = 0
         final_charges = []
+
+        def map_to_topology_order(template_charges, cur_atom, n_atoms):
+            # map back from the template ordering to the topology order
+            q_params = {}
+            for i in range(n_atoms):
+                tmpl_atom_idx = self.topology_idx_to_template_idx[cur_atom + i]
+                q_params[i] = template_charges[tmpl_atom_idx]
+            return jnp.array([q_params[i] for i in range(n_atoms)])
+
+        template_cached_charges = {}
         for tfr in self.template_for_residue:
             n_atoms = len(tfr.atoms)
             initial_res_charges = self.initial_charges[cur_atom : cur_atom + n_atoms]
 
             if tfr.name not in self.all_res_mols_by_name:
                 final_charges.append(initial_res_charges)
+                cur_atom += n_atoms
+                continue
+
+            # only compute the charges once per residue type
+            if tfr.name in template_cached_charges:
+                tmpl_q_params = template_cached_charges[tfr.name]
+                final_charges.append(map_to_topology_order(tmpl_q_params, cur_atom, n_atoms))
                 cur_atom += n_atoms
                 continue
 
@@ -810,13 +805,8 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 deltas,
                 runtime_validate=False,  # required for jit
             )
-
-            # map back from the template ordering to the topology order
-            q_params = {}
-            for i in range(n_atoms):
-                tmpl_atom_idx = self.topology_idx_to_template_idx[cur_atom + i]
-                q_params[i] = tmpl_q_params[tmpl_atom_idx]
-            q_params_ordered = jnp.array([q_params[i] for i in range(n_atoms)])
+            template_cached_charges[tfr.name] = tmpl_q_params
+            q_params_ordered = map_to_topology_order(tmpl_q_params, cur_atom, n_atoms)
             final_charges.append(q_params_ordered)
 
             # for i, atom in enumerate(omm_res_mol.GetAtoms()):
@@ -828,6 +818,25 @@ class EnvironmentBCCHandler(SerializableMixIn):
             # final_charges.append(initial_res_charges)
             cur_atom += n_atoms
 
+        # all_res_mols = list(self.all_res_mols_by_name.values())
+        # from rdkit.Chem import Draw
+        # from rdkit.Chem.Draw import rdMolDraw2D
+        # with open(f"all_res_mols.svg", "w") as fh:
+        #     n_res = len(all_res_mols)
+        #     n_mols_per_row = 4
+        #     drawer = rdMolDraw2D.MolDraw2DSVG(200 * n_mols_per_row, 180 * ((n_res // n_mols_per_row)+1), 200, 180)
+        #     dopts = drawer.drawOptions()
+        #     dopts.baseFontSize = 0.025
+        #     dopts.minFontSize = 3
+        #     dopts.maxFontSize = 40
+
+        #     drawer.DrawMolecules(
+        #         all_res_mols,
+        #         legends=[x.GetProp("_Name") for x in all_res_mols],
+        #     )
+
+        #     drawer.FinishDrawing()
+        #     fh.write(drawer.GetDrawingText())
         return jnp.concatenate(final_charges, axis=0)
 
 
