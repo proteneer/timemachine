@@ -14,7 +14,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, VelocityVerl
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.minimizer import check_force_norm, replace_conformer_with_minimized
-from timemachine.potentials import HarmonicBond, SummedPotential
+from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
 from timemachine.potentials.potential import get_potential_by_type
 from timemachine.testsystems.ligands import get_biphenyl
 
@@ -959,8 +959,8 @@ def test_context_invalid_boxes_without_nonbonded_potentials():
 
     bps = []
     for p, pot in zip(sys_params, unbound_potentials):
-        # Skip the nonbonded all pairs, which is a SummedPotential, will result in no check
-        if isinstance(pot, SummedPotential):
+        # Skip the nonbonded all pairs, will result in no check
+        if isinstance(pot, (Nonbonded, NonbondedInteractionGroup)):
             continue
         bound_impl = pot.bind(p).to_gpu(np.float32).bound_impl
         bps.append(bound_impl)

@@ -428,7 +428,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
     def prepare_host_edge(
         self, ff: Forcefield, host_config: HostConfig, lamb: float
-    ) -> tuple[list[Potential], list, NDArray]:
+    ) -> tuple[tuple[Potential, ...], tuple, NDArray]:
         """
         Prepares the host-guest system
 
@@ -468,10 +468,10 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             else:
                 final_params.append(params)
                 final_potentials.append(pot)
-        combined_masses = self._combine(ligand_masses, host_masses)
-        return final_potentials, final_params, combined_masses
+        combined_masses = self._combine(ligand_masses, np.array(host_masses))
+        return tuple(final_potentials), tuple(final_params), combined_masses
 
-    def prepare_vacuum_edge(self, ff: Forcefield):
+    def prepare_vacuum_edge(self, ff: Forcefield) -> tuple[tuple[Potential, ...], tuple, NDArray]:
         """
         Prepares the vacuum system
 
@@ -491,7 +491,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top, 0.0)
         return final_potentials, final_params, ligand_masses
 
-    def prepare_combined_coords(self, host_coords=None):
+    def prepare_combined_coords(self, host_coords: Optional[NDArray] = None) -> NDArray:
         """
         Returns the combined coordinates.
 
@@ -508,7 +508,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         ligand_coords = get_romol_conf(self.mol)
         return self._combine(ligand_coords, host_coords)
 
-    def _combine(self, ligand_values, host_values=None):
+    def _combine(self, ligand_values: NDArray, host_values: Optional[NDArray] = None) -> NDArray:
         """
         Combine the values along the 0th axis.
         The host values will be first, if given.
