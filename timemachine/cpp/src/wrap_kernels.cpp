@@ -804,8 +804,8 @@ void declare_potential(py::module &m) {
                     // Remove the first dimension of the parameters shape to be consistent in ordering of return values
                     pshape.erase(pshape.begin());
                     // Append the new dimensions for the du_dps
-                    unsigned long int shape[] = {coord_batches, param_batches};
-                    pshape.insert(pshape.begin(), shape, shape + 2);
+                    std::vector<unsigned long int> shape({coord_batches, param_batches});
+                    pshape.insert(pshape.begin(), shape.begin(), shape.end());
 
                     py::array_t<double, py::array::c_style> py_du_dp(pshape);
                     for (unsigned int i = 0; i < total_executions; i++) {
