@@ -40,6 +40,7 @@ from timemachine.potentials import (
     HarmonicBond,
     Nonbonded,
     NonbondedInteractionGroup,
+    Potential,
     SummedPotential,
     make_summed_potential,
 )
@@ -425,7 +426,9 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.top = top
 
-    def prepare_host_edge(self, ff: Forcefield, host_config: HostConfig, lamb: float):
+    def prepare_host_edge(
+        self, ff: Forcefield, host_config: HostConfig, lamb: float
+    ) -> tuple[list[Potential], list, NDArray]:
         """
         Prepares the host-guest system
 
@@ -452,7 +455,19 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
         hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms, ff, host_config.omm_topology)
 
-        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
+        final_params = []
+        final_potentials = []
+        combined_params, combined_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
+        for params, pot in zip(combined_params, combined_potentials):
+            # Unpack the summed potential to be consistent with SingleTopology
+            # TBD: Deboggle and unify the topology classes
+            if isinstance(pot, SummedPotential):
+                for partial_params, sub_pot in zip(pot.params_init, pot.potentials):
+                    final_params.append(partial_params)
+                    final_potentials.append(sub_pot)
+            else:
+                final_params.append(params)
+                final_potentials.append(pot)
         combined_masses = self._combine(ligand_masses, host_masses)
         return final_potentials, final_params, combined_masses
 
