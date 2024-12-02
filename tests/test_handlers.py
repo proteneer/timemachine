@@ -1157,14 +1157,14 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries):
     raw_charges = np.array(pbcc.parameterize(np.zeros_like(params)))
     bcc_charges = np.array(pbcc.parameterize(params))
 
-    # atoms = []
-    # bonds = []
+    atoms = []
+    bonds = []
 
-    # for atom in topology.atoms():
-    #     atoms.append(atom.element.symbol)
+    for atom in topology.atoms():
+        atoms.append(atom.element.symbol)
 
-    # for src_atom, dst_atom in topology.bonds():
-    #     bonds.append((src_atom.index, dst_atom.index))
+    for src_atom, dst_atom in topology.bonds():
+        bonds.append((src_atom.index, dst_atom.index))
 
     # mol = make_residue_mol(atoms, bonds)
     # from rdkit.Chem import Draw
