@@ -11,8 +11,9 @@ from timemachine import constants
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
-from timemachine.ff.handlers.utils import canonicalize_bond
+from timemachine.ff.handlers.utils import canonicalize_bond, make_residue_mol, make_residue_mol_from_template
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
+from timemachine.ff.handlers.utils import update_mol_topology
 from timemachine.graph_utils import convert_to_nx
 
 AM1_CHARGE_CACHE = "AM1Cache"
@@ -217,41 +218,22 @@ def generate_nonbonded_idxs(mol, smirks):
     return param_idxs
 
 
-def compute_or_load_am1bcc_charges(mol):
-    """Unless already cached in mol's "AM1BCCELF10_CHARGE_CACHE" property, use OpenEye to compute AM1ELF10 partial charges."""
-
-    # check for cache
-    if not mol.HasProp(AM1BCCELF10_CHARGE_CACHE):
-        # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
-        # to be an issue that the atom ordering modifies the return values as well. A follow up
-        # with OpenEye is in order
-        # https://github.com/openforcefield/openff-toolkit/issues/983
-        am1_charges = list(oe_assign_charges(mol, AM1BCCELF10))
-
-        mol.SetProp(AM1BCCELF10_CHARGE_CACHE, base64.b64encode(pickle.dumps(am1_charges)))
-
-    else:
-        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(AM1BCCELF10_CHARGE_CACHE)))
-        assert len(am1_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
-
-    return np.array(am1_charges)
-
-
-def compute_or_load_am1_charges(mol):
+def compute_or_load_am1_charges(mol, mode=AM1ELF10):
     """Unless already cached in mol's "AM1ELF10_CHARGE_CACHE" property, use OpenEye to compute AM1ELF10 partial charges."""
 
     # check for cache
-    if not mol.HasProp(AM1ELF10_CHARGE_CACHE):
+    cache_prop_name = AM1ELF10_CHARGE_CACHE if mode == AM1ELF10 else AM1BCCELF10_CHARGE_CACHE
+    if not mol.HasProp(cache_prop_name):
         # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
         # to be an issue that the atom ordering modifies the return values as well. A follow up
         # with OpenEye is in order
         # https://github.com/openforcefield/openff-toolkit/issues/983
-        am1_charges = list(oe_assign_charges(mol, AM1ELF10))
+        am1_charges = list(oe_assign_charges(mol, mode))
 
-        mol.SetProp(AM1ELF10_CHARGE_CACHE, base64.b64encode(pickle.dumps(am1_charges)))
+        mol.SetProp(cache_prop_name, base64.b64encode(pickle.dumps(am1_charges)))
 
     else:
-        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(AM1ELF10_CHARGE_CACHE)))
+        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_prop_name)))
         assert len(am1_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
 
     return np.array(am1_charges)
@@ -551,61 +533,6 @@ class AM1BCCSolventHandler(AM1BCCHandler):
     pass
 
 
-SMILES_BY_RES_NAME = {
-    "ACE": "CC=O",
-    "NME": "CN",
-    # 'ARG': 'N[C@@H](CCCNC(N)=[NH2+])C(O)=O',
-    # to preserve symmetry use symmetric resonance structure
-    "ARG": "N[C@@H](CCC[NH+]=C(N)N)C(O)=O",
-    "HID": "C1=C(NC=N1)C[C@@H](C(=O)O)N",
-    "HIE": "N[C@@H](CC1=CNC=N1)C(O)=O",
-    "HIP": "N[C@@H](CC1=CNC=[NH+]1)C(O)=O",
-    "LYS": "N[C@@H](CCCC[NH3+])C(O)=O",
-    "ASP": "N[C@@H](CC([O-])=O)C(O)=O",
-    "ASH": "N[C@@H](CC(O)=O)C(O)=O",
-    "GLU": "N[C@@H](CCC([O-])=O)C(O)=O",
-    "GLH": "N[C@@H](CCC(O)=O)C(O)=O",
-    "SER": "C([C@@H](C(=O)O)N)O",
-    "THR": "C[C@H]([C@@H](C(=O)O)N)O",
-    "ASN": "C([C@@H](C(=O)O)N)C(=O)N",
-    "GLN": "C(CC(=O)N)[C@@H](C(=O)O)N",
-    "CYS": "C([C@@H](C(=O)O)N)S",
-    "CYM": "N[C@@H](C[S-])C(O)=O",
-    "GLY": "C(C(=O)O)N",
-    "PRO": "C1C[C@H](NC1)C(=O)O",
-    "ALA": "O=C(O)C(N)C",
-    "VAL": "CC(C)[C@@H](C(=O)O)N",
-    "ILE": "CC[C@H](C)[C@@H](C(=O)O)N",
-    "LEU": "CC(C)C[C@@H](C(=O)O)N",
-    "MET": "CSCC[C@@H](C(=O)O)N",
-    "PHE": "C1=CC=C(C=C1)C[C@@H](C(=O)O)N",
-    "TYR": "C1=CC(=CC=C1C[C@@H](C(=O)O)N)O",
-    "TRP": "C1=CC=C2C(=C1)C(=CN2)C[C@@H](C(=O)O)N",
-}
-
-
-def make_residue_mol(name, atoms, bonds, name_list):
-    # Generate an rdkit molecule given a list of atoms and a list of bonds
-    mw = Chem.RWMol()
-    mw.BeginBatchEdit()
-    for i, atom in enumerate(atoms):
-        aa = Chem.Atom(atom)
-        aa.SetProp("molAtomMapNumber", str(i))
-        mw.AddAtom(aa)
-
-    for src, dst in bonds:
-        bond_tuple = name_list[src], name_list[dst]
-        if bond_tuple in [("C", "O"), ("O", "C")]:
-            mw.AddBond(src, dst, Chem.BondType.DOUBLE)
-        else:
-            mw.AddBond(src, dst, Chem.BondType.SINGLE)
-    mw.CommitBatchEdit()
-    mw = Chem.RemoveHs(mw, implicitOnly=True, sanitize=False)
-
-    mw.SetProp("_Name", name)
-    return mw
-
-
 class EnvironmentBCCHandler(SerializableMixIn):
     """
     Applies BCCs to residues in a protein. Needs a concrete openmm topology to use.
@@ -666,125 +593,47 @@ class EnvironmentBCCHandler(SerializableMixIn):
             symbol_list = [atm.element.symbol for atm in tfr.atoms]
             name_list = [atm.name for atm in tfr.atoms]
             bond_list = tfr.bonds
-            omm_res_mol = make_residue_mol(tfr.name + "_omm", symbol_list, bond_list, name_list)
+            omm_res_mol = make_residue_mol(tfr.name, symbol_list, bond_list, name_list)
 
-            res_name = tfr.name
-            is_nh3_capped = False
-            if len(res_name) == 4 and res_name[0] == "C":
-                res_name = res_name[1:]
-            if len(res_name) == 4 and res_name[0] == "N":
-                is_nh3_capped = True
-                res_name = res_name[1:]
-
-            if res_name not in SMILES_BY_RES_NAME:
+            proper_res_mol = make_residue_mol_from_template(tfr.name)
+            if proper_res_mol is None:
+                # i.e. skip water/ions
                 continue
 
-            proper_res_mol = Chem.AddHs(Chem.MolFromSmiles(SMILES_BY_RES_NAME[res_name]))
-            if is_nh3_capped:
-                mw = Chem.RWMol(proper_res_mol)
-                mw.BeginBatchEdit()
-                # Need to adjust charge of the N to +1
-                query_mol = Chem.MolFromSmiles("NCC(O)=O")
-                query_params = Chem.AdjustQueryParameters.NoAdjustments()
-                query_params.makeBondsGeneric = True
-                query_mol = Chem.AdjustQueryProperties(query_mol, query_params)
-                matches = proper_res_mol.GetSubstructMatches(query_mol)
-                # print(matches)
-                for i, atom in enumerate(mw.GetAtoms()):
-                    if i not in matches[0]:
-                        continue
-                    if atom.GetSymbol() == "N":
-                        atom.SetFormalCharge(+1)
-                        atm_h = mw.AddAtom(Chem.Atom("H"))
-                        mw.AddBond(atm_h, atom.GetIdx())
-                        break
-                mw.CommitBatchEdit()
-                proper_res_mol = mw
-
-            proper_res_mol.SetProp("_Name", tfr.name + "_proper")
-
-            query_params = Chem.AdjustQueryParameters.NoAdjustments()
-            query_params.makeBondsGeneric = True
-            query_generic_bonds = Chem.AdjustQueryProperties(omm_res_mol, query_params)
-            match = proper_res_mol.GetSubstructMatch(query_generic_bonds)
-
-            # Match maps the proper res mol (which has the proper bond types and charges)
-            # back to the omm_res_mol (used for the smirks assignment)
-            fwd_map = {i: v for i, v in enumerate(match)}  # from proper_res to omm
-            proper_res_atoms = {i: atom for i, atom in enumerate(proper_res_mol.GetAtoms())}
-            proper_res_mol.UpdatePropertyCache()
-
-            for atom in omm_res_mol.GetAtoms():
-                proper_res_idx = fwd_map[atom.GetIdx()]
-                proper_res_atom = proper_res_atoms[proper_res_idx]
-
-                # TODO CLEANUP
-                if proper_res_atom.GetFormalCharge() != 0 or name_list[atom.GetIdx()] == "OXT":
-                    new_charge = proper_res_atom.GetFormalCharge()
-                    if (
-                        name_list[atom.GetIdx()] == "OXT"
-                    ):  # For capped residues, need to get the charge right for symmtery
-                        new_charge = -1
-                    atom.SetFormalCharge(new_charge)
-
-            proper_bonds = {}
-            for bond in proper_res_mol.GetBonds():
-                src_idx = bond.GetBeginAtomIdx()
-                dst_idx = bond.GetEndAtomIdx()
-                proper_bonds[(src_idx, dst_idx)] = bond
-                proper_bonds[(dst_idx, src_idx)] = bond
-            # print('proper_bonds', proper_bonds)
-
-            omm_res_mol.UpdatePropertyCache()
-            for bond in omm_res_mol.GetBonds():
-                src_idx = bond.GetBeginAtomIdx()
-                dst_idx = bond.GetEndAtomIdx()
-
-                bond_tuple = name_list[src_idx], name_list[dst_idx]
-                # may not be matched and already handled in make_residue_mol
-                if bond_tuple in [("C", "O"), ("O", "C"), ("C", "OXT"), ("OXT", "C")]:
-                    continue
-
-                proper_src_idx = fwd_map[src_idx]
-                proper_dst_idx = fwd_map[dst_idx]
-                k = (proper_src_idx, proper_dst_idx)
-                bond.SetBondType(proper_bonds[k].GetBondType())
-                bond.SetIsAromatic(proper_bonds[k].GetIsAromatic())
-
-            proper_res_mol.UpdatePropertyCache()
-            omm_res_mol.UpdatePropertyCache()
+            # copy the charges and bond types from proper_res to omm_res
+            update_mol_topology(omm_res_mol, proper_res_mol, name_list)
 
             # cache smirks patterns to speed up parameterize
             compute_or_load_bond_smirks_matches(omm_res_mol, self.patterns)
             self.all_res_mols_by_name[tfr.name] = omm_res_mol
-            # self.all_res_mols_by_name[tfr.name + "_proper"] = proper_res_mol
+
+    def _map_to_topology_order(self, template_charges, cur_atom, n_atoms):
+        # map back from the template ordering to the topology order
+        q_params = {}
+        for i in range(n_atoms):
+            tmpl_atom_idx = self.topology_idx_to_template_idx[cur_atom + i]
+            q_params[i] = template_charges[tmpl_atom_idx]
+        return jnp.array([q_params[i] for i in range(n_atoms)])
 
     def parameterize(self, params):
         cur_atom = 0
         final_charges = []
-
-        def map_to_topology_order(template_charges, cur_atom, n_atoms):
-            # map back from the template ordering to the topology order
-            q_params = {}
-            for i in range(n_atoms):
-                tmpl_atom_idx = self.topology_idx_to_template_idx[cur_atom + i]
-                q_params[i] = template_charges[tmpl_atom_idx]
-            return jnp.array([q_params[i] for i in range(n_atoms)])
-
         template_cached_charges = {}
         for tfr in self.template_for_residue:
             n_atoms = len(tfr.atoms)
             initial_res_charges = self.initial_charges[cur_atom : cur_atom + n_atoms]
 
+            # not a template residue, so skip
             if tfr.name not in self.all_res_mols_by_name:
                 final_charges.append(initial_res_charges)
                 cur_atom += n_atoms
                 continue
 
             # only compute the charges once per residue type
+            # and reuse from cache if possible
             if tfr.name in template_cached_charges:
                 tmpl_q_params = template_cached_charges[tfr.name]
-                final_charges.append(map_to_topology_order(tmpl_q_params, cur_atom, n_atoms))
+                final_charges.append(self._map_to_topology_order(tmpl_q_params, cur_atom, n_atoms))
                 cur_atom += n_atoms
                 continue
 
@@ -805,38 +654,13 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 deltas,
                 runtime_validate=False,  # required for jit
             )
+
+            # map the template charges back to topology order
             template_cached_charges[tfr.name] = tmpl_q_params
-            q_params_ordered = map_to_topology_order(tmpl_q_params, cur_atom, n_atoms)
+            q_params_ordered = self._map_to_topology_order(tmpl_q_params, cur_atom, n_atoms)
             final_charges.append(q_params_ordered)
-
-            # for i, atom in enumerate(omm_res_mol.GetAtoms()):
-            #     atom.SetProp("molAtomMapNumber", f'{i}:{q_params_ordered[i]:0.2f}')
-
-            # for i, atom in enumerate(omm_res_mol.GetAtoms()):
-            #     atom.SetProp("molAtomMapNumber", f'{name_list[i]}:{initial_res_charges[i]:0.2f}')
-
-            # final_charges.append(initial_res_charges)
             cur_atom += n_atoms
 
-        # all_res_mols = list(self.all_res_mols_by_name.values())
-        # from rdkit.Chem import Draw
-        # from rdkit.Chem.Draw import rdMolDraw2D
-        # with open(f"all_res_mols.svg", "w") as fh:
-        #     n_res = len(all_res_mols)
-        #     n_mols_per_row = 4
-        #     drawer = rdMolDraw2D.MolDraw2DSVG(200 * n_mols_per_row, 180 * ((n_res // n_mols_per_row)+1), 200, 180)
-        #     dopts = drawer.drawOptions()
-        #     dopts.baseFontSize = 0.025
-        #     dopts.minFontSize = 3
-        #     dopts.maxFontSize = 40
-
-        #     drawer.DrawMolecules(
-        #         all_res_mols,
-        #         legends=[x.GetProp("_Name") for x in all_res_mols],
-        #     )
-
-        #     drawer.FinishDrawing()
-        #     fh.write(drawer.GetDrawingText())
         return jnp.concatenate(final_charges, axis=0)
 
 
@@ -940,9 +764,24 @@ class AM1CCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
+        return AM1CCCHandler._static_parameterize(params, smirks, mol)
+
+    @staticmethod
+    def _static_parameterize(params, smirks, mol, mode=AM1ELF10):
+        """
+        Parameters
+        ----------
+        params: np.array, (P,)
+            normalized charge increment for each matched bond
+        smirks: list of str (P,)
+            SMIRKS patterns matching bonds, to be parsed using OpenEye Toolkits
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        """
         # (ytz): leave this comment here, useful for quickly disable AM1 calculations for large mols
         # return np.zeros(mol.GetNumAtoms())
-        am1_charges = compute_or_load_am1_charges(mol)
+        am1_charges = compute_or_load_am1_charges(mol, mode=mode)
         bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
 
         deltas = params[type_idxs]
@@ -980,24 +819,7 @@ class AM1BCCCCCHandler(AM1CCCHandler):
             molecule to be parameterized.
 
         """
-        # (ytz): leave this comment here, useful for quickly disable AM1 calculations for large mols
-        # return np.zeros(mol.GetNumAtoms())
-
-        # TODO: Merge duplicate code w/AM1CCCHandler, only difference is line below
-        am1_charges = compute_or_load_am1bcc_charges(mol)
-        bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
-
-        deltas = params[type_idxs]
-        q_params = apply_bond_charge_corrections(
-            am1_charges,
-            bond_idxs,
-            deltas,
-            runtime_validate=False,  # required for jit
-        )
-
-        assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
-
-        return q_params
+        return AM1CCCHandler._static_parameterize(params, smirks, mol, mode=AM1BCCELF10)
 
 
 class AM1BCCCCCIntraHandler(AM1BCCCCCHandler):
