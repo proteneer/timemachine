@@ -459,7 +459,8 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         final_potentials = []
         combined_params, combined_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
         for params, pot in zip(combined_params, combined_potentials):
-            # Unpack the summed potential to be consistent with SingleTopology
+            # Unpack the summed potential to be consistent with SingleTopology and so
+            # that downstream code which relies on the potential types works properly
             # TBD: Deboggle and unify the topology classes
             if isinstance(pot, SummedPotential):
                 for partial_params, sub_pot in zip(pot.params_init, pot.potentials):
