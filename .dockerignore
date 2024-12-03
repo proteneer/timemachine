@@ -16,6 +16,7 @@
 **/.hypothesis/
 Dockerfile
 .dockerignore
+.gitlab-ci.yml
 
 # Git Files
 **/.git*
