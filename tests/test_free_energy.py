@@ -22,10 +22,12 @@ from timemachine.fe.free_energy import (
     HostConfig,
     HREXSimulationResult,
     IndeterminateEnergyWarning,
+    InitialState,
     MDParams,
     MinOverlapWarning,
     PairBarResult,
     Trajectory,
+    WaterSamplingParams,
     assert_potentials_compatible,
     batches,
     compute_potential_matrix,
@@ -41,6 +43,7 @@ from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
+from timemachine.lib import LangevinIntegrator
 from timemachine.md import builders
 from timemachine.md.hrex import HREX, HREXDiagnostics
 from timemachine.md.states import CoordsVelBox
@@ -182,6 +185,49 @@ def test_functional():
         with pytest.raises(RuntimeError) as e:
             _ = grad(U, argnums=2)(coords, sys_params, box)
         assert "box" in str(e).lower()
+
+
+def test_absolute_complex_with_water_sampling():
+    seed = 2024
+    lamb = 0.0
+
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = utils.read_sdf(path_to_ligand)
+    mol = mols[0]
+
+    ff = Forcefield.load_default()
+
+    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+        host_sys, host_conf, box, top, num_water_atoms = builders.build_protein_system(
+            str(protein_path), ff.protein_ff, ff.water_ff, mols=[mol]
+        )
+        box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    host_config = HostConfig(host_sys, host_conf, box, num_water_atoms, top)
+
+    bt = topology.BaseTopology(mol, ff)
+    afe = free_energy.AbsoluteFreeEnergy(mol, bt)
+
+    complex_unbound_potentials, complex_sys_params, complex_masses = afe.prepare_host_edge(ff, host_config, lamb)
+
+    intg = LangevinIntegrator(DEFAULT_TEMP, 1.5e-3, 1.0, complex_masses, seed)
+
+    x0 = afe.prepare_combined_coords(host_conf)
+
+    state = InitialState(
+        potentials=[pot.bind(params) for pot, params in zip(complex_unbound_potentials, complex_sys_params)],
+        integrator=intg,
+        barostat=None,
+        x0=x0,
+        v0=np.zeros_like(x0),
+        box0=box,
+        lamb=lamb,
+        ligand_idxs=np.arange(len(host_conf), len(x0)),
+        protein_idxs=np.arange(0, len(host_conf) - num_water_atoms),
+    )
+
+    md_params = MDParams(10, 0, 10, seed, water_sampling_params=WaterSamplingParams())
+    traj = sample(state, md_params, md_params.n_frames)
+    assert len(traj.frames) == md_params.n_frames
 
 
 @pytest.mark.nocuda
