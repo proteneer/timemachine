@@ -2,7 +2,7 @@
 ARG LIBXRENDER_VERSION=1:0.9.10-*
 ARG LIBXEXT_VERSION=2:1.3.4-*
 
-FROM nvidia/cuda:11.7.1-devel-ubuntu20.04 AS tm_base_env
+FROM nvidia/cuda:12.4.1-devel-ubuntu20.04 AS tm_base_env
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 
@@ -114,7 +114,7 @@ WORKDIR /code/timemachine/
 RUN pip install --no-cache-dir -e . && rm -rf ./build
 
 # Container with only cuda runtime, half the size of the timemachine_cuda_dev container
-FROM nvidia/cuda:11.7.1-runtime-ubuntu20.04 as timemachine
+FROM nvidia/cuda:12.4.1-runtime-ubuntu20.04 as timemachine
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
