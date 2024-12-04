@@ -19,19 +19,17 @@ workflow:
 
 docker_build:
   stage: build-docker
-  image: docker:20.10
+  image: docker:27.3.1
   tags:
-    - gpu
-    - docker
+    - aws-tardis-gpu
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
     # Prune images older than 2 days
     - docker system prune --filter "until=48h" -f -a
     # Pull the docker containers
-    - docker pull $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH || true
-    - docker pull $DOCKER_TAG || true
+    - docker pull $DOCKER_TAG || docker pull $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH || true
     # Cache from default branch and most recent image to get most out of the caching
-    - docker build -t $DOCKER_TAG --cache-from $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH,$DOCKER_TAG --target timemachine_ci .
+    - docker build -t $DOCKER_TAG --cache-from $DOCKER_TAG --cache-from $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH --target timemachine_ci .
     - docker push $DOCKER_TAG
 
 lint:
@@ -39,8 +37,7 @@ lint:
   image: $DOCKER_TAG
   needs: ["docker_build"]
   tags:
-    - timemachine
-    - gpu
+    - aws-tardis-gpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
     - if: $NIGHTLY_TESTS
@@ -52,8 +49,7 @@ nocuda-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - timemachine
-    - cpu
+    - aws-tardis-cpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
@@ -71,8 +67,7 @@ nogpu-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - timemachine
-    - cpu
+    - aws-tardis-cpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   # Build custom ops with fixed cuda arch, to test C++ that is CPU only
@@ -93,7 +88,7 @@ memory-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - aws-tardis-gpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
@@ -111,7 +106,7 @@ unit-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - aws-tardis-gpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
   script:
@@ -129,7 +124,7 @@ nightly-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - aws-tardis-gpu
   rules:
     - if: $NIGHTLY_TESTS
   script:
@@ -147,7 +142,7 @@ nightly-memcheck-tests:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - gpu
+    - aws-tardis-gpu
   rules:
     - if: $NIGHTLY_TESTS
   script:
@@ -165,8 +160,7 @@ nightly-tests-nocuda:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - timemachine
-    - cpu
+    - aws-tardis-cpu
   rules:
     - if: $NIGHTLY_TESTS
   script:
@@ -184,8 +178,7 @@ nightly-tests-nogpu:
   image: $DOCKER_TAG
   needs: ["lint"]
   tags:
-    - timemachine
-    - cpu
+    - aws-tardis-cpu
   rules:
     - if: $NIGHTLY_TESTS
   # Build custom ops with fixed cuda arch, to test C++ that is CPU only
