@@ -121,16 +121,13 @@ ARG LIBXEXT_VERSION
 RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-# Copy all of the include directory, more headers than neccessary but headers are small
-COPY --from=timemachine_cuda_dev /usr/local/cuda/targets/x86_64-linux/include/ /usr/local/cuda/targets/x86_64-linux/include/
-COPY --from=timemachine_cuda_dev /usr/local/cuda/targets/x86_64-linux/lib/libcurand* /usr/local/cuda/targets/x86_64-linux/lib/
-COPY --from=timemachine_cuda_dev /usr/local/cuda/lib64/libcurand* /usr/local/cuda/lib64/
+# Copy the conda environment and the openmm installation
 COPY --from=timemachine_cuda_dev /opt/conda/ /opt/conda/
 COPY --from=timemachine_cuda_dev /opt/openmm_install/ /opt/openmm_install/
+
 COPY --from=timemachine_cuda_dev /code/ /code/
 COPY --from=timemachine_cuda_dev /root/.bashrc /root/.bashrc
 RUN ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh
 ARG ENV_NAME=timemachine
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64/
 ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
 ENV CONDA_DEFAULT_ENV ${ENV_NAME}
