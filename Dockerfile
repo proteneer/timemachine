@@ -2,7 +2,7 @@
 ARG LIBXRENDER_VERSION=1:0.9.10-*
 ARG LIBXEXT_VERSION=2:1.3.4-*
 
-FROM nvidia/cuda:12.4.1-devel-ubuntu20.04 AS tm_base_env
+FROM docker.io/nvidia/cuda:12.4.1-devel-ubuntu20.04 AS tm_base_env
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 
@@ -115,7 +115,7 @@ RUN pip install --no-cache-dir -e . && rm -rf ./build
 
 # Container with only cuda base, half the size of the timemachine_cuda_dev container
 # Need to copy curand/cudart as these are dependecies of the Timemachine GPU code
-FROM nvidia/cuda:12.4.1-base-ubuntu20.04 as timemachine
+FROM docker.io/nvidia/cuda:12.4.1-base-ubuntu20.04 as timemachine
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
@@ -125,10 +125,12 @@ RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxr
 COPY --from=timemachine_cuda_dev /usr/local/cuda/targets/x86_64-linux/include/ /usr/local/cuda/targets/x86_64-linux/include/
 COPY --from=timemachine_cuda_dev /usr/local/cuda/targets/x86_64-linux/lib/libcurand* /usr/local/cuda/targets/x86_64-linux/lib/
 COPY --from=timemachine_cuda_dev /usr/local/cuda/lib64/libcurand* /usr/local/cuda/lib64/
-COPY --from=timemachine_cuda_dev /opt/ /opt/
+COPY --from=timemachine_cuda_dev /opt/conda/ /opt/conda/
+COPY --from=timemachine_cuda_dev /opt/openmm_install/ /opt/openmm_install/
 COPY --from=timemachine_cuda_dev /code/ /code/
 COPY --from=timemachine_cuda_dev /root/.bashrc /root/.bashrc
 RUN ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh
 ARG ENV_NAME=timemachine
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64/
 ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
 ENV CONDA_DEFAULT_ENV ${ENV_NAME}
