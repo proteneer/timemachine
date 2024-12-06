@@ -18,6 +18,7 @@ from timemachine.fe.free_energy import (
     HREXSimulationResult,
     InitialState,
     MDParams,
+    RESTParams,
     SimulationResult,
     Trajectory,
     make_pair_bar_plots,
@@ -32,6 +33,8 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
+from timemachine.fe.rest import SingleTopologyREST, Symmetric
+from timemachine.fe.rest.interpolation import Quadratic
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology, assert_default_system_constraints
 from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
@@ -51,6 +54,16 @@ MAX_SEED_VALUE = 10000
 DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023, hrex_params=None)
 
 DEFAULT_HREX_PARAMS = replace(DEFAULT_MD_PARAMS, hrex_params=HREXParams(n_frames_bisection=100))
+
+assert DEFAULT_HREX_PARAMS.hrex_params
+
+DEFAULT_REST_PARAMS = replace(
+    DEFAULT_HREX_PARAMS,
+    hrex_params=replace(
+        DEFAULT_HREX_PARAMS.hrex_params,
+        rest_params=RESTParams(temperature_scale_interpolation_fxn=Symmetric(Quadratic(1.0, 2.0))),
+    ),
+)
 
 
 @dataclass
@@ -564,13 +577,12 @@ def estimate_relative_free_energy_bisection_or_hrex(*args, **kwargs) -> Simulati
     as appropriate given md_params.
 
     """
-    md_params = kwargs["md_params"]
-    estimate_fxn = (
-        estimate_relative_free_energy_bisection_hrex
-        if md_params.hrex_params is not None
-        else estimate_relative_free_energy_bisection
-    )
-    return estimate_fxn(*args, **kwargs)
+    hrex_params = kwargs["md_params"].hrex_params
+
+    if hrex_params is not None:
+        return estimate_relative_free_energy_bisection_hrex(*args, **kwargs)
+    else:
+        return estimate_relative_free_energy_bisection(*args, **kwargs)
 
 
 def estimate_relative_free_energy_bisection(
@@ -706,8 +718,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
     combined_prefix: str,
     min_overlap: Optional[float] = None,
 ) -> HREXSimulationResult:
-    if n_windows is None:
-        n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
     try:
@@ -849,6 +859,7 @@ def estimate_relative_free_energy_bisection_hrex(
     min_overlap: float or None, optional
         If not None, terminate bisection early when the BAR overlap between all neighboring pairs of states exceeds this
         value. When given, the final number of windows may be less than or equal to n_windows.
+
     min_cutoff: float or None, optional
         Throw error if any atom moves more than this distance (nm) after minimization
 
@@ -858,12 +869,24 @@ def estimate_relative_free_energy_bisection_hrex(
         Collected data from the simulation (see class for storage information).
 
     """
+    hrex_params = md_params.hrex_params
+    assert hrex_params
 
     if n_windows is None:
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+    single_topology = (
+        SingleTopologyREST(
+            mol_a,
+            mol_b,
+            core,
+            ff,
+            temperature_scale_interpolation_fxn=hrex_params.rest_params.temperature_scale_interpolation_fxn,
+        )
+        if hrex_params.rest_params
+        else SingleTopology(mol_a, mol_b, core, ff)
+    )
 
     lambda_interval = lambda_interval or (0.0, 1.0)
     lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
