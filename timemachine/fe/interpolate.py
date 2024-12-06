@@ -111,13 +111,20 @@ def assert_canonical_bond(bond):
     assert bond[0] < bond[-1]
 
 
+MIN_Q = 0.0
+MIN_SIG = 0.05
+MIN_EPS = 0.05  # Minimum EPSILON
+MIN_W = 1.2  # Set to NB CUTOFF
+
 align_harmonic_bond_idxs_and_params = partial(
     align_idxs_and_params,
     make_default=lambda p: (0, p[1]),  # 0 is force constant, p[1] is bond length
     validate_idxs=assert_canonical_bond,
 )
 align_harmonic_angle_idxs_and_params = partial(align_idxs_and_params, make_default=lambda p: (0, p[1], 0))
-align_nonbonded_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: (0, 0, 0, 0))
+align_nonbonded_idxs_and_params = partial(
+    align_idxs_and_params, make_default=lambda _: (MIN_Q, MIN_SIG, MIN_EPS, MIN_W)
+)
 align_chiral_atom_idxs_and_params = partial(align_idxs_and_params, make_default=lambda _: 0)
 align_proper_idxs_and_params = partial(
     align_idxs_and_params,

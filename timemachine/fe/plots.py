@@ -684,46 +684,61 @@ def _plot_improper_interpolation(xs, systems, filter_fn, axs, row):
 
 
 def _plot_intramolecular_nonbonded_interpolation(xs, systems, filter_fn, axs, row):
-    nonbonded_ws = []
     nonbonded_qs = []
+    nonbonded_ss = []
+    nonbonded_es = []
+    nonbonded_ws = []
+
     for sys in systems:
         nonbonded_idxs = sys.nonbonded.potential.idxs
         keep_idxs = []
-        for b_idx, idxs in enumerate(nonbonded_idxs):
+        for nb_idx, idxs in enumerate(nonbonded_idxs):
             if filter_fn(idxs):
-                keep_idxs.append(b_idx)
+                keep_idxs.append(nb_idx)
         keep_idxs = np.array(keep_idxs, dtype=np.int32)
         nonbonded_params = sys.nonbonded.params
-        nonbonded_ws.append(nonbonded_params[keep_idxs, -1])
         nonbonded_qs.append(nonbonded_params[keep_idxs, 0])
+        nonbonded_ss.append(nonbonded_params[keep_idxs, 1])
+        nonbonded_es.append(nonbonded_params[keep_idxs, 2])
+        nonbonded_ws.append(nonbonded_params[keep_idxs, 3])
 
     nonbonded_idxs = nonbonded_idxs[keep_idxs]
-    nonbonded_ws = np.array(nonbonded_ws).T
     nonbonded_qs = np.array(nonbonded_qs).T
-    num_bonds = nonbonded_ws.shape[0]
-    for b_idx in range(num_bonds):
+    nonbonded_ss = np.array(nonbonded_ss).T
+    nonbonded_es = np.array(nonbonded_es).T
+    nonbonded_ws = np.array(nonbonded_ws).T
+    num_ixns = nonbonded_ws.shape[0]
+    for idx in range(num_ixns):
         linestyle = "solid"
         label = None
         alpha = 0.2
-        axs[row, 0].plot(xs, nonbonded_ws[b_idx], linestyle=linestyle, label=label, alpha=alpha)
-        axs[row, 1].plot(xs, nonbonded_qs[b_idx], linestyle=linestyle, label=label, alpha=alpha)
-        break
+        axs[row, 0].plot(xs, nonbonded_qs[idx], linestyle=linestyle, label=label, alpha=alpha)
+        axs[row, 1].plot(xs, nonbonded_ss[idx], linestyle=linestyle, label=label, alpha=alpha)
+        axs[row + 1, 0].plot(xs, nonbonded_es[idx], linestyle=linestyle, label=label, alpha=alpha)
+        axs[row + 1, 1].plot(xs, nonbonded_ws[idx], linestyle=linestyle, label=label, alpha=alpha)
+        # break
 
-    axs[row, 0].set_title("nonbonded ws")
-    axs[row, 1].set_title("nonbonded qs")
+    axs[row, 0].set_title("nonbonded qs")
+    axs[row, 1].set_title("nonbonded sigmas")
+    axs[row + 1, 0].set_title("nonbonded epsilons")
+    axs[row + 1, 1].set_title("nonbonded ws")
 
-    axs[row, 0].set_ylabel("w")
-    axs[row, 1].set_ylabel("q")
+    axs[row, 0].set_ylabel("q")
+    axs[row, 1].set_ylabel("sig")
+    axs[row + 1, 0].set_ylabel("eps")
+    axs[row + 1, 1].set_ylabel("w")
 
     axs[row, 0].set_xlabel("lambda window")
     axs[row, 1].set_xlabel("lambda window")
+    axs[row + 1, 0].set_xlabel("lambda window")
+    axs[row + 1, 1].set_xlabel("lambda window")
 
     # axs[row, 0].legend()
     # axs[row, 1].legend()
 
 
 def plot_interpolation_schedule(st, filter_fn, fig_title, n_windows):
-    fig, axs = plt.subplots(6, 2, figsize=(9, 12))
+    fig, axs = plt.subplots(7, 2, figsize=(9, 12))
     # plot the force constant and equilibrium bond lengths along lambda
     lambdas = np.linspace(0, 1.0, n_windows)
     systems = []
@@ -734,19 +749,21 @@ def plot_interpolation_schedule(st, filter_fn, fig_title, n_windows):
     _plot_angle_interpolation(st, lambdas, systems, filter_fn, axs, row=2)
     _plot_proper_interpolation(lambdas, systems, filter_fn, axs, row=3)
     _plot_improper_interpolation(lambdas, systems, filter_fn, axs, row=4)
+    # this takes up 2 rows
+    print("PLOTTING NONBONDED")
     _plot_intramolecular_nonbonded_interpolation(lambdas, systems, filter_fn, axs, row=5)
     fig.suptitle(fig_title, fontsize=12)
     plt.tight_layout()
     # plt.show()
 
 
-def plot_core_interpolation_schedule(st, n_windows=48):
+def plot_core_interpolation_schedule(st, n_windows=24):
     plot_interpolation_schedule(st, st.all_idxs_belong_to_core, "Core Interpolation Schedule", n_windows)
 
 
-def plot_dummy_a_interpolation_schedule(st, n_windows=48):
+def plot_dummy_a_interpolation_schedule(st, n_windows=24):
     plot_interpolation_schedule(st, st.any_idxs_belong_to_dummy_a, "Dummy Group A Interpolation Schedule", n_windows)
 
 
-def plot_dummy_b_interpolation_schedule(st, n_windows=48):
+def plot_dummy_b_interpolation_schedule(st, n_windows=24):
     plot_interpolation_schedule(st, st.any_idxs_belong_to_dummy_b, "Dummy Group B Interpolation Schedule", n_windows)

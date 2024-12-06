@@ -1227,8 +1227,8 @@ class SingleTopology(AtomMapMixin):
         # store the forcefield
         self.ff = forcefield
 
-        a_charge = Chem.GetFormalCharge(mol_a)
-        b_charge = Chem.GetFormalCharge(mol_b)
+        # a_charge = Chem.GetFormalCharge(mol_a)
+        # b_charge = Chem.GetFormalCharge(mol_b)
         # if a_charge != b_charge:
         # raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
@@ -1409,7 +1409,7 @@ class SingleTopology(AtomMapMixin):
         assert src_nonbonded.potential.beta == dst_nonbonded.potential.beta
         assert src_nonbonded.potential.cutoff == dst_nonbonded.potential.cutoff
 
-        cutoff = src_nonbonded.potential.cutoff
+        # cutoff = src_nonbonded.potential.cutoff
 
         pair_idxs_and_params = align_fn(
             src_nonbonded.potential.idxs,
@@ -1424,34 +1424,50 @@ class SingleTopology(AtomMapMixin):
             src_params = jnp.array([x for _, x, _ in pair_idxs_and_params])
             dst_params = jnp.array([x for _, _, x in pair_idxs_and_params])
 
-            src_qlj, src_w = src_params[:, :3], src_params[:, 3]
-            dst_qlj, dst_w = dst_params[:, :3], dst_params[:, 3]
+            src_q, dst_q = src_params[:, 0], dst_params[:, 0]
+            src_sig, dst_sig = src_params[:, 1], dst_params[:, 1]
+            src_eps, dst_eps = src_params[:, 2], dst_params[:, 2]
+            src_w, dst_w = src_params[:, 3], dst_params[:, 3]
 
-            is_excluded_src = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
-            is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
+            # protocol:
+            # 1) first scale charges (0.0, 0.33)
+            # 2) then scale epsilons (0.33, 0.66)
+            # 3) then scale w coords (0.66, 1.00)
+            # at lambda = 0.5?
 
-            w = interpolate.pad(interpolate_w_coord, cutoff, dst_w, lamb, 0.7, 1.0)
+            # interpolating a core-core interaction
+            q_always_on = interpolate.pad(interpolate.linear_interpolation, src_q, dst_q, lamb, 0, 1.0)
+            s_always_on = interpolate.pad(interpolate.linear_interpolation, src_sig, dst_sig, lamb, 0, 1.0)
+            e_always_on = interpolate.pad(interpolate.linear_interpolation, src_eps, dst_eps, lamb, 0, 1.0)
+            w_always_on = interpolate.pad(interpolate_w_coord, src_w, dst_w, lamb, 0.0, 1.0)  # no-op, 0->0
+            qljw_always_on = jnp.stack([q_always_on, s_always_on, e_always_on, w_always_on], axis=1)
 
-            # interpolate_w_coord(src_w, cutoff, lamb)
-            pair_params_excluded_src = jnp.concatenate((dst_qlj, w[:, None]), axis=1)
-            w = interpolate.pad(interpolate_w_coord, src_w, cutoff, lamb, 0.0, 0.3)
+            # turning off an interaction, charges -> eps -> w
+            q_on_to_off = interpolate.pad(interpolate.linear_interpolation, src_q, dst_q, lamb, 0, 0.33)  # un-used
+            s_on_to_off = interpolate.pad(interpolate.linear_interpolation, src_sig, dst_sig, lamb, 0.25, 0.5)
+            e_on_to_off = interpolate.pad(interpolate.linear_interpolation, src_eps, dst_eps, lamb, 0.0, 0.25)
+            w_on_to_off = interpolate.pad(interpolate_w_coord, src_w, dst_w, lamb, 0.25, 0.5)
+            qljw_on_to_off = jnp.stack([q_on_to_off, s_on_to_off, e_on_to_off, w_on_to_off], axis=1)
 
-            pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
+            # turning on an interaction, w -> eps -> charges
+            q_off_to_on = interpolate.pad(interpolate.linear_interpolation, src_q, dst_q, lamb, 0.66, 1.0)  # un-used
+            s_off_to_on = interpolate.pad(interpolate.linear_interpolation, src_sig, dst_sig, lamb, 0.0, 0.25)
+            e_off_to_on = interpolate.pad(interpolate.linear_interpolation, src_eps, dst_eps, lamb, 0.25, 0.5)
+            w_off_to_on = interpolate.pad(interpolate_w_coord, src_w, dst_w, lamb, 0.0, 0.25)
+            qljw_off_to_on = jnp.stack([q_off_to_on, s_off_to_on, e_off_to_on, w_off_to_on], axis=1)
 
-            # parameters for pairs that interact in both src and dst states
-            w = jax.vmap(interpolate.linear_interpolation, (0, 0, None))(src_w, dst_w, lamb)
-            qlj = interpolate_qlj_fn(src_qlj, dst_qlj, lamb)
-            pair_params_not_excluded = jnp.concatenate((qlj, w[:, None]), axis=1)
+            src_w_is_on = src_w == 0
+            dst_w_is_on = dst_w == 0
+            dst_w_is_off = dst_w > 0
 
             pair_params = jnp.where(
-                is_excluded_src,
-                pair_params_excluded_src,
+                jnp.expand_dims(jnp.logical_and(src_w_is_on, dst_w_is_on), axis=-1),
+                qljw_always_on,
                 jnp.where(
-                    is_excluded_dst,
-                    pair_params_excluded_dst,
-                    pair_params_not_excluded,
+                    jnp.expand_dims(jnp.logical_and(src_w_is_on, dst_w_is_off), axis=-1), qljw_on_to_off, qljw_off_to_on
                 ),
             )
+
         else:
             pair_params = jnp.array([])
 
