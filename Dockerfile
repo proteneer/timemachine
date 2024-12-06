@@ -113,6 +113,7 @@ COPY . /code/timemachine/
 WORKDIR /code/timemachine/
 RUN pip install --no-cache-dir -e . && rm -rf ./build
 
+# Container with only cuda runtime, half the size of the timemachine_cuda_dev container
 FROM docker.io/nvidia/cuda:12.4.1-runtime-ubuntu20.04 as timemachine
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
