@@ -24,7 +24,6 @@ from timemachine.md.builders import build_protein_system
 from timemachine.potentials import Nonbonded
 from timemachine.potentials.potential import GpuImplWrapper
 from timemachine.potentials.types import PotentialFxn
-from timemachine.testsystems.data.ildn_params import get_amber99ildn_patterns
 
 HILBERT_GRID_DIM = 128
 
@@ -394,11 +393,11 @@ def load_split_forcefields() -> SplitForcefield:
     SIG_SCALE = 0.5  # smaller change to prevent overflow
     EPS_SCALE = 2.0
 
-    patterns = get_amber99ildn_patterns()
-    protein_smirks = [x[0] for x in patterns]
-    protein_params = np.ones((len(protein_smirks),)) * 0.5
-
     ff_ref = Forcefield.load_default()
+
+    assert ff_ref.q_handle is not None
+    protein_smirks = ff_ref.q_handle.smirks
+    protein_params = np.ones((len(protein_smirks),)) * 0.5
 
     ff_intra = Forcefield.load_default()
     assert ff_intra.q_handle_intra is not None
