@@ -464,6 +464,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             # TBD: Deboggle and unify the topology classes
             if isinstance(pot, SummedPotential):
                 for partial_params, sub_pot in zip(pot.params_init, pot.potentials):
+                    assert not isinstance(sub_pot, SummedPotential), "Multiple levels of nesting of summed potentials"
                     final_params.append(partial_params)
                     final_potentials.append(sub_pot)
             else:
