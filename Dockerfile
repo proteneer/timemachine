@@ -121,8 +121,7 @@ ARG LIBXEXT_VERSION
 RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-# Copy all of the include directory, more headers than neccessary but headers are small
-COPY --from=timemachine_cuda_dev /usr/local/cuda/targets/x86_64-linux/include/ /usr/local/cuda/targets/x86_64-linux/include/
+
 # Copy curand libraries from image, only require cudart and curand
 COPY --from=timemachine_cuda_dev /usr/local/cuda/targets/x86_64-linux/lib/libcurand* /usr/local/cuda/targets/x86_64-linux/lib/
 COPY --from=timemachine_cuda_dev /usr/local/cuda/lib64/libcurand* /usr/local/cuda/lib64/
