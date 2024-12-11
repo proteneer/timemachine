@@ -3,7 +3,7 @@ import os
 import numpy as np
 from openmm import app
 
-from timemachine.constants import AVOGADRO, DEFAULT_PRESSURE, DEFAULT_TEMP
+from timemachine.constants import AVOGADRO, DEFAULT_PRESSURE, DEFAULT_TEMP, NBParamIdx
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.topology import BaseTopology
@@ -13,7 +13,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.builders import strip_units
 from timemachine.md.exchange.exchange_mover import delta_r_np
-from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
+from timemachine.potentials import HarmonicBond, Nonbonded
 from timemachine.potentials.potential import get_bound_potential_by_type
 
 DEFAULT_BB_RADIUS = 0.46
@@ -87,14 +87,10 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
         afe = AbsoluteFreeEnergy(mol, bt)
         potentials, params, combined_masses = afe.prepare_host_edge(ff, host_config, lamb)
         ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms(), dtype=np.int32)
-        summed_pot_idx = next(i for i, pot in enumerate(potentials) if isinstance(pot, SummedPotential))
-        nb_params = np.array(params[summed_pot_idx])
+        nb_pot_idx = next(i for i, pot in enumerate(potentials) if isinstance(pot, Nonbonded))
+        nb_params = np.array(params[nb_pot_idx])
         final_conf = np.concatenate([solvent_conf, get_romol_conf(mol)], axis=0)
-        component_dim = 4  # q,s,e,w
-        num_atoms = len(final_conf)
 
-        ligand_water_flat_idxs = np.s_[component_dim * num_atoms : 2 * component_dim * num_atoms]  # water
-        ligand_water_params = nb_params[ligand_water_flat_idxs].reshape(-1, 4)
         # Forms a hole on the "flat" side of the buckyball, 1-indexed, over the selected atoms
         # previously failed attempts:
         # 1) uniformly decoupling half of the buckyball
@@ -105,8 +101,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
             num_water_atoms + np.array([10, 11, 16, 17, 21, 22, 12, 14, 13, 25, 24, 23, 20]) - 1
         )
         fully_coupled_ligand_atoms = np.setdiff1d(ligand_idxs, lambda_coupled_ligand_atoms)
-        ligand_water_params[fully_coupled_ligand_atoms, -1] = 0
-        nb_params[ligand_water_flat_idxs] = ligand_water_params.reshape(-1)
+        nb_params[fully_coupled_ligand_atoms, NBParamIdx.W_IDX] = 0
     else:
         host_fns, combined_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=nb_cutoff)
         potentials = [bp.potential for bp in host_fns]
@@ -118,7 +113,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
     # override water Nonbonded potential with the updated nb_params
     host_bps = []
     for p, ubp in zip(params, potentials):
-        if isinstance(ubp, (Nonbonded, SummedPotential)):
+        if isinstance(ubp, Nonbonded):
             host_bps.append(ubp.bind(nb_params))
         else:
             host_bps.append(ubp.bind(p))
