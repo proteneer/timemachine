@@ -40,6 +40,7 @@ from timemachine.potentials import (
     HarmonicBond,
     Nonbonded,
     NonbondedInteractionGroup,
+    Potential,
     SummedPotential,
     make_summed_potential,
 )
@@ -431,7 +432,9 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.top = top
 
-    def prepare_host_edge(self, ff: Forcefield, host_config: HostConfig, lamb: float):
+    def prepare_host_edge(
+        self, ff: Forcefield, host_config: HostConfig, lamb: float
+    ) -> tuple[tuple[Potential, ...], tuple, NDArray]:
         """
         Prepares the host-guest system
 
@@ -458,11 +461,25 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
         hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms, ff, host_config.omm_topology)
 
-        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
-        combined_masses = self._combine(ligand_masses, host_masses)
-        return final_potentials, final_params, combined_masses
+        final_params = []
+        final_potentials = []
+        combined_params, combined_potentials = self._get_system_params_and_potentials(ff_params, hgt, lamb)
+        for params, pot in zip(combined_params, combined_potentials):
+            # Unpack the summed potential to be consistent with SingleTopology and so
+            # that downstream code which relies on the potential types works properly
+            # TBD: Deboggle and unify the topology classes
+            if isinstance(pot, SummedPotential):
+                for partial_params, sub_pot in zip(pot.params_init, pot.potentials):
+                    assert not isinstance(sub_pot, SummedPotential), "Multiple levels of nesting of summed potentials"
+                    final_params.append(partial_params)
+                    final_potentials.append(sub_pot)
+            else:
+                final_params.append(params)
+                final_potentials.append(pot)
+        combined_masses = self._combine(ligand_masses, np.array(host_masses))
+        return tuple(final_potentials), tuple(final_params), combined_masses
 
-    def prepare_vacuum_edge(self, ff: Forcefield):
+    def prepare_vacuum_edge(self, ff: Forcefield) -> tuple[tuple[Potential, ...], tuple, NDArray]:
         """
         Prepares the vacuum system
 
@@ -482,7 +499,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top, 0.0)
         return final_potentials, final_params, ligand_masses
 
-    def prepare_combined_coords(self, host_coords=None):
+    def prepare_combined_coords(self, host_coords: Optional[NDArray] = None) -> NDArray:
         """
         Returns the combined coordinates.
 
@@ -499,7 +516,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         ligand_coords = get_romol_conf(self.mol)
         return self._combine(ligand_coords, host_coords)
 
-    def _combine(self, ligand_values, host_values=None):
+    def _combine(self, ligand_values: NDArray, host_values: Optional[NDArray] = None) -> NDArray:
         """
         Combine the values along the 0th axis.
         The host values will be first, if given.
