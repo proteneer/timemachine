@@ -103,18 +103,18 @@ def test_hrex_rbfe_hif2a_water_sampling_warning(hif2a_single_topology_leg, seed)
     assert any("Not running any water sampling" in str(warn.message) for warn in captured_warnings)
 
 
+@pytest.mark.parametrize("max_bisection_windows, target_overlap", [(5, None), (5, 0.667)])
 @pytest.mark.parametrize("seed", [2024])
-def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
+def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed, max_bisection_windows, target_overlap):
     host_name, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
     md_params = MDParams(
         n_frames=200,
         n_eq_steps=10_000,
         steps_per_frame=400,
         seed=seed,
-        hrex_params=HREXParams(n_frames_bisection=100),
+        hrex_params=HREXParams(n_frames_bisection=100, optimize_target_overlap=target_overlap),
         water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000) if host_name == "complex" else None,
     )
-    n_windows = 5
 
     rss_traj = []
 
@@ -133,11 +133,21 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
             md_params,
             prefix=host_name if host_name is not None else "vacuum",
             lambda_interval=(0.0, 0.15),
-            n_windows=n_windows,
+            n_windows=max_bisection_windows,
             min_cutoff=0.7 if host_name == "complex" else None,
         )
 
-    assert len(rss_traj) > n_windows * md_params.n_frames
+    final_windows = len(result.final_result.initial_states)
+    # All of the lambda values of the initial states should be different
+    assert len(set([s.lamb for s in result.final_result.initial_states])) == final_windows
+
+    if md_params.hrex_params.optimize_target_overlap is not None:
+        assert final_windows <= max_bisection_windows
+    else:
+        # min_overlap is None here, will reach the max number of windows
+        assert final_windows == max_bisection_windows
+
+    assert len(rss_traj) > final_windows * md_params.n_frames
     # Check that memory usage is not increasing
     rss_traj = rss_traj[10:]  # discard initial transients
     assert len(rss_traj)
@@ -148,7 +158,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
     if DEBUG:
         plot_hrex_rbfe_hif2a(result)
 
-    assert result.hrex_diagnostics.cumulative_swap_acceptance_rates.shape[1] == n_windows - 1
+    assert result.hrex_diagnostics.cumulative_swap_acceptance_rates.shape[1] == final_windows - 1
 
     # Swap acceptance rates for all neighboring pairs should be >~ 20%
     final_swap_acceptance_rates = result.hrex_diagnostics.cumulative_swap_acceptance_rates[-1]
@@ -163,12 +173,12 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
 
     assert len(result.hrex_diagnostics.replica_idx_by_state_by_iter) == md_params.n_frames
     assert all(
-        len(replica_idx_by_state) == n_windows
+        len(replica_idx_by_state) == final_windows
         for replica_idx_by_state in result.hrex_diagnostics.replica_idx_by_state_by_iter
     )
 
     # Initial permutation should be the identity
-    np.testing.assert_array_equal(result.hrex_diagnostics.replica_idx_by_state_by_iter[0], np.arange(n_windows))
+    np.testing.assert_array_equal(result.hrex_diagnostics.replica_idx_by_state_by_iter[0], np.arange(final_windows))
 
     # Check that we can extract replica trajectories
     n_atoms = result.final_result.initial_states[0].x0.shape[0]
@@ -176,7 +186,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
     n_atoms_subset = rng.choice(n_atoms) + 1  # in [1, n_atoms]
     atom_idxs = rng.choice(n_atoms, n_atoms_subset, replace=False)
     trajs_by_replica = result.extract_trajectories_by_replica(atom_idxs)
-    assert trajs_by_replica.shape == (n_windows, md_params.n_frames, n_atoms_subset, 3)
+    assert trajs_by_replica.shape == (final_windows, md_params.n_frames, n_atoms_subset, 3)
 
     # Check that the frame-to-frame rmsd is lower for replica trajectories versus state trajectories
     def time_lagged_rmsd(traj):
@@ -197,7 +207,7 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed):
     # Check that we can extract ligand trajectories by replica
     ligand_trajs_by_replica = result.extract_ligand_trajectories_by_replica()
     n_ligand_atoms = len(result.final_result.initial_states[0].ligand_idxs)
-    assert ligand_trajs_by_replica.shape == (n_windows, md_params.n_frames, n_ligand_atoms, 3)
+    assert ligand_trajs_by_replica.shape == (final_windows, md_params.n_frames, n_ligand_atoms, 3)
 
     # Check plots were generated
     assert result.hrex_plots

@@ -1,6 +1,7 @@
 import ast
 import base64
 import pickle
+import warnings
 from collections import Counter
 
 import jax.numpy as jnp
@@ -311,7 +312,7 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas, runtime_va
 
     if max(directed_bonds.values()) > 1:
         duplicates = [bond for (bond, count) in directed_bonds.items() if count > 1]
-        print(UserWarning(f"Duplicate directed bonds! {duplicates}"))
+        warnings.warn(f"Duplicate directed bonds! {duplicates}")
 
     return final_charges
 
