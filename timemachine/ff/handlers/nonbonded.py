@@ -13,7 +13,7 @@ from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smi
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.utils import canonicalize_bond, make_residue_mol, make_residue_mol_from_template
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
-from timemachine.ff.handlers.utils import update_carbonyl_bond_type, update_mol_topology
+from timemachine.ff.handlers.utils import update_mol_topology
 from timemachine.graph_utils import convert_to_nx
 
 AM1_CHARGE_CACHE = "AM1Cache"
@@ -591,18 +591,15 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 continue
 
             symbol_list = [atm.element.symbol for atm in tfr.atoms]
-            atom_name_list = [atm.name for atm in tfr.atoms]
             bond_list = tfr.bonds
-            topology_res_mol = update_carbonyl_bond_type(
-                make_residue_mol(tfr.name, symbol_list, bond_list), atom_name_list
-            )
+            topology_res_mol = make_residue_mol(tfr.name, symbol_list, bond_list)
             template_res_mol = make_residue_mol_from_template(tfr.name)
             if template_res_mol is None:
                 # i.e. skip water/ions
                 continue
 
             # copy the charges and bond types from proper_res to omm_res
-            update_mol_topology(topology_res_mol, template_res_mol, atom_name_list)
+            update_mol_topology(topology_res_mol, template_res_mol)
 
             # cache smirks patterns to speed up parameterize
             compute_or_load_bond_smirks_matches(topology_res_mol, self.patterns)

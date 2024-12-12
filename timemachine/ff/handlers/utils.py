@@ -1,4 +1,3 @@
-import copy
 from typing import List, Optional, Tuple, TypeAlias
 
 from rdkit import Chem
@@ -131,7 +130,6 @@ def make_residue_mol(name: str, elements: List[str], bonds: List[Tuple[int, int]
         List of atom idxs to connect.
 
     """
-    print(name, elements, bonds)
     mol = Chem.RWMol()
     mol.BeginBatchEdit()
     for i, element in enumerate(elements):
@@ -145,32 +143,6 @@ def make_residue_mol(name: str, elements: List[str], bonds: List[Tuple[int, int]
     mol.CommitBatchEdit()
     mol = Chem.RemoveHs(mol, implicitOnly=True, sanitize=False)
     mol.SetProp("_Name", name)
-    return mol
-
-
-def update_carbonyl_bond_type(mol: Mol, atom_name_list: List[str]) -> Mol:
-    """
-    For the carbonyl linker, set the C=O double bond type.
-
-    Parameters
-    ----------
-    mol:
-        Generated with `make_residue_mol`.
-    atom_name_list:
-        List of atom names (using Amber types).
-
-    Return
-    ------
-        Updated mol.
-    """
-    return mol
-    mol = copy.deepcopy(mol)
-    for bond in mol.GetBonds():
-        atm_idx0, atm_idx1 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        bond_names = sorted((atom_name_list[atm_idx0], atom_name_list[atm_idx1]))
-        if bond_names == ["C", "O"]:
-            bond.SetBondType(Chem.BondType.DOUBLE)
-    mol = Chem.RemoveHs(mol, implicitOnly=True, sanitize=False)
     return mol
 
 
@@ -210,12 +182,10 @@ def make_residue_mol_from_template(template_name: str) -> Optional[Mol]:
     if has_c_cap:
         mol = add_c_cap(mol)
 
-    for atom in mol.GetAtoms():
-        atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
     return mol
 
 
-def update_mol_topology(topology_res_mol: Mol, template_res_mol: Mol, name_list: List[str]):
+def update_mol_topology(topology_res_mol: Mol, template_res_mol: Mol):
     """
     Update the topology_res_mol to copy the bond types and
     charges from the template_res_mol.
@@ -228,8 +198,6 @@ def update_mol_topology(topology_res_mol: Mol, template_res_mol: Mol, name_list:
         with the bond types and formal charges from `template_res_mol`.
     template_res_mol:
         Template molecule generated using `make_residue_mol_from_template`.
-    name_list:
-        List of Amber atom types for the `topology_res_mol` in order.
     """
     match = template_res_mol.GetSubstructMatch(get_query_mol(topology_res_mol))
 
