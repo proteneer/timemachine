@@ -13,7 +13,7 @@ from timemachine.md.barostat.utils import compute_box_center, compute_box_volume
 from timemachine.md.builders import build_water_system
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.thermostat.utils import sample_velocities
-from timemachine.potentials import HarmonicBond, SummedPotential
+from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, NonbondedPairListPrecomputed
 from timemachine.potentials.potential import get_bound_potential_by_type, get_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
@@ -454,10 +454,11 @@ def test_molecular_ideal_gas():
     unbound_potentials = list(_unbound_potentials)
     sys_params = list(_sys_params)
 
-    # drop the nonbonded potential
-    nb_pot_idx = next(i for i, pot in enumerate(unbound_potentials) if isinstance(pot, SummedPotential))
-    unbound_potentials.pop(nb_pot_idx)
-    sys_params.pop(nb_pot_idx)
+    # drop the nonbonded potentials
+    for nb_type in (Nonbonded, NonbondedInteractionGroup, NonbondedPairListPrecomputed):
+        nb_pot_idx = next(i for i, pot in enumerate(unbound_potentials) if isinstance(pot, nb_type))
+        unbound_potentials.pop(nb_pot_idx)
+        sys_params.pop(nb_pot_idx)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = get_potential_by_type(unbound_potentials, HarmonicBond)

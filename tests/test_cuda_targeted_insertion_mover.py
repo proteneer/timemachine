@@ -37,7 +37,7 @@ from timemachine.md.exchange.exchange_mover import (
     get_water_idxs,
 )
 from timemachine.md.minimizer import check_force_norm
-from timemachine.potentials import HarmonicBond, Nonbonded, SummedPotential
+from timemachine.potentials import HarmonicBond, Nonbonded
 from timemachine.potentials.potential import get_bound_potential_by_type
 
 
@@ -447,10 +447,7 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
     box = host_box
 
     bps = [pot.bind(p) for pot, p in zip(potentials, params)]
-    summed_pot = get_bound_potential_by_type(bps, SummedPotential).potential
-    nb = next(
-        pot.bind(p) for pot, p in zip(summed_pot.potentials, summed_pot.params_init) if isinstance(pot, Nonbonded)
-    )
+    nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     bond_list = get_bond_list(bond_pot)
@@ -684,10 +681,7 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
     box = host_box
 
     bps = [pot.bind(p) for pot, p in zip(potentials, params)]
-    summed_pot = get_bound_potential_by_type(bps, SummedPotential).potential
-    nb = next(
-        pot.bind(p) for pot, p in zip(summed_pot.potentials, summed_pot.params_init) if isinstance(pot, Nonbonded)
-    )
+    nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 
     bond_list = get_bond_list(bond_pot)
