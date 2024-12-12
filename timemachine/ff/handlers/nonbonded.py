@@ -16,9 +16,9 @@ from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.ff.handlers.utils import update_mol_topology
 from timemachine.graph_utils import convert_to_nx
 
+CACHE_SUFFIX = "Cache"
 AM1_CHARGE_CACHE = "AM1Cache"
 AM1ELF10_CHARGE_CACHE = "AM1ELF10Cache"
-AM1BCCELF10_CHARGE_CACHE = "AM1BCCELF10Cache"
 BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
 
 AM1 = "AM1"
@@ -222,7 +222,7 @@ def compute_or_load_am1_charges(mol, mode=AM1ELF10):
     """Unless already cached in mol's "AM1ELF10_CHARGE_CACHE" property, use OpenEye to compute AM1ELF10 partial charges."""
 
     # check for cache
-    cache_prop_name = AM1ELF10_CHARGE_CACHE if mode == AM1ELF10 else AM1BCCELF10_CHARGE_CACHE
+    cache_prop_name = f"{mode}{CACHE_SUFFIX}"
     if not mol.HasProp(cache_prop_name):
         # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
         # to be an issue that the atom ordering modifies the return values as well. A follow up
