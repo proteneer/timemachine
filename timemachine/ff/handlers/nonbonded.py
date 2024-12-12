@@ -13,7 +13,7 @@ from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smi
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.utils import canonicalize_bond, make_residue_mol, make_residue_mol_from_template
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
-from timemachine.ff.handlers.utils import update_mol_topology
+from timemachine.ff.handlers.utils import update_carbonyl_bond_type, update_mol_topology
 from timemachine.graph_utils import convert_to_nx
 
 AM1_CHARGE_CACHE = "AM1Cache"
@@ -581,7 +581,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
         assert self.initial_charges is not None
 
         # initial_charges is in the topology ordering
-        # so map to the template/omm_res_mol ordering
+        # so map to the topology_res_mol ordering
         self.topology_idx_to_template_idx = {atm.index: j for atm, j in self.data.atomTemplateIndexes.items()}
 
         self.all_res_mols_by_name = {}
@@ -591,21 +591,22 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 continue
 
             symbol_list = [atm.element.symbol for atm in tfr.atoms]
-            name_list = [atm.name for atm in tfr.atoms]
+            atom_name_list = [atm.name for atm in tfr.atoms]
             bond_list = tfr.bonds
-            omm_res_mol = make_residue_mol(tfr.name, symbol_list, bond_list, name_list)
-
-            proper_res_mol = make_residue_mol_from_template(tfr.name)
-            if proper_res_mol is None:
+            topology_res_mol = update_carbonyl_bond_type(
+                make_residue_mol(tfr.name, symbol_list, bond_list), atom_name_list
+            )
+            template_res_mol = make_residue_mol_from_template(tfr.name)
+            if template_res_mol is None:
                 # i.e. skip water/ions
                 continue
 
             # copy the charges and bond types from proper_res to omm_res
-            update_mol_topology(omm_res_mol, proper_res_mol, name_list)
+            update_mol_topology(topology_res_mol, template_res_mol, atom_name_list)
 
             # cache smirks patterns to speed up parameterize
-            compute_or_load_bond_smirks_matches(omm_res_mol, self.patterns)
-            self.all_res_mols_by_name[tfr.name] = omm_res_mol
+            compute_or_load_bond_smirks_matches(topology_res_mol, self.patterns)
+            self.all_res_mols_by_name[tfr.name] = topology_res_mol
 
     def _map_to_topology_order(self, template_charges, cur_atom, n_atoms):
         # map back from the template ordering to the topology order
@@ -638,18 +639,18 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 continue
 
             # extract the charges in the order of the template residue
-            omm_res_mol = self.all_res_mols_by_name[tfr.name]
-            omm_res_mol_charges = {}
+            topology_res_mol = self.all_res_mols_by_name[tfr.name]
+            topology_res_mol_charges = {}
             for i in range(n_atoms):
                 tmpl_atom_idx = self.topology_idx_to_template_idx[cur_atom + i]
-                omm_res_mol_charges[tmpl_atom_idx] = initial_res_charges[i]
-            omm_res_mol_charges_ordered = jnp.array([omm_res_mol_charges[i] for i in range(n_atoms)])
+                topology_res_mol_charges[tmpl_atom_idx] = initial_res_charges[i]
+            topology_res_mol_charges_ordered = jnp.array([topology_res_mol_charges[i] for i in range(n_atoms)])
 
             # compute smirks on the template residue
-            bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(omm_res_mol, self.patterns)
+            bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(topology_res_mol, self.patterns)
             deltas = params[type_idxs]
             tmpl_q_params = apply_bond_charge_corrections(
-                omm_res_mol_charges_ordered,
+                topology_res_mol_charges_ordered,
                 bond_idxs,
                 deltas,
                 runtime_validate=False,  # required for jit

@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from openmm import app
+from openmm.app.forcefield import ForceField as OMMForceField
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
@@ -17,6 +18,7 @@ from timemachine.fe import topology, utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
+from timemachine.ff.handlers import utils as handler_utils
 from timemachine.md import builders
 
 pytestmark = [pytest.mark.nocuda]
@@ -1248,3 +1250,169 @@ def test_environment_bcc_full_protein(protein_path):
         first = group[0]
         for other in group[1:]:
             np.testing.assert_almost_equal(final_q_params[other], final_q_params[first])
+
+
+def test_get_query_mol():
+    mol_a = Chem.MolFromSmiles("NCC(O)=O")
+
+    # with bond ordered only have one match
+    mol_q = Chem.MolFromSmiles("C=O")
+    matches = mol_a.GetSubstructMatches(mol_q)
+    assert len(matches) == 1
+
+    # using generic bonds, have two matches
+    mol_q = handler_utils.get_query_mol(mol_q)
+    matches = mol_a.GetSubstructMatches(mol_q)
+    assert len(matches) == 2
+
+
+@pytest.fixture()
+def residue_mol_inputs():
+    properties_by_res_name = {}
+    for protein_path in ["5dfr_solv_equil.pdb", "hif2a_nowater_min.pdb"]:
+        with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
+            host_pdb = app.PDBFile(str(path_to_pdb))
+            _, _, _, topology, _ = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
+        ff = OMMForceField(f"{DEFAULT_PROTEIN_FF}.xml", f"{DEFAULT_WATER_FF}.xml")
+        data = OMMForceField._SystemData(topology)
+        residueTemplates = {}
+        template_for_residue = ff._matchAllResiduesToTemplates(
+            data, topology, residueTemplates, ignoreExternalBonds=False
+        )
+
+        for tfr in template_for_residue:
+            if tfr.name in properties_by_res_name:
+                continue
+            elements = [atom.element.symbol for atom in tfr.atoms]
+            atom_name_list = [atom.name for atom in tfr.atoms]
+            bond_list = tfr.bonds
+            properties_by_res_name[tfr.name] = {
+                "elements": elements,
+                "atom_name_list": atom_name_list,
+                "bond_list": bond_list,
+            }
+
+    return properties_by_res_name
+
+
+def test_make_residue_mol(residue_mol_inputs):
+    for res_name, props in residue_mol_inputs.items():
+        res_mol = handler_utils.make_residue_mol(res_name, props["elements"], props["bond_list"])
+        assert res_mol.GetNumAtoms() == len(props["elements"])
+
+        bond_list_mol = [(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()) for bond in res_mol.GetBonds()]
+        assert set(bond_list_mol) == set(props["bond_list"])
+
+
+def test_update_carbonyl_bond_type(residue_mol_inputs):
+    for res_name, props in residue_mol_inputs.items():
+        if res_name in ["NME", "HOH"]:  # don't have a carbonyl
+            continue
+        elements, bond_list, atom_name_list = props["elements"], props["bond_list"], props["atom_name_list"]
+        res_mol = handler_utils.make_residue_mol(res_name, elements, bond_list)
+        res_mol = handler_utils.update_carbonyl_bond_type(res_mol, atom_name_list)
+        found_carbonyl_bond = False
+        for bond in res_mol.GetBonds():
+            atom_idx0, atom_idx1 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+            atom_name0, atom_name1 = atom_name_list[atom_idx0], atom_name_list[atom_idx1]
+            if (atom_name0, atom_name1) == ("C", "O") and bond.GetBondType() == Chem.BondType.DOUBLE:
+                found_carbonyl_bond = True
+        assert found_carbonyl_bond
+
+
+def test_make_residue_mol_from_template():
+    for res_name in handler_utils.SMILES_BY_RES_NAME:
+        res_mol = handler_utils.make_residue_mol_from_template(res_name)
+
+        if res_name not in ["ACE", "NME"]:
+            nres_mol = handler_utils.make_residue_mol_from_template(f"N{res_name}")
+            cres_mol = handler_utils.make_residue_mol_from_template(f"C{res_name}")
+
+            assert res_mol.GetNumAtoms() + 1 == nres_mol.GetNumAtoms()
+            assert res_mol.GetNumAtoms() == cres_mol.GetNumAtoms()
+        else:
+            assert res_mol is not None
+
+    assert handler_utils.make_residue_mol_from_template("HOH") is None
+
+
+def test_update_mol_topology(residue_mol_inputs):
+    for res_name, props in residue_mol_inputs.items():
+        if res_name in ["HOH"]:  # doesn't apply
+            continue
+        elements, bond_list, atom_name_list = props["elements"], props["bond_list"], props["atom_name_list"]
+        topology_res_mol = handler_utils.update_carbonyl_bond_type(
+            handler_utils.make_residue_mol(res_name, elements, bond_list), atom_name_list
+        )
+        template_res_mol = handler_utils.make_residue_mol_from_template(res_name)
+
+        from rdkit.Chem.Draw import rdMolDraw2D
+
+        with open(f"test.svg", "w") as fh:
+            drawer = rdMolDraw2D.MolDraw2DSVG(200, 180 * 2, 200, 180)
+            drawer.drawOptions().useBWAtomPalette()
+            dopts = drawer.drawOptions()
+            dopts.baseFontSize = 0.3
+
+            drawer.DrawMolecules(
+                [topology_res_mol, template_res_mol],
+                legends=[res_name, res_name + "template"],
+            )
+            drawer.FinishDrawing()
+            fh.write(drawer.GetDrawingText())
+
+        handler_utils.update_mol_topology(topology_res_mol, template_res_mol, atom_name_list)
+
+        match = template_res_mol.GetSubstructMatch(topology_res_mol)
+        print("match", match)
+        # map from topology_res_mol to template_res_mol
+        fwd_map = {i: v for i, v in enumerate(match)}
+        for topology_atom in topology_res_mol.GetAtoms():
+            template_atom = template_res_mol.GetAtomWithIdx(fwd_map[topology_atom.GetIdx()])
+            assert template_atom.GetFormalCharge() == topology_atom.GetFormalCharge()
+
+        template_bonds = {}
+        for bond in template_res_mol.GetBonds():
+            src_idx = bond.GetBeginAtomIdx()
+            dst_idx = bond.GetEndAtomIdx()
+            template_bonds[(src_idx, dst_idx)] = bond
+            template_bonds[(dst_idx, src_idx)] = bond
+
+        for topology_bond in topology_res_mol.GetBonds():
+            src_idx = fwd_map[topology_bond.GetBeginAtomIdx()]
+            dst_idx = fwd_map[topology_bond.GetEndAtomIdx()]
+            template_bond = template_bonds[(src_idx, dst_idx)]
+            assert topology_bond.GetBondType() == template_bond.GetBondType()
+            assert topology_bond.GetIsAromatic() == template_bond.GetIsAromatic()
+
+
+def test_get_res_name():
+    res_name, has_n_cap, has_c_cap = handler_utils.get_res_name("ARG")
+    assert res_name == "ARG"
+    assert not has_n_cap
+    assert not has_c_cap
+
+    res_name, has_n_cap, has_c_cap = handler_utils.get_res_name("NARG")
+    assert res_name == "ARG"
+    assert has_n_cap
+    assert not has_c_cap
+
+    res_name, has_n_cap, has_c_cap = handler_utils.get_res_name("CARG")
+    assert res_name == "ARG"
+    assert not has_n_cap
+    assert has_c_cap
+
+
+def test_add_n_cap():
+    res_mol = handler_utils.make_residue_mol_from_template("HID")
+    res_mol = handler_utils.add_n_cap(res_mol)
+
+    found_nh3 = False
+    for atom in res_mol.GetAtoms():
+        if atom.GetSymbol() == "N" and atom.GetFormalCharge() == 1:
+            bonds = []
+            for bond in atom.GetBonds():
+                bonds.append({bond.GetBeginAtom().GetSymbol(), bond.GetEndAtom().GetSymbol()})
+            if sorted(bonds) == sorted([{"N", "C"}, {"N", "H"}, {"N", "H"}, {"N", "H"}]):
+                found_nh3 = True
+    assert found_nh3
