@@ -5,6 +5,8 @@ from rdkit import Chem
 
 Mol: TypeAlias = Chem.rdchem.Mol
 
+AMIDE_SMILES = "NCC(O)=O"
+
 SMILES_BY_RES_NAME = {
     "ACE": "CC=O",
     "NME": "CN",
@@ -114,7 +116,7 @@ def get_query_mol(mol: Mol) -> Mol:
     return query_generic_bonds
 
 
-def make_residue_mol(name: str, elements: List[str], bonds: List[int]) -> Mol:
+def make_residue_mol(name: str, elements: List[str], bonds: List[Tuple[int, int]]) -> Mol:
     """
     Generate an rdkit molecule given a list of elements and a list of bonds
     for a residue.
@@ -206,7 +208,6 @@ def make_residue_mol_from_template(template_name: str) -> Optional[Mol]:
 
     # Set up the COO- cap, for CXYZ residues
     if has_c_cap:
-        print("has_c_cap", has_c_cap)
         mol = add_c_cap(mol)
 
     for atom in mol.GetAtoms():
@@ -242,16 +243,8 @@ def update_mol_topology(topology_res_mol: Mol, template_res_mol: Mol, name_list:
         template_res_idx = fwd_map[atom.GetIdx()]
         template_res_atom = template_res_atoms[template_res_idx]
 
-        new_charge = None
         if template_res_atom.GetFormalCharge() != 0:
-            new_charge = template_res_atom.GetFormalCharge()
-
-        # # For capped residues, need to get the charge right for symmtery
-        # if name_list[atom.GetIdx()] == "OXT":
-        #     new_charge = -1
-
-        if new_charge is not None:
-            atom.SetFormalCharge(new_charge)
+            atom.SetFormalCharge(template_res_atom.GetFormalCharge())
 
     # Update the bonds/aromatic type based on the template
     template_bonds = {}
@@ -266,15 +259,9 @@ def update_mol_topology(topology_res_mol: Mol, template_res_mol: Mol, name_list:
         src_idx = bond.GetBeginAtomIdx()
         dst_idx = bond.GetEndAtomIdx()
 
-        bond_tuple = name_list[src_idx], name_list[dst_idx]
-        # # may not be matched (due to a partial molecule match)
-        # # and already handled in make_residue_mol
-        # if bond_tuple in [("C", "O"), ("O", "C"), ("C", "OXT"), ("OXT", "C")]:
-        #     continue
-
-        proper_src_idx = fwd_map[src_idx]
-        proper_dst_idx = fwd_map[dst_idx]
-        k = (proper_src_idx, proper_dst_idx)
+        template_src_idx = fwd_map[src_idx]
+        template_dst_idx = fwd_map[dst_idx]
+        k = (template_src_idx, template_dst_idx)
         bond.SetBondType(template_bonds[k].GetBondType())
         bond.SetIsAromatic(template_bonds[k].GetIsAromatic())
 
@@ -320,7 +307,7 @@ def add_n_cap(mol: Mol) -> Mol:
     mw = Chem.RWMol(mol)
     mw.BeginBatchEdit()
     # Need to adjust charge of the N to +1
-    query_mol = get_query_mol(Chem.MolFromSmiles("NCC(O)=O"))
+    query_mol = get_query_mol(Chem.MolFromSmiles(AMIDE_SMILES))
     matches = mol.GetSubstructMatches(query_mol)
 
     # find the N to add the cap
@@ -346,9 +333,8 @@ def add_c_cap(mol: Mol) -> Mol:
     mw = Chem.RWMol(mol)
     mw.BeginBatchEdit()
     # Need to adjust charge of the O to -1
-    query_mol = get_query_mol(Chem.MolFromSmiles("NCC(O)=O"))
+    query_mol = get_query_mol(Chem.MolFromSmiles(AMIDE_SMILES))
     matches = mol.GetSubstructMatches(query_mol)
-    print("matches", matches)
 
     # find the O to adjust the charge
     h_atom_idx = None
@@ -364,9 +350,9 @@ def add_c_cap(mol: Mol) -> Mol:
                     elif bond.GetEndAtom().GetSymbol() == "H":
                         h_atom_idx = bond.GetEndAtomIdx()
                 break
-    print("h_atom_idx", h_atom_idx)
+
+    # remove the extra H
     if h_atom_idx is not None:
         mw.RemoveAtom(h_atom_idx)
     mw.CommitBatchEdit()
-    # mw.RemoveHs(mw, implicitOnly=False, sanitize=True)
     return mw
