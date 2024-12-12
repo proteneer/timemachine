@@ -219,7 +219,15 @@ def generate_nonbonded_idxs(mol, smirks):
 
 
 def compute_or_load_am1_charges(mol, mode=AM1ELF10):
-    """Unless already cached in mol's "AM1ELF10_CHARGE_CACHE" property, use OpenEye to compute AM1ELF10 partial charges."""
+    """
+    Unless already cached in mol's "{mode}{CACHE_SUFFIX}" property,
+    use OpenEye to compute partial charges using the specified mode.
+
+    Parameters
+    ----------
+    mode:
+        One of AM1, AM1ELF10, AM1BCC or AM1BCCELF10.
+    """
 
     # check for cache
     cache_prop_name = f"{mode}{CACHE_SUFFIX}"
