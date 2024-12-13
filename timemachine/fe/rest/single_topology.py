@@ -7,6 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 from openmm import app
 
+from timemachine.constants import NBParamIdx
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import HostGuestSystem, VacuumSystem
 from timemachine.ff import Forcefield
@@ -111,9 +112,9 @@ class SingleTopologyREST(SingleTopology):
         nonbonded = replace(
             ref_state.nonbonded,
             params=jnp.asarray(ref_state.nonbonded.params)
-            .at[:, 0]
+            .at[:, NBParamIdx.Q_IDX]
             .mul(energy_scale)  # scale q_ij
-            .at[:, 2]
+            .at[:, NBParamIdx.LJ_EPS_IDX]
             .mul(energy_scale),  # scale eps_ij
         )
 
@@ -134,9 +135,9 @@ class SingleTopologyREST(SingleTopology):
         nonbonded_host_guest_ixn = replace(
             ref_state.nonbonded_host_guest_ixn,
             params=jnp.asarray(ref_state.nonbonded_host_guest_ixn.params)
-            .at[num_atoms_host:, 0]
+            .at[num_atoms_host:, NBParamIdx.Q_IDX]
             .mul(energy_scale)  # scale ligand charges
-            .at[num_atoms_host:, 2]
+            .at[num_atoms_host:, NBParamIdx.LJ_EPS_IDX]
             .mul(energy_scale),  # scale ligand epsilons
         )
 
