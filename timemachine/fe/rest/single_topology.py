@@ -36,6 +36,44 @@ def get_temperature_scale_interpolation_fxn(
 
 
 class SingleTopologyREST(SingleTopology):
+    r"""Extends :py:class`timemachine.fe.single_topology.SingleTopology` to enhance intermediate states with REST-like
+    energy scaling of certain interactions.
+
+    The enhanced interactions are:
+
+    1. ligand proper torsions (i, j, k, l) where (j, k) is a rotatable bond
+    2. ligand proper torsions (i, j, k, l) where (j, k) is an aliphatic ring bond
+    3. ligand-ligand electrostatics and LJ
+    4. ligand-environment electrostatics LJ
+
+    Energy scaling is implemented by scaling interaction parameters by ``1 / temperature_scale``, where
+    ``temperature_scale`` is interpolated using a function ``f`` with the following properties:
+
+    - f(0) = f(1) = 1 (identity at end states)
+    - f(0.5) = max_temperature_scale
+    - f(x) = f(1 - x) (symmetric)
+
+    Parameters
+    ----------
+    mol_a: ROMol
+        First guest
+
+    mol_b: ROMol
+        Second guest
+
+    core: np.array (C, 2)
+        Atom mapping from mol_a to mol_b
+
+    forcefield: ff.Forcefield
+        Forcefield to use for parameterization
+
+    max_temperature_scale: float
+        Maximum temperature scale factor
+
+    temperature_scale_interpolation_fxn: str
+        Interpolation function to use for temperature scaling. One of "linear", "quadratic", or "exponential"
+    """
+
     def __init__(
         self,
         mol_a,
