@@ -12,8 +12,8 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.rbfe import Host, setup_optimized_host
-from timemachine.fe.rest import InterpolationFxn, SingleTopologyREST, Symmetric
-from timemachine.fe.rest.interpolation import Exponential, Linear, Quadratic, plot_interpolation_fxn
+from timemachine.fe.rest.interpolation import Exponential, Linear, Quadratic, Symmetric, plot_interpolation_fxn
+from timemachine.fe.rest.single_topology import InterpolationFxnName, SingleTopologyREST
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import VacuumSystem
 from timemachine.fe.utils import get_romol_conf, read_sdf_mols_by_name
@@ -47,18 +47,17 @@ def get_single_topology(mol_a, mol_b, core) -> SingleTopology:
 
 @cache
 def get_single_topology_rest(
-    mol_a, mol_b, core, temperature_scale_interpolation_fxn: Symmetric[InterpolationFxn]
+    mol_a, mol_b, core, max_temperature_scale: float, temperature_scale_interpolation_fxn: InterpolationFxnName
 ) -> SingleTopologyREST:
-    return SingleTopologyREST(mol_a, mol_b, np.asarray(core), forcefield, temperature_scale_interpolation_fxn)
+    return SingleTopologyREST(
+        mol_a, mol_b, np.asarray(core), forcefield, max_temperature_scale, temperature_scale_interpolation_fxn
+    )
 
 
 @pytest.mark.parametrize("lamb", [0.0, 0.4, 0.5, 1.0])
-@pytest.mark.parametrize(
-    "functional_form",
-    [Linear(1.0, 2.0), Quadratic(1.0, 2.0), Exponential(1.0, 2.0)],
-)
+@pytest.mark.parametrize("temperature_scale_interpolation_fxn", ["linear", "quadratic", "exponential"])
 @pytest.mark.parametrize("mol_pair", np.random.default_rng(2024).choice(hif2a_ligand_pairs, size=3))
-def test_single_topology_rest_vacuum(mol_pair, functional_form: InterpolationFxn, lamb):
+def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_fxn, lamb):
     mol_a, mol_b = mol_pair
 
     has_aliphatic_rings = (
@@ -70,7 +69,7 @@ def test_single_topology_rest_vacuum(mol_pair, functional_form: InterpolationFxn
 
     core = get_core(mol_a, mol_b)
     st = get_single_topology(mol_a, mol_b, core)
-    st_rest = get_single_topology_rest(mol_a, mol_b, core, Symmetric(functional_form))
+    st_rest = get_single_topology_rest(mol_a, mol_b, core, 2.0, temperature_scale_interpolation_fxn)
 
     state = st_rest.setup_intermediate_state(lamb)
     state_ref = st.setup_intermediate_state(lamb)
@@ -136,17 +135,14 @@ def get_solvent_host(st: SingleTopology) -> tuple[Host, HostConfig]:
 
 
 @pytest.mark.parametrize("lamb", [0.0, 0.4, 0.5, 1.0])
-@pytest.mark.parametrize(
-    "functional_form",
-    [Linear(1.0, 2.0), Quadratic(1.0, 2.0), Exponential(1.0, 2.0)],
-)
+@pytest.mark.parametrize("temperature_scale_interpolation_fxn", ["linear", "quadratic", "exponential"])
 @pytest.mark.parametrize("mol_pair", np.random.default_rng(2024).choice(hif2a_ligand_pairs, size=3))
-def test_single_topology_rest_solvent(mol_pair, functional_form: InterpolationFxn, lamb):
+def test_single_topology_rest_solvent(mol_pair, temperature_scale_interpolation_fxn, lamb):
     mol_a, mol_b = mol_pair
 
     core = get_core(mol_a, mol_b)
     st = get_single_topology(mol_a, mol_b, core)
-    st_rest = get_single_topology_rest(mol_a, mol_b, core, Symmetric(functional_form))
+    st_rest = get_single_topology_rest(mol_a, mol_b, core, 2.0, temperature_scale_interpolation_fxn)
 
     host, host_config = get_solvent_host(st)
 
@@ -173,7 +169,7 @@ def get_mol(smiles: str):
 def get_identity_transformation(mol):
     n_atoms = mol.GetNumAtoms()
     core = np.tile(np.arange(n_atoms)[:, None], (1, 2))  # identity
-    return SingleTopologyREST(mol, mol, core, forcefield, Symmetric(Linear(1.0, 2.0)))
+    return SingleTopologyREST(mol, mol, core, forcefield, 2.0, "linear")
 
 
 def test_single_topology_rest_propers():
@@ -198,18 +194,15 @@ def test_single_topology_rest_propers():
 @pytest.mark.parametrize(
     "lamb", [0.0, 0.4, 0.51, 1.0]
 )  # NOTE: asymmetry at lambda = 0.5 due to discontinuity in combine_confs
-@pytest.mark.parametrize(
-    "functional_form",
-    [Linear(1.0, 2.0), Quadratic(1.0, 2.0), Exponential(1.0, 2.0)],
-)
+@pytest.mark.parametrize("temperature_scale_interpolation_fxn", ["linear", "quadratic", "exponential"])
 @pytest.mark.parametrize("mol_pair", np.random.default_rng(2024).choice(hif2a_ligand_pairs, size=3))
-def test_single_topology_rest_symmetric(mol_pair, functional_form: InterpolationFxn, lamb):
+def test_single_topology_rest_symmetric(mol_pair, temperature_scale_interpolation_fxn, lamb):
     mol_a, mol_b = mol_pair
     core_fwd = get_core(mol_a, mol_b)
     core_rev = tuple((b, a) for a, b in core_fwd)
 
     def get_transformation(mol_a, mol_b, core, lamb):
-        st = get_single_topology_rest(mol_a, mol_b, core, Symmetric(functional_form))
+        st = get_single_topology_rest(mol_a, mol_b, core, 2.0, temperature_scale_interpolation_fxn)
         potential = st.setup_intermediate_state(lamb).get_U_fn()
         conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
         return potential, conf, st

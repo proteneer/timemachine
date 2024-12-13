@@ -33,8 +33,7 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
-from timemachine.fe.rest import SingleTopologyREST, Symmetric
-from timemachine.fe.rest.interpolation import Quadratic
+from timemachine.fe.rest.single_topology import SingleTopologyREST
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology, assert_default_system_constraints
 from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
@@ -61,7 +60,7 @@ DEFAULT_REST_PARAMS = replace(
     DEFAULT_HREX_PARAMS,
     hrex_params=replace(
         DEFAULT_HREX_PARAMS.hrex_params,
-        rest_params=RESTParams(temperature_scale_interpolation_fxn=Symmetric(Quadratic(1.0, 2.0))),
+        rest_params=RESTParams(max_temperature_scale=3.0, temperature_scale_interpolation_fxn="exponential"),
     ),
 )
 
@@ -882,6 +881,7 @@ def estimate_relative_free_energy_bisection_hrex(
             mol_b,
             core,
             ff,
+            max_temperature_scale=hrex_params.rest_params.max_temperature_scale,
             temperature_scale_interpolation_fxn=hrex_params.rest_params.temperature_scale_interpolation_fxn,
         )
         if hrex_params.rest_params

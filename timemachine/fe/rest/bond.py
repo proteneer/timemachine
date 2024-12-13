@@ -21,7 +21,7 @@ class CanonicalBond:
     def from_idxs(cls, i: int, j: int):
         return cls(i, j, _unsafe=True) if i < j else cls(j, i, _unsafe=True)
 
-    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int_]) -> "CanonicalBond":
+    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int32]) -> "CanonicalBond":
         return CanonicalBond.from_idxs(a_to_b[self.i], a_to_b[self.j])
 
 
@@ -42,7 +42,7 @@ class CanonicalAngle:
     def from_idxs(cls, i: int, j: int, k: int):
         return cls(i, j, k, _unsafe=True) if i < k else cls(k, j, i, _unsafe=True)
 
-    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int_]) -> "CanonicalAngle":
+    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int32]) -> "CanonicalAngle":
         return CanonicalAngle.from_idxs(a_to_b[self.i], a_to_b[self.j], a_to_b[self.k])
 
 
@@ -64,7 +64,7 @@ class CanonicalTorsion:
     def from_idxs(cls, i: int, j: int, k: int, l: int):
         return cls(i, j, k, l, _unsafe=True) if i < l else cls(l, k, j, i, _unsafe=True)
 
-    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int_]) -> "CanonicalTorsion":
+    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int32]) -> "CanonicalTorsion":
         return CanonicalTorsion.from_idxs(a_to_b[self.i], a_to_b[self.j], a_to_b[self.k], a_to_b[self.l])
 
 

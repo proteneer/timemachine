@@ -1,5 +1,6 @@
 from dataclasses import replace
 from functools import cached_property
+from typing import Callable, Literal
 
 import jax.numpy as jnp
 import numpy as np
@@ -12,8 +13,25 @@ from timemachine.ff import Forcefield
 from timemachine.potentials import HarmonicAngleStable, NonbondedPairListPrecomputed
 
 from .bond import CanonicalBond, mkbond
-from .interpolation import InterpolationFxn, Symmetric
+from .interpolation import Exponential, InterpolationFxn, Linear, Quadratic, Symmetric
 from .queries import get_rotatable_bonds
+
+InterpolationFxnName = Literal["linear", "quadratic", "exponential"]
+
+
+def get_temperature_scale_interpolation_fxn(
+    max_temperature_scale: float, interpolation_fxn: InterpolationFxnName
+) -> InterpolationFxn:
+    make_interp_fxn: Callable[[float, float], InterpolationFxn]
+    match interpolation_fxn:
+        case "linear":
+            make_interp_fxn = Linear
+        case "quadratic":
+            make_interp_fxn = Quadratic
+        case "exponential":
+            make_interp_fxn = Exponential
+
+    return Symmetric(make_interp_fxn(1.0, max_temperature_scale))
 
 
 class SingleTopologyREST(SingleTopology):
@@ -23,14 +41,14 @@ class SingleTopologyREST(SingleTopology):
         mol_b,
         core,
         forcefield,
-        temperature_scale_interpolation_fxn: Symmetric[InterpolationFxn],
+        max_temperature_scale: float,
+        temperature_scale_interpolation_fxn: InterpolationFxnName = "exponential",
     ):
-        assert isinstance(temperature_scale_interpolation_fxn, Symmetric)
-        assert temperature_scale_interpolation_fxn.src == 1.0
-
         super().__init__(mol_a, mol_b, core, forcefield)
 
-        self._temperature_scale_interpolation_fxn = temperature_scale_interpolation_fxn
+        self._temperature_scale_interpolation_fxn = get_temperature_scale_interpolation_fxn(
+            max_temperature_scale, temperature_scale_interpolation_fxn
+        )
 
     @cached_property
     def aliphatic_ring_bonds(self) -> set[CanonicalBond]:
