@@ -1,12 +1,26 @@
+from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Callable, TypeVar, override
 
 import numpy as np
 from numpy.typing import NDArray
 
+TCanonicalIxn = TypeVar("TCanonicalIxn", bound="CanonicalIxn")  # in Python 3.11, can remove this in favor of Self
+
 
 @dataclass(frozen=True)
-class CanonicalBond:
+class CanonicalIxn(ABC):
+    @abstractmethod
+    def map(self: TCanonicalIxn, f: Callable[[int], int]) -> TCanonicalIxn:
+        ...
+
+    def translate(self: TCanonicalIxn, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int32]) -> TCanonicalIxn:
+        return self.map(lambda i: a_to_b[i])
+
+
+@dataclass(frozen=True)
+class CanonicalBond(CanonicalIxn):
     i: int
     j: int
 
@@ -22,12 +36,13 @@ class CanonicalBond:
     def from_idxs(cls, i: int, j: int):
         return cls(i, j, _unsafe=True) if i < j else cls(j, i, _unsafe=True)
 
-    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int32]) -> "CanonicalBond":
-        return CanonicalBond.from_idxs(a_to_b[self.i], a_to_b[self.j])
+    @override
+    def map(self, f: Callable[[int], int]) -> "CanonicalBond":
+        return CanonicalBond.from_idxs(f(self.i), f(self.j))
 
 
 @dataclass(frozen=True)
-class CanonicalAngle:
+class CanonicalAngle(CanonicalIxn):
     i: int
     j: int
     k: int
@@ -44,12 +59,13 @@ class CanonicalAngle:
     def from_idxs(cls, i: int, j: int, k: int):
         return cls(i, j, k, _unsafe=True) if i < k else cls(k, j, i, _unsafe=True)
 
-    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int32]) -> "CanonicalAngle":
-        return CanonicalAngle.from_idxs(a_to_b[self.i], a_to_b[self.j], a_to_b[self.k])
+    @override
+    def map(self, f: Callable[[int], int]) -> "CanonicalAngle":
+        return CanonicalAngle.from_idxs(f(self.i), f(self.j), f(self.k))
 
 
 @dataclass(frozen=True)
-class CanonicalProper:
+class CanonicalProper(CanonicalIxn):
     i: int
     j: int
     k: int
@@ -67,8 +83,9 @@ class CanonicalProper:
     def from_idxs(cls, i: int, j: int, k: int, l: int):
         return cls(i, j, k, l, _unsafe=True) if i < l else cls(l, k, j, i, _unsafe=True)
 
-    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int32]) -> "CanonicalProper":
-        return CanonicalProper.from_idxs(a_to_b[self.i], a_to_b[self.j], a_to_b[self.k], a_to_b[self.l])
+    @override
+    def map(self, f: Callable[[int], int]) -> "CanonicalProper":
+        return CanonicalProper.from_idxs(f(self.i), f(self.j), f(self.k), f(self.l))
 
 
 def mkbond(i: int, j: int) -> CanonicalBond:

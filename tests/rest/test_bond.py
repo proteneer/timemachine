@@ -25,3 +25,11 @@ def test_eq():
     assert CanonicalProper(1, 2, 3, 4) == CanonicalProper.from_idxs(4, 3, 2, 1)
     assert CanonicalProper(1, 2, 3, 4) != CanonicalProper.from_idxs(2, 3, 4, 1)
     assert CanonicalProper(1, 2, 3, 4) != CanonicalProper.from_idxs(4, 2, 3, 1)
+
+
+def test_map_canonical():
+    assert CanonicalBond(0, 1).map(lambda x: 1 - x) == CanonicalBond(0, 1)
+
+
+def test_repr():
+    assert "_unsafe" not in repr(CanonicalBond(1, 2))  # should be hidden
