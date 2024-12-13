@@ -47,7 +47,7 @@ class CanonicalAngle:
 
 
 @dataclass(frozen=True)
-class CanonicalTorsion:
+class CanonicalProper:
     i: int
     j: int
     k: int
@@ -64,8 +64,8 @@ class CanonicalTorsion:
     def from_idxs(cls, i: int, j: int, k: int, l: int):
         return cls(i, j, k, l, _unsafe=True) if i < l else cls(l, k, j, i, _unsafe=True)
 
-    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int32]) -> "CanonicalTorsion":
-        return CanonicalTorsion.from_idxs(a_to_b[self.i], a_to_b[self.j], a_to_b[self.k], a_to_b[self.l])
+    def translate(self, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int32]) -> "CanonicalProper":
+        return CanonicalProper.from_idxs(a_to_b[self.i], a_to_b[self.j], a_to_b[self.k], a_to_b[self.l])
 
 
 def mkbond(i: int, j: int) -> CanonicalBond:
@@ -76,5 +76,5 @@ def mkangle(i: int, j: int, k: int) -> CanonicalAngle:
     return CanonicalAngle.from_idxs(i, j, k)
 
 
-def mktorsion(i: int, j: int, k: int, l: int) -> CanonicalTorsion:
-    return CanonicalTorsion.from_idxs(i, j, k, l)
+def mkproper(i: int, j: int, k: int, l: int) -> CanonicalProper:
+    return CanonicalProper.from_idxs(i, j, k, l)
