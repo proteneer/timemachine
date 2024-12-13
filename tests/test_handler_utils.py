@@ -172,6 +172,5 @@ def test_add_c_cap():
             continue
         res_mol = handler_utils.make_residue_mol_from_template(res_name)
         res_mol = handler_utils.add_c_cap(res_mol)
-
         matches = res_mol.GetSubstructMatches(Chem.MolFromSmiles("NCC([O-])=O"))
         assert len(matches) == 1

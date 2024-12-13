@@ -18,7 +18,9 @@ from timemachine.graph_utils import convert_to_nx
 
 CACHE_SUFFIX = "Cache"
 AM1_CHARGE_CACHE = "AM1Cache"
+AM1BCC_CHARGE_CACHE = "AM1BCCCache"
 AM1ELF10_CHARGE_CACHE = "AM1ELF10Cache"
+AM1BCCELF10_CHARGE_CACHE = "AM1BCCELF10Cache"
 BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
 
 AM1 = "AM1"
@@ -783,6 +785,10 @@ class AM1CCCHandler(SerializableMixIn):
             SMIRKS patterns matching bonds, to be parsed using OpenEye Toolkits
         mol: Chem.ROMol
             molecule to be parameterized.
+        mode: str
+            Mode used to compute the charges, one of AM1, AM1ELF10, AM1BCC, AM1BCCELF10.
+            Defaults to AM1ELF10. Note, if using AM1BCC or AM1BCCELF10, the parameters
+            need to be initialized correctly.
 
         """
         # (ytz): leave this comment here, useful for quickly disable AM1 calculations for large mols
@@ -812,6 +818,27 @@ class AM1CCCSolventHandler(AM1CCCHandler):
 
 
 class AM1BCCCCCHandler(AM1CCCHandler):
+    def __init__(self, smirks, params, props):
+        """
+        The AM1BCCCCCHandler stands for AM1BCC Correctable Charge Correction (CCC),
+        that is AM1BCC is applied using OpenEye's AM1BCCELF10 method and
+        then additional corrections are applied to the resulting charges.
+
+        This handler also supports phosphorus, unlike the `AM1CCCHandler`.
+        See `AM1CCCHandler` for more details.
+
+        Parameters
+        ----------
+        smirks: list of str (P,)
+            SMIRKS patterns
+        params: np.array, (P,)
+            normalized charge increment for each matched bond
+        props: any
+        """
+        super().__init__(smirks, params, props)
+        # Also supports phosphorus
+        self.supported_elements.add(15)
+
     @staticmethod
     def static_parameterize(params, smirks, mol):
         """

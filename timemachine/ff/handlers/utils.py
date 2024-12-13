@@ -156,7 +156,8 @@ def make_residue_mol_from_template(template_name: str) -> Optional[Mol]:
     Parameters
     ----------
     template_name:
-        Name of the residue. Supported residues are in `SMILES_BY_RES_NAME`.
+        Name of the residue. Supported residues are in `SMILES_BY_RES_NAME`
+        and the equivalent N- or C-capped versions.
 
     Return
     ------
@@ -236,13 +237,13 @@ def update_mol_topology(topology_res_mol: Mol, template_res_mol: Mol):
     topology_res_mol.UpdatePropertyCache()
 
 
-def get_res_name(res_name: str) -> Tuple[str, bool, bool]:
+def get_res_name(template_name: str) -> Tuple[str, bool, bool]:
     """
     Parameters
     ----------
-    res_name:
-        Three letter of the residue. Can have an 'N' or 'C' prefix
-        to indicate a capped residue.
+    template_name:
+        Three code of the residue.
+        Can have an 'N' or 'C' prefix to indicate a capped residue.
 
     Return
     ------
@@ -255,6 +256,7 @@ def get_res_name(res_name: str) -> Tuple[str, bool, bool]:
     """
     has_c_cap = False
     has_n_cap = False
+    res_name = template_name
     if len(res_name) == 4 and res_name[0] == "C":
         res_name = res_name[1:]
         has_c_cap = True
@@ -262,6 +264,7 @@ def get_res_name(res_name: str) -> Tuple[str, bool, bool]:
         has_n_cap = True
         res_name = res_name[1:]
 
+    assert len(res_name) == 3, f"Invalid residue name: {template_name}"
     return res_name, has_n_cap, has_c_cap
 
 
@@ -274,19 +277,15 @@ def add_n_cap(mol: Mol) -> Mol:
     """
     mw = Chem.RWMol(mol)
     mw.BeginBatchEdit()
+
     # Need to adjust charge of the N to +1
     query_mol = get_query_mol(Chem.MolFromSmiles(AMIDE_SMILES))
-    matches = mol.GetSubstructMatches(query_mol)
+    n_atom_idx = mol.GetSubstructMatches(query_mol)[0][0]
+    n_atom = mw.GetAtomWithIdx(n_atom_idx)
+    n_atom.SetFormalCharge(+1)
+    h_atom = mw.AddAtom(Chem.Atom("H"))
 
-    # find the N to add the cap
-    for i, atom in enumerate(mw.GetAtoms()):
-        if i not in matches[0]:
-            continue
-        if atom.GetSymbol() == "N":
-            atom.SetFormalCharge(+1)
-            atm_h = mw.AddAtom(Chem.Atom("H"))
-            mw.AddBond(atm_h, atom.GetIdx())
-            break
+    mw.AddBond(h_atom, n_atom_idx)
     mw.CommitBatchEdit()
     return mw
 
@@ -298,29 +297,26 @@ def add_c_cap(mol: Mol) -> Mol:
     NOTE: This only works properly for residues constructed
     from the template, see `SMILES_BY_RES_NAME`.
     """
-    mw = Chem.RWMol(mol)
-    mw.BeginBatchEdit()
-    # Need to adjust charge of the O to -1
-    query_mol = get_query_mol(Chem.MolFromSmiles(AMIDE_SMILES))
+
+    # ((0, 1, 9, 10, 11),)
+    # Need to adjust charge of the O to -1 and remove the extra H
+    query_mol = Chem.MolFromSmiles(AMIDE_SMILES)
     matches = mol.GetSubstructMatches(query_mol)
 
-    # find the O to adjust the charge
-    h_atom_idx = None
-    for i, atom in enumerate(mw.GetAtoms()):
-        if i not in matches[0]:
-            continue
-        if atom.GetSymbol() == "O":
-            if [bond.GetBondType() for bond in atom.GetBonds()] != [Chem.BondType.DOUBLE]:
-                atom.SetFormalCharge(-1)
-                for bond in atom.GetBonds():
-                    if bond.GetBeginAtom().GetSymbol() == "H":
-                        h_atom_idx = bond.GetBeginAtomIdx()
-                    elif bond.GetEndAtom().GetSymbol() == "H":
-                        h_atom_idx = bond.GetEndAtomIdx()
-                break
+    mw = Chem.RWMol(mol)
+    mw.BeginBatchEdit()
 
-    # remove the extra H
-    if h_atom_idx is not None:
-        mw.RemoveAtom(h_atom_idx)
+    oxygen_idx = matches[0][3]
+    oxygen_atom = mw.GetAtomWithIdx(oxygen_idx)
+    oxygen_atom.SetFormalCharge(-1)
+    for bond in oxygen_atom.GetBonds():
+        if bond.GetBeginAtom().GetSymbol() == "H":
+            h_atom_idx = bond.GetBeginAtomIdx()
+            break
+        elif bond.GetEndAtom().GetSymbol() == "H":
+            h_atom_idx = bond.GetEndAtomIdx()
+            break
+
+    mw.RemoveAtom(h_atom_idx)
     mw.CommitBatchEdit()
     return mw
