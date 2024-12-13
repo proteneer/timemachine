@@ -298,7 +298,6 @@ def add_c_cap(mol: Mol) -> Mol:
     from the template, see `SMILES_BY_RES_NAME`.
     """
 
-    # ((0, 1, 9, 10, 11),)
     # Need to adjust charge of the O to -1 and remove the extra H
     query_mol = Chem.MolFromSmiles(AMIDE_SMILES)
     matches = mol.GetSubstructMatches(query_mol)
