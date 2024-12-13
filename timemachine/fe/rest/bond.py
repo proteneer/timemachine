@@ -13,9 +13,10 @@ class CanonicalBond:
     _unsafe: bool = field(default=False, init=True, compare=False, repr=False)
 
     def __post_init__(self):
-        if not self._unsafe:
-            if self.i >= self.j:
-                raise ValueError(f"{(self.i, self.j)} is not canonical")
+        if self._unsafe:
+            return
+        if self.i >= self.j:
+            raise ValueError(f"{(self.i, self.j)} is not canonical")
 
     @classmethod
     def from_idxs(cls, i: int, j: int):
@@ -34,9 +35,10 @@ class CanonicalAngle:
     _unsafe: bool = field(default=False, init=True, compare=False, repr=False)
 
     def __post_init__(self):
-        if not self._unsafe:
-            if self.i >= self.k:
-                raise ValueError(f"{(self.i, self.j, self.k)} is not canonical")
+        if self._unsafe:
+            return
+        if self.i >= self.k:
+            raise ValueError(f"{(self.i, self.j, self.k)} is not canonical")
 
     @classmethod
     def from_idxs(cls, i: int, j: int, k: int):
@@ -56,9 +58,10 @@ class CanonicalProper:
     _unsafe: bool = field(default=False, init=True, compare=False, repr=False)
 
     def __post_init__(self):
-        if not self._unsafe:
-            if self.i >= self.l:
-                raise ValueError(f"{(self.i, self.j, self.k, self.l)} is not canonical")
+        if self._unsafe:
+            return
+        if self.i >= self.l:
+            raise ValueError(f"{(self.i, self.j, self.k, self.l)} is not canonical")
 
     @classmethod
     def from_idxs(cls, i: int, j: int, k: int, l: int):
