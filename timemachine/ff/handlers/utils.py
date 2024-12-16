@@ -268,19 +268,19 @@ def get_res_name(template_name: str) -> Tuple[str, bool, bool]:
     return res_name, has_n_cap, has_c_cap
 
 
-def add_n_cap(mol: Mol) -> Mol:
+def add_n_cap(template_res_mol: Mol) -> Mol:
     """
     Add an N cap to the template residue mol.
 
     NOTE: This only works properly for residues constructed
-    from the template, see `SMILES_BY_RES_NAME`.
+    from the template, see `make_residue_mol_from_template`.
     """
-    mw = Chem.RWMol(mol)
+    mw = Chem.RWMol(template_res_mol)
     mw.BeginBatchEdit()
 
     # Need to adjust charge of the N to +1
     query_mol = get_query_mol(Chem.MolFromSmiles(AMIDE_SMILES))
-    n_atom_idx = mol.GetSubstructMatches(query_mol)[0][0]
+    n_atom_idx = template_res_mol.GetSubstructMatches(query_mol)[0][0]
     n_atom = mw.GetAtomWithIdx(n_atom_idx)
     n_atom.SetFormalCharge(+1)
     h_atom = mw.AddAtom(Chem.Atom("H"))
@@ -290,19 +290,19 @@ def add_n_cap(mol: Mol) -> Mol:
     return mw
 
 
-def add_c_cap(mol: Mol) -> Mol:
+def add_c_cap(template_res_mol: Mol) -> Mol:
     """
     Update the C-cap (COOH -> COO-).
 
     NOTE: This only works properly for residues constructed
-    from the template, see `SMILES_BY_RES_NAME`.
+    from the template, see `make_residue_mol_from_template`.
     """
 
     # Need to adjust charge of the O to -1 and remove the extra H
     query_mol = Chem.MolFromSmiles(AMIDE_SMILES)
-    matches = mol.GetSubstructMatches(query_mol)
+    matches = template_res_mol.GetSubstructMatches(query_mol)
 
-    mw = Chem.RWMol(mol)
+    mw = Chem.RWMol(template_res_mol)
     mw.BeginBatchEdit()
 
     oxygen_idx = matches[0][3]

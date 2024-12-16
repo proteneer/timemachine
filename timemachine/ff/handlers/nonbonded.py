@@ -220,7 +220,7 @@ def generate_nonbonded_idxs(mol, smirks):
     return param_idxs
 
 
-def compute_or_load_am1_charges(mol, mode=AM1ELF10):
+def compute_or_load_oe_charges(mol, mode=AM1ELF10):
     """
     Unless already cached in mol's "{mode}{CACHE_SUFFIX}" property,
     use OpenEye to compute partial charges using the specified mode.
@@ -230,6 +230,7 @@ def compute_or_load_am1_charges(mol, mode=AM1ELF10):
     mode:
         One of AM1, AM1ELF10, AM1BCC or AM1BCCELF10.
     """
+    assert mode in [AM1, AM1ELF10, AM1BCC, AM1BCCELF10]
 
     # check for cache
     cache_prop_name = f"{mode}{CACHE_SUFFIX}"
@@ -238,15 +239,15 @@ def compute_or_load_am1_charges(mol, mode=AM1ELF10):
         # to be an issue that the atom ordering modifies the return values as well. A follow up
         # with OpenEye is in order
         # https://github.com/openforcefield/openff-toolkit/issues/983
-        am1_charges = list(oe_assign_charges(mol, mode))
+        oe_charges = list(oe_assign_charges(mol, mode))
 
-        mol.SetProp(cache_prop_name, base64.b64encode(pickle.dumps(am1_charges)))
+        mol.SetProp(cache_prop_name, base64.b64encode(pickle.dumps(oe_charges)))
 
     else:
-        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_prop_name)))
-        assert len(am1_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
+        oe_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_prop_name)))
+        assert len(oe_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
 
-    return np.array(am1_charges)
+    return np.array(oe_charges)
 
 
 def compute_or_load_bond_smirks_matches(mol, smirks_list):
@@ -491,7 +492,7 @@ class AM1Handler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        return oe_assign_charges(mol, "AM1")
+        return oe_assign_charges(mol, AM1)
 
 
 class AM1BCCHandler(SerializableMixIn):
@@ -532,7 +533,7 @@ class AM1BCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        return oe_assign_charges(mol, "AM1BCCELF10")
+        return oe_assign_charges(mol, AM1BCCELF10)
 
 
 class AM1BCCIntraHandler(AM1BCCHandler):
@@ -793,7 +794,7 @@ class AM1CCCHandler(SerializableMixIn):
         """
         # (ytz): leave this comment here, useful for quickly disable AM1 calculations for large mols
         # return np.zeros(mol.GetNumAtoms())
-        am1_charges = compute_or_load_am1_charges(mol, mode=mode)
+        am1_charges = compute_or_load_oe_charges(mol, mode=mode)
         bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(mol, smirks)
 
         deltas = params[type_idxs]
