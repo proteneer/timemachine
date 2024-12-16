@@ -25,7 +25,7 @@ from timemachine.md.exchange.exchange_mover import TIBDExchangeMove as RefTIBDEx
 from timemachine.md.exchange.exchange_mover import get_water_idxs
 from timemachine.md.moves import MonteCarloMove
 from timemachine.md.states import CoordsVelBox
-from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, SummedPotential
+from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup
 from timemachine.potentials.potential import get_bound_potential_by_type
 
 
@@ -116,14 +116,12 @@ def test_exchange():
     # all_pairs has masked charges
     if mol:
         # uses a summed potential
-        ligand_env_pot = get_bound_potential_by_type(bps, SummedPotential).potential
-        ixn_group_idx = next(
-            i for i, pot in enumerate(ligand_env_pot.potentials) if isinstance(pot, NonbondedInteractionGroup)
-        )
+        bound_ixn_group = get_bound_potential_by_type(bps, NonbondedInteractionGroup)
+
         # Use the Ixn Group params
-        nb_beta = ligand_env_pot.potentials[ixn_group_idx].beta
-        nb_cutoff = ligand_env_pot.potentials[ixn_group_idx].cutoff
-        nb_water_ligand_params = ligand_env_pot.params_init[ixn_group_idx]
+        nb_beta = bound_ixn_group.potential.beta
+        nb_cutoff = bound_ixn_group.potential.cutoff
+        nb_water_ligand_params = bound_ixn_group.params
         print("number of ligand atoms", mol.GetNumAtoms())
     else:
         nb_pot = get_bound_potential_by_type(bps, Nonbonded)
