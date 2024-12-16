@@ -56,6 +56,7 @@ class Forcefield:
             nonbonded.AM1CCCHandler,
             nonbonded.AM1BCCCCCHandler,
             nonbonded.PrecomputedChargeHandler,
+            nonbonded.NNHandler,
         ]
     ]
     q_handle_intra: Optional[
@@ -65,6 +66,7 @@ class Forcefield:
             nonbonded.AM1CCCIntraHandler,
             nonbonded.AM1BCCCCCIntraHandler,
             nonbonded.PrecomputedChargeHandler,
+            nonbonded.NNHandler,
         ]
     ]
 
@@ -211,6 +213,7 @@ class Forcefield:
                     nonbonded.AM1BCCHandler,
                     nonbonded.SimpleChargeHandler,
                     nonbonded.PrecomputedChargeHandler,
+                    nonbonded.NNHandler,
                 ),
             ):
                 assert q_handle is None

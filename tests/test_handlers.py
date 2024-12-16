@@ -1,4 +1,6 @@
+import base64
 import functools
+import pickle
 from collections import defaultdict
 from copy import deepcopy
 from importlib import resources
@@ -1061,6 +1063,52 @@ def test_symmetric_am1ccc():
     # set(ref_charges) == {-1.8165082, -1.8158009, 0.90795946}
     # set(test_charges) == {-3.815801, -1.8158009, 0.18349183, 0.90795946}
     np.testing.assert_array_equal(test_charges, ref_charges)
+
+
+def test_nn_handler():
+    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        all_mols = utils.read_sdf(path_to_ligand)
+
+    mol = all_mols[0]
+    ff0 = Forcefield.load_default()
+    seed = 2024
+    feature_size = 64
+    rng = np.random.default_rng(seed)
+    bond_idxs, _ = nonbonded.compute_or_load_bond_smirks_matches(mol, ff0.q_handle.smirks)
+
+    # the handler expected both directions of each bond to be present
+    bond_idxs_ = []
+    for bond_idx in bond_idxs:
+        bond_idxs_.append(bond_idx)
+        bond_idxs_.append(bond_idx[::-1])
+    bond_idxs = np.array(bond_idxs_)
+
+    num_atoms = mol.GetNumAtoms()
+    num_bonds = bond_idxs.shape[0]
+
+    features = {
+        "atom_features": rng.random((num_atoms, feature_size)),
+        "bond_idxs": np.array(bond_idxs, dtype=int),
+        "bond_src_features": rng.random((num_bonds, feature_size)),
+        "bond_dst_features": rng.random((num_bonds, feature_size)),
+    }
+    mol.SetProp(nonbonded.NN_FEATURES_PROPNAME, base64.b64encode(pickle.dumps(features)))
+
+    # input has the features (atom0, atom1, bond)
+    layers = [0, 1, 2]
+    layer_sizes = [feature_size * 4, 32, 16, 1]
+    params = [rng.random((size0, size1)) for (size0, size1) in zip(layer_sizes, layer_sizes[1:])]
+    nn = nonbonded.NNHandler(layers, params, layer_sizes)
+    charges = nn.static_parameterize(layers, params, layer_sizes, mol)
+    assert np.sum(charges) < 1e-5
+
+    def loss_fn(params):
+        return jnp.sum(jnp.abs(nn.static_parameterize(layers, params, layer_sizes, mol)))
+
+    grad_fn = jax.grad(loss_fn)
+    print("loss", loss_fn(params))  # fast
+    print("grad", grad_fn(params))  # a few seconds
+    print("jit grad", jax.jit(grad_fn)(params))  # also a few seconds
 
 
 def test_harmonic_bonds_complete():
