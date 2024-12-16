@@ -24,6 +24,7 @@ AM1BCC_CHARGE_CACHE = "AM1BCCCache"
 AM1ELF10_CHARGE_CACHE = "AM1ELF10Cache"
 AM1BCCELF10_CHARGE_CACHE = "AM1BCCELF10Cache"
 BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
+NN_FEATURES_PROPNAME = "NNFeatures"
 
 AM1 = "AM1"
 AM1ELF10 = "AM1ELF10"
@@ -497,6 +498,66 @@ class AM1Handler(SerializableMixIn):
 
         """
         return compute_or_load_oe_charges(mol, mode=AM1)
+
+
+class NNHandler(SerializableMixIn):
+    def __init__(self, layer_idxs, params, layer_sizes):
+        self.smirks = layer_idxs
+        self.params = params
+        self.props = layer_sizes
+
+    @staticmethod
+    def static_parameterize(layer_idxs, params, layer_sizes, mol):
+        features = pickle.loads(base64.b64decode(mol.GetProp(NN_FEATURES_PROPNAME)))
+        atom_features = features["atom_features"]
+        bond_idx_features = features["bond_idxs"]
+        bond_src_features = features["bond_src_features"]
+        bond_dst_features = features["bond_dst_features"]
+
+        bond_features_by_idx = {}
+        for i, bond_idx in enumerate(bond_idx_features):
+            bond_features_by_idx[tuple(bond_idx)] = jnp.concatenate([bond_src_features[i], bond_dst_features[i]])
+
+        am1_charges = compute_or_load_oe_charges(mol, mode=AM1BCC)
+        bond_idxs = np.array(sorted(set(bond_features_by_idx.keys())))
+
+        reshaped_params = []
+        for layer_size, p in zip(layer_sizes, params):
+            reshaped_params.append(jnp.array(p).reshape(-1, layer_size))
+
+        params_by_layer = {int(layer_idx): param for layer_idx, param in zip(layer_idxs, reshaped_params)}
+        layers_by_index = list(sorted(params_by_layer.keys()))
+
+        def activation(x):
+            return x / (1 + jnp.exp(-x))  # silu
+
+        def eval_nn(features):
+            x = features
+            for layer in layers_by_index[:-1]:
+                W = params_by_layer[layer]
+                x = activation(jnp.dot(W, x))
+
+            # last layer skips activation
+            W = params_by_layer[layers_by_index[-1]]
+            return jnp.squeeze(jnp.dot(W, x))  # scalar
+
+        deltas = []
+        for bond_idx in bond_idxs:
+            bond_idx_tup = tuple(bond_idx)
+            a0 = atom_features[bond_idx[0]]
+            a1 = atom_features[bond_idx[1]]
+            b0 = bond_features_by_idx[bond_idx_tup]
+            # just b0 with features swapped
+            b1 = bond_features_by_idx[bond_idx_tup[::-1]]
+            ff0 = jnp.concatenate([a0, a1, b0])
+            ff1 = jnp.concatenate([a1, a0, b1])
+            f0 = eval_nn(ff0)
+            f1 = eval_nn(ff1)
+            f = f1 - f0  # antisymmetric to swapping bond direction
+            deltas.append(f * np.sqrt(constants.ONE_4PI_EPS0))
+
+        final_charges = apply_bond_charge_corrections(am1_charges, bond_idxs, jnp.array(deltas), runtime_validate=False)
+        return final_charges
 
 
 class AM1BCCHandler(SerializableMixIn):
