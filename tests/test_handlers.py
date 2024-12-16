@@ -1,4 +1,5 @@
 import functools
+from collections import defaultdict
 from copy import deepcopy
 from importlib import resources
 
@@ -17,7 +18,6 @@ from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.md import builders
-from timemachine.testsystems.data.ildn_params import get_amber99ildn_patterns
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -696,7 +696,7 @@ def test_freesolv_failures():
         assert am1elf10_charges is not None
 
 
-def test_compute_or_load_am1_charges():
+def test_compute_or_load_oe_charges():
     """Loop over test ligands, asserting that charges are stored in expected property and that the same charges are
     returned on repeated calls"""
 
@@ -712,14 +712,14 @@ def test_compute_or_load_am1_charges():
         assert not mol.HasProp(cache_key)
 
     # compute charges once
-    fresh_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in mols]
+    fresh_am1_charges = [nonbonded.compute_or_load_oe_charges(mol) for mol in mols]
 
     # expect each mol to have AM1 cache now
     for mol in mols:
         assert mol.HasProp(cache_key)
 
     # expect the same charges as the first time around
-    cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in mols]
+    cached_am1_charges = [nonbonded.compute_or_load_oe_charges(mol) for mol in mols]
     for fresh, cached in zip(fresh_am1_charges, cached_am1_charges):
         np.testing.assert_array_equal(fresh, cached)
 
@@ -1145,19 +1145,13 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries):
     Test that we can compute BCCs to generate per atom charge offsets and that they can be differentiated
     """
     protein_path, expected_symmetries = protein_path_and_symmetries
-    patterns = get_amber99ildn_patterns()
-
-    smirks = [x[0] for x in patterns]
+    smirks = [x[0] for x in AM1CCC_CHARGES["patterns"]]
     params = np.random.rand(len(smirks)) - 0.5
 
     with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
         host_pdb = app.PDBFile(str(path_to_pdb))
         topology = host_pdb.topology
-
-    pbcc = nonbonded.EnvironmentBCCHandler(smirks, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
-
-    assert len(pbcc.bond_atomic_numbers) == len(pbcc.bond_idxs)
-    assert (6, 6) in pbcc.bond_atomic_numbers
+        pbcc = nonbonded.EnvironmentBCCHandler(smirks, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
 
     # raw charges are correct are in the order of atoms in the topology
     raw_charges = np.array(pbcc.parameterize(np.zeros_like(params)))
@@ -1193,19 +1187,18 @@ def test_environment_bcc_full_protein(protein_path):
     """
     Test that we can compute BCCs to generate per atom charge offsets and that they can be differentiated
     """
-    patterns = get_amber99ildn_patterns()
-    smirks = [x[0] for x in patterns]
-    params = [x[1] for x in patterns]
-    params = np.random.rand(len(params)) - 0.5
+    patterns = [smirks for (smirks, param) in AM1CCC_CHARGES["patterns"]]
+    np.random.seed(2024)
+    params = np.random.rand(len(patterns)) - 0.5
 
     with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
         host_pdb = app.PDBFile(str(path_to_pdb))
         _, _, _, topology, _ = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
 
-    pbcc = nonbonded.EnvironmentBCCHandler(smirks, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
+    pbcc = nonbonded.EnvironmentBCCHandler(patterns, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
 
     # test that we can mechanically parameterize everything
-    pbcc.parameterize(params)
+    final_q_params = pbcc.parameterize(params)
 
     def loss_fn(bcc_params):
         res = pbcc.parameterize(bcc_params)
@@ -1219,7 +1212,7 @@ def test_environment_bcc_full_protein(protein_path):
 
     # test that the partial handler gives the same results
     ff = Forcefield.load_default()
-    partial_cc = nonbonded.EnvironmentBCCPartialHandler(smirks, params, None)
+    partial_cc = nonbonded.EnvironmentBCCPartialHandler(patterns, params, None)
     pbcc2 = partial_cc.get_env_handle(topology, ff)
     np.testing.assert_array_equal(pbcc.parameterize(params), pbcc2.parameterize(params))
 
@@ -1231,3 +1224,27 @@ def test_environment_bcc_full_protein(protein_path):
 
     assert loss_fn(params) == loss_fn2(params)
     np.testing.assert_array_equal(grad_fn(params), grad_fn2(params))
+
+    # now check for correctness on the full protein set
+    # if the initial charges are the same, then the final charges should
+    # also be the same by symmetry
+    atom_idx_to_res_name = {}
+    cur_atom = 0
+    for i in range(len(pbcc.template_for_residue)):
+        tfr = pbcc.template_for_residue[i]
+        n_atoms = len(tfr.atoms)
+        for j in range(n_atoms):
+            atom_idx_to_res_name[cur_atom + j] = f"{tfr.name}"
+        cur_atom += n_atoms
+
+    # charges that are the same and belong to the same residue should
+    # be the same after applying the corrections
+    init_q_params = pbcc.initial_charges
+    sym_charge_idxs = defaultdict(list)
+    for i, q in enumerate(init_q_params):
+        sym_charge_idxs[(q, atom_idx_to_res_name[i])].append(i)
+
+    for k, group in sym_charge_idxs.items():
+        first = group[0]
+        for other in group[1:]:
+            np.testing.assert_almost_equal(final_q_params[other], final_q_params[first])
