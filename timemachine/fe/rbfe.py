@@ -798,11 +798,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
     assert n_windows >= 2
 
     assert md_params.hrex_params is not None, "hrex_params must be set to use HREX"
-    if min_overlap is not None and md_params.hrex_params.optimize_target_overlap is not None:
-        assert (
-            min_overlap >= md_params.hrex_params.optimize_target_overlap
-        ), "Target overlap must be less than or equal to bisection min overlap"
-
     try:
         # First phase: bisection to determine lambda spacing
         md_params_bisection = replace(md_params, n_frames=md_params.hrex_params.n_frames_bisection)
