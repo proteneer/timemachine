@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Callable, TypeVar, override
+from typing import Callable, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -36,7 +36,6 @@ class CanonicalBond(CanonicalIxn):
     def from_idxs(cls, i: int, j: int):
         return cls(i, j, _unsafe=True) if i < j else cls(j, i, _unsafe=True)
 
-    @override
     def map(self, f: Callable[[int], int]) -> "CanonicalBond":
         return CanonicalBond.from_idxs(f(self.i), f(self.j))
 
@@ -59,7 +58,6 @@ class CanonicalAngle(CanonicalIxn):
     def from_idxs(cls, i: int, j: int, k: int):
         return cls(i, j, k, _unsafe=True) if i < k else cls(k, j, i, _unsafe=True)
 
-    @override
     def map(self, f: Callable[[int], int]) -> "CanonicalAngle":
         return CanonicalAngle.from_idxs(f(self.i), f(self.j), f(self.k))
 
@@ -83,7 +81,6 @@ class CanonicalProper(CanonicalIxn):
     def from_idxs(cls, i: int, j: int, k: int, l: int):
         return cls(i, j, k, l, _unsafe=True) if i < l else cls(l, k, j, i, _unsafe=True)
 
-    @override
     def map(self, f: Callable[[int], int]) -> "CanonicalProper":
         return CanonicalProper.from_idxs(f(self.i), f(self.j), f(self.k), f(self.l))
 
