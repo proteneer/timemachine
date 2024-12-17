@@ -106,6 +106,7 @@ setup(
         "rdkit",
         "scipy",
         "matplotlib",
+        "openmm",
     ],
     extras_require={
         "dev": [

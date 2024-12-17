@@ -46,48 +46,11 @@ ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
 
 ENV CONDA_DEFAULT_ENV ${ENV_NAME}
 
-# Install OpenMM
-ARG OPENMM_VERSION=8.0.0
-
-ARG DOXYGEN_VERSION=1.9.1
-ARG CYTHON_VERSION=0.29.26
-ARG SWIG_VERSION=3.0.12
-
-RUN . /opt/conda/etc/profile.d/conda.sh && \
-    conda install -y -c conda-forge swig=${SWIG_VERSION} doxygen=${DOXYGEN_VERSION} cython=${CYTHON_VERSION} && \
-    conda clean -a
-
 WORKDIR /code/
 
 # Copy the pip requirements to cache when possible
 COPY requirements.txt /code/timemachine/
 RUN pip install --no-cache-dir -r timemachine/requirements.txt
-
-RUN git clone --depth 1 https://github.com/openmm/openmm.git --branch "${OPENMM_VERSION}" && \
-    cd openmm/ && \
-    mkdir build && \
-    cd build && \
-    cmake \
-      -DOPENMM_BUILD_CPU_LIB=OFF \
-      -DOPENMM_BUILD_AMOEBA_CUDA_LIB=OFF \
-      -DOPENMM_BUILD_AMOEBA_OPENCL_LIB=OFF \
-      -DOPENMM_BUILD_CUDA_LIB=OFF \
-      -DOPENMM_BUILD_CUDA_COMPILER_PLUGIN=OFF \
-      -DOPENMM_BUILD_C_AND_FORTRAN_WRAPPERS=OFF \
-      -DOPENMM_BUILD_DRUDE_CUDA_LIB=OFF \
-      -DOPENMM_BUILD_DRUDE_OPENCL_LIB=OFF \
-      -DOPENMM_BUILD_EXAMPLES=OFF \
-      -DOPENMM_BUILD_OPENCL_LIB=OFF \
-      -DOPENMM_BUILD_PME_PLUGIN=OFF \
-      -DOPENMM_BUILD_RPMD_CUDA_LIB=OFF \
-      -DOPENMM_BUILD_RPMD_OPENCL_LIB=OFF \
-      -DCMAKE_INSTALL_PREFIX=/opt/openmm_install \
-      ../ && \
-    make -j "$(nproc)" && \
-    make -j "$(nproc)" install && \
-    make PythonInstall && \
-    cd /code/ && \
-    rm -rf openmm/
 
 # NOTE: timemachine_ci must come before timemachine in the Dockerfile;
 # otherwise, CI will try (and fail) to build timemachine to reach the
@@ -127,7 +90,6 @@ COPY --from=timemachine_cuda_dev /usr/local/cuda/targets/x86_64-linux/lib/libcur
 COPY --from=timemachine_cuda_dev /usr/local/cuda/lib64/libcurand* /usr/local/cuda/lib64/
 
 COPY --from=timemachine_cuda_dev /opt/conda/ /opt/conda/
-COPY --from=timemachine_cuda_dev /opt/openmm_install/ /opt/openmm_install/
 COPY --from=timemachine_cuda_dev /code/ /code/
 COPY --from=timemachine_cuda_dev /root/.bashrc /root/.bashrc
 RUN ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh
