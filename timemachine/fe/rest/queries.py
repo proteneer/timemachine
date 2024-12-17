@@ -1,5 +1,4 @@
 from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors
 
 from .bond import CanonicalBond, mkbond
 
@@ -18,10 +17,11 @@ def get_aliphatic_ring_bonds(mol: Chem.rdchem.Mol) -> set[CanonicalBond]:
 
 
 def get_rotatable_bonds(mol: Chem.rdchem.Mol) -> set[CanonicalBond]:
-    """
-    Identify rotatable bonds in a molecule.
+    """Identify rotatable bonds in a molecule.
 
-    NOTE: This is an extremely crude and inaccurate method. This misses simple cases like benzoic acids, amides, etc.
+    NOTE: This uses the same (non-strict) pattern for a rotatable bond as RDKit:
+
+        https://github.com/rdkit/rdkit/blob/e640915d4eb2140fbca76a820b69a8e15216a908/rdkit/Chem/Lipinski.py#L41
 
     Parameters
     ----------
@@ -33,10 +33,7 @@ def get_rotatable_bonds(mol: Chem.rdchem.Mol) -> set[CanonicalBond]:
     set of CanonicalBond
         Set of bonds identified as rotatable
     """
+
     pattern = Chem.MolFromSmarts("[!$(*#*)&!D1]-&!@[!$(*#*)&!D1]")
     matches = mol.GetSubstructMatches(pattern, uniquify=1)
-
-    # sanity check
-    assert len(matches) >= rdMolDescriptors.CalcNumRotatableBonds(mol)
-
     return {mkbond(i, j) for i, j in matches}
