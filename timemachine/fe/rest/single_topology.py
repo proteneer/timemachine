@@ -1,6 +1,5 @@
 from dataclasses import replace
 from functools import cached_property
-from typing import Callable, Literal
 
 import jax.numpy as jnp
 import numpy as np
@@ -14,25 +13,16 @@ from timemachine.ff import Forcefield
 from timemachine.potentials import HarmonicAngleStable, NonbondedPairListPrecomputed
 
 from .bond import CanonicalBond, mkbond
-from .interpolation import Exponential, InterpolationFxn, Linear, Quadratic, Symmetric
+from .interpolation import InterpolationFxn, InterpolationFxnName, Symmetric, get_interpolation_fxn
 from .queries import get_rotatable_bonds
-
-InterpolationFxnName = Literal["linear", "quadratic", "exponential"]
 
 
 def get_temperature_scale_interpolation_fxn(
     max_temperature_scale: float, interpolation: InterpolationFxnName
 ) -> InterpolationFxn:
-    make_interp_fxn: Callable[[float, float], InterpolationFxn]
-    match interpolation:
-        case "linear":
-            make_interp_fxn = Linear
-        case "quadratic":
-            make_interp_fxn = Quadratic
-        case "exponential":
-            make_interp_fxn = Exponential
-
-    return Symmetric(make_interp_fxn(1.0, max_temperature_scale))
+    f = get_interpolation_fxn(interpolation, 1.0, max_temperature_scale)
+    f = Symmetric(f)
+    return f
 
 
 class SingleTopologyREST(SingleTopology):

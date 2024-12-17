@@ -1,5 +1,6 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Generic, Protocol, TypeVar
+from typing import Callable, Generic, Literal, Protocol, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,11 +21,24 @@ class InterpolationFxn(Protocol):
 
 
 @dataclass(frozen=True)
-class Linear:
+class BaseInterpolationFxn(ABC):
+    @abstractmethod
+    def get_value(self, x: ArrayLike) -> NDArray:
+        ...
+
+    def __call__(self, x: ArrayLike) -> NDArray:
+        x = np.asarray(x)
+        if not np.all((0.0 <= x) & (x <= 1.0)):
+            raise ValueError("argument must be in [0, 1]")
+        return self.get_value(x)
+
+
+@dataclass(frozen=True)
+class Linear(BaseInterpolationFxn):
     src: ArrayLike
     dst: ArrayLike
 
-    def __call__(self, x: ArrayLike) -> NDArray:
+    def get_value(self, x: ArrayLike) -> NDArray:
         src = np.asarray(self.src)
         dst = np.asarray(self.dst)
         x = np.asarray(x)
@@ -35,14 +49,14 @@ class Linear:
 
 
 @dataclass(frozen=True)
-class Quadratic:
+class Quadratic(BaseInterpolationFxn):
     src: ArrayLike
     dst: ArrayLike
 
     def __post_init__(self):
         assert np.all(self.src != self.dst)
 
-    def __call__(self, x: ArrayLike) -> NDArray:
+    def get_value(self, x: ArrayLike) -> NDArray:
         src = np.asarray(self.src)
         dst = np.asarray(self.dst)
         x = np.asarray(x)
@@ -63,11 +77,11 @@ class Quadratic:
 
 
 @dataclass(frozen=True)
-class Exponential:
+class Exponential(BaseInterpolationFxn):
     src: ArrayLike
     dst: ArrayLike
 
-    def __call__(self, x: ArrayLike) -> NDArray:
+    def get_value(self, x: ArrayLike) -> NDArray:
         src = np.asarray(self.src)
         dst = np.asarray(self.dst)
         x = np.asarray(x)
@@ -81,7 +95,7 @@ F = TypeVar("F", bound=InterpolationFxn)
 
 
 @dataclass(frozen=True)
-class Symmetric(Generic[F]):
+class Symmetric(Generic[F], BaseInterpolationFxn):
     f: F
 
     @property
@@ -92,7 +106,7 @@ class Symmetric(Generic[F]):
     def dst(self):
         return self.f.src
 
-    def __call__(self, x: ArrayLike) -> NDArray:
+    def get_value(self, x: ArrayLike) -> NDArray:
         x = np.asarray(x)
         return np.where(
             x < 0.5,
@@ -104,3 +118,19 @@ class Symmetric(Generic[F]):
 def plot_interpolation_fxn(f: InterpolationFxn):
     x = np.linspace(0.0, 1.0, 100)
     return plt.plot(x, f(x), label=str(f))
+
+
+InterpolationFxnName = Literal["linear", "quadratic", "exponential"]
+
+
+def get_interpolation_fxn(name: InterpolationFxnName, src: ArrayLike, dst: ArrayLike) -> InterpolationFxn:
+    make_interp_fxn: Callable[[ArrayLike, ArrayLike], InterpolationFxn]
+    match name:
+        case "linear":
+            make_interp_fxn = Linear
+        case "quadratic":
+            make_interp_fxn = Quadratic
+        case "exponential":
+            make_interp_fxn = Exponential
+
+    return make_interp_fxn(src, dst)
