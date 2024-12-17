@@ -152,7 +152,7 @@ class Symmetric(Generic[F]):
     def dst(self):
         return self.f.src
 
-    def get_value(self, x: ArrayLike) -> NDArray:
+    def __call__(self, x: ArrayLike) -> NDArray:
         x = np.asarray(x)
         return np.where(
             x < 0.5,
