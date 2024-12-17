@@ -24,9 +24,10 @@ from timemachine.fe.free_energy import (
 from timemachine.fe.lambda_schedule import bisection_lambda_schedule
 from timemachine.fe.rbfe import (
     DEFAULT_HREX_PARAMS,
+    optimize_initial_state_from_pre_optimized,
+    setup_initial_state,
     setup_initial_states,
     setup_optimized_host,
-    setup_optimized_initial_state,
 )
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
@@ -122,22 +123,30 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
             n_windows, lambda_interval=(initial_states[0].lamb, initial_states[-1].lamb)
         )
         # Function to be used by run_sims_bisection
-        make_optimized_initial_state = partial(
-            setup_optimized_initial_state,
+        make_initial_state_fn = partial(
+            setup_initial_state,
             single_topology,
             host=host,
-            optimized_initial_states=initial_states,
             temperature=temperature,
             seed=md_params.seed,
         )
+
+        optimize_initial_state_fn = partial(
+            optimize_initial_state_from_pre_optimized,
+            optimized_initial_states=initial_states,
+        )
+
+        make_optimized_initial_state = lambda lamb: optimize_initial_state_fn(make_initial_state_fn(lamb))
+
         bisection_initial_states = [make_optimized_initial_state(lamb) for lamb in lambda_grid]
 
-        # Redefine function with new optimized initial states
-        make_optimized_initial_state = partial(
-            make_optimized_initial_state,
+        # Redefine function with the new optimized initial states
+        optimize_initial_state_fn = partial(
+            optimize_initial_state_from_pre_optimized,
             optimized_initial_states=bisection_initial_states,
         )
 
+        make_optimized_initial_state = lambda lamb: optimize_initial_state_fn(make_initial_state_fn(lamb))
         # Bisection is a bit different since it has to generate new windows, but still good to benchmark
         # as it is done upfront before HREX in practice
         run = partial(
