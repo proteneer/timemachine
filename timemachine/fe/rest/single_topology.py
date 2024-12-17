@@ -14,7 +14,7 @@ from timemachine.potentials import HarmonicAngleStable, NonbondedPairListPrecomp
 
 from .bond import CanonicalBond, mkbond
 from .interpolation import InterpolationFxn, InterpolationFxnName, Symmetric, get_interpolation_fxn
-from .queries import get_rotatable_bonds
+from .queries import get_aliphatic_ring_bonds, get_rotatable_bonds
 
 
 def get_temperature_scale_interpolation_fxn(
@@ -81,18 +81,6 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def aliphatic_ring_bonds(self) -> set[CanonicalBond]:
-        def get_aliphatic_ring_bonds(mol):
-            return [
-                mkbond(
-                    mol.GetBondWithIdx(bond_idx).GetBeginAtomIdx(),
-                    mol.GetBondWithIdx(bond_idx).GetEndAtomIdx(),
-                )
-                for ring_bond_idxs in mol.GetRingInfo().BondRings()
-                for is_aromatic in [all(mol.GetBondWithIdx(bond_idx).GetIsAromatic() for bond_idx in ring_bond_idxs)]
-                if not is_aromatic
-                for bond_idx in ring_bond_idxs
-            ]
-
         ring_bonds_a = {bond.translate(self.a_to_c) for bond in get_aliphatic_ring_bonds(self.mol_a)}
         ring_bonds_b = {bond.translate(self.b_to_c) for bond in get_aliphatic_ring_bonds(self.mol_b)}
         ring_bonds_c = ring_bonds_a | ring_bonds_b
