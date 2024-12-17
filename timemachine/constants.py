@@ -33,7 +33,7 @@ DEFAULT_POSITIONAL_RESTRAINT_K = 4000.0
 
 # thresholds
 # The MAX_FORCE_NORM was selected empirically based on looking at the forces of simulations that crashed
-MAX_FORCE_NORM = 10_000.0  # used to check norms in the gradient computations
+MAX_FORCE_NORM = 20_000.0  # used to check norms in the gradient computations
 
 # atom mapping parameters
 DEFAULT_ATOM_MAPPING_KWARGS: Dict[str, Any] = {
