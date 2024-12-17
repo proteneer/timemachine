@@ -128,7 +128,6 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
 include_directories(src/kernels)
 include_directories(SYSTEM ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${EIGEN_SRC_DIR})
-include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 17)
 
