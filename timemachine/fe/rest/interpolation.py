@@ -1,7 +1,7 @@
 """This module defines interpolation functions specialized to the domain [0, 1]"""
 
 from dataclasses import dataclass
-from typing import Callable, Generic, Literal, Protocol, TypeVar
+from typing import Generic, Literal, Protocol, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -170,13 +170,10 @@ InterpolationFxnName = Literal["linear", "quadratic", "exponential"]
 
 
 def get_interpolation_fxn(name: InterpolationFxnName, src: ArrayLike, dst: ArrayLike) -> InterpolationFxn:
-    make_interp_fxn: Callable[[ArrayLike, ArrayLike], InterpolationFxn]
     match name:
         case "linear":
-            make_interp_fxn = Linear
+            return Linear(src, dst)
         case "quadratic":
-            make_interp_fxn = Quadratic
+            return Quadratic(src, dst)
         case "exponential":
-            make_interp_fxn = Exponential
-
-    return make_interp_fxn(src, dst)
+            return Exponential(src, dst)
