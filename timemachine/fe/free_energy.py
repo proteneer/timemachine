@@ -78,16 +78,22 @@ class HREXParams:
         If given, number of neighbor states on either side of a given replica's initial state for which to compute
         potentials. This determines the maximum number of states that a replica can move from its initial state during
         a single HREX iteration. Otherwise, compute potentials for all (replica, state) pairs.
+
+    optimize_target_overlap: float or None
+        If given, optimize the lambda schedule out of the initial bisection phase to target a specific minimum overlap
+        between all adjacent windows. Must be in the interval (0.0, 1.0) if provided.
     """
 
     n_frames_bisection: int = 100
     n_frames_per_iter: int = 1
     max_delta_states: Optional[int] = 4
+    optimize_target_overlap: Optional[float] = None
 
     def __post_init__(self):
         assert self.n_frames_bisection > 0
         assert self.n_frames_per_iter == 1, "n_frames_per_iter must be 1"
         assert self.max_delta_states is None or self.max_delta_states > 0
+        assert self.optimize_target_overlap is None or 0.0 < self.optimize_target_overlap < 1.0
 
 
 @dataclass(frozen=True)

@@ -44,7 +44,7 @@ References
 3. This is intended to be used in the context of some initial protocol, e.g. from bisection
     * Bisection guarantees that overlap(lams[i],lams[i+1]) > threshold for all i, but does not minimize len(lams)
 """
-
+import warnings
 from typing import Callable, cast
 
 import numpy as np
@@ -358,34 +358,36 @@ def greedily_optimize_protocol(
     target_distance=0.5,
     max_iterations=1000,
     bisection_xtol=1e-4,
+    protocol_interval: tuple[float, float] = (0.0, 1.0),
 ) -> Array:
     """Optimize a lambda protocol from "left to right"
 
     Sequentially pick next_lam so that
     distance_fxn(prev_lam, next_lam) ~= target_distance
     """
-    protocol = [0.0]
+    start_lamb, end_lamb = protocol_interval
+    protocol = [start_lamb]
 
     for t in range(max_iterations):
         prev_lam = protocol[-1]
 
         # can we directly jump to the end?
-        if distance_fxn(prev_lam, 1.0) < target_distance:
+        if distance_fxn(prev_lam, end_lamb) < target_distance:
             break
 
         # otherwise, binary search for next
         next_lam = bisect(
             f=lambda trial_lam: distance_fxn(prev_lam, trial_lam) - target_distance,
             a=prev_lam,
-            b=1.0,
+            b=end_lamb,
             xtol=bisection_xtol,
         )
         protocol.append(next_lam)
 
         if t == max_iterations - 1:
-            print(UserWarning("Exceeded max_iterations!"))
+            warnings.warn("Exceeded max_iterations!")
 
-    if protocol[-1] != 1.0:
-        protocol.append(1.0)
+    if protocol[-1] != end_lamb:
+        protocol.append(end_lamb)
 
     return jnp.array(protocol)
