@@ -146,25 +146,24 @@ class SingleTopologyREST(SingleTopology):
     ) -> HostGuestSystem:
         ref_state = super().combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
 
-        num_atoms_host = host_system.nonbonded.potential.num_atoms
-        ligand_idxs = jnp.index_exp[num_atoms_host:]
-
-        energy_scale = self.get_energy_scale_factor(lamb)
-
         # NOTE: the following methods of scaling the ligand-environment interaction energy are all equivalent:
         #
         # 1. scaling ligand charges and LJ epsilons by energy_scale
         # 2. scaling environment charges and LJ epsilons by energy_scale
-        # 3. scaling ligand and environment charges and LJ epsilons by sqrt(energy_scale)
+        # 3. scaling all charges and LJ epsilons by sqrt(energy_scale)
         #
-        # Here, we choose (1) to minimize the number of parameters to scale.
+        # Here, we choose (3) since this is independent of the ordering of ligand and environment atoms, and so less
+        # error-prone.
+
+        sqrt_energy_scale = np.sqrt(self.get_energy_scale_factor(lamb))
+
         nonbonded_host_guest_ixn = replace(
             ref_state.nonbonded_host_guest_ixn,
             params=jnp.asarray(ref_state.nonbonded_host_guest_ixn.params)
-            .at[ligand_idxs, NBParamIdx.Q_IDX]
-            .mul(energy_scale)  # scale ligand charges
-            .at[ligand_idxs, NBParamIdx.LJ_EPS_IDX]
-            .mul(energy_scale),  # scale ligand epsilons
+            .at[:, NBParamIdx.Q_IDX]
+            .mul(sqrt_energy_scale)  # scale ligand charges
+            .at[:, NBParamIdx.LJ_EPS_IDX]
+            .mul(sqrt_energy_scale),  # scale ligand epsilons
         )
 
         return replace(ref_state, nonbonded_host_guest_ixn=nonbonded_host_guest_ixn)
