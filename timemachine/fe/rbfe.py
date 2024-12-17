@@ -60,7 +60,7 @@ DEFAULT_REST_PARAMS = replace(
     DEFAULT_HREX_PARAMS,
     hrex_params=replace(
         DEFAULT_HREX_PARAMS.hrex_params,
-        rest_params=RESTParams(max_temperature_scale=3.0, temperature_scale_interpolation_fxn="exponential"),
+        rest_params=RESTParams(max_temperature_scale=3.0, temperature_scale_interpolation="exponential"),
     ),
 )
 
@@ -882,7 +882,7 @@ def estimate_relative_free_energy_bisection_hrex(
             core,
             ff,
             max_temperature_scale=hrex_params.rest_params.max_temperature_scale,
-            temperature_scale_interpolation_fxn=hrex_params.rest_params.temperature_scale_interpolation_fxn,
+            temperature_scale_interpolation=hrex_params.rest_params.temperature_scale_interpolation,
         )
         if hrex_params.rest_params
         else SingleTopology(mol_a, mol_b, core, ff)

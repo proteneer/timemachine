@@ -66,7 +66,7 @@ class HostConfig:
 @dataclass(frozen=True)
 class RESTParams:
     max_temperature_scale: float
-    temperature_scale_interpolation_fxn: InterpolationFxnName
+    temperature_scale_interpolation: InterpolationFxnName
 
 
 @dataclass(frozen=True)

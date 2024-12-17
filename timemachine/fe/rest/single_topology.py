@@ -21,10 +21,10 @@ InterpolationFxnName = Literal["linear", "quadratic", "exponential"]
 
 
 def get_temperature_scale_interpolation_fxn(
-    max_temperature_scale: float, interpolation_fxn: InterpolationFxnName
+    max_temperature_scale: float, interpolation: InterpolationFxnName
 ) -> InterpolationFxn:
     make_interp_fxn: Callable[[float, float], InterpolationFxn]
-    match interpolation_fxn:
+    match interpolation:
         case "linear":
             make_interp_fxn = Linear
         case "quadratic":
@@ -70,7 +70,7 @@ class SingleTopologyREST(SingleTopology):
     max_temperature_scale: float
         Maximum temperature scale factor
 
-    temperature_scale_interpolation_fxn: str
+    temperature_scale_interpolation: str
         Interpolation function to use for temperature scaling. One of "linear", "quadratic", or "exponential"
     """
 
@@ -81,12 +81,12 @@ class SingleTopologyREST(SingleTopology):
         core,
         forcefield,
         max_temperature_scale: float,
-        temperature_scale_interpolation_fxn: InterpolationFxnName = "exponential",
+        temperature_scale_interpolation: InterpolationFxnName = "exponential",
     ):
         super().__init__(mol_a, mol_b, core, forcefield)
 
         self._temperature_scale_interpolation_fxn = get_temperature_scale_interpolation_fxn(
-            max_temperature_scale, temperature_scale_interpolation_fxn
+            max_temperature_scale, temperature_scale_interpolation
         )
 
     @cached_property
