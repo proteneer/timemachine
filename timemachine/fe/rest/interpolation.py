@@ -1,4 +1,5 @@
-from abc import ABC, abstractmethod
+"""This module defines interpolation functions specialized to the domain [0, 1]"""
+
 from dataclasses import dataclass
 from typing import Callable, Generic, Literal, Protocol, TypeVar
 
@@ -21,24 +22,25 @@ class InterpolationFxn(Protocol):
 
 
 @dataclass(frozen=True)
-class BaseInterpolationFxn(ABC):
-    @abstractmethod
-    def get_value(self, x: ArrayLike) -> NDArray:
-        ...
+class Linear:
+    """Linear interpolation on [0, 1].
 
-    def __call__(self, x: ArrayLike) -> NDArray:
-        x = np.asarray(x)
-        if not np.all((0.0 <= x) & (x <= 1.0)):
-            raise ValueError("argument must be in [0, 1]")
-        return self.get_value(x)
+    Parameters
+    ----------
+    src : ArrayLike
+        value at 0
+    dst : ArrayLike
+        value at 1
 
+    Returns
+    -------
+    NDArray
+    """
 
-@dataclass(frozen=True)
-class Linear(BaseInterpolationFxn):
     src: ArrayLike
     dst: ArrayLike
 
-    def get_value(self, x: ArrayLike) -> NDArray:
+    def __call__(self, x: ArrayLike) -> NDArray:
         src = np.asarray(self.src)
         dst = np.asarray(self.dst)
         x = np.asarray(x)
@@ -49,14 +51,28 @@ class Linear(BaseInterpolationFxn):
 
 
 @dataclass(frozen=True)
-class Quadratic(BaseInterpolationFxn):
+class Quadratic:
+    """Quadratic interpolation on [0, 1], specialized to assume b^2 - 4 a c = 0 (i.e. a single root).
+
+    Parameters
+    ----------
+    src : ArrayLike
+        value at 0
+    dst : ArrayLike
+        value at 1
+
+    Returns
+    -------
+    NDArray
+    """
+
     src: ArrayLike
     dst: ArrayLike
 
     def __post_init__(self):
         assert np.all(self.src != self.dst)
 
-    def get_value(self, x: ArrayLike) -> NDArray:
+    def __call__(self, x: ArrayLike) -> NDArray:
         src = np.asarray(self.src)
         dst = np.asarray(self.dst)
         x = np.asarray(x)
@@ -77,11 +93,25 @@ class Quadratic(BaseInterpolationFxn):
 
 
 @dataclass(frozen=True)
-class Exponential(BaseInterpolationFxn):
+class Exponential:
+    """Exponential interpolation on [0, 1], specialized to assume f(x -> -inf) = 0.
+
+    Parameters
+    ----------
+    src : ArrayLike
+        value at 0
+    dst : ArrayLike
+        value at 1
+
+    Returns
+    -------
+    NDArray
+    """
+
     src: ArrayLike
     dst: ArrayLike
 
-    def get_value(self, x: ArrayLike) -> NDArray:
+    def __call__(self, x: ArrayLike) -> NDArray:
         src = np.asarray(self.src)
         dst = np.asarray(self.dst)
         x = np.asarray(x)
@@ -95,7 +125,23 @@ F = TypeVar("F", bound=InterpolationFxn)
 
 
 @dataclass(frozen=True)
-class Symmetric(Generic[F], BaseInterpolationFxn):
+class Symmetric(Generic[F]):
+    """Symmetric interpolation on [0, 1] derived from an arbitrary interpolation function f.
+
+    The symmetry property is Symmetric(f)(x) == Symmetric(f)(1 - x).
+
+    Parameters
+    ----------
+    src : ArrayLike
+        value at 0
+    dst : ArrayLike
+        value at 1
+
+    Returns
+    -------
+    NDArray
+    """
+
     f: F
 
     @property
