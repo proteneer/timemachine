@@ -6,8 +6,7 @@ set(PYBIND11_PYTHON_VERSION 3.10 CACHE STRING "Which version of python we're bui
 
 project(timemachine LANGUAGES CXX CUDA)
 
-find_package(PythonInterp 3.10 REQUIRED)
-find_package(PythonLibs 3.10 REQUIRED)
+find_package(Python 3.10 COMPONENTS Interpreter Development REQUIRED)
 
 set(DEBUG_BUILD "$ENV{DEBUG_BUILD}")
 
@@ -129,7 +128,6 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
 include_directories(src/kernels)
 include_directories(SYSTEM ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${EIGEN_SRC_DIR})
-include_directories(SYSTEM ${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 17)
 
