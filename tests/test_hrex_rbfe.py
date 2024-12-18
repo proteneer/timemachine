@@ -17,6 +17,7 @@ from timemachine.fe.free_energy import (
     HREXParams,
     HREXSimulationResult,
     MDParams,
+    RESTParams,
     WaterSamplingParams,
     sample_with_context_iter,
 )
@@ -104,15 +105,24 @@ def test_hrex_rbfe_hif2a_water_sampling_warning(hif2a_single_topology_leg, seed)
 
 
 @pytest.mark.parametrize("max_bisection_windows, target_overlap", [(5, None), (5, 0.667)])
+@pytest.mark.parametrize("enable_rest", [False, True])
 @pytest.mark.parametrize("seed", [2024])
-def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed, max_bisection_windows, target_overlap):
+def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed, max_bisection_windows, target_overlap, enable_rest):
     host_name, (mol_a, mol_b, core, forcefield, host_config) = hif2a_single_topology_leg
     md_params = MDParams(
         n_frames=200,
         n_eq_steps=10_000,
         steps_per_frame=400,
         seed=seed,
-        hrex_params=HREXParams(n_frames_bisection=100, optimize_target_overlap=target_overlap),
+        hrex_params=HREXParams(
+            n_frames_bisection=100,
+            optimize_target_overlap=target_overlap,
+            rest_params=(
+                RESTParams(max_temperature_scale=3.0, temperature_scale_interpolation="exponential")
+                if enable_rest
+                else None
+            ),
+        ),
         water_sampling_params=WaterSamplingParams(interval=400, n_proposals=1000) if host_name == "complex" else None,
     )
 
