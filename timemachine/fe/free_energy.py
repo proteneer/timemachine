@@ -25,6 +25,7 @@ from timemachine.fe.plots import (
     plot_overlap_summary_figure,
 )
 from timemachine.fe.protocol_refinement import greedy_bisection_step
+from timemachine.fe.rest.single_topology import InterpolationFxnName
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield, ForcefieldParams
@@ -63,6 +64,12 @@ class HostConfig:
 
 
 @dataclass(frozen=True)
+class RESTParams:
+    max_temperature_scale: float
+    temperature_scale_interpolation: InterpolationFxnName
+
+
+@dataclass(frozen=True)
 class HREXParams:
     """
     Parameters
@@ -88,6 +95,7 @@ class HREXParams:
     n_frames_per_iter: int = 1
     max_delta_states: Optional[int] = 4
     optimize_target_overlap: Optional[float] = None
+    rest_params: Optional[RESTParams] = None
 
     def __post_init__(self):
         assert self.n_frames_bisection > 0

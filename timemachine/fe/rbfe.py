@@ -19,6 +19,7 @@ from timemachine.fe.free_energy import (
     HREXSimulationResult,
     InitialState,
     MDParams,
+    RESTParams,
     SimulationResult,
     Trajectory,
     compute_u_kn,
@@ -34,6 +35,7 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
+from timemachine.fe.rest.single_topology import SingleTopologyREST
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology, assert_default_system_constraints
 from timemachine.fe.system import VacuumSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
@@ -54,6 +56,16 @@ MAX_SEED_VALUE = 10000
 DEFAULT_MD_PARAMS = MDParams(n_frames=1000, n_eq_steps=10_000, steps_per_frame=400, seed=2023, hrex_params=None)
 
 DEFAULT_HREX_PARAMS = replace(DEFAULT_MD_PARAMS, hrex_params=HREXParams(n_frames_bisection=100))
+
+assert DEFAULT_HREX_PARAMS.hrex_params
+
+DEFAULT_REST_PARAMS = replace(
+    DEFAULT_HREX_PARAMS,
+    hrex_params=replace(
+        DEFAULT_HREX_PARAMS.hrex_params,
+        rest_params=RESTParams(max_temperature_scale=3.0, temperature_scale_interpolation="exponential"),
+    ),
+)
 
 
 @dataclass
@@ -606,13 +618,12 @@ def estimate_relative_free_energy_bisection_or_hrex(*args, **kwargs) -> Simulati
     as appropriate given md_params.
 
     """
-    md_params = kwargs["md_params"]
-    estimate_fxn = (
-        estimate_relative_free_energy_bisection_hrex
-        if md_params.hrex_params is not None
-        else estimate_relative_free_energy_bisection
-    )
-    return estimate_fxn(*args, **kwargs)
+    hrex_params = kwargs["md_params"].hrex_params
+
+    if hrex_params is not None:
+        return estimate_relative_free_energy_bisection_hrex(*args, **kwargs)
+    else:
+        return estimate_relative_free_energy_bisection(*args, **kwargs)
 
 
 def estimate_relative_free_energy_bisection(
@@ -793,8 +804,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         Collected data from the simulation (see class for storage information).
 
     """
-    if n_windows is None:
-        n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
     assert md_params.hrex_params is not None, "hrex_params must be set to use HREX"
@@ -969,12 +978,25 @@ def estimate_relative_free_energy_bisection_hrex(
         Collected data from the simulation (see class for storage information).
 
     """
+    hrex_params = md_params.hrex_params
+    assert hrex_params
 
     if n_windows is None:
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+    single_topology = (
+        SingleTopologyREST(
+            mol_a,
+            mol_b,
+            core,
+            ff,
+            max_temperature_scale=hrex_params.rest_params.max_temperature_scale,
+            temperature_scale_interpolation=hrex_params.rest_params.temperature_scale_interpolation,
+        )
+        if hrex_params.rest_params
+        else SingleTopology(mol_a, mol_b, core, ff)
+    )
 
     lambda_interval = lambda_interval or (0.0, 1.0)
     lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
