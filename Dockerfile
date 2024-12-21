@@ -78,7 +78,7 @@ RUN pip install --no-cache-dir -e . && rm -rf ./build
 
 # Container with only cuda base, half the size of the timemachine_cuda_dev container
 # Need to copy curand/cudart as these are dependecies of the Timemachine GPU code
-FROM docker.io/nvidia/cuda:12.4.1-base-ubuntu20.04 as timemachine
+FROM docker.io/nvidia/cuda:12.4.1-base-ubuntu20.04 AS timemachine
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
