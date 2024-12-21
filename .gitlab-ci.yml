@@ -24,12 +24,10 @@ docker_build:
     - aws-tardis-gpu
   script:
     - DOCKER_HOST=tcp://localhost:2375 docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
-    # Prune images older than 2 days
-    - docker system prune --filter "until=48h" -f -a
     # Pull the docker containers
     - docker pull $DOCKER_TAG || docker pull $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH || true
     # Cache from default branch and most recent image to get most out of the caching
-    - docker build -t $DOCKER_TAG --cache-from $DOCKER_TAG --cache-from $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH --target timemachine_ci .
+    - docker build -t $DOCKER_TAG --cache-from $DOCKER_TAG --cache-from $CI_REGISTRY_IMAGE:$CI_DEFAULT_BRANCH --cache-to type=inline --target timemachine_ci .
     - docker push $DOCKER_TAG
 
 lint:
