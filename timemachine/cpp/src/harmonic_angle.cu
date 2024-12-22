@@ -30,6 +30,10 @@ HarmonicAngle<RealType>::HarmonicAngle(const std::vector<int> &angle_idxs // [A,
     gpuErrchk(cudaMemcpy(d_angle_idxs_, &angle_idxs[0], A_ * 3 * sizeof(*d_angle_idxs_), cudaMemcpyHostToDevice));
 
     cudaSafeMalloc(&d_u_buffer_, A_ * sizeof(*d_u_buffer_));
+
+    // Carve out all of the shared memory for the L1, or for other kernels
+    gpuErrchk(cudaFuncSetAttribute(
+        k_harmonic_angle<RealType>, cudaFuncAttributePreferredSharedMemoryCarveout, cudaSharedmemCarveoutMaxL1));
 };
 
 template <typename RealType> HarmonicAngle<RealType>::~HarmonicAngle() {

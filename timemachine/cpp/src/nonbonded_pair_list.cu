@@ -43,6 +43,12 @@ NonbondedPairList<RealType, Negated>::NonbondedPairList(
 
     cudaSafeMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
+
+    // Carve out all of the shared memory for the L1, intended to be concurrent with kernsl that only need L1
+    gpuErrchk(cudaFuncSetAttribute(
+        k_nonbonded_pair_list<RealType, Negated>,
+        cudaFuncAttributePreferredSharedMemoryCarveout,
+        cudaSharedmemCarveoutMaxL1));
 };
 
 template <typename RealType, bool Negated> NonbondedPairList<RealType, Negated>::~NonbondedPairList() {

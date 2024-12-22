@@ -31,6 +31,10 @@ PeriodicTorsion<RealType>::PeriodicTorsion(const std::vector<int> &torsion_idxs 
     gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], T_ * 4 * sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
 
     cudaSafeMalloc(&d_u_buffer_, T_ * sizeof(*d_u_buffer_));
+
+    // Carve out all of the shared memory for the L1, intended to be concurrent with kernsl that only need L1
+    gpuErrchk(cudaFuncSetAttribute(
+        k_periodic_torsion<RealType, 3>, cudaFuncAttributePreferredSharedMemoryCarveout, cudaSharedmemCarveoutMaxL1));
 };
 
 template <typename RealType> PeriodicTorsion<RealType>::~PeriodicTorsion() {

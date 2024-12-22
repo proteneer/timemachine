@@ -26,6 +26,10 @@ HarmonicBond<RealType>::HarmonicBond(const std::vector<int> &bond_idxs) : B_(bon
     cudaSafeMalloc(&d_bond_idxs_, B_ * 2 * sizeof(*d_bond_idxs_));
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_ * 2 * sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
     cudaSafeMalloc(&d_u_buffer_, B_ * sizeof(*d_u_buffer_));
+
+    // Carve out all of the shared memory for the L1, intended to be concurrent with kernsl that only need L1
+    gpuErrchk(cudaFuncSetAttribute(
+        k_harmonic_bond<RealType>, cudaFuncAttributePreferredSharedMemoryCarveout, cudaSharedmemCarveoutMaxL1));
 };
 
 template <typename RealType> HarmonicBond<RealType>::~HarmonicBond() {
