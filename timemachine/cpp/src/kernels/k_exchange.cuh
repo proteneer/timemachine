@@ -68,8 +68,8 @@ RealType __host__ __device__ __forceinline__ compute_raw_log_probability_targete
 
 void __global__ k_setup_proposals(
     const int total_proposals,
-    const int batch_size,            // Number of molecules to setup
-    const int num_atoms_in_each_mol, // number of atoms in each sample
+    const int batch_size,                      // Number of molecules to setup
+    const int num_atoms_in_each_mol,           // number of atoms in each sample
     const int *__restrict__ rand_offset,
     const int *__restrict__ mol_idx_per_batch, // [batch_size] The index of the molecules to sample
     const int *__restrict__ atom_indices,      // [N]
@@ -174,7 +174,7 @@ void __global__ k_decide_targeted_moves(
     int *__restrict__ targeting_inner_volume,  // [batch_size]
     int *__restrict__ src_weights_counts,
     int *__restrict__ target_weights_counts,
-    RealType *__restrict__ output_translation // [batch_size, 3]
+    RealType *__restrict__ output_translation  // [batch_size, 3]
 );
 
 template <typename RealType>

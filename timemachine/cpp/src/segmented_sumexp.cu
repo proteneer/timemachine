@@ -34,8 +34,8 @@ void SegmentedSumExp<RealType>::sum_device(
     const int num_segments,
     const int *d_segment_offsets, // [num_segments + 1]
     const RealType *d_values,
-    RealType *d_max_out,     // [num_segments] The max value of each segment
-    RealType *d_exp_sum_out, // [num_segments] The sum([exp(x - max) for x in d_values])
+    RealType *d_max_out,          // [num_segments] The max value of each segment
+    RealType *d_exp_sum_out,      // [num_segments] The sum([exp(x - max) for x in d_values])
     cudaStream_t stream) {
     if (total_values > max_vals_per_segment_ * num_segments_) {
         throw std::runtime_error(

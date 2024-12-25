@@ -11,7 +11,7 @@ template <typename RealType>
 void __global__ k_generate_translations_inside_and_outside_sphere(
     const int num_translations,
     const double *__restrict__ box,
-    const RealType *__restrict__ center, // [3]
+    const RealType *__restrict__ center,       // [3]
     const RealType radius,
     curandState_t *__restrict__ rand_states,   // [threads_per_block]
     RealType *__restrict__ output_translations // [num_translations, 3]

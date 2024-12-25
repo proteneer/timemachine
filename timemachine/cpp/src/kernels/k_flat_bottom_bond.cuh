@@ -71,7 +71,7 @@ void __global__ k_log_probability_selection(
 
 template <typename RealType>
 void __global__ k_flat_bottom_bond(
-    const int B, // number of bonds
+    const int B,                       // number of bonds
     const double *__restrict__ coords,
     const double *__restrict__ box,
     const double *__restrict__ params, // [B, 3]
