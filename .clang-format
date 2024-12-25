@@ -9,3 +9,4 @@ ReflowComments: false
 AlignTrailingComments:
   Kind: Always
   OverEmptyLines: 2
+FixNamespaceComments: true
