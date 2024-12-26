@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
 from openmm import app
+from rdkit import Chem
 
 from timemachine.constants import NBParamIdx
 from timemachine.fe.single_topology import SingleTopology
@@ -42,37 +43,38 @@ class SingleTopologyREST(SingleTopology):
     - f(0) = f(1) = 1 (identity at end states)
     - f(0.5) = max_temperature_scale
     - f(x) = f(1 - x) (symmetric)
-
-    Parameters
-    ----------
-    mol_a: ROMol
-        First guest
-
-    mol_b: ROMol
-        Second guest
-
-    core: np.array (C, 2)
-        Atom mapping from mol_a to mol_b
-
-    forcefield: ff.Forcefield
-        Forcefield to use for parameterization
-
-    max_temperature_scale: float
-        Maximum temperature scale factor
-
-    temperature_scale_interpolation: str
-        Interpolation function to use for temperature scaling. One of "linear", "quadratic", or "exponential"
     """
 
     def __init__(
         self,
-        mol_a,
-        mol_b,
-        core,
-        forcefield,
+        mol_a: Chem.Mol,
+        mol_b: Chem.Mol,
+        core: NDArray,
+        forcefield: Forcefield,
         max_temperature_scale: float,
         temperature_scale_interpolation: InterpolationFxnName = "exponential",
     ):
+        """
+        Parameters
+        ----------
+        mol_a: Chem.Mol
+            First guest
+
+        mol_b: Chem.Mol
+            Second guest
+
+        core: np.array (C, 2)
+            Atom mapping from mol_a to mol_b
+
+        forcefield: ff.Forcefield
+            Forcefield to use for parameterization
+
+        max_temperature_scale: float
+            Maximum temperature scale factor
+
+        temperature_scale_interpolation: str
+            Interpolation function to use for temperature scaling. One of "linear", "quadratic", or "exponential"
+        """
         super().__init__(mol_a, mol_b, core, forcefield)
 
         self._temperature_scale_interpolation_fxn = get_temperature_scale_interpolation_fxn(

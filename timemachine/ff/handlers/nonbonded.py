@@ -6,6 +6,7 @@ from collections import Counter
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+from numpy.typing import NDArray
 from rdkit import Chem
 
 from timemachine import constants
@@ -142,7 +143,9 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
     return inlined_constant * partial_charges[inv_permutation]
 
 
-def generate_exclusion_idxs(mol, scale12, scale13, scale14_lj, scale14_q):
+def generate_exclusion_idxs(
+    mol: Chem.Mol, scale12: float, scale13: float, scale14_lj: float, scale14_q: float
+) -> tuple[NDArray, NDArray]:
     """
     Generate exclusions for a mol based on the all pairs shortest path.
     We always take the convention that exclusions for smaller distances
@@ -150,7 +153,7 @@ def generate_exclusion_idxs(mol, scale12, scale13, scale14_lj, scale14_q):
 
     Parameters
     ----------
-    mol: Chem.ROMol
+    mol: Chem.Mol
         romol
 
     scale12: float
