@@ -426,6 +426,7 @@ void __global__ k_compute_centroid_of_atoms(
     const double *__restrict__ coords, // [N, 3]
     RealType *__restrict__ centroid    // [3]
 ) {
+    // Could optimize by a block reduce, probably a good idea
     __shared__ unsigned long long fixed_centroid[3];
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     // Can only have a single block
@@ -438,16 +439,25 @@ void __global__ k_compute_centroid_of_atoms(
     }
     __syncthreads();
 
+    unsigned long long x = 0;
+    unsigned long long y = 0;
+    unsigned long long z = 0;
+
     while (idx < num_atoms) {
         atom_idx = atom_idxs[idx];
 
         // TBD: Account for pbc? Could be atoms from different mols theoretically
-        atomicAdd(fixed_centroid + 0, FLOAT_TO_FIXED<RealType>(coords[atom_idx * 3 + 0]));
-        atomicAdd(fixed_centroid + 1, FLOAT_TO_FIXED<RealType>(coords[atom_idx * 3 + 1]));
-        atomicAdd(fixed_centroid + 2, FLOAT_TO_FIXED<RealType>(coords[atom_idx * 3 + 2]));
+        x += FLOAT_TO_FIXED<RealType>(coords[atom_idx * 3 + 0]);
+        y += FLOAT_TO_FIXED<RealType>(coords[atom_idx * 3 + 1]);
+        z += FLOAT_TO_FIXED<RealType>(coords[atom_idx * 3 + 2]);
 
         idx += gridDim.x * blockDim.x;
     }
+
+    atomicAdd(fixed_centroid + 0, x);
+    atomicAdd(fixed_centroid + 1, y);
+    atomicAdd(fixed_centroid + 2, z);
+
     __syncthreads();
     if (threadIdx.x == 0) {
         centroid[0] = FIXED_TO_FLOAT<RealType>(fixed_centroid[0]) / static_cast<RealType>(num_atoms);
