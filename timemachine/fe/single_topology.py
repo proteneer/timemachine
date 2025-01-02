@@ -761,7 +761,7 @@ def setup_end_state(
 
 
 def make_find_chirally_valid_dummy_groups(
-    mol_a: Chem.Mol, mol_b: Chem.mol
+    mol_a: Chem.Mol, mol_b: Chem.Mol
 ) -> Callable[[NDArray], Optional[tuple[dict[int, frozenset[int]], dict[int, frozenset[int]]]]]:
     """Returns a function that, given a core, returns a pair of dummy group assignments for the A -> B and B -> A
     transformations such that the implied hybrid mol is chirally valid, or None if no such pair exists.
