@@ -7,6 +7,11 @@ ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 
 # Copied out of anaconda's dockerfile
+<<<<<<< HEAD
+=======
+ARG MINIFORGE_NAME=Miniforge3
+ARG MINIFORGE_VERSION=24.9.2-0
+>>>>>>> d66935b2 (miniforge not miniconda)
 ARG MAKE_VERSION=4.2.1-1.2
 ARG GIT_VERSION=1:2.25.1-*
 ARG WGET_VERSION=1.20.3-*
@@ -14,9 +19,12 @@ RUN (apt-get update || true)  && apt-get install --no-install-recommends -y \
     wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+<<<<<<< HEAD
 
 ARG MINIFORGE_NAME=Miniforge3
 ARG MINIFORGE_VERSION=24.11.2-0
+=======
+>>>>>>> d66935b2 (miniforge not miniconda)
 RUN wget --quiet https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/${MINIFORGE_NAME}-${MINIFORGE_VERSION}-Linux-$(uname -m).sh -O ~/miniconda.sh && \
     /bin/bash ~/miniconda.sh -b -p /opt/conda && \
     rm ~/miniconda.sh && \
