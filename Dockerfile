@@ -39,7 +39,7 @@ ARG ENV_NAME=timemachine
 
 # Create Timemachine Env
 RUN . /opt/conda/etc/profile.d/conda.sh && \
-    mamba env create -n "${ENV_NAME}" --force -f environment.yml && \
+    mamba env create -n "${ENV_NAME}" -f environment.yml && \
     mamba clean -a && \
     mamba activate ${ENV_NAME}
 
