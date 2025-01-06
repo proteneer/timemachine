@@ -111,8 +111,8 @@ void __device__ v_nonbonded_unified(
     const int tile_idx,
     const int N,
     const int NR,
-    const double *__restrict__ coords, // [N * 3]
-    const double *__restrict__ params, // [N * PARAMS_PER_ATOM]
+    const double *__restrict__ coords,    // [N * 3]
+    const double *__restrict__ params,    // [N * PARAMS_PER_ATOM]
     box_cache<RealType> &shared_box,
     __int128 *__restrict__ energy_buffer, // [blockDim.x]
     const double beta,
@@ -327,8 +327,8 @@ void __device__ v_nonbonded_unified(
 
 template <typename RealType, int THREADS_PER_BLOCK, bool COMPUTE_U, bool COMPUTE_DU_DX, bool COMPUTE_DU_DP>
 void __global__ k_nonbonded_unified(
-    const int N,  // Number of atoms
-    const int NR, // Number of row indices
+    const int N,                       // Number of atoms
+    const int NR,                      // Number of row indices
     const unsigned int *__restrict__ ixn_count,
     const double *__restrict__ coords, // [N, 3]
     const double *__restrict__ params, // [N, PARAMS_PER_ATOM]
@@ -442,7 +442,7 @@ void __global__ k_compute_nonbonded_target_atom_energies(
     const double *__restrict__ box,              // [3, 3],
     const RealType beta,
     const RealType cutoff_squared,
-    __int128 *__restrict__ output_energies // [num_target_atoms, gridDim.x]
+    __int128 *__restrict__ output_energies       // [num_target_atoms, gridDim.x]
 ) {
     static_assert(THREADS_PER_BLOCK <= 256 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
     __shared__ __int128 block_energy_buffer[THREADS_PER_BLOCK];

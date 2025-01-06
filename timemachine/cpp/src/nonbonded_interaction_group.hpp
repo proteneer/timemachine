@@ -38,7 +38,7 @@ private:
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
     int *p_rebuild_nblist_; // pinned
 
-    unsigned int *d_perm_; // hilbert curve permutation
+    unsigned int *d_perm_;  // hilbert curve permutation
 
     // "sorted" means
     // - if hilbert sorting enabled, atoms are sorted into contiguous
