@@ -318,8 +318,8 @@ class BaseTopology:
         inclusion_idxs, rescale_mask = [], []
         for i in range(self.mol.GetNumAtoms()):
             for j in range(i + 1, self.mol.GetNumAtoms()):
-                scale_factor = exclusions_kv.get((i, j), np.zeros(2))  # how much to remove
-                rescale_factor = 1 - np.asarray(scale_factor)  # how much to keep
+                scale_factor = exclusions_kv.get((i, j), np.zeros(2, dtype=np.float64))  # how much to remove
+                rescale_factor = 1 - np.asarray(scale_factor, dtype=np.float64)  # how much to keep
                 # keep this ixn if either lj or coulombic interaction is present
                 if np.any(rescale_factor) > 0:
                     rescale_mask.append(rescale_factor)
