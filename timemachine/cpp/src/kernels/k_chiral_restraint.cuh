@@ -6,7 +6,7 @@ namespace timemachine {
 
 template <typename RealType>
 void __global__ k_chiral_atom_restraint(
-    const int R, // number of restraints
+    const int R,                       // number of restraints
     const double *__restrict__ coords,
     const double *__restrict__ params, // [R]
     const int *__restrict__ idxs,      // [R, 4]
@@ -92,7 +92,7 @@ void __global__ k_chiral_atom_restraint(
 
 template <typename RealType>
 void __global__ k_chiral_bond_restraint(
-    const int R, // number of restraints
+    const int R,                       // number of restraints
     const double *__restrict__ coords,
     const double *__restrict__ params, // [R]
     const int *__restrict__ idxs,      // [R, 2]

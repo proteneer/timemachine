@@ -19,8 +19,8 @@ private:
 
     __int128 *d_u_buffer_; // [M]
 
-    int *d_pair_idxs_; // [M, 2]
-    double *d_scales_; // [M, 2]
+    int *d_pair_idxs_;     // [M, 2]
+    double *d_scales_;     // [M, 2]
 
 public:
     NonbondedPairList(

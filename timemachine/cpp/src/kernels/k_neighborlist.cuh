@@ -209,10 +209,10 @@ void __global__ k_find_blocks_with_ixns(
     const RealType *__restrict__ row_bb_ext,      // [N * 3] block extents
     const double *__restrict__ coords,            // [N * 3]
     const double *__restrict__ box,
-    unsigned int *__restrict__ interactionCount, // number of tiles that have interactions
-    int *__restrict__ interactingTiles,          // the row block idx of the tile that is interacting
-    unsigned int *__restrict__ interactingAtoms, // [NR * WARP_SIZE] atom indices interacting with each row block
-    unsigned int *__restrict__ trim_atoms,       // the left-over trims that will later be compacted
+    unsigned int *__restrict__ interactionCount,  // number of tiles that have interactions
+    int *__restrict__ interactingTiles,           // the row block idx of the tile that is interacting
+    unsigned int *__restrict__ interactingAtoms,  // [NR * WARP_SIZE] atom indices interacting with each row block
+    unsigned int *__restrict__ trim_atoms,        // the left-over trims that will later be compacted
     const double cutoff) {
 
     static_assert(TILE_SIZE == WARP_SIZE, "TILE_SIZE != WARP_SIZE is not currently supported");

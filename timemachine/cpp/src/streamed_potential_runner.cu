@@ -14,7 +14,7 @@ void StreamedPotentialRunner::execute_potentials(
     const double *d_box, // [3 * 3]
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    __int128 *d_u, // [bps.size()]
+    __int128 *d_u,       // [bps.size()]
     cudaStream_t stream) {
     for (int i = 0; i < bps.size(); i++) {
         // Always sync the new streams with the incoming stream to ensure that the state
