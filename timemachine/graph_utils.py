@@ -5,7 +5,7 @@ import networkx as nx
 
 def convert_to_nx(mol):
     """
-    Convert an ROMol into a networkx graph.
+    Convert an Chem.Mol into a networkx graph.
     """
     g = nx.Graph()
     for atom in mol.GetAtoms():
