@@ -6,3 +6,8 @@ BinPackArguments: false
 BinPackParameters: false
 AccessModifierOffset: -4
 ReflowComments: false
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 2
+FixNamespaceComments: true
+PointerAlignment: Right

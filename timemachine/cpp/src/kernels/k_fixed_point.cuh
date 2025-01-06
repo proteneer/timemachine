@@ -10,10 +10,10 @@ namespace timemachine {
 long long __device__ __forceinline__ real_to_int64(float x) {
 #if __CUDA_ARCH__ >= 610
     float z = x * (float)0x1.00000p-32;
-    int hi = __float2int_rz(z);                            // First convert high bits
-    float delta = x - ((float)0x1.00000p32 * ((float)hi)); // Check remainder sign
+    int hi = __float2int_rz(z);                                     // First convert high bits
+    float delta = x - ((float)0x1.00000p32 * ((float)hi));          // Check remainder sign
     int test = (__float_as_uint(delta) > 0xbf000000);
-    int lo = __float2uint_rn(fabsf(delta)); // Convert the (unsigned) remainder
+    int lo = __float2uint_rn(fabsf(delta));                         // Convert the (unsigned) remainder
     lo = (test) ? -lo : lo;
     hi -= test;                                                     // Two's complement correction
     long long res = __double_as_longlong(__hiloint2double(hi, lo)); // Return 64-bit result

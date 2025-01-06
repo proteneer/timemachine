@@ -76,9 +76,9 @@ private:
     double *d_x_after_;
     double *d_box_after_;
 
-    int *d_atom_idxs_;   // grouped index to atom coords
-    int *d_mol_idxs_;    // grouped index to molecule index
-    int *d_mol_offsets_; // Offset of molecules to determine size of mols
+    int *d_atom_idxs_;                // grouped index to atom coords
+    int *d_mol_idxs_;                 // grouped index to molecule index
+    int *d_mol_offsets_;              // Offset of molecules to determine size of mols
 
     unsigned long long *d_centroids_; // Accumulate centroids in fixed point to ensure deterministic behavior
 

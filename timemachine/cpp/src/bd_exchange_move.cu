@@ -440,8 +440,8 @@ void BDExchangeMove<RealType>::compute_incremental_log_weights_device(
 template <typename RealType>
 std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental_log_weights_host(
     const int N,
-    const double *h_coords, // [N, 3]
-    const double *h_box,    // [3, 3]
+    const double *h_coords,        // [N, 3]
+    const double *h_box,           // [3, 3]
     const int *h_mol_idxs,
     const RealType *h_quaternions, // [batch_size_, 4]
     const RealType *h_translations // [batch_size_, 3]

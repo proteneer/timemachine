@@ -71,7 +71,7 @@ void SegmentedWeightedRandomSampler<RealType>::sample_given_noise_device(
     this->sample_given_noise_and_offset_device(
         total_values,
         num_segments,
-        0, // Max offset can be safely ignored
+        0,       // Max offset can be safely ignored
         d_segment_offsets,
         d_log_probabilities,
         nullptr, // No noise offset

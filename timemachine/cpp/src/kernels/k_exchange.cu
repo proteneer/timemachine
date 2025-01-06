@@ -52,8 +52,8 @@ template void __global__ k_convert_energies_to_log_weights<double>(
 // the starting atom idx rather than the prefix sum of mol lengths that the mol_offsets is.
 void __global__ k_setup_proposals(
     const int total_proposals,
-    const int batch_size,            // Number of proposals to setup
-    const int num_atoms_in_each_mol, // number of atoms in each sample
+    const int batch_size,                      // Number of proposals to setup
+    const int num_atoms_in_each_mol,           // number of atoms in each sample
     const int *__restrict__ rand_offset,
     const int *__restrict__ mol_idx_per_batch, // [batch_size] The index of the molecules to sample
     const int *__restrict__ atom_indices,      // [N]
@@ -223,8 +223,8 @@ void __global__ k_compute_box_volume(
 }
 
 template void __global__ k_compute_box_volume<float>(
-    const double *__restrict__ box,   // [3]
-    float *__restrict__ output_volume // [1]
+    const double *__restrict__ box,    // [3]
+    float *__restrict__ output_volume  // [1]
 );
 template void __global__ k_compute_box_volume<double>(
     const double *__restrict__ box,    // [3]
@@ -321,7 +321,7 @@ void __global__ k_set_sampled_energy_block(
     const int batch_size,
     const int mol_size,
     const int num_energies,
-    const int *__restrict__ target_atoms, // [batch_size, mol_size]
+    const int *__restrict__ target_atoms,     // [batch_size, mol_size]
     const RealType *__restrict__ per_atom_energies,
     __int128 *__restrict__ intermediate_accum // [batch_size, ceil_divide(N, THREADS_PER_BLOCK)]
 ) {

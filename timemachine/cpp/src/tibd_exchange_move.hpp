@@ -29,14 +29,14 @@ protected:
     DeviceBuffer<RealType> d_center_; // [3]
     // Uniform noise with the first element used for deciding directionality of insertion
     // and the second element is used for comparison against the acceptance rate in the Metropolis-Hastings check
-    DeviceBuffer<RealType> d_uniform_noise_buffer_; // [2 * this->batch_size_ * this->steps_per_move_]
-    DeviceBuffer<int> d_targeting_inner_vol_;       // [1]
+    DeviceBuffer<RealType> d_uniform_noise_buffer_;    // [2 * this->batch_size_ * this->steps_per_move_]
+    DeviceBuffer<int> d_targeting_inner_vol_;          // [1]
 
     DeviceBuffer<int> d_ligand_idxs_;
-    DeviceBuffer<RealType> d_src_log_weights_;  // [this->num_target_mols_ * this->batch_size_]
-    DeviceBuffer<RealType> d_dest_log_weights_; // [this->num_target_mols_ * this->batch_size_]
-    DeviceBuffer<int> d_inner_flags_;           // [this->num_target_mols_]
-    DeviceBuffer<RealType> d_box_volume_;       // [1]
+    DeviceBuffer<RealType> d_src_log_weights_;         // [this->num_target_mols_ * this->batch_size_]
+    DeviceBuffer<RealType> d_dest_log_weights_;        // [this->num_target_mols_ * this->batch_size_]
+    DeviceBuffer<int> d_inner_flags_;                  // [this->num_target_mols_]
+    DeviceBuffer<RealType> d_box_volume_;              // [1]
 
 private:
     DeviceBuffer<RealType> d_selected_translations_;   // [this->batch_size_, 3] The translation selected to run
@@ -44,8 +44,8 @@ private:
     DeviceBuffer<int> d_weights_before_counts_;        // [this->batch_size_]
     DeviceBuffer<int> d_weights_after_counts_;         // [this->batch_size_]
 
-    DeviceBuffer<RealType> d_lse_max_src_;     // [this->batch_size, this->num_target_mols_]
-    DeviceBuffer<RealType> d_lse_exp_sum_src_; // [this->batch_size, this->num_target_mols_]
+    DeviceBuffer<RealType> d_lse_max_src_;             // [this->batch_size, this->num_target_mols_]
+    DeviceBuffer<RealType> d_lse_exp_sum_src_;         // [this->batch_size, this->num_target_mols_]
 
 public:
     TIBDExchangeMove(
