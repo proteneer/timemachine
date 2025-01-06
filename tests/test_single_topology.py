@@ -173,8 +173,7 @@ def test_phenol():
     Test that dummy interactions are setup correctly for a phenol. We want to check that bonds and angles
     are present when either a single root anchor is provided, or when a root anchor and a neighbor anchor is provided.
     """
-    mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
-    AllChem.EmbedMolecule(mol, randomSeed=2022)
+    mol = ligand_from_smiles("c1ccccc1O", seed=2022)
 
     all_atoms_set = set([a for a in range(mol.GetNumAtoms())])
 
@@ -241,8 +240,7 @@ def test_methyl_chiral_atom_idxs():
     """
     Check that we're leaving the chiral restraints on correctly for a methyl, when only a single hydrogen is a core atom.
     """
-    mol = Chem.AddHs(Chem.MolFromSmiles("C"))
-    AllChem.EmbedMolecule(mol, randomSeed=2022)
+    mol = ligand_from_smiles("C", seed=2022)
 
     dg = [1, 2, 3, 4]
     all_atoms_set = set([a for a in range(mol.GetNumAtoms())])
@@ -366,11 +364,8 @@ def test_find_dummy_groups_and_multiple_anchors():
 def test_ethane_cyclobutadiene():
     """Test case where a naive heuristic for identifying dummy groups results in disconnected components"""
 
-    mol_a = Chem.AddHs(Chem.MolFromSmiles("CC"))
-    mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccc1"))
-
-    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
-    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
+    mol_a = ligand_from_smiles("CC", seed=2022)
+    mol_b = ligand_from_smiles("c1ccc1", seed=2022)
 
     core = np.array([[2, 0], [4, 2], [0, 3], [3, 7]])
     ff = Forcefield.load_default()
@@ -386,11 +381,8 @@ def test_ethane_cyclobutadiene():
 
 @pytest.mark.nocuda
 def test_charge_perturbation_is_invalid():
-    mol_a = Chem.AddHs(Chem.MolFromSmiles("Cc1cc[nH]c1"))
-    mol_b = Chem.AddHs(Chem.MolFromSmiles("C[n+]1cc[nH]c1"))
-
-    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
-    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
+    mol_a = ligand_from_smiles("Cc1cc[nH]c1", seed=2022)
+    mol_b = ligand_from_smiles("C[n+]1cc[nH]c1", seed=2022)
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
@@ -768,11 +760,8 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
 @pytest.mark.nocuda
 def test_combine_with_host():
     """Verifies that combine_with_host correctly sets up all of the U functions"""
-    mol_a = Chem.MolFromSmiles("BrC1=CC=CC=C1")
-    mol_b = Chem.MolFromSmiles("C1=CN=CC=C1F")
-
-    AllChem.EmbedMolecule(mol_a, randomSeed=2022)
-    AllChem.EmbedMolecule(mol_b, randomSeed=2022)
+    mol_a = ligand_from_smiles("BrC1=CC=CC=C1", seed=2022)
+    mol_b = ligand_from_smiles("C1=CN=CC=C1F", seed=2022)
 
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
@@ -1060,7 +1049,7 @@ def test_combine_with_host_split(precision, rtol, atol):
     )
 
 
-def ligand_from_smiles(smiles, seed: int = 2024):
+def ligand_from_smiles(smiles: str, seed: int = 2024) -> Chem.Mol:
     mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
     AllChem.EmbedMolecule(mol, randomSeed=seed)
     set_mol_name(mol, smiles)
@@ -1189,10 +1178,6 @@ def test_cyclic_difference_translation_invariant(a, b, t, period):
 
 def pairs(elem, unique=False):
     return st.lists(elem, min_size=2, max_size=2, unique=unique).map(tuple)
-
-
-# https://github.com/python/mypy/issues/12617
-lambda_intervals = pairs(finite_floats(1e-9, 1.0 - 1e-9), unique=True).map(sorted)  # type: ignore
 
 
 @pytest.mark.nocuda

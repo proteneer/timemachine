@@ -1,21 +1,11 @@
 import warnings
 from collections import defaultdict
 from itertools import product
-from typing import (
-    Collection,
-    DefaultDict,
-    Dict,
-    FrozenSet,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-)
+from typing import Collection, DefaultDict, Iterable, Iterator, Optional, Sequence, TypeVar
 
 import networkx as nx
+import numpy as np
+from numpy.typing import NDArray
 
 
 class MultipleAnchorWarning(UserWarning):
@@ -24,7 +14,7 @@ class MultipleAnchorWarning(UserWarning):
 
 def generate_dummy_group_assignments(
     bond_graph: nx.Graph, core_atoms: Collection[int]
-) -> Iterator[Dict[int, FrozenSet[int]]]:
+) -> Iterator[dict[int, frozenset[int]]]:
     """Returns an iterator over dummy group assignments (i.e., candidate partitionings of dummy atoms with each
     partition assigned a bond anchor atom) for a given molecule (represented as a bond graph) and set of core atoms.
 
@@ -101,12 +91,12 @@ def generate_dummy_group_assignments(
 
 
 def generate_anchored_dummy_group_assignments(
-    dummy_groups: Dict[int, FrozenSet[int]],
+    dummy_groups: dict[int, frozenset[int]],
     bond_graph_a: nx.Graph,
     bond_graph_b: nx.Graph,
-    core_atoms_a: Sequence[int],
-    core_atoms_b: Sequence[int],
-) -> Iterator[Dict[int, Tuple[Optional[int], FrozenSet[int]]]]:
+    core_atoms_a: NDArray[np.int32] | Sequence[int],
+    core_atoms_b: NDArray[np.int32] | Sequence[int],
+) -> Iterator[dict[int, tuple[Optional[int], frozenset[int]]]]:
     """Returns an iterator over candidate anchored dummy group assignments.
 
     By convention, dummy atoms are added to A to transform it into a supergraph of B. Indices in the dummy_groups
@@ -133,7 +123,7 @@ def generate_anchored_dummy_group_assignments(
 
     Parameters
     ----------
-    dummy_groups: Dict[int, FrozenSet[int]]
+    dummy_groups: dict[int, frozenset[int]]
         Mapping from anchor atom to atoms in the associated dummy group. Indices refer to atoms in B.
 
     bond_graph_a, bond_graph_b: nx.Graph
@@ -176,7 +166,7 @@ def generate_anchored_dummy_group_assignments(
     return anchored_dummy_group_assignments
 
 
-def canonicalize_bond(ixn: Tuple[int, ...]) -> Tuple[int, ...]:
+def canonicalize_bond(ixn: tuple[int, ...]) -> tuple[int, ...]:
     if ixn[0] > ixn[-1]:
         return tuple(ixn[::-1])
     else:
@@ -184,18 +174,18 @@ def canonicalize_bond(ixn: Tuple[int, ...]) -> Tuple[int, ...]:
 
 
 def get_core_bonds(
-    bonds_a: Collection[Tuple[int, int]],
-    bonds_b: Collection[Tuple[int, int]],
-    core_atoms_a: Sequence[int],
-    core_atoms_b: Sequence[int],
-) -> FrozenSet[Tuple[int, ...]]:
+    bonds_a: Collection[tuple[int, int]],
+    bonds_b: Collection[tuple[int, int]],
+    core_atoms_a: NDArray[np.int32] | Sequence[int],
+    core_atoms_b: NDArray[np.int32] | Sequence[int],
+) -> frozenset[tuple[int, ...]]:
     """Returns core-core bonds that are present in both mol_a and mol_b"""
     a_to_c = {a: c for c, a in enumerate(core_atoms_a)}
     b_to_c = {b: c for c, b in enumerate(core_atoms_b)}
     return frozenset(translate_bonds(bonds_a, a_to_c)).intersection(frozenset(translate_bonds(bonds_b, b_to_c)))
 
 
-def translate_bonds(bonds: Collection[Tuple[int, ...]], mapping: Dict[int, int]) -> List[Tuple[int, ...]]:
+def translate_bonds(bonds: Collection[tuple[int, ...]], mapping: dict[int, int]) -> list[tuple[int, ...]]:
     """Applies the given mapping of atom indices to a collection of bonds (i.e. tuples of atom indices)
 
     Bonds containing indices that are missing from the input mapping are omitted in the output."""
@@ -208,9 +198,9 @@ _K = TypeVar("_K")
 _V = TypeVar("_V")
 
 
-def union_by_key(ts: Iterable[Tuple[_K, FrozenSet[_V]]]) -> Dict[_K, FrozenSet[_V]]:
+def union_by_key(ts: Iterable[tuple[_K, frozenset[_V]]]) -> dict[_K, frozenset[_V]]:
     """Given an iterable of key-value pairs where the values are sets, returns a dictionary of sets merged by key."""
-    d: DefaultDict[_K, FrozenSet[_V]] = defaultdict(frozenset)
+    d: DefaultDict[_K, frozenset[_V]] = defaultdict(frozenset)
     for k, xs in ts:
         d[k] = d[k].union(xs)
     return dict(d)

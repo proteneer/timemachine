@@ -300,7 +300,7 @@ class BaseTopology:
     ):
         """
         Generate intramolecular nonbonded pairlist, and is mostly identical to the above
-        except implemented as a pairlist.
+        except implemented as a precomputed pairlist.
         """
         # use same scale factors for electrostatics and vdWs
         exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
@@ -318,14 +318,14 @@ class BaseTopology:
         inclusion_idxs, rescale_mask = [], []
         for i in range(self.mol.GetNumAtoms()):
             for j in range(i + 1, self.mol.GetNumAtoms()):
-                scale_factor = exclusions_kv.get((i, j), (0.0, 0.0))  # how much to remove
-                rescale_factor = 1 - np.array(scale_factor)  # how much to keep
+                scale_factor = exclusions_kv.get((i, j), np.zeros(2, dtype=np.float64))  # how much to remove
+                rescale_factor = 1 - np.asarray(scale_factor, dtype=np.float64)  # how much to keep
                 # keep this ixn if either lj or coulombic interaction is present
                 if np.any(rescale_factor) > 0:
                     rescale_mask.append(rescale_factor)
                     inclusion_idxs.append([i, j])
 
-        inclusion_idxs = np.array(inclusion_idxs).reshape(-1, 2).astype(np.int32)
+        inclusion_idxs = np.array(inclusion_idxs, dtype=np.int32).reshape(-1, 2)
 
         if intramol_params:
             q_params = self.ff.q_handle_intra.partial_parameterize(ff_q_params_intra, self.mol)
