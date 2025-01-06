@@ -547,7 +547,7 @@ class NNHandler(SerializableMixIn):
             a0 = atom_features[bond_idx[0]]
             a1 = atom_features[bond_idx[1]]
             b0 = bond_features_by_idx[bond_idx_tup]
-            # just b0 with features swapped
+            # just b0 with src, dst swapped
             b1 = bond_features_by_idx[bond_idx_tup[::-1]]
             ff0 = jnp.concatenate([a0, a1, b0])
             ff1 = jnp.concatenate([a1, a0, b1])
