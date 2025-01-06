@@ -12,7 +12,7 @@ ARG MAKE_VERSION=4.2.1-1.2
 ARG GIT_VERSION=1:2.25.1-*
 ARG WGET_VERSION=1.20.3-*
 RUN (apt-get update || true)  && apt-get install --no-install-recommends -y \
-    wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} vim \
+    wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh -O ~/miniconda.sh && \
@@ -57,14 +57,14 @@ RUN pip install --no-cache-dir -r timemachine/requirements.txt
 # timemachine_ci target
 FROM tm_base_env AS timemachine_ci
 
-# Install pre-commit and cache hooks
-RUN pip install --no-cache-dir pre-commit==3.2.1
-COPY .pre-commit-config.yaml /code/timemachine/
-RUN cd /code/timemachine && git init . && pre-commit install-hooks
-
 # Install CI requirements
 COPY ci/requirements.txt /code/timemachine/ci/requirements.txt
 RUN pip install --no-cache-dir -r timemachine/ci/requirements.txt
+
+# Install pre-commit and cache hooks
+COPY .pre-commit-config.yaml /code/timemachine/
+RUN cd /code/timemachine && git init . && pre-commit install-hooks
+
 
 # Container that contains the cuda developer tools which allows building the customs ops
 # Used as an intermediate for creating a final slimmed down container with timemachine and only the cuda runtime
@@ -77,8 +77,8 @@ WORKDIR /code/timemachine/
 RUN pip install --no-cache-dir -e . && rm -rf ./build
 
 # Container with only cuda base, half the size of the timemachine_cuda_dev container
-# Need to copy curand/cudart as these are dependecies of the Timemachine GPU code
-FROM docker.io/nvidia/cuda:12.4.1-base-ubuntu20.04 as timemachine
+# Need to copy curand/cudart as these are dependencies of the Timemachine GPU code
+FROM docker.io/nvidia/cuda:12.4.1-base-ubuntu20.04 AS timemachine
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
