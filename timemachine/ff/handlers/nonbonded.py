@@ -501,13 +501,14 @@ class AM1Handler(SerializableMixIn):
 
 
 class NNHandler(SerializableMixIn):
-    def __init__(self, layer_idxs, params, layer_sizes):
-        self.smirks = layer_idxs
+    def __init__(self, layer_sizes, params, props):
+        self.smirks = layer_sizes
         self.params = params
-        self.props = layer_sizes
+        self.props = props
 
     @staticmethod
-    def static_parameterize(layer_idxs, params, layer_sizes, mol):
+    def static_parameterize(params, layer_sizes, mol):
+        layer_idxs = list(range(len(layer_sizes)))
         features = pickle.loads(base64.b64decode(mol.GetProp(NN_FEATURES_PROPNAME)))
         atom_features = features["atom_features"]
         bond_idx_features = features["bond_idxs"]
