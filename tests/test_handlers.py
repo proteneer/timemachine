@@ -1095,10 +1095,9 @@ def test_nn_handler():
     mol.SetProp(nonbonded.NN_FEATURES_PROPNAME, base64.b64encode(pickle.dumps(features)))
 
     # input has the features (atom0, atom1, bond)
-    layers = [0, 1, 2]
     layer_sizes = [feature_size * 4, 32, 16, 1]
     params = [rng.random((size0, size1)) for (size0, size1) in zip(layer_sizes, layer_sizes[1:])]
-    nn = nonbonded.NNHandler(layers, params, layer_sizes)
+    nn = nonbonded.NNHandler(layer_sizes, params, None)
     charges = nn.static_parameterize(params, layer_sizes, mol)
     assert np.sum(charges) < 1e-5
 
