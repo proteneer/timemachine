@@ -36,7 +36,7 @@ lint:
   needs: ["docker_build"]
   # Specify cuda arch, so that a GPU is not required to detect the cuda arch.
   variables:
-    CMAKE_ARGS: -DCUDA_ARCH=75
+    CUDA_ARCH: 75
   tags:
     - aws-tardis-cpu
   rules:
