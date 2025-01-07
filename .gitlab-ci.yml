@@ -34,8 +34,11 @@ lint:
   stage: lint
   image: $DOCKER_TAG
   needs: ["docker_build"]
+  # Specify cuda arch, so that a GPU is not required to detect the cuda arch.
+  variables:
+    CMAKE_ARGS: -DCUDA_ARCH=75
   tags:
-    - aws-tardis-gpu
+    - aws-tardis-cpu
   rules:
     - if: $CI_EXTERNAL_PULL_REQUEST_IID
     - if: $NIGHTLY_TESTS
