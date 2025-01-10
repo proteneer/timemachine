@@ -26,7 +26,7 @@ SMILES_BY_RES_NAME = {
     "CYM": "N[C@@H](C[S-])C(O)=O",
     "GLY": "C(C(=O)O)N",
     "PRO": "C1C[C@H](NC1)C(=O)O",
-    "ALA": "O=C(O)C(N)C",
+    "ALA": "C[C@H](N)C(=O)O",
     "VAL": "CC(C)[C@@H](C(=O)O)N",
     "ILE": "CC[C@H](C)[C@@H](C(=O)O)N",
     "LEU": "CC(C)C[C@@H](C(=O)O)N",
@@ -285,7 +285,7 @@ def add_n_cap(template_res_mol: Mol) -> Mol:
     n_atom.SetFormalCharge(+1)
     h_atom = mw.AddAtom(Chem.Atom("H"))
 
-    mw.AddBond(h_atom, n_atom_idx)
+    mw.AddBond(h_atom, n_atom_idx, order=Chem.rdchem.BondType.SINGLE)
     mw.CommitBatchEdit()
     return mw
 

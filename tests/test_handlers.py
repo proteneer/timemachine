@@ -1096,13 +1096,15 @@ def test_nn_handler():
 
     # input has the features (atom0, atom1, bond)
     layer_sizes = [feature_size * 4, 32, 16, 1]
-    params = [rng.random((size0, size1)) for (size0, size1) in zip(layer_sizes, layer_sizes[1:])]
-    nn = nonbonded.NNHandler(layer_sizes, params, None)
-    charges = nn.static_parameterize(params, layer_sizes, mol)
+    total_size = sum(np.array(layer_sizes)[:-1] * np.array(layer_sizes[1:]))
+    params = [rng.random((total_size,))]
+    enc_layer_sizes = [base64.b64encode(pickle.dumps(layer_sizes))]
+    nn = nonbonded.NNHandler(enc_layer_sizes, params, None)
+    charges = nn.static_parameterize(params, enc_layer_sizes, mol)
     assert np.sum(charges) < 1e-5
 
     def loss_fn(params):
-        return jnp.sum(jnp.abs(nn.static_parameterize(params, layer_sizes, mol)))
+        return jnp.sum(jnp.abs(nn.static_parameterize(params, enc_layer_sizes, mol)))
 
     grad_fn = jax.grad(loss_fn)
     print("loss", loss_fn(params))  # fast
