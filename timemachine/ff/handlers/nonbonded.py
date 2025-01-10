@@ -1,7 +1,7 @@
 import base64
 import pickle
 import warnings
-from collections import Counter
+from collections import Counter, defaultdict
 
 import jax.numpy as jnp
 import networkx as nx
@@ -13,7 +13,12 @@ from timemachine import constants
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
-from timemachine.ff.handlers.utils import canonicalize_bond, make_residue_mol, make_residue_mol_from_template
+from timemachine.ff.handlers.utils import (
+    canonicalize_bond,
+    get_query_mol,
+    make_residue_mol,
+    make_residue_mol_from_template,
+)
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.ff.handlers.utils import update_mol_topology
 from timemachine.graph_utils import convert_to_nx
@@ -502,12 +507,15 @@ class AM1Handler(SerializableMixIn):
 
 class NNHandler(SerializableMixIn):
     def __init__(self, layer_sizes, params, props):
+        assert len(layer_sizes) == 1
+        assert len(params) == 1
         self.smirks = layer_sizes
-        self.params = params
+        self.params = np.array(params, dtype=np.float64)
         self.props = props
 
     @staticmethod
-    def static_parameterize(params, layer_sizes, mol):
+    def get_bond_idxs_and_charge_deltas(flat_params, init_mol_charges, encoded_layer_sizes, mol):
+        layer_sizes = pickle.loads(base64.b64decode(encoded_layer_sizes[0]))
         layer_idxs = list(range(len(layer_sizes)))
         features = pickle.loads(base64.b64decode(mol.GetProp(NN_FEATURES_PROPNAME)))
         atom_features = features["atom_features"]
@@ -515,17 +523,50 @@ class NNHandler(SerializableMixIn):
         bond_src_features = features["bond_src_features"]
         bond_dst_features = features["bond_dst_features"]
 
+        # symmetrize features
+        sym_charge_idxs = defaultdict(list)
+        for i, q in enumerate(init_mol_charges):
+            sym_charge_idxs[float(q)].append(i)
+
+        # all atoms in the sym. group should have the same features
+        for sym_group in sym_charge_idxs.values():
+            sym_atom_features = np.mean([atom_features[j] for j in sym_group], axis=0)
+            for j in sym_group:
+                atom_features[j, :] = sym_atom_features
+
+        # all bonds in the paired sym. group should have the same features
+        bond_features_by_sym_idx = defaultdict(list)
+        for i, bond_idx in enumerate(bond_idx_features):
+            bond_feature = jnp.concatenate([bond_src_features[i], bond_dst_features[i]])
+            q0 = float(init_mol_charges[bond_idx[0]])
+            q1 = float(init_mol_charges[bond_idx[1]])
+            bond_features_by_sym_idx[(q0, q1)].append(bond_feature)
+
         bond_features_by_idx = {}
         for i, bond_idx in enumerate(bond_idx_features):
-            bond_features_by_idx[tuple(bond_idx)] = jnp.concatenate([bond_src_features[i], bond_dst_features[i]])
+            q0 = float(init_mol_charges[bond_idx[0]])
+            q1 = float(init_mol_charges[bond_idx[1]])
+            bond_features_by_idx[tuple(bond_idx)] = np.mean(bond_features_by_sym_idx[(q0, q1)], axis=0)
 
-        am1_charges = compute_or_load_oe_charges(mol, mode=AM1BCC)
         bond_idxs = np.array(sorted(set(bond_features_by_idx.keys())))
 
-        reshaped_params = []
-        for layer_size, p in zip(layer_sizes, params):
-            reshaped_params.append(jnp.array(p).reshape(-1, layer_size))
+        def expand_params(x):
+            # Convert to np.array if params are from serialized ff
+            if isinstance(x, tuple):
+                x = np.array(x)
+            split_idxs = []
+            for i, layer_size in enumerate(layer_sizes[:-1]):
+                next_layer_size = layer_sizes[i + 1]
+                split_idxs.append(layer_size * next_layer_size)
+            split_idxs = list(np.cumsum(split_idxs))
 
+            reshape_params = jnp.split(x, split_idxs)
+            full_reshape_params = []
+            for size, p in zip(layer_sizes[:-1], reshape_params):
+                full_reshape_params.append(p.reshape(-1, size))
+            return full_reshape_params
+
+        reshaped_params = expand_params(flat_params[0])
         params_by_layer = {int(layer_idx): param for layer_idx, param in zip(layer_idxs, reshaped_params)}
         layers_by_index = list(sorted(params_by_layer.keys()))
 
@@ -556,7 +597,14 @@ class NNHandler(SerializableMixIn):
             f1 = eval_nn(ff1)
             f = f1 - f0  # antisymmetric to swapping bond direction
             deltas.append(f * np.sqrt(constants.ONE_4PI_EPS0))
+        return bond_idxs, deltas
 
+    @staticmethod
+    def static_parameterize(flat_params, encoded_layer_sizes, mol):
+        am1_charges = compute_or_load_oe_charges(mol, mode=AM1BCC)
+        bond_idxs, deltas = NNHandler.get_bond_idxs_and_charge_deltas(
+            flat_params, am1_charges, encoded_layer_sizes, mol
+        )
         final_charges = apply_bond_charge_corrections(am1_charges, bond_idxs, jnp.array(deltas), runtime_validate=False)
         return final_charges
 
@@ -662,9 +710,12 @@ class EnvironmentBCCHandler(SerializableMixIn):
         self.topology_idx_to_template_idx = {atm.index: j for atm, j in self.data.atomTemplateIndexes.items()}
 
         self.all_res_mols_by_name = {}
+        cur_atom = 0
         for tfr in self.template_for_residue:
+            n_atoms = len(tfr.atoms)
             if tfr.name in self.all_res_mols_by_name:
                 # already processed this residue
+                cur_atom += n_atoms
                 continue
 
             symbol_list = [atm.element.symbol for atm in tfr.atoms]
@@ -673,14 +724,18 @@ class EnvironmentBCCHandler(SerializableMixIn):
             template_res_mol = make_residue_mol_from_template(tfr.name)
             if template_res_mol is None:
                 # i.e. skip water/ions
+                cur_atom += n_atoms
                 continue
 
-            # copy the charges and bond types from proper_res to omm_res
+            # copy the charges and bond types from template_res to topology_res_mol
             update_mol_topology(topology_res_mol, template_res_mol)
 
-            # cache smirks patterns to speed up parameterize
-            compute_or_load_bond_smirks_matches(topology_res_mol, self.patterns)
+            # cache smirks patterns to speed up parameterize,
+            initial_res_charges = self.initial_charges[cur_atom : cur_atom + n_atoms]
+            self._compute_res_charges(tfr.name, topology_res_mol, initial_res_charges, params)
+
             self.all_res_mols_by_name[tfr.name] = topology_res_mol
+            cur_atom += n_atoms
 
     def _map_to_topology_order(self, template_charges, cur_atom, n_atoms):
         # map back from the template ordering to the topology order
@@ -689,6 +744,16 @@ class EnvironmentBCCHandler(SerializableMixIn):
             tmpl_atom_idx = self.topology_idx_to_template_idx[cur_atom + i]
             q_params[i] = template_charges[tmpl_atom_idx]
         return jnp.array([q_params[i] for i in range(n_atoms)])
+
+    def _compute_res_charges(self, res_name, topology_res_mol, initial_res_charges, params):
+        bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(topology_res_mol, self.patterns)
+        deltas = params[type_idxs]
+        return apply_bond_charge_corrections(
+            initial_res_charges,
+            bond_idxs,
+            deltas,
+            runtime_validate=False,  # required for jit
+        )
 
     def parameterize(self, params):
         cur_atom = 0
@@ -720,14 +785,9 @@ class EnvironmentBCCHandler(SerializableMixIn):
                 topology_res_mol_charges[tmpl_atom_idx] = initial_res_charges[i]
             topology_res_mol_charges_ordered = jnp.array([topology_res_mol_charges[i] for i in range(n_atoms)])
 
-            # compute smirks on the template residue
-            bond_idxs, type_idxs = compute_or_load_bond_smirks_matches(topology_res_mol, self.patterns)
-            deltas = params[type_idxs]
-            tmpl_q_params = apply_bond_charge_corrections(
-                topology_res_mol_charges_ordered,
-                bond_idxs,
-                deltas,
-                runtime_validate=False,  # required for jit
+            # compute the charges on the topology res
+            tmpl_q_params = self._compute_res_charges(
+                tfr.name, topology_res_mol, topology_res_mol_charges_ordered, params
             )
 
             # map the template charges back to topology order
@@ -772,6 +832,92 @@ class EnvironmentBCCPartialHandler(SerializableMixIn):
         ff: Forcefield
         """
         return EnvironmentBCCHandler(self.smirks, self.params, ff.protein_ff, ff.water_ff, omm_topology)
+
+
+class EnvironmentNNHandler(EnvironmentBCCHandler):
+    """
+    Applies `NNHandler` to residues in a protein. Needs a concrete openmm topology to use.
+    NOTE: Currently, this only supports the amber99sbildn protein forcefield.
+    """
+
+    def __init__(self, patterns, params, props, protein_ff_name, water_ff_name, topology):
+        self.props = props
+        self.nn_h = NNHandler(patterns, params, None)
+        super().__init__(patterns, params, protein_ff_name, water_ff_name, topology)
+
+    def _compute_res_charges(self, res_name, topology_res_mol, initial_res_charges, params):
+        features_by_res = pickle.loads(base64.b64decode(self.props[0]))
+
+        # NOTE: This is NOT the same template as the OMM template in `EnvironmentBCCHandler`
+        template_res_mol = make_residue_mol_from_template(res_name)
+
+        # features are already encoded
+        template_res_mol.SetProp(NN_FEATURES_PROPNAME, features_by_res[res_name])
+
+        # map bond_idxs back to topology_res_mol
+        match = template_res_mol.GetSubstructMatch(get_query_mol(topology_res_mol))
+
+        # Match maps the topology_res_mol to template_res_mol
+        fwd_map = {i: v for i, v in enumerate(match)}
+
+        # map from template_res_mol to topology_res_mol
+        rev_map = {v: i for i, v in fwd_map.items()}
+
+        # map topology initial res charges to the template_res_mol
+        template_res_charges_ = {}
+        for top_i, tmpl_j in fwd_map.items():
+            template_res_charges_[tmpl_j] = initial_res_charges[top_i]
+
+        # Arbitrary as long as it's not an actual charge in the molecule
+        # since the charges are used to determine symmetry groups
+        missing_q_value = -100
+        template_res_charges = [
+            template_res_charges_.get(i, missing_q_value) for i in range(template_res_mol.GetNumAtoms())
+        ]
+
+        # get the bond_idxs, deltas for the template residue
+        bond_idxs, deltas = self.nn_h.get_bond_idxs_and_charge_deltas(
+            params, template_res_charges, self.patterns, template_res_mol
+        )
+
+        # map back to the topology residue
+        top_bond_idxs = []
+        top_deltas = []
+        for bond_idx, delta in zip(bond_idxs, deltas):
+            src_idx, dst_idx = bond_idx
+            # May have a bond that is not present in the original topology
+            # so skip these in the BCC
+            if src_idx in rev_map and dst_idx in rev_map:
+                top_src_idx = rev_map[src_idx]
+                top_dst_idx = rev_map[dst_idx]
+                top_bond_idxs.append((top_src_idx, top_dst_idx))
+                top_deltas.append(delta)
+
+        final_charges = apply_bond_charge_corrections(
+            initial_res_charges, np.array(top_bond_idxs), jnp.array(top_deltas), runtime_validate=False
+        )
+        return final_charges
+
+
+class EnvironmentNNPartialHandler(EnvironmentBCCPartialHandler):
+    """
+    Similar to `EnvironmentBCCPartialHandler` but using the NNHandler
+    in place of BCC terms.
+    """
+
+    def get_env_handle(self, omm_topology, ff) -> EnvironmentNNHandler:
+        """
+        Return an initialized `EnvironmentNNHandler` which can be used to
+        get the (possibly updated) environment charges.
+
+        Parameters
+        ----------
+        omm_topology:
+            Openmm topology object for the environment.
+
+        ff: Forcefield
+        """
+        return EnvironmentNNHandler(self.smirks, self.params, self.props, ff.protein_ff, ff.water_ff, omm_topology)
 
 
 class AM1CCCHandler(SerializableMixIn):

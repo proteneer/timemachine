@@ -72,7 +72,12 @@ class Forcefield:
 
     lj_handle: Optional[nonbonded.LennardJonesHandler]
     lj_handle_intra: Optional[nonbonded.LennardJonesIntraHandler]
-    env_bcc_handle: Optional[nonbonded.EnvironmentBCCPartialHandler]
+    env_bcc_handle: Optional[
+        Union[
+            nonbonded.EnvironmentBCCPartialHandler,
+            nonbonded.EnvironmentNNPartialHandler,
+        ]
+    ]
 
     protein_ff: str
     water_ff: str
@@ -161,7 +166,10 @@ class Forcefield:
         env_bcc_handle = None
 
         for handle in ff_handlers:
-            if isinstance(handle, nonbonded.EnvironmentBCCPartialHandler):
+            if isinstance(
+                handle,
+                (nonbonded.EnvironmentBCCPartialHandler, nonbonded.EnvironmentNNPartialHandler),
+            ):
                 assert env_bcc_handle is None
                 env_bcc_handle = handle
             elif isinstance(handle, bonded.HarmonicBondHandler):
