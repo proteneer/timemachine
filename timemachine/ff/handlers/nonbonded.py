@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
+from jax import jit
 from rdkit import Chem
 
 from timemachine import constants
@@ -505,6 +506,23 @@ class AM1Handler(SerializableMixIn):
         return compute_or_load_oe_charges(mol, mode=AM1)
 
 
+@jit
+def eval_nn(params_by_layer, features):
+    def activation(x):
+        return x / (1 + jnp.exp(-x))  # silu
+
+    layers_by_index = list(sorted(params_by_layer.keys()))
+
+    x = features
+    for layer in layers_by_index[:-1]:
+        W = params_by_layer[layer]
+        x = activation(jnp.dot(W, x))
+
+    # last layer skips activation
+    W = params_by_layer[layers_by_index[-1]]
+    return jnp.squeeze(jnp.dot(W, x))  # scalar
+
+
 class NNHandler(SerializableMixIn):
     def __init__(self, layer_sizes, params, props):
         assert len(layer_sizes) == 1
@@ -568,20 +586,11 @@ class NNHandler(SerializableMixIn):
 
         reshaped_params = expand_params(flat_params[0])
         params_by_layer = {int(layer_idx): param for layer_idx, param in zip(layer_idxs, reshaped_params)}
-        layers_by_index = list(sorted(params_by_layer.keys()))
 
-        def activation(x):
-            return x / (1 + jnp.exp(-x))  # silu
-
-        def eval_nn(features):
-            x = features
-            for layer in layers_by_index[:-1]:
-                W = params_by_layer[layer]
-                x = activation(jnp.dot(W, x))
-
-            # last layer skips activation
-            W = params_by_layer[layers_by_index[-1]]
-            return jnp.squeeze(jnp.dot(W, x))  # scalar
+        def flatten_params(params):
+            flat_params = [p.flatten() for p in params]
+            x = jnp.concatenate(flat_params).reshape(1, -1)
+            return x
 
         deltas = []
         for bond_idx in bond_idxs:
@@ -591,13 +600,13 @@ class NNHandler(SerializableMixIn):
             b0 = bond_features_by_idx[bond_idx_tup]
             # just b0 with src, dst swapped
             b1 = bond_features_by_idx[bond_idx_tup[::-1]]
-            ff0 = jnp.concatenate([a0, a1, b0])
-            ff1 = jnp.concatenate([a1, a0, b1])
-            f0 = eval_nn(ff0)
-            f1 = eval_nn(ff1)
+            features0 = np.array(jnp.concatenate([a0, a1, b0]))
+            features1 = np.array(jnp.concatenate([a1, a0, b1]))
+            f0 = eval_nn(params_by_layer, features0)
+            f1 = eval_nn(params_by_layer, features1)
             f = f1 - f0  # antisymmetric to swapping bond direction
             deltas.append(f * np.sqrt(constants.ONE_4PI_EPS0))
-        return bond_idxs, deltas
+        return bond_idxs, jnp.array(deltas)
 
     @staticmethod
     def static_parameterize(flat_params, encoded_layer_sizes, mol):
@@ -892,6 +901,8 @@ class EnvironmentNNHandler(EnvironmentBCCHandler):
                 top_dst_idx = rev_map[dst_idx]
                 top_bond_idxs.append((top_src_idx, top_dst_idx))
                 top_deltas.append(delta)
+
+        # return jnp.array(top_deltas) #DEBUGDEBUGDEBUGDEBUGDEBUGDEBUGDEBUGDEBUGDEBUG
 
         final_charges = apply_bond_charge_corrections(
             initial_res_charges, np.array(top_bond_idxs), jnp.array(top_deltas), runtime_validate=False
