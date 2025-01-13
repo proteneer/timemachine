@@ -496,7 +496,7 @@ class AM1Handler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        return oe_assign_charges(mol, AM1)
+        return compute_or_load_oe_charges(mol, AM1)
 
 
 class AM1BCCHandler(SerializableMixIn):
