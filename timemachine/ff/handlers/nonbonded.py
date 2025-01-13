@@ -537,7 +537,7 @@ class AM1BCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        return oe_assign_charges(mol, AM1BCCELF10)
+        return compute_or_load_oe_charges(mol, mode=AM1BCCELF10)
 
 
 class AM1BCCIntraHandler(AM1BCCHandler):
