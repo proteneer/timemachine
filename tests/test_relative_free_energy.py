@@ -292,6 +292,23 @@ def test_am1bcc_vacuum():
     assert res.md_params == md_params
 
 
+def test_am1bcc_solvent():
+    """Verify that AM1BCC forcefields can be used to run a relative solvent simulation"""
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file("smirnoff_2_2_0_am1bcc.py")
+    seed = 2024
+    frames = 5
+    windows = 2
+    steps_per_frame = 5
+
+    md_params = MDParams(n_frames=frames, n_eq_steps=10, seed=seed, steps_per_frame=steps_per_frame)
+
+    res = run_solvent(mol_a, mol_b, core, forcefield, None, md_params=md_params, n_windows=windows)
+
+    assert len(res.frames[0]) == frames
+    assert res.md_params == md_params
+
+
 @pytest.mark.parametrize("freeze_reference", [True, False])
 def test_local_md_parameters(freeze_reference):
     """Run RBFE methods with local steps mixed in"""
