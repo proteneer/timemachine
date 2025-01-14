@@ -327,18 +327,26 @@ def test_exclusions():
     np.testing.assert_equal(scales, expected_scales)
 
 
-def test_am1_bcc():
+def test_am1bcc_parameterization():
     # currently takes no parameters
     smirks = []
     params = []
     props = None
 
+    cache_key = nonbonded.AM1BCCELF10_CHARGE_CACHE
     am1h = nonbonded.AM1BCCHandler(smirks, params, props)
     mol = Chem.AddHs(Chem.MolFromSmiles("C1CNCOC1F"))
     AllChem.EmbedMolecule(mol)
+
+    assert not mol.HasProp(cache_key)
+
     charges = am1h.parameterize(mol)
 
     assert len(charges) == mol.GetNumAtoms()
+    assert mol.HasProp(cache_key)
+
+    cached_charges = am1h.parameterize(mol)
+    np.testing.assert_equal(charges, cached_charges)
 
     new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, None, mol))
 
