@@ -902,8 +902,6 @@ class EnvironmentNNHandler(EnvironmentBCCHandler):
                 top_bond_idxs.append((top_src_idx, top_dst_idx))
                 top_deltas.append(delta)
 
-        # return jnp.array(top_deltas) #DEBUGDEBUGDEBUGDEBUGDEBUGDEBUGDEBUGDEBUGDEBUG
-
         final_charges = apply_bond_charge_corrections(
             initial_res_charges, np.array(top_bond_idxs), jnp.array(top_deltas), runtime_validate=False
         )
