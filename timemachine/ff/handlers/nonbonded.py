@@ -555,7 +555,7 @@ class NNHandler(SerializableMixIn):
         # all bonds in the paired sym. group should have the same features
         bond_features_by_sym_idx = defaultdict(list)
         for i, bond_idx in enumerate(bond_idx_features):
-            bond_feature = jnp.concatenate([bond_src_features[i], bond_dst_features[i]])
+            bond_feature = np.concatenate([bond_src_features[i], bond_dst_features[i]])
             q0 = float(init_mol_charges[bond_idx[0]])
             q1 = float(init_mol_charges[bond_idx[1]])
             bond_features_by_sym_idx[(q0, q1)].append(bond_feature)
@@ -600,8 +600,8 @@ class NNHandler(SerializableMixIn):
             b0 = bond_features_by_idx[bond_idx_tup]
             # just b0 with src, dst swapped
             b1 = bond_features_by_idx[bond_idx_tup[::-1]]
-            features0 = np.array(jnp.concatenate([a0, a1, b0]))
-            features1 = np.array(jnp.concatenate([a1, a0, b1]))
+            features0 = np.array(np.concatenate([a0, a1, b0]))
+            features1 = np.array(np.concatenate([a1, a0, b1]))
             f0 = eval_nn(params_by_layer, features0)
             f1 = eval_nn(params_by_layer, features1)
             f = f1 - f0  # antisymmetric to swapping bond direction
