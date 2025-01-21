@@ -128,19 +128,27 @@ setup(
     },
     package_data={
         "timemachine": [
-            "datasets/**/*.csv",
-            "datasets/**/*.pdb",
-            "datasets/**/*.sdf",
             "py.typed",
-            "testsystems/data/**/*.pdb",
-            "testsystems/data/**/*.sdf",
+        ],
+        "timemachine.datasets": [
+            "**/*.csv",
+            "**/*.pdb",
+            "**/*.sdf",
+        ],
+        "timemachine.testsystems": [
+            "**/*.pdb",
+            "**/*.sdf",
+        ],
+        "timemachine.cpp": [
+            "**/*.h",
+            "**/*.cu",
+            "**/*.cuh",
+            "**/*.hpp",
+            "**/*.cpp",
+            "CMakeLists.txt",
+            "generate_stubs",
         ],
     },
-    # entry_points={
-    #     "console_scripts": [
-    #         "sample=sample:main",
-    #     ],
-    # },
     project_urls={
         "Bug Reports": "https://github.com/proteneer/timemachine/issues",
         "Source": "https://github.com/proteneer/timemachine/",

@@ -8,6 +8,7 @@ oe_license.txt
 *.swp
 .ipynb_checkpoints/
 build/
+dist/
 *.egg-info/
 .coverage*
 .hypothesis/
