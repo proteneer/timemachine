@@ -21,8 +21,7 @@ _State = TypeVar("_State")
 
 class Move(Generic[_State], ABC):
     @abstractmethod
-    def move(self, _: _State) -> _State:
-        ...
+    def move(self, _: _State) -> _State: ...
 
     def move_n(self, x: _State, n: int) -> _State:
         """Return the result of iterating the move n times.
