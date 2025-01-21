@@ -146,10 +146,8 @@ def setup_dummy_bond_and_chiral_interactions(
     dummy_group: frozenset[int],
     root_anchor_atom: int,
     core_atoms: NDArray,
-    verify: bool = True,
 ):
-    if verify:
-        assert root_anchor_atom in core_atoms
+    assert root_anchor_atom in core_atoms
 
     dummy_group_arr = np.array(list(dummy_group))
 
@@ -438,7 +436,6 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
     b_to_c: NDArray,
     anchored_dummy_groups: dict[int, tuple[Optional[int], frozenset[int]]],
     ff: Forcefield,
-    verify: bool = True,
 ) -> tuple[BoundPotential[HarmonicBond], BoundPotential[ChiralAtomRestraint], BoundPotential[ChiralBondRestraint]]:
     """Given an atom mapping and dummy group assignment, sets up end-state bond and chiral restraint potentials.
     The mapped indices will correspond to the alchemical molecule with dummy atoms. Note that the bond, chiral atom and
@@ -457,9 +454,6 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
 
     ff: forcefield.Forcefield
         Forcefield used to parameterize the molecule
-
-    verify: bool, optional
-        If True, perform additional consistency checks. Set to False when maximum performance is desired.
 
     Returns
     -------
@@ -507,7 +501,6 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
             dg,
             anchor,
             core[:, 1],
-            verify,
         )
         # append idxs
         all_dummy_bond_idxs_.append(all_idxs[0])
@@ -539,15 +532,14 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
     # process chiral volumes, turning off ones at the end-state that have a missing bond.
 
     # assert presence of bonds
-    if verify:
-        canon_mol_a_bond_idxs_set = {tuple(x) for x in canonicalize_bonds(mol_a_bond_idxs)}
-        for c, i, j, k in mol_a_chiral_atom_idxs:
-            ci = canonicalize_bond((c, i))
-            cj = canonicalize_bond((c, j))
-            ck = canonicalize_bond((c, k))
-            assert ci in canon_mol_a_bond_idxs_set
-            assert cj in canon_mol_a_bond_idxs_set
-            assert ck in canon_mol_a_bond_idxs_set
+    canon_mol_a_bond_idxs_set = {tuple(x) for x in canonicalize_bonds(mol_a_bond_idxs)}
+    for c, i, j, k in mol_a_chiral_atom_idxs:
+        ci = canonicalize_bond((c, i))
+        cj = canonicalize_bond((c, j))
+        ck = canonicalize_bond((c, k))
+        assert ci in canon_mol_a_bond_idxs_set
+        assert cj in canon_mol_a_bond_idxs_set
+        assert ck in canon_mol_a_bond_idxs_set
 
     mol_c_bond_idxs_set = {tuple(x) for x in mol_c_bond_idxs}
 
@@ -567,7 +559,7 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
         if len(missing_bonds) == 0:
             all_proper_dummy_chiral_atom_idxs_.append((c, i, j, k))
             all_proper_dummy_chiral_atom_params_.append(p)
-        elif verify:
+        else:
             warnings.warn(
                 f"Chiral Volume {c, i, j, k} has disabled bonds {missing_bonds}, turning off.",
                 ChiralVolumeDisabledWarning,
