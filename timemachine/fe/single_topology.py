@@ -1,7 +1,7 @@
 import warnings
 from enum import IntEnum
 from functools import partial
-from typing import Any, Callable, Collection, Optional, Sequence
+from typing import Any, Collection, Optional, Sequence
 
 import jax
 import jax.numpy as jnp
@@ -750,11 +750,11 @@ def setup_end_state(
     )
 
 
-def make_find_chirally_valid_dummy_groups(
-    mol_a: Chem.Mol, mol_b: Chem.Mol
-) -> Callable[[NDArray], Optional[tuple[dict[int, frozenset[int]], dict[int, frozenset[int]]]]]:
-    """Returns a function that, given a core, returns a pair of dummy group assignments for the A -> B and B -> A
-    transformations such that the implied hybrid mol is chirally valid, or None if no such pair exists.
+def find_chirally_valid_dummy_groups(
+    mol_a: Chem.Mol, mol_b: Chem.Mol, core
+) -> Optional[tuple[dict[int, frozenset[int]], dict[int, frozenset[int]]]]:
+    """Returns a pair of dummy group assignments for the A -> B and B -> A transformations such that the implied hybrid
+    mol is chirally valid, or None if no such pair exists.
 
     Refer to :py:func:`check_chiral_validity` for definition of "chiral validity".
 
@@ -768,32 +768,29 @@ def make_find_chirally_valid_dummy_groups(
     bond_graph_a = convert_to_nx(mol_a)
     bond_graph_b = convert_to_nx(mol_b)
 
-    def find_chirally_valid_dummy_groups(core):
-        def is_chirally_valid(dummy_groups_ab, dummy_groups_ba):
-            return True
+    def is_chirally_valid(dummy_groups_ab, dummy_groups_ba):
+        return True
 
-        with warnings.catch_warnings():
-            # Suppress warnings from end-state setup during the search; these are only relevant for the selected candidate,
-            # and will be raised again when we construct the final SingleTopology instance
-            warnings.simplefilter("ignore", ChiralVolumeDisabledWarning)
-            warnings.simplefilter("ignore", MultipleAnchorWarning)
+    with warnings.catch_warnings():
+        # Suppress warnings from end-state setup during the search; these are only relevant for the selected candidate,
+        # and will be raised again when we construct the final SingleTopology instance
+        warnings.simplefilter("ignore", ChiralVolumeDisabledWarning)
+        warnings.simplefilter("ignore", MultipleAnchorWarning)
 
-            pairs = (
-                (dummy_groups_ab, dummy_groups_ba)
-                # NOTE: We use fair_product_2 instead of itertools.product to avoid iterating over all possible candidates
-                # for A -> B before trying the second candidate for B -> A
-                for dummy_groups_ab, dummy_groups_ba in fair_product_2(
-                    list(generate_dummy_group_assignments(bond_graph_b, core[:, 1])),
-                    list(generate_dummy_group_assignments(bond_graph_a, core[:, 0])),
-                )
-                if is_chirally_valid(dummy_groups_ab, dummy_groups_ba)
+        pairs = (
+            (dummy_groups_ab, dummy_groups_ba)
+            # NOTE: We use fair_product_2 instead of itertools.product to avoid iterating over all possible candidates
+            # for A -> B before trying the second candidate for B -> A
+            for dummy_groups_ab, dummy_groups_ba in fair_product_2(
+                list(generate_dummy_group_assignments(bond_graph_b, core[:, 1])),
+                list(generate_dummy_group_assignments(bond_graph_a, core[:, 0])),
             )
+            if is_chirally_valid(dummy_groups_ab, dummy_groups_ba)
+        )
 
-            arbitrary_pair = next(pairs, None)
+        arbitrary_pair = next(pairs, None)
 
-        return arbitrary_pair
-
-    return find_chirally_valid_dummy_groups
+    return arbitrary_pair
 
 
 def find_dummy_groups_and_anchors(
@@ -1238,8 +1235,7 @@ class SingleTopology(AtomMapMixin):
         if a_charge != b_charge:
             raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
-        find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
-        dummy_groups = find_chirally_valid_dummy_groups(core)
+        dummy_groups = find_chirally_valid_dummy_groups(mol_a, mol_b, core)
         if dummy_groups is None:
             raise DummyGroupAssignmentError("Unable to find chirally-valid dummy group assignment")
         dummy_groups_ab, dummy_groups_ba = dummy_groups
