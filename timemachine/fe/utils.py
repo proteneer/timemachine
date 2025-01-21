@@ -12,7 +12,7 @@ from scipy.stats import special_ortho_group
 from timemachine import constants
 
 
-def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.15) -> float:
+def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = constants.DEFAULT_TEMP) -> float:
     """Convert an IC50 measurement in uM concentrations to kJ/mol.
 
     Parameters
@@ -22,7 +22,7 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 2
         Micro molar IC50
 
     experiment_temp: float
-        Experiment temperature in Kelvin.
+        Experiment temperature in Kelvin. Defaults to constants.DEFAULT_TEMP
 
     Returns
     -------
@@ -34,7 +34,7 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 2
     return RT * np.log(amount_in_uM * 1e-6) * constants.KCAL_TO_KJ
 
 
-def convert_uM_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.15) -> float:
+def convert_uM_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = constants.DEFAULT_TEMP) -> float:
     """
     Convert a potency measurement in uM concentrations to kJ/mol.
 
@@ -44,7 +44,7 @@ def convert_uM_to_kJ_per_mole(amount_in_uM: float, experiment_temp: float = 298.
         Binding potency in uM concentration.
 
     experiment_temp: float
-        Experiment temperature in Kelvin.
+        Experiment temperature in Kelvin. Defaults to constants.DEFAULT_TEMP
 
     Returns
     -------

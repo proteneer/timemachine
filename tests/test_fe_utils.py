@@ -4,6 +4,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import model_utils, utils
 from timemachine.fe.model_utils import image_frame, image_molecule
 from timemachine.ff import Forcefield
@@ -215,15 +216,22 @@ def test_get_and_set_mol_coords_conf_id():
 
 
 def test_experimental_conversions_to_kj():
-    rng = np.random.RandomState(2022)
+    rng = np.random.default_rng(2022)
 
     experimental_values = rng.random(10)
+
+    # Assert that the temperature kwarg defaults to the same temperature that simulations default to.
+    # TBD: Investigate changing DEFAULT_TEMP to 298.15 K
+    np.testing.assert_array_equal(
+        utils.convert_uM_to_kJ_per_mole(experimental_values),
+        utils.convert_uM_to_kJ_per_mole(experimental_values, experiment_temp=DEFAULT_TEMP)
+    )
     # Verify that uM to kJ and uIC50 to Kj is identical
     np.testing.assert_array_equal(
         utils.convert_uM_to_kJ_per_mole(experimental_values), utils.convert_uIC50_to_kJ_per_mole(experimental_values)
     )
 
-    np.testing.assert_allclose(utils.convert_uM_to_kJ_per_mole(0.15), -38.951164)
+    np.testing.assert_allclose(utils.convert_uM_to_kJ_per_mole(0.15), -39.192853)
 
 
 def test_get_strained_atoms():
