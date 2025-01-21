@@ -816,7 +816,6 @@ M  END""",
     )
 
     atom_mappng_kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
-    atom_mappng_kwargs["enforce_chirally_valid_dummy_groups"] = True
     core = get_cores(mol_a, mol_b, **atom_mappng_kwargs)[0]
 
     atom_map = AtomMapMixin(mol_a, mol_b, core)
