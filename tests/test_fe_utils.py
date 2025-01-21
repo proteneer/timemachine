@@ -224,7 +224,7 @@ def test_experimental_conversions_to_kj():
     # TBD: Investigate changing DEFAULT_TEMP to 298.15 K
     np.testing.assert_array_equal(
         utils.convert_uM_to_kJ_per_mole(experimental_values),
-        utils.convert_uM_to_kJ_per_mole(experimental_values, experiment_temp=DEFAULT_TEMP)
+        utils.convert_uM_to_kJ_per_mole(experimental_values, experiment_temp=DEFAULT_TEMP),
     )
     # Verify that uM to kJ and uIC50 to Kj is identical
     np.testing.assert_array_equal(
