@@ -432,18 +432,19 @@ def canonicalize_chiral_atom_idxs(idxs: NDArray[np.int32]) -> NDArray[np.int32]:
     return np.concatenate([c, ijk_canon], axis=1)
 
 
-def make_setup_end_state_harmonic_bond_and_chiral_potentials(
+def setup_end_state_harmonic_bond_and_chiral_potentials(
     mol_a: Chem.Mol,
     mol_b: Chem.Mol,
+    core: NDArray,
+    a_to_c: NDArray,
+    b_to_c: NDArray,
+    dummy_groups: dict[int, frozenset[int]],
     ff: Forcefield,
     verify: bool = True,
-) -> Callable[
-    [NDArray, NDArray, NDArray, dict[int, frozenset[int]]],
-    tuple[BoundPotential[HarmonicBond], BoundPotential[ChiralAtomRestraint], BoundPotential[ChiralBondRestraint]],
-]:
-    """Returns a function that, given an atom mapping and dummy group assignment, sets up end-state bond and chiral
-    restraint potentials. The mapped indices will correspond to the alchemical molecule with dummy atoms. Note that the
-    bond, chiral atom and chiral bond idxs are canonicalized.
+) -> tuple[BoundPotential[HarmonicBond], BoundPotential[ChiralAtomRestraint], BoundPotential[ChiralBondRestraint]]:
+    """Given an atom mapping and dummy group assignment, sets up end-state bond and chiral restraint potentials.
+    The mapped indices will correspond to the alchemical molecule with dummy atoms. Note that the bond, chiral atom and
+    chiral bond idxs are canonicalized.
 
     Note: this is separated from setup_end_state to support fast chiral validity checks, which only require chiral atom
     restraint indices.
@@ -496,115 +497,107 @@ def make_setup_end_state_harmonic_bond_and_chiral_potentials(
         DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
     )
 
-    def setup_end_state_harmonic_bond_and_chiral_potentials(
-        core: NDArray,
-        a_to_c: NDArray,
-        b_to_c: NDArray,
-        dummy_groups: dict[int, frozenset[int]],
-    ):
-        all_dummy_bond_idxs_, all_dummy_bond_params_ = [], []
-        all_dummy_chiral_atom_idxs_, all_dummy_chiral_atom_params_ = [], []
+    all_dummy_bond_idxs_, all_dummy_bond_params_ = [], []
+    all_dummy_chiral_atom_idxs_, all_dummy_chiral_atom_params_ = [], []
 
-        for anchor, dg in dummy_groups.items():
-            all_idxs, all_params = setup_dummy_bond_and_chiral_interactions(
-                mol_b_hb.idxs,
-                mol_b_bond_params,
-                mol_b_chiral_atom.potential.idxs,
-                np.asarray(mol_b_chiral_atom.params),
-                dg,
-                anchor,
-                core[:, 1],
-                verify,
-            )
-            # append idxs
-            all_dummy_bond_idxs_.append(all_idxs[0])
-            all_dummy_chiral_atom_idxs_.append(all_idxs[1])
-            # append params
-            all_dummy_bond_params_.append(all_params[0])
-            all_dummy_chiral_atom_params_.append(all_params[1])
-
-        def concatenate(arrays, empty_shape, empty_dtype):
-            return np.concatenate(arrays) if len(arrays) > 0 else np.empty(empty_shape, empty_dtype)
-
-        all_dummy_bond_idxs = concatenate(all_dummy_bond_idxs_, (0, 2), np.int32)
-        all_dummy_bond_params = concatenate(all_dummy_bond_params_, (0, 2), np.float64)
-
-        all_dummy_chiral_atom_idxs = concatenate(all_dummy_chiral_atom_idxs_, (0, 4), np.int32)
-        all_dummy_chiral_atom_params = concatenate(all_dummy_chiral_atom_params_, (0,), np.float64)
-
-        mol_a_bond_idxs = a_to_c[mol_a_hb.idxs]
-        mol_a_chiral_atom_idxs = a_to_c[mol_a_chiral_atom.potential.idxs]
-        mol_a_chiral_bond_idxs = a_to_c[mol_a_chiral_bond.potential.idxs]
-
-        all_dummy_bond_idxs = b_to_c[all_dummy_bond_idxs]
-        all_dummy_chiral_atom_idxs = b_to_c[all_dummy_chiral_atom_idxs]
-
-        # parameterize the combined molecule
-        mol_c_bond_idxs = np.concatenate([mol_a_bond_idxs, all_dummy_bond_idxs])
-        mol_c_bond_params = np.concatenate([mol_a_bond_params, all_dummy_bond_params])
-
-        # process chiral volumes, turning off ones at the end-state that have a missing bond.
-
-        # assert presence of bonds
-        if verify:
-            canon_mol_a_bond_idxs_set = {tuple(x) for x in canonicalize_bonds(mol_a_bond_idxs)}
-            for c, i, j, k in mol_a_chiral_atom_idxs:
-                ci = canonicalize_bond((c, i))
-                cj = canonicalize_bond((c, j))
-                ck = canonicalize_bond((c, k))
-                assert ci in canon_mol_a_bond_idxs_set
-                assert cj in canon_mol_a_bond_idxs_set
-                assert ck in canon_mol_a_bond_idxs_set
-
-        mol_c_bond_idxs_set = {tuple(x) for x in mol_c_bond_idxs}
-
-        # Chiral atom restraint c,i,j,k requires that all bonds ci, cj, ck be present at the
-        # end-state in order to be numerically stable under small perturbations due to normalization
-        # along the bond lengths. However, the angle terms defining icj, ick, and jck can be
-        # either 0 or 180, since the normalized chiral volume is still smooth wrt perturbations
-        all_proper_dummy_chiral_atom_idxs_ = []
-        all_proper_dummy_chiral_atom_params_ = []
-
-        for (c, i, j, k), p in zip(all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params):
-            missing_bonds = []
-            for x in [i, j, k]:
-                if (c, x) not in mol_c_bond_idxs_set and (x, c) not in mol_c_bond_idxs_set:
-                    missing_bonds.append((c, x))
-
-            if len(missing_bonds) == 0:
-                all_proper_dummy_chiral_atom_idxs_.append((c, i, j, k))
-                all_proper_dummy_chiral_atom_params_.append(p)
-            elif verify:
-                warnings.warn(
-                    f"Chiral Volume {c, i, j, k} has disabled bonds {missing_bonds}, turning off.",
-                    ChiralVolumeDisabledWarning,
-                )
-
-        all_proper_dummy_chiral_atom_idxs = np.array(all_proper_dummy_chiral_atom_idxs_, np.int32).reshape(-1, 4)
-        all_proper_dummy_chiral_atom_params = np.array(all_proper_dummy_chiral_atom_params_, np.float64)
-
-        mol_c_chiral_atom_idxs = np.concatenate([mol_a_chiral_atom_idxs, all_proper_dummy_chiral_atom_idxs])
-        mol_c_chiral_atom_params = np.concatenate([mol_a_chiral_atom.params, all_proper_dummy_chiral_atom_params])
-
-        # canonicalize bonds
-        mol_c_bond_idxs_canon = canonicalize_bonds(mol_c_bond_idxs)
-        bond_potential = HarmonicBond(mol_c_bond_idxs_canon).bind(np.array(mol_c_bond_params))
-
-        # chiral atoms need special code for canonicalization, since triple product is invariant
-        # under rotational symmetry (but not something like swap symmetry)
-        mol_c_chiral_atom_idxs = canonicalize_chiral_atom_idxs(mol_c_chiral_atom_idxs)
-
-        mol_c_chiral_bond_idxs = canonicalize_bonds(mol_a_chiral_bond_idxs)
-        mol_c_chiral_bond_signs = mol_a_chiral_bond.potential.signs
-
-        chiral_atom_potential = ChiralAtomRestraint(mol_c_chiral_atom_idxs).bind(mol_c_chiral_atom_params)
-        chiral_bond_potential = ChiralBondRestraint(mol_c_chiral_bond_idxs, mol_c_chiral_bond_signs).bind(
-            mol_a_chiral_bond.params
+    for anchor, dg in dummy_groups.items():
+        all_idxs, all_params = setup_dummy_bond_and_chiral_interactions(
+            mol_b_hb.idxs,
+            mol_b_bond_params,
+            mol_b_chiral_atom.potential.idxs,
+            np.asarray(mol_b_chiral_atom.params),
+            dg,
+            anchor,
+            core[:, 1],
+            verify,
         )
+        # append idxs
+        all_dummy_bond_idxs_.append(all_idxs[0])
+        all_dummy_chiral_atom_idxs_.append(all_idxs[1])
+        # append params
+        all_dummy_bond_params_.append(all_params[0])
+        all_dummy_chiral_atom_params_.append(all_params[1])
 
-        return bond_potential, chiral_atom_potential, chiral_bond_potential
+    def concatenate(arrays, empty_shape, empty_dtype):
+        return np.concatenate(arrays) if len(arrays) > 0 else np.empty(empty_shape, empty_dtype)
 
-    return setup_end_state_harmonic_bond_and_chiral_potentials
+    all_dummy_bond_idxs = concatenate(all_dummy_bond_idxs_, (0, 2), np.int32)
+    all_dummy_bond_params = concatenate(all_dummy_bond_params_, (0, 2), np.float64)
+
+    all_dummy_chiral_atom_idxs = concatenate(all_dummy_chiral_atom_idxs_, (0, 4), np.int32)
+    all_dummy_chiral_atom_params = concatenate(all_dummy_chiral_atom_params_, (0,), np.float64)
+
+    mol_a_bond_idxs = a_to_c[mol_a_hb.idxs]
+    mol_a_chiral_atom_idxs = a_to_c[mol_a_chiral_atom.potential.idxs]
+    mol_a_chiral_bond_idxs = a_to_c[mol_a_chiral_bond.potential.idxs]
+
+    all_dummy_bond_idxs = b_to_c[all_dummy_bond_idxs]
+    all_dummy_chiral_atom_idxs = b_to_c[all_dummy_chiral_atom_idxs]
+
+    # parameterize the combined molecule
+    mol_c_bond_idxs = np.concatenate([mol_a_bond_idxs, all_dummy_bond_idxs])
+    mol_c_bond_params = np.concatenate([mol_a_bond_params, all_dummy_bond_params])
+
+    # process chiral volumes, turning off ones at the end-state that have a missing bond.
+
+    # assert presence of bonds
+    if verify:
+        canon_mol_a_bond_idxs_set = {tuple(x) for x in canonicalize_bonds(mol_a_bond_idxs)}
+        for c, i, j, k in mol_a_chiral_atom_idxs:
+            ci = canonicalize_bond((c, i))
+            cj = canonicalize_bond((c, j))
+            ck = canonicalize_bond((c, k))
+            assert ci in canon_mol_a_bond_idxs_set
+            assert cj in canon_mol_a_bond_idxs_set
+            assert ck in canon_mol_a_bond_idxs_set
+
+    mol_c_bond_idxs_set = {tuple(x) for x in mol_c_bond_idxs}
+
+    # Chiral atom restraint c,i,j,k requires that all bonds ci, cj, ck be present at the
+    # end-state in order to be numerically stable under small perturbations due to normalization
+    # along the bond lengths. However, the angle terms defining icj, ick, and jck can be
+    # either 0 or 180, since the normalized chiral volume is still smooth wrt perturbations
+    all_proper_dummy_chiral_atom_idxs_ = []
+    all_proper_dummy_chiral_atom_params_ = []
+
+    for (c, i, j, k), p in zip(all_dummy_chiral_atom_idxs, all_dummy_chiral_atom_params):
+        missing_bonds = []
+        for x in [i, j, k]:
+            if (c, x) not in mol_c_bond_idxs_set and (x, c) not in mol_c_bond_idxs_set:
+                missing_bonds.append((c, x))
+
+        if len(missing_bonds) == 0:
+            all_proper_dummy_chiral_atom_idxs_.append((c, i, j, k))
+            all_proper_dummy_chiral_atom_params_.append(p)
+        elif verify:
+            warnings.warn(
+                f"Chiral Volume {c, i, j, k} has disabled bonds {missing_bonds}, turning off.",
+                ChiralVolumeDisabledWarning,
+            )
+
+    all_proper_dummy_chiral_atom_idxs = np.array(all_proper_dummy_chiral_atom_idxs_, np.int32).reshape(-1, 4)
+    all_proper_dummy_chiral_atom_params = np.array(all_proper_dummy_chiral_atom_params_, np.float64)
+
+    mol_c_chiral_atom_idxs = np.concatenate([mol_a_chiral_atom_idxs, all_proper_dummy_chiral_atom_idxs])
+    mol_c_chiral_atom_params = np.concatenate([mol_a_chiral_atom.params, all_proper_dummy_chiral_atom_params])
+
+    # canonicalize bonds
+    mol_c_bond_idxs_canon = canonicalize_bonds(mol_c_bond_idxs)
+    bond_potential = HarmonicBond(mol_c_bond_idxs_canon).bind(np.array(mol_c_bond_params))
+
+    # chiral atoms need special code for canonicalization, since triple product is invariant
+    # under rotational symmetry (but not something like swap symmetry)
+    mol_c_chiral_atom_idxs = canonicalize_chiral_atom_idxs(mol_c_chiral_atom_idxs)
+
+    mol_c_chiral_bond_idxs = canonicalize_bonds(mol_a_chiral_bond_idxs)
+    mol_c_chiral_bond_signs = mol_a_chiral_bond.potential.signs
+
+    chiral_atom_potential = ChiralAtomRestraint(mol_c_chiral_atom_idxs).bind(mol_c_chiral_atom_params)
+    chiral_bond_potential = ChiralBondRestraint(mol_c_chiral_bond_idxs, mol_c_chiral_bond_signs).bind(
+        mol_a_chiral_bond.params
+    )
+
+    return bond_potential, chiral_atom_potential, chiral_bond_potential
 
 
 def setup_end_state(
@@ -737,11 +730,8 @@ def setup_end_state(
     mol_a_nbpl.idxs = mol_c_nbpl_idxs_canon
     nonbonded_potential = mol_a_nbpl.bind(np.array(mol_a_nbpl_params, dtype=np.float64))
 
-    setup_end_state_harmonic_bond_and_chiral_potentials = make_setup_end_state_harmonic_bond_and_chiral_potentials(
-        mol_a, mol_b, ff
-    )
     bond_potential, chiral_atom_potential, chiral_bond_potential = setup_end_state_harmonic_bond_and_chiral_potentials(
-        core, a_to_c, b_to_c, dummy_groups
+        mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups, ff
     )
 
     num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
