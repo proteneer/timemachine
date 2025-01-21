@@ -88,7 +88,7 @@ For example, starting from a clean environment with the openeye license file in 
 OE_DIR=~/.openeye pytest -xsv tests/
 ```
 
-Note: we currently only support and test on python 3.10, use other versions at your own peril.
+Note: we currently only support and test on python 3.12, use other versions at your own peril.
 
 ## Forcefield Gotchas
 

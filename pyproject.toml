@@ -28,7 +28,7 @@ requires = [
   # Need cmake/mypy if building the C++, only supported on linux
   "cmake==3.24.3; sys_platform == 'linux'",
   "mypy==1.5.1; sys_platform == 'linux'",
-  "setuptools >= 43.0.0, < 64.0.0",
+  "setuptools >= 43.0.0",
   "wheel",
   "versioneer-518"
 ]

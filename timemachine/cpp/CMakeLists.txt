@@ -2,11 +2,12 @@ cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(PYBIND11_PYTHON_VERSION 3.10 CACHE STRING "Which version of python we're building wrappers against")
 
 project(timemachine LANGUAGES CXX CUDA)
 
-find_package(Python 3.10...3.12 COMPONENTS Interpreter Development REQUIRED)
+find_package(Python 3.10...3.12.8 COMPONENTS Interpreter Development REQUIRED)
+
+set(PYBIND11_PYTHON_VERSION ${Python_VERSION} CACHE STRING "Which version of python we're building wrappers against")
 
 set(DEBUG_BUILD "$ENV{DEBUG_BUILD}")
 
