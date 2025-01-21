@@ -113,10 +113,6 @@ class ChargePertubationError(RuntimeError):
     pass
 
 
-class ChiralConversionError(RuntimeError):
-    pass
-
-
 class DummyGroupAssignmentError(RuntimeError):
     pass
 
