@@ -6,7 +6,7 @@ set(PYBIND11_PYTHON_VERSION 3.10 CACHE STRING "Which version of python we're bui
 
 project(timemachine LANGUAGES CXX CUDA)
 
-find_package(Python 3.10 COMPONENTS Interpreter Development REQUIRED)
+find_package(Python 3.10...3.12 COMPONENTS Interpreter Development REQUIRED)
 
 set(DEBUG_BUILD "$ENV{DEBUG_BUILD}")
 
