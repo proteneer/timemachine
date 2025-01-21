@@ -436,7 +436,7 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
     core: NDArray,
     a_to_c: NDArray,
     b_to_c: NDArray,
-    dummy_groups: dict[int, frozenset[int]],
+    anchored_dummy_groups: dict[int, tuple[Optional[int], frozenset[int]]],
     ff: Forcefield,
     verify: bool = True,
 ) -> tuple[BoundPotential[HarmonicBond], BoundPotential[ChiralAtomRestraint], BoundPotential[ChiralBondRestraint]]:
@@ -464,7 +464,7 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
     Returns
     -------
     Callable
-        (core, a_to_c, b_to_c, dummy_groups) -> (HarmonicBond, ChiralAtomRestraint, ChiralBondRestraint)
+        (core, a_to_c, b_to_c, anchored_dummy_groups) -> (HarmonicBond, ChiralAtomRestraint, ChiralBondRestraint)
 
         where
 
@@ -477,8 +477,8 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
         b_to_c: array
             mapping from b into a common core idx
 
-        dummy_groups: dict[int, frozenset[int]]
-            mapping from anchor atom to dummy group. Indices refer to atoms in mol_b.
+        anchored_dummy_groups: dict[int, tuple[Optional[int], frozenset[int]]]
+            mapping from anchor atom to (optional) angle anchor and dummy group. Indices refer to atoms in mol_b.
     """
 
     assert ff.hb_handle
@@ -498,7 +498,7 @@ def setup_end_state_harmonic_bond_and_chiral_potentials(
     all_dummy_bond_idxs_, all_dummy_bond_params_ = [], []
     all_dummy_chiral_atom_idxs_, all_dummy_chiral_atom_params_ = [], []
 
-    for anchor, dg in dummy_groups.items():
+    for anchor, (_, dg) in anchored_dummy_groups.items():
         all_idxs, all_params = setup_dummy_bond_and_chiral_interactions(
             mol_b_hb.idxs,
             mol_b_bond_params,
@@ -605,7 +605,7 @@ def setup_end_state(
     core: NDArray,
     a_to_c: NDArray,
     b_to_c: NDArray,
-    dummy_groups: dict[int, frozenset[int]],
+    anchored_dummy_groups: dict[int, tuple[Optional[int], frozenset[int]]],
 ) -> VacuumSystem:
     """
     Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
@@ -632,8 +632,8 @@ def setup_end_state(
     b_to_c: array
         mapping from b into a common core idx
 
-    dummy_groups: dict[int, frozenset[int]]
-        mapping from anchor atom to dummy group. Indices refer to atoms in mol_b.
+    anchored_dummy_groups: dict[int, tuple[Optional[int], frozenset[int]]]
+        mapping from anchor atom to (optional) angle anchor and dummy group. Indices refer to atoms in mol_b.
 
     Returns
     -------
@@ -641,13 +641,6 @@ def setup_end_state(
         A parameterized system in the vacuum.
 
     """
-
-    # pick an arbitrary angle anchor for each dummy group
-    bond_graph_a = convert_to_nx(mol_a)
-    bond_graph_b = convert_to_nx(mol_b)
-    anchored_dummy_groups = next(
-        generate_anchored_dummy_group_assignments(dummy_groups, bond_graph_a, bond_graph_b, core[:, 0], core[:, 1])
-    )
 
     all_dummy_angle_idxs_, all_dummy_angle_params_ = [], []
     all_dummy_improper_idxs_, all_dummy_improper_params_ = [], []
@@ -729,7 +722,7 @@ def setup_end_state(
     nonbonded_potential = mol_a_nbpl.bind(np.array(mol_a_nbpl_params, dtype=np.float64))
 
     bond_potential, chiral_atom_potential, chiral_bond_potential = setup_end_state_harmonic_bond_and_chiral_potentials(
-        mol_a, mol_b, core, a_to_c, b_to_c, dummy_groups, ff
+        mol_a, mol_b, core, a_to_c, b_to_c, anchored_dummy_groups, ff
     )
 
     num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
@@ -748,20 +741,11 @@ def setup_end_state(
     )
 
 
-def get_arbitrary_dummy_group_assignment(mol: Chem.Mol, core_atoms: NDArray[np.int32]) -> dict[int, frozenset[int]]:
-    """Returns an arbitrary dummy group assignment.
-
-    Refer to :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
-    information on dummy group assignment.
-    """
-
-    bond_graph = convert_to_nx(mol)
-
-    return next(generate_dummy_group_assignments(bond_graph, core_atoms))
-
-
 def find_dummy_groups_and_anchors(
-    mol_a, mol_b, core_atoms_a: Sequence[int], core_atoms_b: Sequence[int]
+    mol_a,
+    mol_b,
+    core_atoms_a: Sequence[int] | NDArray[np.int32],
+    core_atoms_b: Sequence[int] | NDArray[np.int32],
 ) -> dict[int, tuple[Optional[int], frozenset[int]]]:
     """Returns an arbitrary dummy group assignment for the A -> B transformation.
 
@@ -1199,8 +1183,8 @@ class SingleTopology(AtomMapMixin):
         if a_charge != b_charge:
             raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
-        self.dummy_groups_ab = get_arbitrary_dummy_group_assignment(mol_b, core[:, 1])
-        self.dummy_groups_ba = get_arbitrary_dummy_group_assignment(mol_a, core[:, 0])
+        self.anchored_dummy_groups_ab = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
+        self.anchored_dummy_groups_ba = find_dummy_groups_and_anchors(mol_b, mol_a, core[:, 1], core[:, 0])
 
         # setup end states
         self.src_system = self._setup_end_state_src()
@@ -1332,7 +1316,7 @@ class SingleTopology(AtomMapMixin):
             Gas-phase system
         """
         return setup_end_state(
-            self.ff, self.mol_a, self.mol_b, self.core, self.a_to_c, self.b_to_c, self.dummy_groups_ab
+            self.ff, self.mol_a, self.mol_b, self.core, self.a_to_c, self.b_to_c, self.anchored_dummy_groups_ab
         )
 
     def _setup_end_state_dst(self):
@@ -1346,7 +1330,7 @@ class SingleTopology(AtomMapMixin):
             Gas-phase system
         """
         return setup_end_state(
-            self.ff, self.mol_b, self.mol_a, self.core[:, ::-1], self.b_to_c, self.a_to_c, self.dummy_groups_ba
+            self.ff, self.mol_b, self.mol_a, self.core[:, ::-1], self.b_to_c, self.a_to_c, self.anchored_dummy_groups_ba
         )
 
     def align_and_interpolate_intramolecular_nonbonded(
