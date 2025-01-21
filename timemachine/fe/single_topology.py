@@ -19,7 +19,6 @@ from timemachine.constants import (
 from timemachine.fe import interpolate, model_utils, topology, utils
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import (
-    MultipleAnchorWarning,
     canonicalize_bond,
     generate_anchored_dummy_group_assignments,
     generate_dummy_group_assignments,
@@ -41,7 +40,6 @@ from timemachine.potentials import (
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
 )
-from timemachine.utils import fair_product_2
 
 OpenMMTopology = Any
 
@@ -750,56 +748,22 @@ def setup_end_state(
     )
 
 
-def find_chirally_valid_dummy_groups(
-    mol_a: Chem.Mol, mol_b: Chem.Mol, core
-) -> Optional[tuple[dict[int, frozenset[int]], dict[int, frozenset[int]]]]:
-    """Returns a pair of dummy group assignments for the A -> B and B -> A transformations such that the implied hybrid
-    mol is chirally valid, or None if no such pair exists.
-
-    Refer to :py:func:`check_chiral_validity` for definition of "chiral validity".
+def get_arbitrary_dummy_group_assignment(mol: Chem.Mol, core_atoms: NDArray[np.int32]) -> dict[int, frozenset[int]]:
+    """Returns an arbitrary dummy group assignment.
 
     Refer to :py:func:`timemachine.fe.dummy.generate_dummy_group_assignments` and notes below for more
     information on dummy group assignment.
-
-    For the A -> B transformation, dummy group indices refer to atoms in mol_b.
-    For the B -> A transformation, dummy group indices refer to atoms in mol_a.
     """
 
-    bond_graph_a = convert_to_nx(mol_a)
-    bond_graph_b = convert_to_nx(mol_b)
+    bond_graph = convert_to_nx(mol)
 
-    def is_chirally_valid(dummy_groups_ab, dummy_groups_ba):
-        return True
-
-    with warnings.catch_warnings():
-        # Suppress warnings from end-state setup during the search; these are only relevant for the selected candidate,
-        # and will be raised again when we construct the final SingleTopology instance
-        warnings.simplefilter("ignore", ChiralVolumeDisabledWarning)
-        warnings.simplefilter("ignore", MultipleAnchorWarning)
-
-        pairs = (
-            (dummy_groups_ab, dummy_groups_ba)
-            # NOTE: We use fair_product_2 instead of itertools.product to avoid iterating over all possible candidates
-            # for A -> B before trying the second candidate for B -> A
-            for dummy_groups_ab, dummy_groups_ba in fair_product_2(
-                list(generate_dummy_group_assignments(bond_graph_b, core[:, 1])),
-                list(generate_dummy_group_assignments(bond_graph_a, core[:, 0])),
-            )
-            if is_chirally_valid(dummy_groups_ab, dummy_groups_ba)
-        )
-
-        arbitrary_pair = next(pairs, None)
-
-    return arbitrary_pair
+    return next(generate_dummy_group_assignments(bond_graph, core_atoms))
 
 
 def find_dummy_groups_and_anchors(
     mol_a, mol_b, core_atoms_a: Sequence[int], core_atoms_b: Sequence[int]
 ) -> dict[int, tuple[Optional[int], frozenset[int]]]:
     """Returns an arbitrary dummy group assignment for the A -> B transformation.
-
-    To get a pair of dummy group assignments for A -> B and B -> A such that the implied hybrid mol is chirally
-    valid, instead use :py:func:`find_chirally_valid_dummy_groups`.
 
     Refer to :py:func:`assert_chiral_consistency` for definition of "chiral consistency".
 
@@ -1235,13 +1199,8 @@ class SingleTopology(AtomMapMixin):
         if a_charge != b_charge:
             raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
-        dummy_groups = find_chirally_valid_dummy_groups(mol_a, mol_b, core)
-        if dummy_groups is None:
-            raise DummyGroupAssignmentError("Unable to find chirally-valid dummy group assignment")
-        dummy_groups_ab, dummy_groups_ba = dummy_groups
-
-        self.dummy_groups_ab = dummy_groups_ab
-        self.dummy_groups_ba = dummy_groups_ba
+        self.dummy_groups_ab = get_arbitrary_dummy_group_assignment(mol_b, core[:, 1])
+        self.dummy_groups_ba = get_arbitrary_dummy_group_assignment(mol_a, core[:, 0])
 
         # setup end states
         self.src_system = self._setup_end_state_src()
