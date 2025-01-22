@@ -792,7 +792,7 @@ class EnvironmentBCCHandler(SerializableMixIn):
             for i in range(n_atoms):
                 tmpl_atom_idx = self.topology_idx_to_template_idx[cur_atom + i]
                 topology_res_mol_charges[tmpl_atom_idx] = initial_res_charges[i]
-            topology_res_mol_charges_ordered = jnp.array([topology_res_mol_charges[i] for i in range(n_atoms)])
+            topology_res_mol_charges_ordered = np.array([topology_res_mol_charges[i] for i in range(n_atoms)])
 
             # compute the charges on the topology res
             tmpl_q_params = self._compute_res_charges(
