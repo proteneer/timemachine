@@ -7,7 +7,8 @@ ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 
 # Copied out of anaconda's dockerfile
-ARG MINICONDA_VERSION=py310_23.1.0-1
+ARG MINIFORGE_NAME=Miniforge3
+ARG MINIFORGE_VERSION=24.11.2-0
 ARG MAKE_VERSION=4.2.1-1.2
 ARG GIT_VERSION=1:2.25.1-*
 ARG WGET_VERSION=1.20.3-*
@@ -15,7 +16,7 @@ RUN (apt-get update || true)  && apt-get install --no-install-recommends -y \
     wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh -O ~/miniconda.sh && \
+RUN wget --quiet https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/${MINIFORGE_NAME}-${MINIFORGE_VERSION}-Linux-$(uname -m).sh -O ~/miniconda.sh && \
     /bin/bash ~/miniconda.sh -b -p /opt/conda && \
     rm ~/miniconda.sh && \
     ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
@@ -38,7 +39,7 @@ ARG ENV_NAME=timemachine
 
 # Create Timemachine Env
 RUN . /opt/conda/etc/profile.d/conda.sh && \
-    conda env create -n "${ENV_NAME}" --force -f environment.yml && \
+    conda env create -n "${ENV_NAME}" -f environment.yml && \
     conda clean -a && \
     conda activate ${ENV_NAME}
 
