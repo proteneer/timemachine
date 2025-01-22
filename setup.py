@@ -111,7 +111,7 @@ setup(
     extras_require={
         "dev": [
             "black==24.10.0",
-            "flake8==7.1.0",
+            "flake8==7.1.1",
             "isort==5.12.0",
             "mypy==1.5.1",
             "pre-commit==3.4.0",
