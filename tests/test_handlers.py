@@ -19,9 +19,65 @@ from timemachine.fe import topology, utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
+from timemachine.ff.handlers import utils as h_utils
 from timemachine.md import builders
 
 pytestmark = [pytest.mark.nocuda]
+
+
+def set_nn_features(mol, seed=2024, feature_size=64):
+    """
+    Add random NN features to the given mol for testing.
+    """
+
+    rng = np.random.default_rng(seed)
+    num_atoms = mol.GetNumAtoms()
+    bond_idxs = [(b.GetBeginAtomIdx(), b.GetEndAtomIdx()) for b in mol.GetBonds()]
+
+    # the handler expected both directions of each bond to be present
+    bond_idxs_ = []
+    for bond_idx in bond_idxs:
+        bond_idxs_.append(bond_idx)
+        bond_idxs_.append(bond_idx[::-1])
+    bond_idxs = np.array(bond_idxs_)
+
+    num_bonds = bond_idxs.shape[0]
+
+    features = {
+        "atom_features": rng.random((num_atoms, feature_size)),
+        "bond_idxs": np.array(bond_idxs, dtype=int),
+        "bond_src_features": rng.random((num_bonds, feature_size)),
+        "bond_dst_features": rng.random((num_bonds, feature_size)),
+    }
+    mol.SetProp(nonbonded.NN_FEATURES_PROPNAME, base64.b64encode(pickle.dumps(features)))
+
+
+@pytest.fixture(scope="module")
+def env_nn_args():
+    # Fixture that returns the smirks, params, props for a `EnvironmentNNHandler`.
+    rng = np.random.default_rng(seed=2024)
+    feature_size = 64
+    layer_sizes = [feature_size * 4, 2 * 32, 1]
+    smirks = [base64.b64encode(pickle.dumps(layer_sizes)).decode("utf-8")]
+
+    layer_sizes_sq = [layer_sizes[0] * layer_sizes[1], layer_sizes[1] * layer_sizes[2]]
+    params = jnp.array([rng.random(sum(layer_sizes_sq))])
+
+    all_res_names = []
+    for res_name in h_utils.SMILES_BY_RES_NAME.keys():
+        all_res_names.append(res_name)
+        if res_name not in ["ACE", "NME"]:
+            all_res_names.append("N" + res_name)
+            all_res_names.append("C" + res_name)
+
+    res_nn_props = {}
+    for res_name in all_res_names:
+        res_mol = h_utils.make_residue_mol_from_template(res_name)
+        set_nn_features(res_mol, feature_size=feature_size)
+        res_nn_props[res_name] = res_mol.GetProp(nonbonded.NN_FEATURES_PROPNAME)
+
+    props = [base64.b64encode(pickle.dumps(res_nn_props)).decode("utf-8")]
+    return smirks, params, props
 
 
 def test_harmonic_bond():
@@ -1070,29 +1126,11 @@ def test_nn_handler():
         all_mols = utils.read_sdf(path_to_ligand)
 
     mol = all_mols[0]
-    ff0 = Forcefield.load_default()
     seed = 2024
     feature_size = 64
     rng = np.random.default_rng(seed)
-    bond_idxs, _ = nonbonded.compute_or_load_bond_smirks_matches(mol, ff0.q_handle.smirks)
 
-    # the handler expected both directions of each bond to be present
-    bond_idxs_ = []
-    for bond_idx in bond_idxs:
-        bond_idxs_.append(bond_idx)
-        bond_idxs_.append(bond_idx[::-1])
-    bond_idxs = np.array(bond_idxs_)
-
-    num_atoms = mol.GetNumAtoms()
-    num_bonds = bond_idxs.shape[0]
-
-    features = {
-        "atom_features": rng.random((num_atoms, feature_size)),
-        "bond_idxs": np.array(bond_idxs, dtype=int),
-        "bond_src_features": rng.random((num_bonds, feature_size)),
-        "bond_dst_features": rng.random((num_bonds, feature_size)),
-    }
-    mol.SetProp(nonbonded.NN_FEATURES_PROPNAME, base64.b64encode(pickle.dumps(features)))
+    set_nn_features(mol, feature_size=feature_size)
 
     # input has the features (atom0, atom1, bond)
     layer_sizes = [feature_size * 4, 32, 16, 1]
@@ -1126,23 +1164,7 @@ def test_harmonic_bonds_complete():
     assert "missing bonds" in str(e)
 
 
-def make_residue_mol(atoms, bonds):
-    # Generate an rdkit molecule given a list of atoms and a list of bonds
-    mw = Chem.RWMol()
-    mw.BeginBatchEdit()
-    for atom in atoms:
-        aa = Chem.Atom(atom)
-        mw.AddAtom(aa)
-
-    for src, dst in bonds:
-        mw.AddBond(src, dst, Chem.BondType.SINGLE)
-    mw.CommitBatchEdit()
-
-    for atom in mw.GetAtoms():
-        atom.SetProp("molAtomMapNumber", str(atom.GetIdx()))
-    return mw
-
-
+@pytest.mark.parametrize("is_nn", [True, False])
 @pytest.mark.parametrize(
     "protein_path_and_symmetries",
     [
@@ -1197,17 +1219,22 @@ def make_residue_mol(atoms, bonds):
         ),
     ],
 )
-def test_env_bcc_peptide_symmetries(protein_path_and_symmetries):
+def test_env_bcc_peptide_symmetries(protein_path_and_symmetries, is_nn, env_nn_args):
     """
     Test that we can compute BCCs to generate per atom charge offsets and that they can be differentiated
     """
     protein_path, expected_symmetries = protein_path_and_symmetries
-    smirks = [x[0] for x in AM1CCC_CHARGES["patterns"]]
-    params = np.random.rand(len(smirks)) - 0.5
-
     with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
         host_pdb = app.PDBFile(str(path_to_pdb))
         topology = host_pdb.topology
+
+    rng = np.random.default_rng(seed=2024)
+    if is_nn:
+        smirks, params, props = env_nn_args
+        pbcc = nonbonded.EnvironmentNNHandler(smirks, params, props, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
+    else:
+        smirks = [x[0] for x in AM1CCC_CHARGES["patterns"]]
+        params = rng.random(len(smirks)) - 0.5
         pbcc = nonbonded.EnvironmentBCCHandler(smirks, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
 
     # raw charges are correct are in the order of atoms in the topology
@@ -1223,7 +1250,7 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries):
     for src_atom, dst_atom in topology.bonds():
         bonds.append((src_atom.index, dst_atom.index))
 
-    # mol = make_residue_mol(atoms, bonds)
+    # mol = hutils.make_residue_mol('res', atoms, bonds)
     # from rdkit.Chem import Draw
     # with open("debug.svg", "w") as fh:
     #     svg = Draw.MolsToGridImage([mol], molsPerRow=4, useSVG=True)
@@ -1239,27 +1266,30 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries):
             np.testing.assert_almost_equal(raw_charges[other], raw_charges[first])
 
 
+@pytest.mark.parametrize("is_nn", [True, False])
 @pytest.mark.parametrize("protein_path", ["5dfr_solv_equil.pdb", "hif2a_nowater_min.pdb"])
-def test_environment_bcc_full_protein(protein_path):
+def test_environment_bcc_full_protein(protein_path, is_nn, env_nn_args):
     """
     Test that we can compute BCCs to generate per atom charge offsets and that they can be differentiated
     """
-    patterns = [smirks for (smirks, param) in AM1CCC_CHARGES["patterns"]]
-    np.random.seed(2024)
-    params = np.random.rand(len(patterns)) - 0.5
-
     with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
         host_pdb = app.PDBFile(str(path_to_pdb))
         _, _, _, topology, _ = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
 
-    pbcc = nonbonded.EnvironmentBCCHandler(patterns, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
+    if is_nn:
+        patterns, params, props = env_nn_args
+        pbcc = nonbonded.EnvironmentNNHandler(patterns, params, props, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
+    else:
+        patterns = [smirks for (smirks, param) in AM1CCC_CHARGES["patterns"]]
+        params = np.random.rand(len(patterns)) - 0.5
+        pbcc = nonbonded.EnvironmentBCCHandler(patterns, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
 
     # test that we can mechanically parameterize everything
     final_q_params = pbcc.parameterize(params)
 
     def loss_fn(bcc_params):
         res = pbcc.parameterize(bcc_params)
-        return jnp.sum(res)
+        return jnp.sum(res * res)
 
     grad_fn = jax.grad(loss_fn)
 
@@ -1269,13 +1299,17 @@ def test_environment_bcc_full_protein(protein_path):
 
     # test that the partial handler gives the same results
     ff = Forcefield.load_default()
-    partial_cc = nonbonded.EnvironmentBCCPartialHandler(patterns, params, None)
+    if is_nn:
+        partial_cc = nonbonded.EnvironmentNNPartialHandler(patterns, params, props)
+    else:
+        partial_cc = nonbonded.EnvironmentBCCPartialHandler(patterns, params, None)
+
     pbcc2 = partial_cc.get_env_handle(topology, ff)
     np.testing.assert_array_equal(pbcc.parameterize(params), pbcc2.parameterize(params))
 
     def loss_fn2(bcc_params):
         res = pbcc.parameterize(bcc_params)
-        return jnp.sum(res)
+        return jnp.sum(res * res)
 
     grad_fn2 = jax.grad(loss_fn2)
 
