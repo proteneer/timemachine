@@ -1,4 +1,4 @@
-name: timemachine312
+name: timemachine
 channels:
   - conda-forge
 dependencies:
