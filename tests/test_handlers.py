@@ -1312,6 +1312,7 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries, is_nn, env_nn_a
             np.testing.assert_almost_equal(raw_charges[other], raw_charges[first])
 
 
+@pytest.mark.nightly(reason="Slow")
 @pytest.mark.parametrize("is_nn", [True, False])
 @pytest.mark.parametrize("protein_path", ["5dfr_solv_equil.pdb", "hif2a_nowater_min.pdb"])
 def test_environment_bcc_full_protein(protein_path, is_nn, env_nn_args):
