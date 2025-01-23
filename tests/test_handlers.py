@@ -25,11 +25,10 @@ from timemachine.md import builders
 pytestmark = [pytest.mark.nocuda]
 
 
-def set_nn_features(mol, seed=2024, feature_size=64):
+def set_nn_features(mol, seed=2024, feature_size=16):
     """
     Add random NN features to the given mol for testing.
     """
-
     rng = np.random.default_rng(seed)
     num_atoms = mol.GetNumAtoms()
     bond_idxs = [(b.GetBeginAtomIdx(), b.GetEndAtomIdx()) for b in mol.GetBonds()]
@@ -40,14 +39,50 @@ def set_nn_features(mol, seed=2024, feature_size=64):
         bond_idxs_.append(bond_idx)
         bond_idxs_.append(bond_idx[::-1])
     bond_idxs = np.array(bond_idxs_)
-
     num_bonds = bond_idxs.shape[0]
 
+    # create random features
+    atom_features = rng.random((num_atoms, feature_size))
+    bond_src_features = rng.random((num_bonds, feature_size))
+    bond_dst_features = rng.random((num_bonds, feature_size))
+
+    # symmetrize features using charges as a guide
+    # NOTE: This may not be what we want to do for the actual
+    # features, but is simple enough for testing
+    init_mol_charges = nonbonded.oe_assign_charges(mol, charge_model=nonbonded.AM1)
+    sym_charge_idxs = defaultdict(list)
+    for i, q in enumerate(init_mol_charges):
+        sym_charge_idxs[float(q)].append(i)
+
+    # all atoms in the sym. group should have the same features
+    for sym_group in sym_charge_idxs.values():
+        sym_atom_features = np.mean([atom_features[j] for j in sym_group], axis=0)
+        for j in sym_group:
+            atom_features[j, :] = sym_atom_features
+
+    # all bonds in the paired sym. group should have the same features
+    bond_features_by_sym_idx = defaultdict(list)
+    for i, bond_idx in enumerate(bond_idxs):
+        bond_feature = np.concatenate([bond_src_features[i], bond_dst_features[i]])
+        q0 = float(init_mol_charges[bond_idx[0]])
+        q1 = float(init_mol_charges[bond_idx[1]])
+        bond_features_by_sym_idx[(q0, q1)].append(bond_feature)
+
+    bond_features_ = []
+    for i, bond_idx in enumerate(bond_idxs):
+        q0 = float(init_mol_charges[bond_idx[0]])
+        q1 = float(init_mol_charges[bond_idx[1]])
+        bond_features_.append(np.mean(bond_features_by_sym_idx[(q0, q1)], axis=0))
+    bond_features = np.array(bond_features_)
+
+    bond_src_features = bond_features[:, :feature_size]
+    bond_dst_features = bond_features[:, feature_size:]
+
     features = {
-        "atom_features": rng.random((num_atoms, feature_size)),
+        "atom_features": atom_features,
         "bond_idxs": np.array(bond_idxs, dtype=int),
-        "bond_src_features": rng.random((num_bonds, feature_size)),
-        "bond_dst_features": rng.random((num_bonds, feature_size)),
+        "bond_src_features": bond_src_features,
+        "bond_dst_features": bond_dst_features,
     }
     mol.SetProp(nonbonded.NN_FEATURES_PROPNAME, base64.b64encode(pickle.dumps(features)))
 
@@ -56,8 +91,8 @@ def set_nn_features(mol, seed=2024, feature_size=64):
 def env_nn_args():
     # Fixture that returns the smirks, params, props for a `EnvironmentNNHandler`.
     rng = np.random.default_rng(seed=2024)
-    feature_size = 64
-    layer_sizes = [feature_size * 4, 2 * 32, 1]
+    feature_size = 16
+    layer_sizes = [feature_size * 4, 8, 1]
     smirks = [base64.b64encode(pickle.dumps(layer_sizes)).decode("utf-8")]
 
     layer_sizes_sq = [layer_sizes[0] * layer_sizes[1], layer_sizes[1] * layer_sizes[2]]
@@ -1266,6 +1301,7 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries, is_nn, env_nn_a
             np.testing.assert_almost_equal(raw_charges[other], raw_charges[first])
 
 
+@pytest.mark.nightly(reason="Slow - 9 mins")
 @pytest.mark.parametrize("is_nn", [True, False])
 @pytest.mark.parametrize("protein_path", ["5dfr_solv_equil.pdb", "hif2a_nowater_min.pdb"])
 def test_environment_bcc_full_protein(protein_path, is_nn, env_nn_args):

@@ -1,13 +1,13 @@
 import base64
 import pickle
 import warnings
-from collections import Counter, defaultdict
+from collections import Counter
 
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-from numpy.typing import NDArray
 from jax import jit
+from numpy.typing import NDArray
 from rdkit import Chem
 
 from timemachine import constants
@@ -527,12 +527,13 @@ class NNHandler(SerializableMixIn):
     def __init__(self, layer_sizes, params, props):
         assert len(layer_sizes) == 1
         assert len(params) == 1
+        # TODO: Make SerializableMixIn generic w.r.t. attribute names
         self.smirks = layer_sizes
         self.params = np.array(params, dtype=np.float64)
         self.props = props
 
     @staticmethod
-    def get_bond_idxs_and_charge_deltas(flat_params, init_mol_charges, encoded_layer_sizes, mol):
+    def get_bond_idxs_and_charge_deltas(flat_params, encoded_layer_sizes, mol):
         layer_sizes = pickle.loads(base64.b64decode(encoded_layer_sizes[0]))
         layer_idxs = list(range(len(layer_sizes)))
         features = pickle.loads(base64.b64decode(mol.GetProp(NN_FEATURES_PROPNAME)))
@@ -541,30 +542,10 @@ class NNHandler(SerializableMixIn):
         bond_src_features = features["bond_src_features"]
         bond_dst_features = features["bond_dst_features"]
 
-        # symmetrize features
-        sym_charge_idxs = defaultdict(list)
-        for i, q in enumerate(init_mol_charges):
-            sym_charge_idxs[float(q)].append(i)
-
-        # all atoms in the sym. group should have the same features
-        for sym_group in sym_charge_idxs.values():
-            sym_atom_features = np.mean([atom_features[j] for j in sym_group], axis=0)
-            for j in sym_group:
-                atom_features[j, :] = sym_atom_features
-
-        # all bonds in the paired sym. group should have the same features
-        bond_features_by_sym_idx = defaultdict(list)
-        for i, bond_idx in enumerate(bond_idx_features):
-            bond_feature = np.concatenate([bond_src_features[i], bond_dst_features[i]])
-            q0 = float(init_mol_charges[bond_idx[0]])
-            q1 = float(init_mol_charges[bond_idx[1]])
-            bond_features_by_sym_idx[(q0, q1)].append(bond_feature)
-
         bond_features_by_idx = {}
         for i, bond_idx in enumerate(bond_idx_features):
-            q0 = float(init_mol_charges[bond_idx[0]])
-            q1 = float(init_mol_charges[bond_idx[1]])
-            bond_features_by_idx[tuple(bond_idx)] = np.mean(bond_features_by_sym_idx[(q0, q1)], axis=0)
+            bond_feature = np.concatenate([bond_src_features[i], bond_dst_features[i]])
+            bond_features_by_idx[tuple(bond_idx)] = bond_feature
 
         bond_idxs = np.array(sorted(set(bond_features_by_idx.keys())))
 
@@ -572,6 +553,7 @@ class NNHandler(SerializableMixIn):
             # Convert to np.array if params are from serialized ff
             if isinstance(x, tuple):
                 x = np.array(x)
+
             split_idxs = []
             for i, layer_size in enumerate(layer_sizes[:-1]):
                 next_layer_size = layer_sizes[i + 1]
@@ -584,13 +566,13 @@ class NNHandler(SerializableMixIn):
                 full_reshape_params.append(p.reshape(-1, size))
             return full_reshape_params
 
-        reshaped_params = expand_params(flat_params[0])
-        params_by_layer = {int(layer_idx): param for layer_idx, param in zip(layer_idxs, reshaped_params)}
-
         def flatten_params(params):
             flat_params = [p.flatten() for p in params]
             x = jnp.concatenate(flat_params).reshape(1, -1)
             return x
+
+        reshaped_params = expand_params(flat_params[0])
+        params_by_layer = {int(layer_idx): param for layer_idx, param in zip(layer_idxs, reshaped_params)}
 
         deltas = []
         for bond_idx in bond_idxs:
@@ -611,9 +593,7 @@ class NNHandler(SerializableMixIn):
     @staticmethod
     def static_parameterize(flat_params, encoded_layer_sizes, mol):
         am1_charges = compute_or_load_oe_charges(mol, mode=AM1BCC)
-        bond_idxs, deltas = NNHandler.get_bond_idxs_and_charge_deltas(
-            flat_params, am1_charges, encoded_layer_sizes, mol
-        )
+        bond_idxs, deltas = NNHandler.get_bond_idxs_and_charge_deltas(flat_params, encoded_layer_sizes, mol)
         final_charges = apply_bond_charge_corrections(am1_charges, bond_idxs, jnp.array(deltas), runtime_validate=False)
         return final_charges
 
@@ -872,22 +852,8 @@ class EnvironmentNNHandler(EnvironmentBCCHandler):
         # map from template_res_mol to topology_res_mol
         rev_map = {v: i for i, v in fwd_map.items()}
 
-        # map topology initial res charges to the template_res_mol
-        template_res_charges_ = {}
-        for top_i, tmpl_j in fwd_map.items():
-            template_res_charges_[tmpl_j] = initial_res_charges[top_i]
-
-        # Arbitrary as long as it's not an actual charge in the molecule
-        # since the charges are used to determine symmetry groups
-        missing_q_value = -100
-        template_res_charges = [
-            template_res_charges_.get(i, missing_q_value) for i in range(template_res_mol.GetNumAtoms())
-        ]
-
         # get the bond_idxs, deltas for the template residue
-        bond_idxs, deltas = self.nn_h.get_bond_idxs_and_charge_deltas(
-            params, template_res_charges, self.patterns, template_res_mol
-        )
+        bond_idxs, deltas = self.nn_h.get_bond_idxs_and_charge_deltas(params, self.patterns, template_res_mol)
 
         # map back to the topology residue
         top_bond_idxs = []

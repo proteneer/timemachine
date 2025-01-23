@@ -1,6 +1,7 @@
 from typing import List, Optional, Tuple, TypeAlias
 
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 Mol: TypeAlias = Chem.rdchem.Mol
 
@@ -183,6 +184,8 @@ def make_residue_mol_from_template(template_name: str) -> Optional[Mol]:
     if has_c_cap:
         mol = add_c_cap(mol)
 
+    mol.UpdatePropertyCache()
+    AllChem.EmbedMolecule(mol, randomSeed=2024)
     return mol
 
 
@@ -305,7 +308,7 @@ def add_c_cap(template_res_mol: Mol) -> Mol:
     mw = Chem.RWMol(template_res_mol)
     mw.BeginBatchEdit()
 
-    oxygen_idx = matches[0][3]
+    oxygen_idx = matches[0][3]  # order from AMIDE_SMILES
     oxygen_atom = mw.GetAtomWithIdx(oxygen_idx)
     oxygen_atom.SetFormalCharge(-1)
     for bond in oxygen_atom.GetBonds():
