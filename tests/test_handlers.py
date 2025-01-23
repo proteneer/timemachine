@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from jax import flatten_util
 from openmm import app
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
@@ -24,8 +25,10 @@ from timemachine.md import builders
 
 pytestmark = [pytest.mark.nocuda]
 
+TEST_FEATURE_SIZE = 16
 
-def set_nn_features(mol, seed=2024, feature_size=16):
+
+def set_nn_features(mol, seed=2024, feature_size=TEST_FEATURE_SIZE):
     """
     Add random NN features to the given mol for testing.
     """
@@ -91,13 +94,17 @@ def set_nn_features(mol, seed=2024, feature_size=16):
 def env_nn_args():
     # Fixture that returns the smirks, params, props for a `EnvironmentNNHandler`.
     rng = np.random.default_rng(seed=2024)
-    feature_size = 16
+    feature_size = TEST_FEATURE_SIZE
+
+    # init params and unflatten function
     layer_sizes = [feature_size * 4, 8, 1]
-    smirks = [base64.b64encode(pickle.dumps(layer_sizes)).decode("utf-8")]
+    weight_sizes = list(zip(np.array(layer_sizes)[1:], np.array(layer_sizes[:-1])))
+    full_params = [rng.random(weight_size) for weight_size in weight_sizes]
+    flat_params, unflatten = flatten_util.ravel_pytree(full_params)
+    params = [flat_params]
+    enc_unflatten_str = [base64.b64encode(pickle.dumps(unflatten))]
 
-    layer_sizes_sq = [layer_sizes[0] * layer_sizes[1], layer_sizes[1] * layer_sizes[2]]
-    params = jnp.array([rng.random(sum(layer_sizes_sq))])
-
+    # enumerate all supported residues
     all_res_names = []
     for res_name in h_utils.SMILES_BY_RES_NAME.keys():
         all_res_names.append(res_name)
@@ -105,14 +112,15 @@ def env_nn_args():
             all_res_names.append("N" + res_name)
             all_res_names.append("C" + res_name)
 
+    # set random nn features for each residue
     res_nn_props = {}
     for res_name in all_res_names:
         res_mol = h_utils.make_residue_mol_from_template(res_name)
         set_nn_features(res_mol, feature_size=feature_size)
         res_nn_props[res_name] = res_mol.GetProp(nonbonded.NN_FEATURES_PROPNAME)
-
     props = [base64.b64encode(pickle.dumps(res_nn_props)).decode("utf-8")]
-    return smirks, params, props
+
+    return enc_unflatten_str, params, props
 
 
 def test_harmonic_bond():
@@ -1162,22 +1170,25 @@ def test_nn_handler():
 
     mol = all_mols[0]
     seed = 2024
-    feature_size = 64
+    feature_size = TEST_FEATURE_SIZE
     rng = np.random.default_rng(seed)
 
     set_nn_features(mol, feature_size=feature_size)
 
     # input has the features (atom0, atom1, bond)
-    layer_sizes = [feature_size * 4, 32, 16, 1]
-    total_size = sum(np.array(layer_sizes)[:-1] * np.array(layer_sizes[1:]))
-    params = [rng.random((total_size,))]
-    enc_layer_sizes = [base64.b64encode(pickle.dumps(layer_sizes))]
-    nn = nonbonded.NNHandler(enc_layer_sizes, params, None)
-    charges = nn.static_parameterize(params, enc_layer_sizes, mol)
+    layer_sizes = [feature_size * 4, 8, 1]
+    weight_sizes = list(zip(np.array(layer_sizes)[1:], np.array(layer_sizes[:-1])))
+    full_params = [rng.random(weight_size) for weight_size in weight_sizes]
+
+    flat_params, unflatten = flatten_util.ravel_pytree(full_params)
+    params = [flat_params]
+    enc_unflatten_str = [base64.b64encode(pickle.dumps(unflatten))]
+    nn = nonbonded.NNHandler(enc_unflatten_str, params, None)
+    charges = nn.static_parameterize(params, enc_unflatten_str, mol)
     assert np.sum(charges) < 1e-5
 
     def loss_fn(params):
-        return jnp.sum(jnp.abs(nn.static_parameterize(params, enc_layer_sizes, mol)))
+        return jnp.sum(jnp.abs(nn.static_parameterize(params, enc_unflatten_str, mol)))
 
     grad_fn = jax.grad(loss_fn)
     print("loss", loss_fn(params))  # fast

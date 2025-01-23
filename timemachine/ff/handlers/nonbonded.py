@@ -533,47 +533,27 @@ class NNHandler(SerializableMixIn):
         self.props = props
 
     @staticmethod
-    def get_bond_idxs_and_charge_deltas(flat_params, encoded_layer_sizes, mol):
-        layer_sizes = pickle.loads(base64.b64decode(encoded_layer_sizes[0]))
-        layer_idxs = list(range(len(layer_sizes)))
+    def get_bond_idxs_and_charge_deltas(flat_params, encoded_unflatten_str, mol):
+        expand_params = pickle.loads(base64.b64decode(encoded_unflatten_str[0]))
         features = pickle.loads(base64.b64decode(mol.GetProp(NN_FEATURES_PROPNAME)))
         atom_features = features["atom_features"]
         bond_idx_features = features["bond_idxs"]
         bond_src_features = features["bond_src_features"]
         bond_dst_features = features["bond_dst_features"]
 
+        # extract bond features
         bond_features_by_idx = {}
         for i, bond_idx in enumerate(bond_idx_features):
             bond_feature = np.concatenate([bond_src_features[i], bond_dst_features[i]])
             bond_features_by_idx[tuple(bond_idx)] = bond_feature
-
         bond_idxs = np.array(sorted(set(bond_features_by_idx.keys())))
 
-        def expand_params(x):
-            # Convert to np.array if params are from serialized ff
-            if isinstance(x, tuple):
-                x = np.array(x)
-
-            split_idxs = []
-            for i, layer_size in enumerate(layer_sizes[:-1]):
-                next_layer_size = layer_sizes[i + 1]
-                split_idxs.append(layer_size * next_layer_size)
-            split_idxs = list(np.cumsum(split_idxs))
-
-            reshape_params = jnp.split(x, split_idxs)
-            full_reshape_params = []
-            for size, p in zip(layer_sizes[:-1], reshape_params):
-                full_reshape_params.append(p.reshape(-1, size))
-            return full_reshape_params
-
-        def flatten_params(params):
-            flat_params = [p.flatten() for p in params]
-            x = jnp.concatenate(flat_params).reshape(1, -1)
-            return x
-
+        # expand params
         reshaped_params = expand_params(flat_params[0])
+        layer_idxs = list(range(len(reshaped_params)))
         params_by_layer = {int(layer_idx): param for layer_idx, param in zip(layer_idxs, reshaped_params)}
 
+        # eval on all bonds
         deltas = []
         for bond_idx in bond_idxs:
             bond_idx_tup = tuple(bond_idx)
@@ -591,9 +571,9 @@ class NNHandler(SerializableMixIn):
         return bond_idxs, jnp.array(deltas)
 
     @staticmethod
-    def static_parameterize(flat_params, encoded_layer_sizes, mol):
+    def static_parameterize(flat_params, encoded_unflatten_str, mol):
         am1_charges = compute_or_load_oe_charges(mol, mode=AM1BCC)
-        bond_idxs, deltas = NNHandler.get_bond_idxs_and_charge_deltas(flat_params, encoded_layer_sizes, mol)
+        bond_idxs, deltas = NNHandler.get_bond_idxs_and_charge_deltas(flat_params, encoded_unflatten_str, mol)
         final_charges = apply_bond_charge_corrections(am1_charges, bond_idxs, jnp.array(deltas), runtime_validate=False)
         return final_charges
 
