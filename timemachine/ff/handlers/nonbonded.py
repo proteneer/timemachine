@@ -6,7 +6,7 @@ from collections import Counter
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-from jax import jit
+from jax import jit, vmap
 from numpy.typing import NDArray
 from rdkit import Chem
 
@@ -507,7 +507,7 @@ class AM1Handler(SerializableMixIn):
 
 
 @jit
-def eval_nn(params_by_layer, features):
+def eval_nn(features, params_by_layer):
     def activation(x):
         return x / (1 + jnp.exp(-x))  # silu
 
@@ -553,21 +553,18 @@ class NNHandler(SerializableMixIn):
         layer_idxs = list(range(len(reshaped_params)))
         params_by_layer = {int(layer_idx): param for layer_idx, param in zip(layer_idxs, reshaped_params)}
 
-        # eval on all bonds
-        deltas = []
+        # evalute on all bonds
+        features_ = []
         for bond_idx in bond_idxs:
             bond_idx_tup = tuple(bond_idx)
             a0 = atom_features[bond_idx[0]]
             a1 = atom_features[bond_idx[1]]
             b0 = bond_features_by_idx[bond_idx_tup]
-            # just b0 with src, dst swapped
-            b1 = bond_features_by_idx[bond_idx_tup[::-1]]
-            features0 = np.array(np.concatenate([a0, a1, b0]))
-            features1 = np.array(np.concatenate([a1, a0, b1]))
-            f0 = eval_nn(params_by_layer, features0)
-            f1 = eval_nn(params_by_layer, features1)
-            f = f1 - f0  # antisymmetric to swapping bond direction
-            deltas.append(f * np.sqrt(constants.ONE_4PI_EPS0))
+            features_.append(np.array(np.concatenate([a0, a1, b0])))
+        batched_features = jnp.array(features_)
+        c = np.sqrt(constants.ONE_4PI_EPS0)
+        vmap_fxn = vmap(eval_nn, in_axes=(0, None))
+        deltas = c * vmap_fxn(batched_features, params_by_layer)
         return bond_idxs, jnp.array(deltas)
 
     @staticmethod
