@@ -56,6 +56,7 @@ class Forcefield:
             nonbonded.AM1CCCHandler,
             nonbonded.AM1BCCCCCHandler,
             nonbonded.PrecomputedChargeHandler,
+            nonbonded.NNHandler,
         ]
     ]
     q_handle_intra: Optional[
@@ -65,12 +66,18 @@ class Forcefield:
             nonbonded.AM1CCCIntraHandler,
             nonbonded.AM1BCCCCCIntraHandler,
             nonbonded.PrecomputedChargeHandler,
+            nonbonded.NNHandler,
         ]
     ]
 
     lj_handle: Optional[nonbonded.LennardJonesHandler]
     lj_handle_intra: Optional[nonbonded.LennardJonesIntraHandler]
-    env_bcc_handle: Optional[nonbonded.EnvironmentBCCPartialHandler]
+    env_bcc_handle: Optional[
+        Union[
+            nonbonded.EnvironmentBCCPartialHandler,
+            nonbonded.EnvironmentNNPartialHandler,
+        ]
+    ]
 
     protein_ff: str
     water_ff: str
@@ -159,7 +166,10 @@ class Forcefield:
         env_bcc_handle = None
 
         for handle in ff_handlers:
-            if isinstance(handle, nonbonded.EnvironmentBCCPartialHandler):
+            if isinstance(
+                handle,
+                (nonbonded.EnvironmentBCCPartialHandler, nonbonded.EnvironmentNNPartialHandler),
+            ):
                 assert env_bcc_handle is None
                 env_bcc_handle = handle
             elif isinstance(handle, bonded.HarmonicBondHandler):
@@ -211,6 +221,7 @@ class Forcefield:
                     nonbonded.AM1BCCHandler,
                     nonbonded.SimpleChargeHandler,
                     nonbonded.PrecomputedChargeHandler,
+                    nonbonded.NNHandler,
                 ),
             ):
                 assert q_handle is None
