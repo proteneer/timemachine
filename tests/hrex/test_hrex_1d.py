@@ -23,11 +23,9 @@ pytestmark = [pytest.mark.nogpu]
 
 
 class Distribution(Protocol):
-    def sample(self, n_samples: int) -> NDArray:
-        ...
+    def sample(self, n_samples: int) -> NDArray: ...
 
-    def log_q(self, x: float) -> float:
-        ...
+    def log_q(self, x: float) -> float: ...
 
 
 @dataclass

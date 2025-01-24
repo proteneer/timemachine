@@ -1,9 +1,9 @@
-numpy==1.24.1
-scipy==1.10.1
+numpy==1.26.4
+scipy==1.15.1
 pymbar==3.1.0
 networkx==2.8.8
 matplotlib==3.7.1
-rdkit==2022.3.5
+rdkit==2024.9.4
 --extra-index-url https://pypi.anaconda.org/OpenEye/simple
 openeye-toolkits==2020.2.0
 openmm==8.2.0
