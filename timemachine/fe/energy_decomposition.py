@@ -53,7 +53,7 @@ def get_batch_u_fns(
             _, _, Us = pot_impl.execute_batch(
                 coords,
                 pot_params,
-                np.array(boxes),
+                np.asarray(boxes),
                 compute_du_dx=False,
                 compute_du_dp=False,
                 compute_u=True,
