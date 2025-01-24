@@ -2,9 +2,8 @@ from typing import Union
 
 import networkx as nx
 import numpy as np
-from jax import jit
+from jax import jit, value_and_grad
 from jax import numpy as jnp
-from jax import value_and_grad
 from jax.scipy.stats import norm
 from scipy.optimize import minimize
 
@@ -203,9 +202,9 @@ def infer_node_vals_and_errs(
         ref_node_vals = np.array([0], dtype=float)
         ref_node_stddevs = np.array([0], dtype=float)
 
-    assert (
-        len(ref_node_idxs) == len(ref_node_vals) == len(ref_node_stddevs)
-    ), "Ref node idxs, ref node values and ref std devs must be of same length"
+    assert len(ref_node_idxs) == len(ref_node_vals) == len(ref_node_stddevs), (
+        "Ref node idxs, ref node values and ref std devs must be of same length"
+    )
 
     dg = infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals)
 

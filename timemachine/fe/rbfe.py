@@ -519,9 +519,9 @@ def optimize_coordinates(
             )
             max_moved = np.max(displacement_distances)
             moved_atoms = restricted_idxs[displacement_distances >= min_cutoff]
-            assert (
-                len(moved_atoms) == 0
-            ), f"λ = {state.lamb} moved atoms {moved_atoms.tolist()} > {min_cutoff*10} Å from initial state during minimization. Largest displacement was {max_moved*10} Å"
+            assert len(moved_atoms) == 0, (
+                f"λ = {state.lamb} moved atoms {moved_atoms.tolist()} > {min_cutoff * 10} Å from initial state during minimization. Largest displacement was {max_moved * 10} Å"
+            )
     return all_xs
 
 

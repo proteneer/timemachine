@@ -48,9 +48,7 @@ def test_build_water_system():
         (
             du_dx,
             _,
-        ) = bp.to_gpu(
-            np.float32
-        ).bound_impl.execute(water_coords, box, compute_u=False)
+        ) = bp.to_gpu(np.float32).bound_impl.execute(water_coords, box, compute_u=False)
         check_force_norm(-du_dx)
 
     water_system_bps, _ = openmm_deserializer.deserialize_system(water_with_mols, cutoff=1.2)
@@ -58,9 +56,7 @@ def test_build_water_system():
         (
             du_dx,
             _,
-        ) = bp.to_gpu(
-            np.float32
-        ).bound_impl.execute(mol_water_coords, box_with_mols, compute_u=False)
+        ) = bp.to_gpu(np.float32).bound_impl.execute(mol_water_coords, box_with_mols, compute_u=False)
         check_force_norm(-du_dx)
 
 
@@ -176,9 +172,7 @@ def test_build_protein_system():
         (
             du_dx,
             _,
-        ) = bp.to_gpu(
-            np.float32
-        ).bound_impl.execute(protein_coords, box, compute_u=False)
+        ) = bp.to_gpu(np.float32).bound_impl.execute(protein_coords, box, compute_u=False)
         check_force_norm(-du_dx)
 
     protein_system_bps, _ = openmm_deserializer.deserialize_system(protein_with_mols, cutoff=1.2)
@@ -186,9 +180,7 @@ def test_build_protein_system():
         (
             du_dx,
             _,
-        ) = bp.to_gpu(
-            np.float32
-        ).bound_impl.execute(mol_protein_coords, box, compute_u=False)
+        ) = bp.to_gpu(np.float32).bound_impl.execute(mol_protein_coords, box, compute_u=False)
         check_force_norm(-du_dx)
 
     # Pick a random water atom, will center the ligands on the atom and verify that the box is slightly

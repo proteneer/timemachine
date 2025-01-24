@@ -19,9 +19,9 @@ from timemachine.ff.handlers.utils import (
     get_query_mol,
     make_residue_mol,
     make_residue_mol_from_template,
+    update_mol_topology,
 )
 from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
-from timemachine.ff.handlers.utils import update_mol_topology
 from timemachine.graph_utils import convert_to_nx
 
 CACHE_SUFFIX = "Cache"

@@ -112,7 +112,11 @@ def integrate_rotation_Z(u_fn, beta):
         return np.exp(-beta * nrg) * np.sin(theta) ** 2 * np.sin(alpha)
 
     Z, Z_err = scipy.integrate.dblquad(
-        integrand, 0, np.pi / 2, lambda x: 0, lambda x: np.pi  # theta low  # theta high  # alpha low  # alpha high
+        integrand,
+        0,  # theta low
+        np.pi / 2,  # theta high
+        lambda x: 0,  # alpha low
+        lambda x: np.pi,  # alpha high
     )
 
     assert Z_err < 1e-5

@@ -651,9 +651,9 @@ def test_compute_incremental_log_weights_match_initial_log_weights_when_recomput
     """Verify that the result of computing the weights using `compute_initial_log_weights` and the incremental log weights generated
     during proposals are identical.
     """
-    assert (
-        proposals_per_move > 1
-    ), "If proposals per move is 1 then this isn't meaningful since the weights won't be incremental"
+    assert proposals_per_move > 1, (
+        "If proposals per move is 1 then this isn't meaningful since the weights won't be incremental"
+    )
     rng = np.random.default_rng(seed)
     cutoff = 1.2
     beta = 2.0
