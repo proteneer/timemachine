@@ -78,7 +78,7 @@ if install_custom_ops():
 
 setup(
     name="timemachine",
-    version="0.1",
+    version="0.1.0",
     cmdclass=cmdclass,
     description="A high-performance differentiable molecular dynamics, docking and optimization engine",
     long_description=long_description,
