@@ -9,11 +9,6 @@ follow_imports = "silent"
 
 [tool.ruff]
 line-length = 120
-exclude = [
-  "versioneer.py",
-  "timemachine/_version.py",
-  "timemachine/ff/params",
-]
 
 [tool.ruff.lint]
 select = [

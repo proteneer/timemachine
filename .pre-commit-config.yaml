@@ -49,8 +49,8 @@ repos:
         pass_filenames: false
         files: '^timemachine/cpp/src/wrap_kernels.cpp$'
 
-exclude: >
-  (?x)
+exclude: |
+  (?x)(
     \.pdb$
   | \.sdf$
   | \.proto$
@@ -59,3 +59,4 @@ exclude: >
   | ^timemachine/ff/params/
   | ^timemachine/_vendored/
   | ^timemachine/lib/custom_ops.pyi$
+  )
