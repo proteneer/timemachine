@@ -69,6 +69,4 @@ exclude: >
   | ^attic/
   | ^timemachine/ff/params/
   | ^timemachine/_vendored/
-  | ^versioneer\.py$
-  | ^timemachine/_version\.py$
   | ^timemachine/lib/custom_ops.pyi$

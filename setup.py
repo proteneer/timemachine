@@ -12,8 +12,6 @@ import sys
 from setuptools import Extension, find_packages, setup
 from setuptools.command.build_ext import build_ext
 
-import versioneer
-
 
 def install_custom_ops() -> bool:
     """Determine if we should install the custom ops.
@@ -72,8 +70,7 @@ here = pathlib.Path(__file__).parent.resolve()
 # Get the long description from the README file
 long_description = (here / "README.md").read_text(encoding="utf-8")
 
-cmdclass = versioneer.get_cmdclass()
-cmdclass.update(build_ext=CMakeBuild)
+cmdclass = {"build_ext": CMakeBuild}
 
 ext_modules = None
 if install_custom_ops():
@@ -81,7 +78,7 @@ if install_custom_ops():
 
 setup(
     name="timemachine",
-    version=versioneer.get_version(),
+    version="0.1",
     cmdclass=cmdclass,
     description="A high-performance differentiable molecular dynamics, docking and optimization engine",
     long_description=long_description,
