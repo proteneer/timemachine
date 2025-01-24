@@ -16,22 +16,18 @@ from timemachine.parallel.utils import get_gpu_count
 
 class BaseFuture(ABC):
     @abstractmethod
-    def done(self) -> bool:
-        ...
+    def done(self) -> bool: ...
 
     @abstractmethod
-    def result(self) -> Any:
-        ...
+    def result(self) -> Any: ...
 
     @property
     @abstractmethod
-    def id(self) -> str:
-        ...
+    def id(self) -> str: ...
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
 
 class AbstractClient:

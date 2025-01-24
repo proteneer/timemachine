@@ -367,7 +367,6 @@ $$$$""",
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=True,
     )
     assert len(all_cores) > 0
 
@@ -408,7 +407,6 @@ def test_all_pairs(dataset):
                 disallow_planar_torsion_flips=False,
                 min_threshold=0,
                 initial_mapping=None,
-                enforce_chirally_valid_dummy_groups=True,
             )
             end_time = time.time()
 
@@ -563,7 +561,6 @@ $$$$""",
         initial_mapping=None,
         # NOTE: example missing explicit Hs, chiral detection will fail
         enforce_chiral=False,
-        enforce_chirally_valid_dummy_groups=False,
     )
 
     assert len(all_cores) == 1
@@ -588,7 +585,6 @@ $$$$""",
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=False,
     )
 
     # 2 possible matches, returned core ordering is fully determined
@@ -615,7 +611,6 @@ $$$$""",
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=False,
     )
 
     # 2 possible matches, if we do not require max_connected_components=1 but do
@@ -749,7 +744,6 @@ def test_hif2a_failure():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=True,
     )
 
     expected_core = np.array(
@@ -815,7 +809,6 @@ def test_cyclohexane_stereo():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=True,
     )
 
     for core_idx, core in enumerate(all_cores[:1]):
@@ -876,7 +869,6 @@ def test_chiral_atom_map():
         ring_matches_ring_only=True,
         min_threshold=0,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=True,
     )
 
     chiral_aware_cores = get_cores(mol_a, mol_b, enforce_chiral=True)
@@ -917,7 +909,6 @@ def test_ring_matches_ring_only(ring_matches_ring_only):
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=True,
     )
 
     cores = get_cores(mol_a, mol_b, ring_matches_ring_only=ring_matches_ring_only)
@@ -948,7 +939,6 @@ def test_max_visits_error():
         disallow_planar_torsion_flips=False,
         min_threshold=0,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=True,
     )
     cores = get_cores(mol_a, mol_b, max_visits=10000)
     assert len(cores) > 0
@@ -983,7 +973,6 @@ def test_max_cores_warning():
         min_threshold=0,
         max_visits=1e7,
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=True,
     )
     # Warning is triggered by reaching the max visits, but not the max_cores
     with pytest.warns(MaxVisitsWarning, match="Inexhaustive search: reached max number of visits"):
@@ -1006,7 +995,6 @@ def test_min_threshold():
         disallow_planar_torsion_flips=False,
         min_threshold=mol_a.GetNumAtoms(),
         initial_mapping=None,
-        enforce_chirally_valid_dummy_groups=True,
     )
 
     with pytest.raises(NoMappingError, match="Unable to find mapping with at least 18 edges"):
@@ -1071,6 +1059,9 @@ def test_max_connected_components():
 
     mol_a = make_polyphenylene(5, 0.0)
     mol_b = make_polyphenylene(5, 90.0)
+
+    # Align the molecules, otherwise the conformers are different enough to trigger test failures.
+    AllChem.AlignMol(mol_a, mol_b)
 
     with pytest.raises(AssertionError, match="max_connected_components > 0"):
         get_core(mol_a, mol_b, max_connected_components=0)
@@ -1174,7 +1165,6 @@ def test_initial_mapping(hif2a_ligands):
         enforce_chiral=True,
         disallow_planar_torsion_flips=True,
         min_threshold=0,
-        enforce_chirally_valid_dummy_groups=True,
     )
 
     all_cores_test, diagnostics_test = get_cores_and_diagnostics(mol_a, mol_b, initial_mapping=initial_mapping)

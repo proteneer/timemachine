@@ -19,8 +19,7 @@ _P = TypeVar("_P", bound="Potential")
 @dataclass
 class Potential(ABC):
     @abstractmethod
-    def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
-        ...
+    def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array: ...
 
     def bind(self: _P, params: Params) -> "BoundPotential[_P]":
         return BoundPotential(self, params)

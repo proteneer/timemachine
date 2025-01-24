@@ -1,4 +1,3 @@
-import warnings
 from collections import defaultdict
 from functools import partial
 from typing import List, Optional, Tuple
@@ -9,7 +8,6 @@ from rdkit import Chem
 
 from timemachine.fe import mcgregor
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet, has_chiral_atom_flips, setup_find_flipped_planar_torsions
-from timemachine.fe.single_topology import make_find_chirally_valid_dummy_groups
 from timemachine.fe.utils import get_romol_bonds, get_romol_conf
 
 # (ytz): Just like how one should never re-write an MD engine, one should never rewrite an MCS library.
@@ -63,7 +61,6 @@ def get_cores_and_diagnostics(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
-    enforce_chirally_valid_dummy_groups: bool,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     """Same as :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
     assert max_cores > 0
@@ -81,7 +78,6 @@ def get_cores_and_diagnostics(
         enforce_chiral=enforce_chiral,
         disallow_planar_torsion_flips=disallow_planar_torsion_flips,
         min_threshold=min_threshold,
-        enforce_chirally_valid_dummy_groups=enforce_chirally_valid_dummy_groups,
     )
 
     # we require that mol_a.GetNumAtoms() <= mol_b.GetNumAtoms()
@@ -110,7 +106,6 @@ def get_cores(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
-    enforce_chirally_valid_dummy_groups: bool,
 ) -> List[NDArray]:
     """
     Finds set of cores between two molecules that maximizes the number of common edges.
@@ -193,7 +188,6 @@ def get_cores(
         disallow_planar_torsion_flips,
         min_threshold,
         initial_mapping,
-        enforce_chirally_valid_dummy_groups,
     )
 
     return all_cores
@@ -267,14 +261,9 @@ def _get_cores_impl(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
-    enforce_chirally_valid_dummy_groups: bool,
 ) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
     if initial_mapping is None:
         initial_mapping = np.zeros((0, 2))
-
-    if enforce_chirally_valid_dummy_groups is True:
-        warnings.warn("enforce_chirally_valid_dummy_groups is deprecated and ignored", DeprecationWarning)
-        enforce_chirally_valid_dummy_groups = False
 
     mol_a, perm, initial_mapping = reorder_atoms_by_degree_and_initial_mapping(mol_a, initial_mapping)
 
@@ -345,19 +334,6 @@ def _get_cores_impl(
     def filter_fxn(trial_core):
         return all(f(trial_core) for f in filter_fxns)
 
-    def make_leaf_filter_fxn():
-        find_chirally_valid_dummy_groups = make_find_chirally_valid_dummy_groups(mol_a, mol_b)
-
-        def leaf_filter_fxn(trial_core) -> bool:
-            if enforce_chirally_valid_dummy_groups:
-                core = mcgregor.perm_to_core(trial_core)
-                chirally_valid_dummy_groups = find_chirally_valid_dummy_groups(core)
-                return chirally_valid_dummy_groups is not None
-            else:
-                return True
-
-        return leaf_filter_fxn
-
     all_cores, _, mcs_diagnostics = mcgregor.mcs(
         n_a,
         n_b,
@@ -372,7 +348,6 @@ def _get_cores_impl(
         min_threshold,
         initial_mapping,
         filter_fxn,
-        make_leaf_filter_fxn(),
     )
 
     all_cores = remove_cores_smaller_than_largest(all_cores)

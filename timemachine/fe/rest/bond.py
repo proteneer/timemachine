@@ -12,8 +12,7 @@ TCanonicalIxn = TypeVar("TCanonicalIxn", bound="CanonicalIxn")  # in Python 3.11
 @dataclass(frozen=True)
 class CanonicalIxn(ABC):
     @abstractmethod
-    def map(self: TCanonicalIxn, f: Callable[[int], int]) -> TCanonicalIxn:
-        ...
+    def map(self: TCanonicalIxn, f: Callable[[int], int]) -> TCanonicalIxn: ...
 
     def translate(self: TCanonicalIxn, a_to_b: Mapping[int, int] | Sequence[int] | NDArray[np.int32]) -> TCanonicalIxn:
         return self.map(lambda i: a_to_b[i])

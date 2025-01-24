@@ -44,6 +44,7 @@ References
 3. This is intended to be used in the context of some initial protocol, e.g. from bisection
     * Bisection guarantees that overlap(lams[i],lams[i+1]) > threshold for all i, but does not minimize len(lams)
 """
+
 import warnings
 from typing import Callable, cast
 

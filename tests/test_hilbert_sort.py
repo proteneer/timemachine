@@ -2,6 +2,7 @@
 the tests/common.py::hilbert_sort function which produces a different permutation. This simply verifies that
 sorting will produce more compact blocks.
 """
+
 import numpy as np
 import pytest
 from numpy.typing import NDArray

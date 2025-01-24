@@ -2,6 +2,9 @@ name: timemachine
 channels:
   - conda-forge
 dependencies:
-  - python=3.10.10
+  - python=3.12.8
   - jax=0.4.28
   - jaxlib=0.4.28=cpu*
+  # Include numpy/scipy to reduce the size of the Docker container
+  - numpy=1.26.4
+  - scipy=1.15.1

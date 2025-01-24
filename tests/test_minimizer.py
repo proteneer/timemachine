@@ -56,18 +56,20 @@ from timemachine.potentials.jax_utils import distance_on_pairs, idxs_within_cuto
     ],
 )
 def test_fire_minimize_host_protein(pdb_path, sdf_path, mol_a_name, mol_b_name):
-    ff = Forcefield.load_default()
-    mols_by_name = read_sdf_mols_by_name(sdf_path)
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    with sdf_path as ligand_path:
+        mols_by_name = read_sdf_mols_by_name(ligand_path)
     mol_a = mols_by_name[mol_a_name]
     mol_b = mols_by_name[mol_b_name]
 
-    for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
-        complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
-            str(pdb_path), ff.protein_ff, ff.water_ff, mols=mols
-        )
-        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
-        x_host = minimizer.fire_minimize_host(mols, host_config, ff)
-        assert x_host.shape == complex_coords.shape
+    with pdb_path as host_path:
+        for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
+            complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
+                str(host_path), ff.protein_ff, ff.water_ff, mols=mols
+            )
+            host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
+            x_host = minimizer.fire_minimize_host(mols, host_config, ff)
+            assert x_host.shape == complex_coords.shape
 
 
 def test_fire_minimize_host_solvent():
