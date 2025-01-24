@@ -928,12 +928,6 @@ def run_sims_sequential(
     """
     stored_trajectories = []
 
-    # keep no more than 2 states in memory at once
-    prev_state: Optional[EnergyDecomposedState] = None
-
-    # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
-    u_kln_by_component_by_lambda = []
-
     # Ensure that states differ only in their parameters so that we can safely instantiate potentials from the first
     # state and use set_params for efficiency
     for s in initial_states[1:]:
@@ -948,23 +942,11 @@ def run_sims_sequential(
         # keep samples from any requested states in memory
         stored_trajectories.append(traj)
 
-        cur_batch_U_fns = get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature)
+    neighbor_ulkns = generate_pair_bar_ulkns(unbound_impls, initial_states, stored_trajectories, temperature)
 
-        state = EnergyDecomposedState(traj.frames, traj.boxes, cur_batch_U_fns)
+    pair_bar_results = [estimate_free_energy_bar(u_kln, temperature) for u_kln in neighbor_ulkns]
 
-        # analysis that depends on current and previous state
-        if prev_state:
-            state_pair = [prev_state, state]
-            u_kln_by_component = compute_energy_decomposed_u_kln(state_pair)
-            u_kln_by_component_by_lambda.append(u_kln_by_component)
-
-        prev_state = state
-
-    bar_results = [
-        estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in u_kln_by_component_by_lambda
-    ]
-
-    return PairBarResult(list(initial_states), bar_results), stored_trajectories
+    return PairBarResult(list(initial_states), pair_bar_results), stored_trajectories
 
 
 class MinOverlapWarning(UserWarning):
@@ -1260,11 +1242,21 @@ def compute_u_kn(trajs, initial_states) -> Tuple[NDArray, NDArray]:
 
 
 def generate_pair_bar_ulkns(
-    unbound_impls: list, initial_states: list[InitialState], samples_by_state, temperature: float
-):
-    # Generate all of the energy combinations. Goal here is to load each set of frames once and compute
-    # on all of the parameters of interest.
-    # Running multiple parameters on the same frames is ideal to avoid neighborlist rebuilds.
+    unbound_impls: list,
+    initial_states: Sequence[InitialState],
+    samples_by_state: Sequence[Trajectory],
+    temperature: float,
+) -> NDArray:
+    """Generate pair bair u_klns.
+    This is a specialized variant of generating u_klns, only loading each set of frames into memory once.
+    Each set of frames is loaded once then all of the parameters of interest are run in a batch.
+    This improves throughput for potentials that use Neighborlists, as there are at most len(frames) neighborlist
+    rebuilds, rather than 3 * len(frames).
+
+    Returns
+    -------
+        u_klns: np.array[len(initial_states) - 1, len(unbound_impls), 2, 2, n_frames]
+    """
     kBT = temperature * BOLTZ
     # Construct an empty array
     state_to_params = np.zeros((len(initial_states), len(initial_states), len(unbound_impls)), dtype=object)
@@ -1289,7 +1281,7 @@ def generate_pair_bar_ulkns(
                 compute_u=True,
             )
 
-            Us = Us.T  # Transpose to get frame by params
+            Us = Us.T  # Transpose to get energies by params
             us = Us.reshape(len(state_idxs), -1) / kBT
             for p_idx, p_us in zip(state_idxs, us):
                 state_to_params[i, p_idx, j] = p_us
