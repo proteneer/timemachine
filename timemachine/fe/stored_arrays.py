@@ -50,12 +50,10 @@ class StoredArrays(Sequence[NDArray]):
         return sum(self._chunk_sizes)
 
     @overload
-    def __getitem__(self, key: int) -> NDArray:
-        ...
+    def __getitem__(self, key: int) -> NDArray: ...
 
     @overload
-    def __getitem__(self, key: slice) -> NoReturn:
-        ...
+    def __getitem__(self, key: slice) -> NoReturn: ...
 
     def __getitem__(self, key) -> NDArray:
         if isinstance(key, int):

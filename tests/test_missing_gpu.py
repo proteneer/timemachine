@@ -1,4 +1,5 @@
 """Tests related to timemachine when there are no GPUs"""
+
 import numpy as np
 import pytest
 
