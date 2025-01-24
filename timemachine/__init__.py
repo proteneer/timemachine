@@ -1,8 +1,3 @@
-from . import _version
-
-__version__ = _version.get_versions()["version"]
-
-
 def _suppress_jax_no_gpu_warning():
     """Suppresses the following warning:
 

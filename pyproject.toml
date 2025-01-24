@@ -1,9 +1,7 @@
 [tool.black]
 line-length = 120
 extend-exclude = '''
-^/( versioneer.py$
-  | timemachine/_version.py$
-  | timemachine/ff/params
+^/( timemachine/ff/params
   )
 '''
 
@@ -30,6 +28,5 @@ requires = [
   "mypy==1.5.1; sys_platform == 'linux'",
   "setuptools >= 64.0.0",
   "wheel",
-  "versioneer-518"
 ]
 build-backend = "setuptools.build_meta"
