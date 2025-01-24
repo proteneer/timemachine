@@ -70,8 +70,6 @@ here = pathlib.Path(__file__).parent.resolve()
 # Get the long description from the README file
 long_description = (here / "README.md").read_text(encoding="utf-8")
 
-cmdclass = {"build_ext": CMakeBuild}
-
 ext_modules = None
 if install_custom_ops():
     ext_modules = [CMakeExtension("timemachine.lib.custom_ops", "timemachine/cpp")]
@@ -79,7 +77,7 @@ if install_custom_ops():
 setup(
     name="timemachine",
     version="0.1.0",
-    cmdclass=cmdclass,
+    cmdclass={"build_ext": CMakeBuild},
     description="A high-performance differentiable molecular dynamics, docking and optimization engine",
     long_description=long_description,
     long_description_content_type="text/markdown",
