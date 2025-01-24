@@ -7,7 +7,6 @@
 **/.coverage/
 **/coverage/
 **/.ipynb_checkpoints*/
-**/attic/
 **/examples/
 **/tests/
 **/.pytest*
