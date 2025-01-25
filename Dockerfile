@@ -31,8 +31,9 @@ RUN wget --quiet https://github.com/Kitware/CMake/releases/download/v${CMAKE_VER
 
 ENV PATH $PATH:$PWD/cmake-${CMAKE_VERSION}-linux-x86_64/bin/
 
-# Copy the environment yaml to cache environment when possible
+# Copy the environment yaml and requirements.txt to cache environment when possible
 COPY environment.yml /code/timemachine/
+COPY requirements.txt /code/timemachine/
 
 WORKDIR /code/timemachine/
 
@@ -49,10 +50,6 @@ ENV PATH /opt/conda/envs/${ENV_NAME}/bin:$PATH
 ENV CONDA_DEFAULT_ENV ${ENV_NAME}
 
 WORKDIR /code/
-
-# Copy the pip requirements to cache when possible
-COPY requirements.txt /code/timemachine/
-RUN pip install --no-cache-dir -r timemachine/requirements.txt
 
 # NOTE: timemachine_ci must come before timemachine in the Dockerfile;
 # otherwise, CI will try (and fail) to build timemachine to reach the
