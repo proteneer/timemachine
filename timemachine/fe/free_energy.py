@@ -1496,27 +1496,9 @@ def run_sims_hrex(
     assert isinstance(potential, custom_ops.SummedPotential)
     unbound_impls = potential.get_potentials()
 
-    # results_by_state = [
-    #     (samples.frames, samples.boxes, initial_state)
-    #     for samples, initial_state in zip(samples_by_state, initial_states)
-    # ]
-
     neighbor_ulkns = generate_pair_bar_ulkns(unbound_impls, initial_states, samples_by_state, temperature)
 
     pair_bar_results = [estimate_free_energy_bar(u_kln, temperature) for u_kln in neighbor_ulkns]
-
-    # bar_results = list(
-    #     pairwise_transform_and_combine(
-    #         results_by_state,
-    #         make_energy_decomposed_state,
-    #         lambda s1, s2: estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature),
-    #     )
-    # )
-    # print(bar_results[0])
-    # print(pair_bar_results[0])
-    # for b_a, b_b in zip(pair_bar_results, bar_results):
-    #     assert np.all(b_a.dG_err_by_component == b_b.dG_err_by_component)
-    #     assert np.all(b_a.u_kln_by_component == b_b.u_kln_by_component)
 
     diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
 
