@@ -76,7 +76,8 @@ packaging:
   variables:
     CMAKE_ARGS: -DCUDA_ARCH=75
   script:
-    - python setup.py sdist
+    - pip install build==1.2.2.post1
+    - python -m build --sdist
     - pip install dist/timemachine-*.tar.gz
   artifacts:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-packaging"
