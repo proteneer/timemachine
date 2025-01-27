@@ -2,9 +2,8 @@ from functools import partial
 
 import numpy as np
 import pytest
-from jax import grad, jit
+from jax import grad, jit, vmap
 from jax import numpy as jnp
-from jax import vmap
 
 from timemachine import constants
 from timemachine.ff import Forcefield
@@ -73,9 +72,9 @@ def assert_no_drift(
     differences_early = np.abs(
         np.diff(expected_selection_fraction_traj[:n_samples]) / expected_selection_fraction_traj[0]
     )
-    assert (
-        np.all(differences_early) < 2.0
-    ), "Difference between first and last sample greater than 200%, likely unstable"
+    assert np.all(differences_early) < 2.0, (
+        "Difference between first and last sample greater than 200%, likely unstable"
+    )
 
     avg_at_start = np.mean(expected_selection_fraction_traj[:n_samples])
     avg_at_end = np.mean(expected_selection_fraction_traj[-n_samples:])

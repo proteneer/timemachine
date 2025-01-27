@@ -222,9 +222,9 @@ class CUDAPoolClient(ProcessPoolClient):
         """
         gpus = get_gpu_count()
         assert self.max_workers <= gpus, f"More workers '{self.max_workers}' requested than GPUs '{gpus}'"
-        assert (
-            len(self._gpu_list) >= self.max_workers
-        ), "Fewer available GPUs than max workers expects, check CUDA_VISIBLE_DEVICES"
+        assert len(self._gpu_list) >= self.max_workers, (
+            "Fewer available GPUs than max workers expects, check CUDA_VISIBLE_DEVICES"
+        )
         assert len(self._gpu_list) <= gpus, "More GPUs requested than the machine has, check CUDA_VISIBLE_DEVICES"
 
 

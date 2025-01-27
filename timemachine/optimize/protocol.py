@@ -49,9 +49,8 @@ import warnings
 from typing import Callable, cast
 
 import numpy as np
-from jax import Array, jit
+from jax import Array, jit, vmap
 from jax import numpy as jnp
-from jax import vmap
 from jax.scipy.special import logsumexp as _logsumexp
 from jax.typing import ArrayLike
 from scipy.optimize import bisect

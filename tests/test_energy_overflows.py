@@ -108,9 +108,9 @@ def test_energy_overflow_max_representation(precision, rtol, atol):
         u, (du_dx,) = ref_val_and_grad(x, box)
         assert np.isfinite(u), "Reference is no longer finite"
         _, gpu_u = gpu_bound.execute(x, box)
-        assert (
-            not np.isnan(gpu_u) and np.abs(gpu_u) < np.iinfo(np.int64).max / custom_ops.FIXED_EXPONENT
-        ), "GPU platform returned nan"
+        assert not np.isnan(gpu_u) and np.abs(gpu_u) < np.iinfo(np.int64).max / custom_ops.FIXED_EXPONENT, (
+            "GPU platform returned nan"
+        )
         return u, du_dx.reshape(-1)
 
     x0_flat = x0.reshape(-1)

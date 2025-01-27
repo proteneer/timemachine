@@ -295,9 +295,9 @@ class GradientTest(unittest.TestCase):
         params = (params.astype(np.float32)).astype(np.float64)
         assert params.dtype == np.float64
         ref_u = ref_potential(x, params, box)
-        assert (
-            np.abs(ref_u) < np.iinfo(np.int64).max / custom_ops.FIXED_EXPONENT
-        ), "System is invalid, GPU platform unable to represent energies"
+        assert np.abs(ref_u) < np.iinfo(np.int64).max / custom_ops.FIXED_EXPONENT, (
+            "System is invalid, GPU platform unable to represent energies"
+        )
         grad_fn = jax.grad(ref_potential, argnums=(0, 1))
         ref_du_dx, ref_du_dp = grad_fn(x, params, box)
 

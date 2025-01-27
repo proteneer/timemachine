@@ -1372,12 +1372,12 @@ def test_hybrid_core_generation(hif2a_ligands):
             # hybrid_core_sizes.append(len(core_hybrid))
 
             assert len(core_no_h) < len(core_h), f"Mol {i} -> {j} failed to produce larger mapping by adding hydrogens"
-            assert len(core_no_h) < len(
-                core_hybrid
-            ), f"Mol {i} -> {j} failed to produce larger mapping by running hybrid"
-            assert len(core_hybrid) <= len(
-                core_h
-            ), f"Mol {i} -> {j} failed to produce larger mapping by running with hydrogens than hybrid"
+            assert len(core_no_h) < len(core_hybrid), (
+                f"Mol {i} -> {j} failed to produce larger mapping by running hybrid"
+            )
+            assert len(core_hybrid) <= len(core_h), (
+                f"Mol {i} -> {j} failed to produce larger mapping by running with hydrogens than hybrid"
+            )
 
     # useful diagnostics
     # import matplotlib.pyplot as plt
