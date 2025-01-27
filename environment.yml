@@ -6,4 +6,4 @@ dependencies:
   - jax=0.4.28
   - jaxlib=0.4.28=cpu*
   - pip:
-    - -r requirements.txt
+    - --no-cache-dir -r requirements.txt
