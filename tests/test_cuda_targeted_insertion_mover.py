@@ -413,16 +413,21 @@ def brd4_rbfe_state() -> InitialState:
     return replace(initial_state, v0=traj.final_velocities, x0=x, box0=b)
 
 
+@pytest.mark.parametrize("water_count", [1, 2])
+@pytest.mark.parametrize("proposals_per_move, batch_size", [(1000, 1), (1000, 250)])
 @pytest.mark.parametrize("radius", [0.4])
 @pytest.mark.parametrize("moves", [10000])
-@pytest.mark.parametrize("precision,rtol,atol", [(np.float64, 3e-5, 2e-5), (np.float32, 1e-4, 2e-3)])
+@pytest.mark.parametrize(
+    "precision,rtol,atol", [(np.float64, 3e-5, 2e-5), pytest.param(np.float32, 1e-4, 2e-3, marks=pytest.mark.memcheck)]
+)
 @pytest.mark.parametrize("seed", [2024])
-def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol, atol, seed):
+def test_targeted_insertion_buckyball_edge_cases(
+    water_count, proposals_per_move, batch_size, radius, moves, precision, rtol, atol, seed
+):
     """Test the edges cases of targeted insertion where the proposal probability isn't symmetric.
 
-    Tests a single water and two waters being moved into an empty buckyball.
+    Tests the edge cases where there is either only one or two waters moving in and out of a buckyball.
     """
-    proposals_per_move = 1
     ff = Forcefield.load_precomputed_default()
     with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
         host_pdb = water_exchange / "bb_0_waters.pdb"
@@ -453,9 +458,8 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
-    # Select an arbitrary water, will be the only water considered for insertion/deletion
-    water_idxs_single = [get_water_idxs(all_group_idxs)[-1]]
-    water_idxs_double = get_water_idxs(all_group_idxs)[-2:]
+    # Select an arbitrary set of waters, will be the only waters considered for insertion/deletion
+    water_idxs = get_water_idxs(all_group_idxs)[-water_count:]
 
     conf = image_frame(all_group_idxs, conf, box)
 
@@ -467,26 +471,26 @@ def test_targeted_insertion_buckyball_edge_cases(radius, moves, precision, rtol,
     klass = custom_ops.TIBDExchangeMove_f32
     if precision == np.float64:
         klass = custom_ops.TIBDExchangeMove_f64
-    for water_idxs in [water_idxs_single, water_idxs_double]:
-        bdem = klass(
-            N,
-            ligand_idxs,
-            water_idxs,
-            params,
-            DEFAULT_TEMP,
-            nb.potential.beta,
-            cutoff,
-            radius,
-            seed,
-            proposals_per_move,
-            1,
-        )
-        assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
+    bdem = klass(
+        N,
+        ligand_idxs,
+        water_idxs,
+        params,
+        DEFAULT_TEMP,
+        nb.potential.beta,
+        cutoff,
+        radius,
+        seed,
+        proposals_per_move,
+        1,
+        batch_size=batch_size,
+    )
+    assert bdem.last_log_probability() == 0.0, "First log probability expected to be zero"
 
-        ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP, ligand_idxs, radius)
+    ref_bdem = RefTIBDExchangeMove(nb.potential.beta, cutoff, params, water_idxs, DEFAULT_TEMP, ligand_idxs, radius)
 
-        verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, proposals_per_move, rtol, atol)
-        assert bdem.n_proposed() == moves
+    verify_targeted_moves(all_group_idxs, bdem, ref_bdem, conf, box, moves, proposals_per_move, rtol, atol)
+    assert bdem.n_proposed() == moves
 
 
 @pytest.mark.parametrize("proposals_per_move, batch_size", [(20000, 1), (20000, 200)])
