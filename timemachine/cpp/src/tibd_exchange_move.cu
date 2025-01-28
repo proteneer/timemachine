@@ -93,7 +93,7 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     // Take the larger of the two to use as the temp storage data for CUB
     temp_storage_bytes_ = max(flagged_bytes, sum_bytes);
 
-    // Memset these buffers to unsure `compute-sanitizer --tool initcheck` has no errors
+    // Memset these buffers to ensure `compute-sanitizer --tool initcheck` has no errors
     gpuErrchk(cudaMemset(this->d_box_volume_.data, 0, this->d_box_volume_.size()));
     gpuErrchk(cudaMemset(this->d_lse_max_src_.data, 0, this->d_lse_max_src_.size()));
     gpuErrchk(cudaMemset(this->d_lse_exp_sum_src_.data, 0, this->d_lse_max_src_.size()));
