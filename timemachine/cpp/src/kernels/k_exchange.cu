@@ -686,8 +686,10 @@ template void __global__ k_separate_weights_for_targeted<double>(
 
 template <typename RealType>
 void __global__ k_setup_destination_weights_for_targeted(
+    const int total_proposals,
     const int batch_size,
     const int num_target_mols,
+    const int *__restrict__ noise_offset,           // [1]
     const int *__restrict__ samples,                // [batch_size]
     const int *__restrict__ weight_offsets,         // [batch_size + 1]
     const int *__restrict__ targeting_inner_volume, // [batch_size]
@@ -697,7 +699,9 @@ void __global__ k_setup_destination_weights_for_targeted(
     RealType *__restrict__ output_weights           // [batch_size, num_target_mols]
 ) {
     const int idx_in_batch = blockIdx.y;
-    if (idx_in_batch >= batch_size) {
+    const int num_prev_proposals = *noise_offset;
+    // Don't set weights beyond the total number of proposals, state of buffers can be invalid
+    if (idx_in_batch >= batch_size || idx_in_batch + num_prev_proposals >= total_proposals) {
         return;
     }
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -723,9 +727,11 @@ void __global__ k_setup_destination_weights_for_targeted(
 }
 
 template void __global__ k_setup_destination_weights_for_targeted<float>(
+    const int total_proposals,
     const int batch_size,
     const int num_target_mols,
-    const int *__restrict__ samples,                // [1]
+    const int *__restrict__ noise_offset,           // [1]
+    const int *__restrict__ samples,                // [batch_size]
     const int *__restrict__ weight_offsets,         // [batch_size + 1]
     const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
@@ -735,9 +741,11 @@ template void __global__ k_setup_destination_weights_for_targeted<float>(
 );
 
 template void __global__ k_setup_destination_weights_for_targeted<double>(
+    const int total_proposals,
     const int batch_size,
     const int num_target_mols,
-    const int *__restrict__ samples,                // [1]
+    const int *__restrict__ noise_offset,           // [1]
+    const int *__restrict__ samples,                // [batch_size]
     const int *__restrict__ weight_offsets,         // [batch_size + 1]
     const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]
