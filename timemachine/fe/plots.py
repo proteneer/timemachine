@@ -351,8 +351,8 @@ def plot_hrex_transition_matrix(
     transition_probability: NDArray,
     figsize: Tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
-    format_annotation: Callable[[float], str] = lambda x: f"{100.0*x:.2g}",
-    format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0*x:.2g}%",
+    format_annotation: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}",
+    format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}%",
     prefix: str = "",
 ):
     """Plot matrix of estimated transition probabilities for permutation moves as a heatmap."""
@@ -408,8 +408,8 @@ def plot_hrex_replica_state_distribution_heatmap(
     lambdas: Sequence[float],
     figsize: Tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
-    format_annotation: Callable[[float], str] = lambda x: f"{100.0*x:.2g}",
-    format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0*x:.2g}%",
+    format_annotation: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}",
+    format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}%",
     prefix: str = "",
 ):
     """Plot distribution of (replica, state) pairs as a heatmap."""

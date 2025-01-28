@@ -254,7 +254,7 @@ def test_exchange():
             accepted = exc_mover.n_accepted()
             proposed = exc_mover.n_proposed()
         print(
-            f"{accepted} / {proposed} | density {density} | # of waters in spherical region {occ // 3} | md step: {idx * args.md_steps_per_batch} | time per mc move: {(end_time - start_time) / args.mc_steps_per_batch }ns",
+            f"{accepted} / {proposed} | density {density} | # of waters in spherical region {occ // 3} | md step: {idx * args.md_steps_per_batch} | time per mc move: {(end_time - start_time) / args.mc_steps_per_batch} ns",
             flush=True,
         )
 

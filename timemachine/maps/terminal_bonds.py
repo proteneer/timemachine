@@ -11,9 +11,8 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import numpy as np
-from jax import config, jacobian, jit
+from jax import config, jacobian, jit, vmap
 from jax import numpy as jnp
-from jax import vmap
 from numpy.typing import NDArray as Array
 
 config.update("jax_enable_x64", True)

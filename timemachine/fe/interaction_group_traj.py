@@ -1,9 +1,8 @@
 from typing import Callable
 
 import numpy as np
-from jax import jit
+from jax import jit, vmap
 from jax import numpy as jnp
-from jax import vmap
 from numpy.typing import NDArray as Array
 
 from timemachine.potentials import nonbonded
@@ -107,7 +106,7 @@ class InteractionGroupTraj:
                 saving {(xs.shape[1] / num_stored):.2f}x on storage
                 (relative to storing all env atoms)
                 padding to max_nbrs = {max_nbrs}
-                (~{max_nbrs/mean_nbrs:.2f}x larger than unpadded neighbor list)
+                (~{max_nbrs / mean_nbrs:.2f}x larger than unpadded neighbor list)
             """
             print(msg)
 

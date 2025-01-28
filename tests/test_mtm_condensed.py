@@ -118,7 +118,7 @@ def test_condensed_phase_mtm(seed):
     num_batches = 3333
     md_steps_per_move = 150
 
-    print(f"Running a total of {num_batches*md_steps_per_move} md steps")
+    print(f"Running a total of {num_batches * md_steps_per_move} md steps")
 
     all_torsions = []
 
@@ -155,7 +155,7 @@ def test_condensed_phase_mtm(seed):
         xvb_t = mtm_mover.move(xvb_t)
 
         print(
-            f"K {K} frame {iteration} acceptance rate {mtm_mover.n_accepted/mtm_mover.n_proposed} solvent_torsion {solvent_torsion}"
+            f"K {K} frame {iteration} acceptance rate {mtm_mover.n_accepted / mtm_mover.n_proposed} solvent_torsion {solvent_torsion}"
         )
 
     all_torsions.append(np.asarray(enhanced_torsions))

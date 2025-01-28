@@ -56,9 +56,9 @@ def compute_ref_raw_log_prob(
     probs_before = np.exp(log_probs_before)
     median_probability = np.median(probs_before)
     reasonable_probability = min(median_probability, 0.01)
-    assert (
-        probs_before[src_idx] >= reasonable_probability
-    ), f"Probability of moving water {src_idx} low {probs_before[src_idx]}, median is {median_probability}"
+    assert probs_before[src_idx] >= reasonable_probability, (
+        f"Probability of moving water {src_idx} low {probs_before[src_idx]}, median is {median_probability}"
+    )
 
     vj_plus_one_idxs = np.concatenate([[water_idx], vj_mols])
     log_weights_after_full, trial_coords = ref_exchange.batch_log_weights_incremental(

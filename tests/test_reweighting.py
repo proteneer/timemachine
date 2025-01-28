@@ -1,9 +1,8 @@
 import numpy as np
 import pymbar
 import pytest
-from jax import grad, jit
+from jax import grad, jit, value_and_grad, vmap
 from jax import numpy as jnp
-from jax import value_and_grad, vmap
 
 from timemachine.constants import BOLTZ
 from timemachine.datasets import fetch_freesolv

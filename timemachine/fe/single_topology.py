@@ -292,9 +292,12 @@ def setup_dummy_interactions(
     dummy_improper_idxs = []
     dummy_improper_params = []
 
-    (dummy_bond_idxs, dummy_chiral_atom_idxs), (
-        dummy_bond_params,
-        dummy_chiral_atom_params,
+    (
+        (dummy_bond_idxs, dummy_chiral_atom_idxs),
+        (
+            dummy_bond_params,
+            dummy_chiral_atom_params,
+        ),
     ) = setup_dummy_bond_and_chiral_interactions(
         bond_idxs,
         bond_params,
@@ -660,9 +663,9 @@ def setup_end_state(
     )
 
     num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
-    assert (
-        get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1
-    ), "hybrid molecule has multiple connected components"
+    assert get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1, (
+        "hybrid molecule has multiple connected components"
+    )
 
     return VacuumSystem(
         bond_potential,
@@ -1054,22 +1057,22 @@ def assert_torsions_defined_over_non_linear_angles(system: VacuumSystem | HostGu
         if proper_k > 0:
             if canonicalize_bond((i, j, k)) in linear_angles:
                 raise TorsionsDefinedOverLinearAngleException(
-                    f"angle {(i,j,k)} is linear in proper torsion {(i,j,k,l)}"
+                    f"angle {(i, j, k)} is linear in proper torsion {(i, j, k, l)}"
                 )
             if canonicalize_bond((j, k, l)) in linear_angles:
                 raise TorsionsDefinedOverLinearAngleException(
-                    f"angle {(j,k,l)} is linear in proper torsion {(i,j,k,l)}"
+                    f"angle {(j, k, l)} is linear in proper torsion {(i, j, k, l)}"
                 )
 
     for (i, j, k, l), (improper_k, _, _) in zip(system.improper.potential.idxs, system.improper.params):
         if improper_k > 0:
             if canonicalize_bond((i, j, k)) in linear_angles:
                 raise TorsionsDefinedOverLinearAngleException(
-                    f"angle {(i,j,k)} is linear in improper torsion {(i,j,k,l)}"
+                    f"angle {(i, j, k)} is linear in improper torsion {(i, j, k, l)}"
                 )
             if canonicalize_bond((j, k, l)) in linear_angles:
                 raise TorsionsDefinedOverLinearAngleException(
-                    f"angle {(j,k,l)} is linear in improper torsion {(i,j,k,l)}"
+                    f"angle {(j, k, l)} is linear in improper torsion {(i, j, k, l)}"
                 )
 
 
