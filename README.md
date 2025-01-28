@@ -92,7 +92,7 @@ Note: we currently only support and test on python 3.12, use other versions at y
 
 ## Forcefield Gotchas
 
-Most of the training is using the correctable charge corrections [ccc forcefield](https://github.com/proteneer/timemachine/blob/1a721dd3f05d6011cf028b0588e066682d38ba59/ff/params/smirnoff_1_1_0_ccc.py), which is SMIRNOFF 1.1.0 augmented with BCCs ported via the [recharge](https://github.com/openforcefield/openff-recharge) project. There are some additional modifications:
+Most of the training is using the correctable charge corrections [ccc forcefield](https://github.com/proteneer/timemachine/blob/1a721dd3f05d6011cf028b0588e066682d38ba59/ff/params/smirnoff_2_0_0_ccc.py), which is SMIRNOFF 2.0.0 augmented with BCCs ported via the [recharge](https://github.com/openforcefield/openff-recharge) project. There are some additional modifications:
 
 1. The charges have been multiplied by sqrt(ONE_4PI_EPS0) as an optimization.
 2. The eps parameter in LJ have been replaced by an alpha such that alpha^2=eps in order to avoid negative eps values during training.
