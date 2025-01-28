@@ -31,9 +31,9 @@ repos:
         # by mypy in pre-commit
         additional_dependencies:
           - "jax==0.4.28"
-          - "numpy==1.26.4"
+          - "numpy==2.2.2"
           - "scipy==1.15.1"
-          - "matplotlib==3.7.1"
+          - "matplotlib==3.10.0"
 
         # Exclude custom_ops.py to work around clash with stub file when typechecking
         exclude: '^timemachine/lib/custom_ops.py$'
