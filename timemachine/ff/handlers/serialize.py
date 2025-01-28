@@ -45,8 +45,10 @@ class SerializableMixIn:
         key = type(handler).__name__[: -len(_SUFFIX)]
         patterns = []
         for smi, p in zip(handler.smirks, handler.params):
-            if isinstance(p, (list, tuple, np.ndarray)):
+            if isinstance(p, (list, tuple)):
                 patterns.append((smi, *p))
+            elif isinstance(p, np.ndarray):
+                patterns.append((smi, *p.tolist()))
             else:
                 # SimpleCharges only have one parameter
                 patterns.append((smi, p))
