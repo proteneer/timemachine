@@ -54,7 +54,7 @@ nightly_tests:
 
 .PHONY: nightly_memcheck_tests
 nightly_memcheck_tests:
-	compute-sanitizer --launch-timeout 120 --leak-check full --error-exitcode 1 pytest -m '$(NIGHTLY_MARKER) and $(MEMCHECK_MARKER)' $(PYTEST_CI_ARGS)
+	compute-sanitizer --launch-timeout 120 --padding 2048 --leak-check full --error-exitcode 1 pytest -m '$(NIGHTLY_MARKER) and $(MEMCHECK_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: nocuda_nightly_tests
 nocuda_nightly_tests:
