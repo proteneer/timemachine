@@ -93,6 +93,11 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
     // Take the larger of the two to use as the temp storage data for CUB
     temp_storage_bytes_ = max(flagged_bytes, sum_bytes);
 
+    // Memset these buffers to unsure `compute-sanitizer --tool initcheck` has no errors
+    gpuErrchk(cudaMemset(this->d_box_volume_.data, 0, this->d_box_volume_.size()));
+    gpuErrchk(cudaMemset(this->d_lse_max_src_.data, 0, this->d_lse_max_src_.size()));
+    gpuErrchk(cudaMemset(this->d_lse_exp_sum_src_.data, 0, this->d_lse_max_src_.size()));
+
     // Zero out the sample segments offsets, the first index will always be zero and the inclusive sum will be offset by 1
     gpuErrchk(cudaMemset(this->d_sample_segments_offsets_.data, 0, this->d_sample_segments_offsets_.size()));
     gpuErrchk(cudaMemset(d_sample_after_segment_offsets_.data, 0, d_sample_after_segment_offsets_.size()));
@@ -309,8 +314,10 @@ void TIBDExchangeMove<RealType>::move(
             N, false, d_box, d_coords, this->d_quaternions_.data, this->d_selected_translations_.data, stream);
 
         k_setup_destination_weights_for_targeted<RealType><<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
+            this->num_proposals_per_move_,
             this->batch_size_,
             this->num_target_mols_,
+            this->d_noise_offset_.data,
             this->d_samples_.data,
             d_sample_after_segment_offsets_.data,
             d_targeting_inner_vol_.data,
@@ -413,16 +420,18 @@ TIBDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const
 template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probability_host() {
     std::vector<RealType> h_log_exp_src(2 * this->batch_size_);
     std::vector<RealType> h_log_exp_after(2 * this->batch_size_);
+
     d_lse_max_src_.copy_to(&h_log_exp_src[0]);
     d_lse_exp_sum_src_.copy_to(&h_log_exp_src[this->batch_size_]);
+
     this->d_lse_max_after_.copy_to(&h_log_exp_after[0]);
     this->d_lse_exp_sum_after_.copy_to(&h_log_exp_after[this->batch_size_]);
 
     int h_targeting_inner_vol[this->batch_size_];
     d_targeting_inner_vol_.copy_to(h_targeting_inner_vol);
 
-    int h_local_inner_count[1];
-    d_inner_mols_count_.copy_to(h_local_inner_count);
+    int h_local_inner_count;
+    d_inner_mols_count_.copy_to(&h_local_inner_count);
 
     RealType h_box_vol;
     d_box_volume_.copy_to(&h_box_vol);
@@ -433,7 +442,7 @@ template <typename RealType> double TIBDExchangeMove<RealType>::raw_log_probabil
         h_targeting_inner_vol[0],
         inner_volume_,
         outer_vol,
-        h_local_inner_count[0],
+        h_local_inner_count,
         this->num_target_mols_,
         &h_log_exp_src[0],
         &h_log_exp_src[this->batch_size_],
