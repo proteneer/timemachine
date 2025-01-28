@@ -17,6 +17,8 @@ NOGPU_MARKER := nogpu
 MEMCHECK_MARKER := memcheck
 NIGHTLY_MARKER := nightly
 
+COMPUTE_SANITIZER_CMD := compute-sanitizer --launch-timeout 120 --padding 2048 --leak-check full --error-exitcode 1
+
 NPROCS = `nproc`
 
 .PHONY: build
@@ -42,7 +44,7 @@ nogpu_tests:
 
 .PHONY: memcheck_tests
 memcheck_tests:
-	compute-sanitizer --launch-timeout 120 --leak-check full --error-exitcode 1 pytest -m '$(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
+	$(COMPUTE_SANITIZER_CMD) pytest -m '$(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: unit_tests
 unit_tests:
@@ -54,7 +56,7 @@ nightly_tests:
 
 .PHONY: nightly_memcheck_tests
 nightly_memcheck_tests:
-	compute-sanitizer --launch-timeout 120 --padding 2048 --leak-check full --error-exitcode 1 pytest -m '$(NIGHTLY_MARKER) and $(MEMCHECK_MARKER)' $(PYTEST_CI_ARGS)
+	$(COMPUTE_SANITIZER_CMD) pytest -m '$(NIGHTLY_MARKER) and $(MEMCHECK_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: nocuda_nightly_tests
 nocuda_nightly_tests:
