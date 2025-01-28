@@ -942,7 +942,9 @@ def run_sims_sequential(
         # keep samples from any requested states in memory
         stored_trajectories.append(traj)
 
-    neighbor_ulkns = generate_pair_bar_ulkns(unbound_impls, initial_states, stored_trajectories, temperature)
+    neighbor_ulkns = generate_pair_bar_ulkns(
+        initial_states, stored_trajectories, temperature, unbound_impls=unbound_impls
+    )
 
     pair_bar_results = [estimate_free_energy_bar(u_kln, temperature) for u_kln in neighbor_ulkns]
 
@@ -1242,10 +1244,10 @@ def compute_u_kn(trajs, initial_states) -> Tuple[NDArray, NDArray]:
 
 
 def generate_pair_bar_ulkns(
-    unbound_impls: list,
     initial_states: Sequence[InitialState],
     samples_by_state: Sequence[Trajectory],
     temperature: float,
+    unbound_impls: Sequence[custom_ops.Potential] | None,
 ) -> NDArray:
     """Generate pair bair u_klns.
     This is a specialized variant of generating u_klns, only loading each set of frames into memory once.
@@ -1257,6 +1259,12 @@ def generate_pair_bar_ulkns(
     -------
         u_klns: np.array[len(initial_states) - 1, len(unbound_impls), 2, 2, n_frames]
     """
+
+    assert len(initial_states) > 0
+    assert len(initial_states) == len(samples_by_state)
+    if unbound_impls is None:
+        unbound_impls = [pot.potential.to_gpu(np.float32).unbound_impl for pot in initial_states[0].potentials]
+    assert len(unbound_impls) == len(initial_states[0].potentials)
     kBT = temperature * BOLTZ
     # Construct an empty array
     state_to_params = np.zeros((len(initial_states), len(initial_states), len(unbound_impls)), dtype=object)
@@ -1291,7 +1299,7 @@ def generate_pair_bar_ulkns(
         for j in range(len(unbound_impls)):
             for l in range(len(states)):
                 for k in range(len(states)):
-                    # Confusing the state_to_params is frames of state l to params of k
+                    # state_to_params is frames of state l to params of k
                     uklns[i, j, k, l] = state_to_params[states[l]][states[k]][j]
     return uklns
 
@@ -1496,7 +1504,7 @@ def run_sims_hrex(
     assert isinstance(potential, custom_ops.SummedPotential)
     unbound_impls = potential.get_potentials()
 
-    neighbor_ulkns = generate_pair_bar_ulkns(unbound_impls, initial_states, samples_by_state, temperature)
+    neighbor_ulkns = generate_pair_bar_ulkns(initial_states, samples_by_state, temperature, unbound_impls=unbound_impls)
 
     pair_bar_results = [estimate_free_energy_bar(u_kln, temperature) for u_kln in neighbor_ulkns]
 
