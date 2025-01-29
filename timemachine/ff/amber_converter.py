@@ -30,7 +30,7 @@ STANDARD_RESIDUES = [
     "asn",  # asparagine
     "asp",  # aspartic acid
     "cys",
-    "cym",  # negatively charged cystein
+    "cym",  # negatively charged cysteine
     "cyx",  # disulfide cysteine
     "gln",
     "glh",  # glutamic acid (neutral)
