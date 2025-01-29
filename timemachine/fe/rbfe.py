@@ -163,6 +163,7 @@ def setup_initial_state(
     # but in a way that should be symmetric for
     # A -> B vs. B -> A edge definitions
     init_seed = int(seed + bytes_to_id(ligand_conf.tobytes())) % MAX_SEED_VALUE
+    protein_idxs: NDArray[np.int32]
     if host:
         x0, hmr_masses, potentials, baro = setup_in_env(st, host, ligand_conf, lamb, temperature, init_seed)
         box0 = host.box

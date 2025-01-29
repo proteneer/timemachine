@@ -617,7 +617,7 @@ def test_execute_batch_sparse(
         du_dx, du_dp, u = unbound_impl.execute_batch_sparse(
             coords,
             params,
-            boxes,
+            boxes.astype(np.float64),
             coords_batch_idxs,
             params_batch_idxs,
             *flags,

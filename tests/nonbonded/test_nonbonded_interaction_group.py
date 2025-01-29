@@ -61,7 +61,7 @@ def test_nonbonded_interaction_group_zero_interactions(rng: np.random.Generator)
 
     potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
 
-    du_dx, du_dp, u = potential.to_gpu(np.float64).unbound_impl.execute(conf, params, box)
+    du_dx, du_dp, u = potential.to_gpu(np.float64).unbound_impl.execute(conf, params, box.astype(np.float64))
 
     assert (du_dx == 0).all()
     assert (du_dp == 0).all()
@@ -378,21 +378,13 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     potential = NonbondedInteractionGroup(num_atoms, ligand_idxs, beta, cutoff)
     unbound_pot = potential.to_gpu(precision).unbound_impl
 
-    ref_du_dx, ref_du_dp, ref_u = unbound_pot.execute(
-        conf,
-        params,
-        box,
-    )
+    ref_du_dx, ref_du_dp, ref_u = unbound_pot.execute(conf, params, box.astype(np.float64))
 
     # Set to first particle not in ligand_idxs, should produce different values
     col_atom_idxs = np.setdiff1d(np.arange(num_atoms), secondary_ligand_set)
     unbound_pot.set_atom_idxs(secondary_ligand_set, col_atom_idxs)  # type: ignore
 
-    diff_du_dx, diff_du_dp, diff_u = unbound_pot.execute(
-        conf,
-        params,
-        box,
-    )
+    diff_du_dx, diff_du_dp, diff_u = unbound_pot.execute(conf, params, box.astype(np.float64))
     assert np.any(diff_du_dx != ref_du_dx)
     assert np.any(diff_du_dp != ref_du_dp)
     assert not np.allclose(ref_u, diff_u)
@@ -401,11 +393,7 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     potential2 = NonbondedInteractionGroup(num_atoms, secondary_ligand_set, beta, cutoff)
     unbound_pot2 = potential2.to_gpu(precision).unbound_impl
 
-    diff_ref_du_dx, diff_ref_du_dp, diff_ref_u = unbound_pot2.execute(
-        conf,
-        params,
-        box,
-    )
+    diff_ref_du_dx, diff_ref_du_dp, diff_ref_u = unbound_pot2.execute(conf, params, box.astype(np.float64))
     np.testing.assert_array_equal(diff_ref_du_dx, diff_du_dx)
     np.testing.assert_array_equal(diff_ref_du_dp, diff_du_dp)
     np.testing.assert_equal(diff_ref_u, diff_u)
@@ -415,11 +403,7 @@ def test_nonbonded_interaction_group_set_atom_idxs(
     col_atom_idxs = np.setdiff1d(np.arange(num_atoms), ligand_idxs)
     unbound_pot.set_atom_idxs(ligand_idxs, col_atom_idxs)  # type: ignore
 
-    test_du_dx, test_du_dp, test_u = unbound_pot.execute(
-        conf,
-        params,
-        box,
-    )
+    test_du_dx, test_du_dp, test_u = unbound_pot.execute(conf, params, box.astype(np.float64))
     np.testing.assert_array_equal(test_du_dx, ref_du_dx)
     np.testing.assert_array_equal(test_du_dp, ref_du_dp)
     np.testing.assert_equal(test_u, ref_u)

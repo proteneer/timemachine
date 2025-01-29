@@ -514,8 +514,8 @@ def setup_end_state(
     mol_a_improper_idxs = a_to_c[mol_a_it.idxs]
     mol_a_nbpl_idxs = a_to_c[mol_a_nbpl.idxs]
 
-    all_dummy_angle_idxs = b_to_c[all_dummy_angle_idxs]
-    all_dummy_improper_idxs = b_to_c[all_dummy_improper_idxs]
+    all_dummy_angle_idxs = b_to_c[all_dummy_angle_idxs]  # type: ignore
+    all_dummy_improper_idxs = b_to_c[all_dummy_improper_idxs]  # type: ignore
 
     mol_c_angle_idxs = np.concatenate([mol_a_angle_idxs, all_dummy_angle_idxs])
     mol_c_angle_params = np.concatenate([mol_a_angle_params, all_dummy_angle_params])
