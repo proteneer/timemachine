@@ -51,7 +51,7 @@ class SerializableMixIn:
                 patterns.append((smi, *p.tolist()))
             else:
                 # SimpleCharges only have one parameter
-                patterns.append((smi, p))
+                patterns.append((smi, float(p)))
 
         body = {"patterns": patterns}
         if handler.props is not None:
