@@ -190,9 +190,11 @@ void __global__ k_separate_weights_for_targeted(
 
 template <typename RealType>
 void __global__ k_setup_destination_weights_for_targeted(
+    const int total_proposals,
     const int batch_size,
     const int num_target_mols,
-    const int *__restrict__ samples,                // [1]
+    const int *__restrict__ noise_offset,           // [1]
+    const int *__restrict__ samples,                // [batch_size]
     const int *__restrict__ weight_offsets,         // [batch_size + 1]
     const int *__restrict__ targeting_inner_volume, // [batch_size]
     const int *__restrict__ inner_count,            // [1]

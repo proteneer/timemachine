@@ -7,9 +7,8 @@ from functools import partial
 from typing import Any, Callable, Tuple
 
 import pytest
-from jax import jit
+from jax import jit, value_and_grad, vmap
 from jax import numpy as jnp
-from jax import value_and_grad, vmap
 from scipy.optimize import minimize
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP

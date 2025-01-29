@@ -5,9 +5,8 @@ import numpy as np
 import pytest
 from hypothesis import example, given, seed
 from hypothesis.extra.numpy import array_shapes, arrays
-from jax import jit
+from jax import jit, vmap
 from jax import numpy as jnp
-from jax import vmap
 
 np.random.seed(2021)
 

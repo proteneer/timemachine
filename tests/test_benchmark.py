@@ -280,7 +280,7 @@ def benchmark(
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
-        f"{label}: N={x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt*1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
+        f"{label}: N={x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt * 1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
     )
 
 
@@ -353,7 +353,7 @@ def benchmark_rbfe_water_sampling(
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
-        f"{label}: N={state.x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt*1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
+        f"{label}: N={state.x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt * 1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
     )
 
 
@@ -430,7 +430,7 @@ def benchmark_local(
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
     print(
-        f"{label}: N={x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt*1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
+        f"{label}: N={x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt * 1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
     )
 
 

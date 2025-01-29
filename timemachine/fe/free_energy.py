@@ -1460,7 +1460,7 @@ def run_sims_hrex(
     unbound_impls = potential.get_potentials()
 
     def make_energy_decomposed_state(
-        results: Tuple[StoredArrays, List[NDArray], InitialState]
+        results: Tuple[StoredArrays, List[NDArray], InitialState],
     ) -> EnergyDecomposedState[StoredArrays]:
         frames, boxes, initial_state = results
         # Reuse the existing unbound potentials already constructed to make a batch Us fn

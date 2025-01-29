@@ -31,3 +31,6 @@ e21cbb8f048840dc24723b60ca3351dbeac8d207
 
 # Normalize numpy vs. jax.numpy imports
 1d49b8f5159d8454e0d14daa441bbade01a3dc4d
+
+# Apply formatting changes from switch to ruff
+a882ce08ddc00fb3a6b3dd2a28b2f1ff6a7d9829

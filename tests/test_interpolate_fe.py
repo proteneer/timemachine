@@ -76,12 +76,12 @@ def test_hif2a_free_energy_estimates():
             plt.hist(fwd_delta_u, alpha=0.5, label="fwd")
             plt.hist(-rev_delta_u, alpha=0.5, label="-rev")
             plt.legend()
-            plt.savefig(f"lambda_{lambda_idx-1}_{lambda_idx}.png")
+            plt.savefig(f"lambda_{lambda_idx - 1}_{lambda_idx}.png")
 
             dG_exact, exact_bar_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
             dG_exact /= beta
             exact_bar_err /= beta
 
             print(
-                f"BAR: lambda {lambda_schedule[lambda_idx-1]:.3f} -> {lambda_schedule[lambda_idx]:.3f} dG: {dG_exact:.3f} dG_err: {exact_bar_err:.3f}"
+                f"BAR: lambda {lambda_schedule[lambda_idx - 1]:.3f} -> {lambda_schedule[lambda_idx]:.3f} dG: {dG_exact:.3f} dG_err: {exact_bar_err:.3f}"
             )
