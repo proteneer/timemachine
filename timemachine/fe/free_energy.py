@@ -1168,7 +1168,7 @@ def compute_potential_matrix(
     # Verify that all of the diagonal energies are finite, else a state has blown up
     diag_idxs = np.diag_indices_from(U_kl)
     assert np.all(np.isfinite(U_kl[diag_idxs])), "A state is no longer valid"
-    assert np.all(np.abs(U_kl) < 1e9), "Energies larger in magnitude than tolerated"
+    assert np.all(np.abs(U_kl[diag_idxs]) < 1e9), "Energies larger in magnitude than tolerated"
     if np.any(np.isnan(U_kl)):
         warn(
             "Encountered NaNs in U_kl matrix. Replacing each instance with inf prior to HREX swaps",
