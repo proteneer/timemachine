@@ -517,7 +517,7 @@ class DualTopology(BaseTopology):
         num_b_atoms = self.mol_b.GetNumAtoms()
         return [np.arange(num_a_atoms), num_a_atoms + np.arange(num_b_atoms)]
 
-    def parameterize_nonbonded(
+    def _parameterize_nonbonded(
         self,
         ff_q_params,
         ff_q_params_intra,
@@ -526,7 +526,6 @@ class DualTopology(BaseTopology):
         lamb: float,
         intramol_params=True,
     ):
-        # NOTE: lamb is unused here, but is used by the subclass DualTopologyMinimization
         del lamb
 
         # dummy is either "a or "b"
@@ -644,8 +643,6 @@ class DualTopology(BaseTopology):
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
 
-
-class DualTopologyMinimization(DualTopology):
     def parameterize_nonbonded(
         self,
         ff_q_params,
@@ -658,7 +655,7 @@ class DualTopologyMinimization(DualTopology):
         # both mol_a and mol_b are standardized.
         # we don't actually need derivatives for this stage.
 
-        params, nb_potential = super().parameterize_nonbonded(
+        params, nb_potential = self._parameterize_nonbonded(
             ff_q_params,
             ff_q_params_intra,
             ff_lj_params,
