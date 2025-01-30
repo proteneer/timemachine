@@ -1173,8 +1173,7 @@ def verify_and_sanitize_potential_matrix(
 ) -> NDArray:
     """Ensure energies in the diagonal are finite and below some threshold and sanitizes NaNs to infs."""
     # Verify that the energies that the energies of the replica in the same state are finite, else a replica is no longer valid
-    state_idx = np.argsort(hrex.replica_idx_by_state)
-    replica_energies = np.diagonal(U_kl[:, state_idx])
+    replica_energies = np.diagonal(U_kl[hrex.replica_idx_by_state])
     assert np.all(np.isfinite(replica_energies)), "Replicas have non-finite energies"
     assert np.all(np.abs(replica_energies) < abs_energy_threshold), "Energies larger in magnitude than tolerated"
     if np.any(np.isnan(U_kl)):
