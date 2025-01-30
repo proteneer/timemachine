@@ -240,7 +240,7 @@ def pre_equilibrate_host(
     if len(mols) == 1:
         top = topology.BaseTopology(mols[0], ff)
     elif len(mols) == 2:
-        top = topology.DualTopologyMinimization(mols[0], mols[1], ff)
+        top = topology.DualTopology(mols[0], mols[1], ff)
     else:
         raise ValueError("mols must be length 1 or 2")
 
@@ -386,7 +386,7 @@ def make_host_du_dx_fxn(
     if len(mols) == 1:
         top = topology.BaseTopology(mols[0], ff)
     elif len(mols) == 2:
-        top = topology.DualTopologyMinimization(mols[0], mols[1], ff)
+        top = topology.DualTopology(mols[0], mols[1], ff)
     else:
         raise ValueError("mols must be length 1 or 2")
 
