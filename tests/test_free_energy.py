@@ -45,7 +45,7 @@ from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator
 from timemachine.md import builders
-from timemachine.md.hrex import HREX, HREXDiagnostics
+from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import (
     HarmonicBond,
@@ -592,7 +592,7 @@ def test_compute_potential_matrix(hif2a_ligand_pair_single_topology, n_states: i
     _, _, U_ref = unbound_impl.execute_batch(confs, params_by_state, boxes, False, False, True)
     assert np.all(np.isfinite(U_ref))
 
-    replica_idx_by_state = rng.choice(n_states, size=n_states, replace=False).tolist()
+    replica_idx_by_state = [ReplicaIdx(i) for i in rng.choice(n_states, size=n_states, replace=False)]
     hrex = HREX(xvbs, replica_idx_by_state)
 
     U_test = compute_potential_matrix(unbound_impl, hrex, params_by_state, max_delta_states)

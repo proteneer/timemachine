@@ -83,7 +83,7 @@ def test_nonbonded_all_pairs_singleton_subset(rng: np.random.Generator):
     for idx in rng.choice(num_atoms, size=(10,)):
         atom_idxs = np.array([idx], dtype=np.int32)
         potential = NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
-        du_dx, du_dp, u = potential.to_gpu(np.float64).unbound_impl.execute(conf, params, box)
+        du_dx, du_dp, u = potential.to_gpu(np.float64).unbound_impl.execute(conf, params, box.astype(np.float64))
 
         assert (du_dx == 0).all()
         assert (du_dp == 0).all()
@@ -141,21 +141,9 @@ def test_nonbonded_all_pairs_set_atom_idxs(precision, cutoff, beta, rng: np.rand
         ref_potential = NonbondedAllPairs(num_atoms, beta, cutoff, atom_idxs)
         unbound_ref = ref_potential.to_gpu(precision).unbound_impl
 
-        du_dx, du_dp, u = unbound_pot.execute(
-            conf,
-            params,
-            box,
-        )
-        du_dx_2, du_dp_2, u_2 = unbound_pot.execute(
-            conf,
-            params,
-            box,
-        )
-        ref_du_dx, ref_du_dp, ref_u = unbound_ref.execute(
-            conf,
-            params,
-            box,
-        )
+        du_dx, du_dp, u = unbound_pot.execute(conf, params, box.astype(np.float64))
+        du_dx_2, du_dp_2, u_2 = unbound_pot.execute(conf, params, box.astype(np.float64))
+        ref_du_dx, ref_du_dp, ref_u = unbound_ref.execute(conf, params, box.astype(np.float64))
 
         np.testing.assert_array_equal(du_dx_2, du_dx)
         np.testing.assert_array_equal(du_dp_2, du_dp)

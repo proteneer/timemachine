@@ -73,7 +73,7 @@ def sequential_monte_carlo(
     * get_endstate_samples_from_smc_result
     """
     n = len(samples)
-    log_weights = np.zeros(n)
+    log_weights: NDArray[np.float64] = np.zeros(n, dtype=np.float64)
 
     # store
     sample_traj = [samples]

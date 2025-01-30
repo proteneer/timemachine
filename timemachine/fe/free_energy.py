@@ -595,8 +595,8 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
         water_sampler = custom_ops.TIBDExchangeMove_f32(
             initial_state.x0.shape[0],
-            initial_state.ligand_idxs.tolist(),
-            [water_group.tolist() for water_group in water_idxs],
+            initial_state.ligand_idxs.tolist(),  # type: ignore
+            [water_group.tolist() for water_group in water_idxs],  # type: ignore
             water_params,
             initial_state.integrator.temperature,
             nb.beta,
@@ -1146,7 +1146,7 @@ def compute_potential_matrix(
         n_states = len(hrex.replicas)
         state_idx = np.argsort(hrex.replica_idx_by_state)
         neighbor_state_idxs = state_idx[:, None] + np.arange(-k, k + 1)[None, :]
-        valid_idxs = np.nonzero((0 <= neighbor_state_idxs) & (neighbor_state_idxs < n_states))
+        valid_idxs: tuple = np.nonzero((0 <= neighbor_state_idxs) & (neighbor_state_idxs < n_states))
         coords_batch_idxs = valid_idxs[0].astype(np.uint32)
         params_batch_idxs = neighbor_state_idxs[valid_idxs].astype(np.uint32)
 
