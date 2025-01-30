@@ -246,10 +246,10 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed, max_bisection_windows,
         ref_bar_results.append(estimate_free_energy_bar(u_kln_by_component, temperature))
     for ref_res, comp_res in zip(ref_bar_results, comp_bar_results):
         assert ref_res.overlap == comp_res.overlap
-        assert np.all(ref_res.dG_err_by_component == comp_res.dG_err_by_component)
-        assert np.all(ref_res.overlap_by_component == comp_res.overlap_by_component)
-        assert np.all(ref_res.dG_err_by_component == comp_res.dG_err_by_component)
-        assert np.all(ref_res.u_kln_by_component == comp_res.u_kln_by_component)
+        np.testing.assert_array_equal(ref_res.dG_err_by_component, comp_res.dG_err_by_component)
+        np.testing.assert_array_equal(ref_res.overlap_by_component, comp_res.overlap_by_component)
+        np.testing.assert_array_equal(ref_res.dG_err_by_component, comp_res.dG_err_by_component)
+        np.testing.assert_array_equal(ref_res.u_kln_by_component, comp_res.u_kln_by_component)
 
 
 def plot_hrex_rbfe_hif2a(result: HREXSimulationResult):
