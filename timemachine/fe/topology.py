@@ -525,8 +525,6 @@ class DualTopology(BaseTopology):
         ff_lj_params_intra,
         intramol_params=True,
     ):
-        del lamb
-
         # dummy is either "a or "b"
         if intramol_params:
             q_params_a = self.ff.q_handle_intra.partial_parameterize(ff_q_params_intra, self.mol_a)
