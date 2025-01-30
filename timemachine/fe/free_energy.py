@@ -1165,6 +1165,17 @@ def compute_potential_matrix(
 
     U_kl = compute_sparse(max_delta_states) if max_delta_states is not None else compute_dense()
 
+    # Verify that all of the diagonal energies are finite, else a state has blown up
+    diag_idxs = np.diag_indices_from(U_kl)
+    assert np.all(np.isfinite(U_kl[diag_idxs])), "A state is no longer valid"
+    assert np.all(np.abs(U_kl) < 1e9), "Energies larger in magnitude than tolerated"
+    if np.any(np.isnan(U_kl)):
+        warn(
+            "Encountered NaNs in U_kl matrix. Replacing each instance with inf prior to HREX swaps",
+            IndeterminateEnergyWarning,
+        )
+        U_kl = np.where(np.isnan(U_kl), np.inf, U_kl)
+
     return U_kl
 
 
