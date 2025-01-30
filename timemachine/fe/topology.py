@@ -523,7 +523,6 @@ class DualTopology(BaseTopology):
         ff_q_params_intra,
         ff_lj_params,
         ff_lj_params_intra,
-        lamb: float,
         intramol_params=True,
     ):
         del lamb
@@ -660,11 +659,10 @@ class DualTopology(BaseTopology):
             ff_q_params_intra,
             ff_lj_params,
             ff_lj_params_intra,
-            lamb,
             intramol_params=intramol_params,
         )
         cutoff = nb_potential.cutoff
-        params_with_offsets = jnp.asarray(params).at[:, 3].set(lamb * cutoff)
+        params_with_offsets = jnp.asarray(params).at[:, NBParamIdx.W_IDX].set(lamb * cutoff)
 
         return params_with_offsets, nb_potential
 
