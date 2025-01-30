@@ -44,7 +44,7 @@ set(LIBRARY_NAME custom_ops)
 set(PYBIND_SRC_DIR pybind11)
 
 if(NOT EXISTS ${PYBIND_SRC_DIR})
-  execute_process(COMMAND git clone --depth 1 --branch v2.9.2 https://github.com/pybind/pybind11.git ${PYBIND_SRC_DIR})
+  execute_process(COMMAND git clone --depth 1 --branch v2.13.6 https://github.com/pybind/pybind11.git ${PYBIND_SRC_DIR})
 endif()
 
 set(EIGEN_SRC_DIR eigen)

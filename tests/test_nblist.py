@@ -114,9 +114,9 @@ def get_water_coords(D, sort=False):
     return x
 
 
-def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> List[List[float]]:
+def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> List[List[int]]:
     # compute the sparsity of the tile
-    ref_ixn_list = []
+    ref_ixn_list: list[list[int]] = []
     N = coords.shape[0]
 
     block_size = 32
@@ -135,7 +135,7 @@ def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> Li
         dij = np.linalg.norm(deltas, axis=-1)
         dij[:, :row_start] = cutoff  # slight hack to discard duplicates
         idxs = np.argwhere(np.any(dij < cutoff, axis=0))
-        ref_ixn_list.append(idxs.reshape(-1).tolist())
+        ref_ixn_list.append(idxs.reshape(-1).tolist())  # type: ignore
     return ref_ixn_list
 
 
@@ -156,7 +156,7 @@ def build_reference_ixn_list_with_subset(
     col_coords = coords[col_idxs]
     col_coords = np.expand_dims(col_coords, axis=0)
     # Compute the reference interactions of the ligand
-    ref_ixn_list = []
+    ref_ixn_list: list[list[int]] = []
     all_row_coords = coords[row_idxs]
     row_length = all_row_coords.shape[0]
     num_blocks = (row_length + block_size - 1) // block_size
@@ -173,7 +173,7 @@ def build_reference_ixn_list_with_subset(
         idxs = np.argwhere(np.any(dij < cutoff, axis=0))
         # Get back the column indices that are ixns
         idxs = col_idxs[idxs.reshape(-1)]
-        ref_ixn_list.append(idxs.reshape(-1).tolist())
+        ref_ixn_list.append(idxs.reshape(-1).tolist())  # type: ignore
     return ref_ixn_list
 
 

@@ -339,8 +339,8 @@ def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[floa
 
     ax.set_xlabel("frame")
     ax.set_ylabel("state")
-    ax.xaxis.get_major_locator().set_params(integer=True)
-    ax.yaxis.get_major_locator().set_params(integer=True)
+    ax.xaxis.get_major_locator().set_params(integer=True)  # type: ignore
+    ax.yaxis.get_major_locator().set_params(integer=True)  # type: ignore
 
     fig.colorbar(p, label="chiral restraint energy")
     fig.suptitle(f"{prefix} Chiral Restraint Energies")
@@ -357,7 +357,7 @@ def plot_hrex_transition_matrix(
 ):
     """Plot matrix of estimated transition probabilities for permutation moves as a heatmap."""
     n_states, _ = transition_probability.shape
-    states = np.arange(n_states)
+    states = np.arange(n_states, dtype=int)
 
     fig, ax = plt.subplots(figsize=figsize)
     p = ax.pcolormesh(states, states, transition_probability)
@@ -373,8 +373,8 @@ def plot_hrex_transition_matrix(
 
     ax.set_xlabel("from state")
     ax.set_ylabel("to state")
-    ax.xaxis.get_major_locator().set_params(integer=True)
-    ax.yaxis.get_major_locator().set_params(integer=True)
+    ax.xaxis.get_major_locator().set_params(integer=True)  # type: ignore
+    ax.yaxis.get_major_locator().set_params(integer=True)  # type: ignore
     ax.set_aspect("equal")
 
     fig.colorbar(p, label="fraction of iterations", format=lambda x, _: format_cbar_tick(x))
@@ -392,7 +392,7 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
     ax.set_ylim(0, 1.1)
     ax.set_xlabel("iteration")
     ax.set_ylabel("cumulative swap acceptance rate")
-    ax.xaxis.get_major_locator().set_params(integer=True)
+    ax.xaxis.get_major_locator().set_params(integer=True)  # type: ignore
     ax.legend(
         labels=[str(i) for i in range(n_pairs)],
         title="left state index",
@@ -415,8 +415,8 @@ def plot_hrex_replica_state_distribution_heatmap(
     """Plot distribution of (replica, state) pairs as a heatmap."""
     n_iters, n_states, n_replicas = cumulative_replica_state_counts.shape
     assert n_states == len(lambdas), "Number of lambdas and states must match"
-    replicas = np.arange(n_replicas)
-    states = np.arange(n_states)
+    replicas = np.arange(n_replicas, dtype=int)
+    states = np.arange(n_states, dtype=int)
     count_by_replica_by_state = cumulative_replica_state_counts[-1]  # (state, replica) -> int
     fraction_by_replica_by_state = count_by_replica_by_state / n_iters  # (state, replica) -> float
 
@@ -433,8 +433,8 @@ def plot_hrex_replica_state_distribution_heatmap(
 
     ax.set_xlabel("replica")
     ax.set_ylabel("state")
-    ax.xaxis.get_major_locator().set_params(integer=True)
-    ax.yaxis.get_major_locator().set_params(integer=True)
+    ax.xaxis.get_major_locator().set_params(integer=True)  # type: ignore
+    ax.yaxis.get_major_locator().set_params(integer=True)  # type: ignore
     ax.set_aspect("equal")
 
     # Add labels at the top of the x axis that include the replica lambda values
