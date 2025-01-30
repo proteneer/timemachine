@@ -37,7 +37,7 @@ def bisection_lambda_schedule(
     assert num_windows >= 2
     min_lamb, max_lamb = lambda_interval
     schedule_windows = int(2 ** np.floor(np.log2(num_windows))) + 1
-    return np.linspace(min_lamb, max_lamb, schedule_windows)
+    return np.linspace(min_lamb, max_lamb, schedule_windows, dtype=np.float64)
 
 
 def construct_pre_optimized_absolute_lambda_schedule_solvent(num_windows: int, nonbonded_cutoff: float = 1.2):

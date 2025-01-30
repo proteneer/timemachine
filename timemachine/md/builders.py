@@ -198,7 +198,7 @@ def build_water_system(box_width: float, water_ff: str, mols: Optional[List[Chem
     pos = unit.Quantity((), unit.angstroms)
     modeller = app.Modeller(top, pos)
 
-    box = np.eye(3, dtype=np.float64) * box_width
+    box = np.eye(3) * box_width
     modeller.addSolvent(ff, boxSize=np.diag(box) * unit.nanometers, model=sanitize_water_ff(water_ff))
 
     def get_host_coords():
@@ -218,7 +218,7 @@ def build_water_system(box_width: float, water_ff: str, mols: Optional[List[Chem
 
     if mols is not None:
         water_idxs = np.arange(solvated_host_coords.shape[0])
-        replace_clashy_waters(modeller, solvated_host_coords, box, water_idxs, mols, ff, water_ff)
+        replace_clashy_waters(modeller, solvated_host_coords, box.astype(np.float64), water_idxs, mols, ff, water_ff)
         solvated_host_coords = get_host_coords()
 
     assert modeller.getTopology().getNumAtoms() == solvated_host_coords.shape[0]
