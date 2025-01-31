@@ -151,7 +151,6 @@ def test_single_topology_rest_solvent(mol_pair, temperature_scale_interpolation_
 
     def get_nonbonded_host_guest_ixn_energy(st: SingleTopology):
         hgs = st.combine_with_host(host.system, lamb, host_config.num_water_atoms, st.ff, host_config.omm_topology)
-        assert hgs.nonbonded_ixn_group
         return hgs.nonbonded_ixn_group(conf, host_config.box)
 
     U = get_nonbonded_host_guest_ixn_energy(st_rest)

@@ -127,7 +127,6 @@ class SingleTopologyREST(SingleTopology):
             params=jnp.asarray(ref_state.proper.params).at[self.target_proper_idxs, 0].mul(energy_scale),
         )
 
-        assert ref_state.nonbonded_pair_list
         nonbonded_pair_list = replace(
             ref_state.nonbonded_pair_list,
             params=jnp.asarray(ref_state.nonbonded_pair_list.params)
@@ -160,7 +159,6 @@ class SingleTopologyREST(SingleTopology):
 
         sqrt_energy_scale = np.sqrt(self.get_energy_scale_factor(lamb))
 
-        assert ref_state.nonbonded_ixn_group
         nonbonded_host_guest_ixn = replace(
             ref_state.nonbonded_ixn_group,
             params=jnp.asarray(ref_state.nonbonded_ixn_group.params)

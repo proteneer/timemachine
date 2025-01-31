@@ -1,4 +1,5 @@
 import multiprocessing
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Generic, List, Optional, Sequence, Tuple, TypeVar, Union, cast
 
@@ -111,8 +112,6 @@ def convert_omm_system(omm_system) -> Tuple["HostSystem", List[float]]:
 
 _Nonbonded = TypeVar("_Nonbonded", bound=Union[Nonbonded, NonbondedPairListPrecomputed, SummedPotential])
 _HarmonicAngle = TypeVar("_HarmonicAngle", bound=Union[HarmonicAngle, HarmonicAngleStable])
-
-from abc import ABC, abstractmethod
 
 
 class AbstractSystem(ABC):

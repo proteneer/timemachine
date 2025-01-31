@@ -1943,15 +1943,11 @@ class SingleTopology(AtomMapMixin):
         """
 
         guest_system = self.setup_intermediate_state(lamb=lamb)
-        assert host_system.nonbonded_all_pairs
-
         num_host_atoms = host_system.nonbonded_all_pairs.params.shape[0]
         guest_chiral_atom_idxs = np.array(guest_system.chiral_atom.potential.idxs, dtype=np.int32) + num_host_atoms
         guest_system.chiral_atom.potential.idxs = guest_chiral_atom_idxs
         guest_chiral_bond_idxs = np.array(guest_system.chiral_bond.potential.idxs, dtype=np.int32) + num_host_atoms
         guest_system.chiral_bond.potential.idxs = guest_chiral_bond_idxs
-
-        assert guest_system.nonbonded_pair_list
         guest_nonbonded_idxs = (
             np.array(guest_system.nonbonded_pair_list.potential.idxs, dtype=np.int32) + num_host_atoms
         )
