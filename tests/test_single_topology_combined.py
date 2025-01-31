@@ -179,9 +179,8 @@ def test_combined_parameters_nonbonded_intermediate(
     num_host_atoms = len(host_masses)
 
     hgs = st.combine_with_host(host_sys, lamb, num_water_atoms, st.ff, omm_topology)
-
-    potential = hgs.nonbonded_host_guest_ixn.potential
-    params = hgs.nonbonded_host_guest_ixn.params
+    potential = hgs.nonbonded_ixn_group.potential
+    params = hgs.nonbonded_ixn_group.params
     assert isinstance(potential, potentials.NonbondedInteractionGroup)
 
     guest_params = np.array(params[num_host_atoms:])

@@ -25,7 +25,7 @@ from timemachine.fe.dummy import (
 )
 from timemachine.fe.interpolate import pad
 from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
-from timemachine.fe.system import HostGuestSystem, VacuumSystem
+from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
 from timemachine.fe.topology import get_ligand_ixn_pots_params
 from timemachine.ff import Forcefield
 from timemachine.graph_utils import convert_to_nx
@@ -435,7 +435,7 @@ def setup_end_state(
     a_to_c: NDArray,
     b_to_c: NDArray,
     anchored_dummy_groups: dict[int, tuple[Optional[int], frozenset[int]]],
-) -> VacuumSystem:
+) -> GuestSystem:
     """
     Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
     to the alchemical molecule with dummy atoms. Note that the bond, angle, torsion, nonbonded pairs,
@@ -466,8 +466,8 @@ def setup_end_state(
 
     Returns
     -------
-    VacuumSystem
-        A parameterized system in the vacuum.
+    GuestSystem
+        A parameterized system.
 
     """
 
@@ -667,14 +667,14 @@ def setup_end_state(
         "hybrid molecule has multiple connected components"
     )
 
-    return VacuumSystem(
-        bond_potential,
-        angle_potential,
-        proper_potential,
-        improper_potential,
-        nonbonded_potential,
-        chiral_atom_potential,
-        chiral_bond_potential,
+    return GuestSystem(
+        bond=bond_potential,
+        angle=angle_potential,
+        proper=proper_potential,
+        improper=improper_potential,
+        nonbonded_pair_list=nonbonded_potential,
+        chiral_atom=chiral_atom_potential,
+        chiral_bond=chiral_bond_potential,
     )
 
 
@@ -1012,14 +1012,14 @@ class TorsionsDefinedOverLinearAngleException(Exception):
     pass
 
 
-def assert_default_system_constraints(system: VacuumSystem | HostGuestSystem):
+def assert_default_system_constraints(system: HostGuestSystem | GuestSystem):
     # Assert that the system objects satisfy a set of constraints
     assert_bonds_defined_for_chiral_volumes(system)
     assert_torsions_defined_over_non_linear_angles(system)
 
 
 def assert_bonds_defined_for_chiral_volumes(
-    system: VacuumSystem | HostGuestSystem, bond_k_min: float = DEFAULT_BOND_IS_PRESENT_K
+    system: GuestSystem | HostGuestSystem, bond_k_min: float = DEFAULT_BOND_IS_PRESENT_K
 ):
     """
     Assert that bonds defined for every chiral volume is present and has a force constant greater than bond_k_min
@@ -1040,7 +1040,7 @@ def assert_bonds_defined_for_chiral_volumes(
                 raise MissingBondsInChiralVolumeException(f"bond {(c, k)} missing from Chiral Volume {(c, i, j, k)}")
 
 
-def assert_torsions_defined_over_non_linear_angles(system: VacuumSystem | HostGuestSystem):
+def assert_torsions_defined_over_non_linear_angles(system: GuestSystem | HostGuestSystem | HostSystem):
     """
     Assert that torsions are never defined over angle terms with an equilibrium value close to 180.
     """
@@ -1249,8 +1249,8 @@ class SingleTopology(AtomMapMixin):
 
         Returns
         -------
-        VacuumSystem
-            Gas-phase system
+        GuestSystem
+            Vacuum system
         """
         return setup_end_state(
             self.ff, self.mol_a, self.mol_b, self.core, self.a_to_c, self.b_to_c, self.anchored_dummy_groups_ab
@@ -1263,8 +1263,8 @@ class SingleTopology(AtomMapMixin):
 
         Returns
         -------
-        VacuumSystem
-            Gas-phase system
+        GuestSystem
+            Vacuum system
         """
         return setup_end_state(
             self.ff, self.mol_b, self.mol_a, self.core[:, ::-1], self.b_to_c, self.a_to_c, self.anchored_dummy_groups_ba
@@ -1274,8 +1274,8 @@ class SingleTopology(AtomMapMixin):
         self, lamb: float
     ) -> BoundPotential[NonbondedPairListPrecomputed]:
         return self._setup_intermediate_nonbonded_term(
-            self.src_system.nonbonded,
-            self.dst_system.nonbonded,
+            self.src_system.nonbonded_pair_list,
+            self.dst_system.nonbonded_pair_list,
             lamb,
             interpolate.align_nonbonded_idxs_and_params,
             interpolate.linear_interpolation,
@@ -1641,7 +1641,7 @@ class SingleTopology(AtomMapMixin):
             self._interpolate_torsion,
         )
 
-    def setup_intermediate_state(self, lamb: float) -> VacuumSystem:
+    def setup_intermediate_state(self, lamb: float) -> GuestSystem:
         r"""
         Set up intermediate states at some value of the alchemical parameter :math:`\lambda`.
 
@@ -1702,7 +1702,15 @@ class SingleTopology(AtomMapMixin):
             interpolate.linear_interpolation,
         )
 
-        return VacuumSystem(bond, angle, proper, improper, nonbonded, chiral_atom, chiral_bond)
+        return GuestSystem(
+            bond=bond,
+            angle=angle,
+            proper=proper,
+            improper=improper,
+            nonbonded_pair_list=nonbonded,
+            chiral_atom=chiral_atom,
+            chiral_bond=chiral_bond,
+        )
 
     def mol(self, lamb: float, min_bond_k: float = DEFAULT_BOND_IS_PRESENT_K) -> Chem.Mol:
         """
@@ -1892,7 +1900,7 @@ class SingleTopology(AtomMapMixin):
 
     def combine_with_host(
         self,
-        host_system: VacuumSystem,
+        host_system: HostSystem,
         lamb: float,
         num_water_atoms: int,
         ff: Forcefield,
@@ -1913,7 +1921,7 @@ class SingleTopology(AtomMapMixin):
 
         Parameters
         ----------
-        host_system: VacuumSystem
+        host_system: HostSystem
             Parameterized system of the host
 
         lamb: float
@@ -1935,15 +1943,19 @@ class SingleTopology(AtomMapMixin):
         """
 
         guest_system = self.setup_intermediate_state(lamb=lamb)
+        assert host_system.nonbonded_all_pairs
 
-        num_host_atoms = host_system.nonbonded.params.shape[0]
+        num_host_atoms = host_system.nonbonded_all_pairs.params.shape[0]
         guest_chiral_atom_idxs = np.array(guest_system.chiral_atom.potential.idxs, dtype=np.int32) + num_host_atoms
         guest_system.chiral_atom.potential.idxs = guest_chiral_atom_idxs
         guest_chiral_bond_idxs = np.array(guest_system.chiral_bond.potential.idxs, dtype=np.int32) + num_host_atoms
         guest_system.chiral_bond.potential.idxs = guest_chiral_bond_idxs
 
-        guest_nonbonded_idxs = np.array(guest_system.nonbonded.potential.idxs, dtype=np.int32) + num_host_atoms
-        guest_system.nonbonded.potential.idxs = guest_nonbonded_idxs
+        assert guest_system.nonbonded_pair_list
+        guest_nonbonded_idxs = (
+            np.array(guest_system.nonbonded_pair_list.potential.idxs, dtype=np.int32) + num_host_atoms
+        )
+        guest_system.nonbonded_pair_list.potential.idxs = guest_nonbonded_idxs
 
         combined_bond_idxs = np.concatenate(
             [host_system.bond.potential.idxs, guest_system.bond.potential.idxs + num_host_atoms]
@@ -1978,25 +1990,25 @@ class SingleTopology(AtomMapMixin):
         combined_improper_params = jnp.concatenate([host_system.improper.params, guest_system.improper.params])
         combined_improper = PeriodicTorsion(combined_improper_idxs).bind(combined_improper_params)
 
-        host_nonbonded = self._parameterize_host_nonbonded(host_system.nonbonded)
-        host_guest_nonbonded_ixn = self._parameterize_host_guest_nonbonded_ixn(
+        host_nonbonded_all_pairs = self._parameterize_host_nonbonded(host_system.nonbonded_all_pairs)
+        host_guest_nonbonded_ixn_group = self._parameterize_host_guest_nonbonded_ixn(
             lamb,
-            host_system.nonbonded,
+            host_system.nonbonded_all_pairs,
             num_water_atoms,
             ff,
             omm_topology,
         )
 
         return HostGuestSystem(
-            combined_bond,
-            combined_angle,
-            combined_proper,
-            combined_improper,
-            guest_system.chiral_atom,
-            guest_system.chiral_bond,
-            guest_system.nonbonded,
-            host_nonbonded,
-            host_guest_nonbonded_ixn,
+            bond=combined_bond,
+            angle=combined_angle,
+            proper=combined_proper,
+            improper=combined_improper,
+            chiral_atom=guest_system.chiral_atom,
+            chiral_bond=guest_system.chiral_bond,
+            nonbonded_pair_list=guest_system.nonbonded_pair_list,
+            nonbonded_all_pairs=host_nonbonded_all_pairs,
+            nonbonded_ixn_group=host_guest_nonbonded_ixn_group,
         )
 
     def get_component_idxs(self) -> list[NDArray]:

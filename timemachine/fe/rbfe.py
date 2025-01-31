@@ -37,7 +37,7 @@ from timemachine.fe.plots import (
 )
 from timemachine.fe.rest.single_topology import SingleTopologyREST
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology, assert_default_system_constraints
-from timemachine.fe.system import VacuumSystem, convert_omm_system
+from timemachine.fe.system import HostSystem, convert_omm_system
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
@@ -70,7 +70,7 @@ DEFAULT_REST_PARAMS = replace(
 
 @dataclass
 class Host:
-    system: VacuumSystem
+    system: HostSystem
     physical_masses: List[float]
     conf: NDArray
     box: NDArray

@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 from timemachine import potentials
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, NBParamIdx
 from timemachine.fe import chiral_utils
-from timemachine.fe.system import VacuumSystem
+from timemachine.fe.system import GuestSystem
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import nonbonded
@@ -432,7 +432,7 @@ class BaseTopology:
 
         return chiral_atom_potential, chiral_bond_potential
 
-    def setup_chiral_end_state(self) -> VacuumSystem:
+    def setup_chiral_end_state(self) -> GuestSystem:
         """
         Setup an end-state with chiral restraints attached.
         """
@@ -445,7 +445,7 @@ class BaseTopology:
         system.chiral_bond = chiral_bond_potential
         return system
 
-    def setup_end_state(self) -> VacuumSystem:
+    def setup_end_state(self) -> GuestSystem:
         mol_bond_params, mol_hb = self.parameterize_harmonic_bond(self.ff.hb_handle.params)
         mol_angle_params, mol_ha = self.parameterize_harmonic_angle(self.ff.ha_handle.params)
         mol_proper_params, mol_pt = self.parameterize_proper_torsion(self.ff.pt_handle.params)
@@ -470,17 +470,15 @@ class BaseTopology:
         signs = np.array([[]], dtype=np.int32).reshape(-1)
         chiral_bond = ChiralBondRestraint(idxs, signs).bind(np.array([], dtype=np.float64).reshape(-1))
 
-        system = VacuumSystem(
-            bond_potential,
-            angle_potential,
-            proper_potential,
-            improper_potential,
-            nonbonded_potential,
-            chiral_atom,
-            chiral_bond,
+        return GuestSystem(
+            bond=bond_potential,
+            angle=angle_potential,
+            proper=proper_potential,
+            improper=improper_potential,
+            nonbonded_pair_list=nonbonded_potential,
+            chiral_atom=chiral_atom,
+            chiral_bond=chiral_bond,
         )
-
-        return system
 
 
 class DualTopology(BaseTopology):

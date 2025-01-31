@@ -15,7 +15,7 @@ from timemachine.fe.rbfe import Host, setup_optimized_host
 from timemachine.fe.rest.interpolation import Exponential, Linear, Quadratic, Symmetric, plot_interpolation_fxn
 from timemachine.fe.rest.single_topology import InterpolationFxnName, SingleTopologyREST
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.system import VacuumSystem
+from timemachine.fe.system import GuestSystem
 from timemachine.fe.utils import get_romol_conf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.md import builders
@@ -80,8 +80,8 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
     U_proper = state.proper(ligand_conf, None)
     U_proper_ref = state_ref.proper(ligand_conf, None)
 
-    U_nonbonded = state.nonbonded(ligand_conf, None)
-    U_nonbonded_ref = state_ref.nonbonded(ligand_conf, None)
+    U_nonbonded = state.nonbonded_pair_list(ligand_conf, None)
+    U_nonbonded_ref = state_ref.nonbonded_pair_list(ligand_conf, None)
 
     U = state.get_U_fn()(ligand_conf)
     U_ref = state_ref.get_U_fn()(ligand_conf)
@@ -104,7 +104,7 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
             if energy_scale < 1.0:
                 assert U_proper < U_proper_ref
 
-        def get_proper_subset_energy(state: VacuumSystem, ixn_idxs):
+        def get_proper_subset_energy(state: GuestSystem, ixn_idxs):
             assert state.proper
             idxs = state.proper.potential.idxs[ixn_idxs, :]
             params = state.proper.params[ixn_idxs, :]
@@ -151,7 +151,8 @@ def test_single_topology_rest_solvent(mol_pair, temperature_scale_interpolation_
 
     def get_nonbonded_host_guest_ixn_energy(st: SingleTopology):
         hgs = st.combine_with_host(host.system, lamb, host_config.num_water_atoms, st.ff, host_config.omm_topology)
-        return hgs.nonbonded_host_guest_ixn(conf, host_config.box)
+        assert hgs.nonbonded_ixn_group
+        return hgs.nonbonded_ixn_group(conf, host_config.box)
 
     U = get_nonbonded_host_guest_ixn_energy(st_rest)
     U_ref = get_nonbonded_host_guest_ixn_energy(st)

@@ -9,7 +9,7 @@ from rdkit import Chem
 
 from timemachine.constants import NBParamIdx
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.system import HostGuestSystem, VacuumSystem
+from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
 from timemachine.ff import Forcefield
 from timemachine.potentials import HarmonicAngleStable, NonbondedPairListPrecomputed
 
@@ -117,7 +117,7 @@ class SingleTopologyREST(SingleTopology):
         temperature_factor = self._temperature_scale_interpolation_fxn(lamb).item()
         return 1.0 / temperature_factor
 
-    def setup_intermediate_state(self, lamb: float) -> VacuumSystem[NonbondedPairListPrecomputed, HarmonicAngleStable]:
+    def setup_intermediate_state(self, lamb: float) -> GuestSystem:
         ref_state = super().setup_intermediate_state(lamb)
         energy_scale = self.get_energy_scale_factor(lamb)
 
@@ -127,20 +127,21 @@ class SingleTopologyREST(SingleTopology):
             params=jnp.asarray(ref_state.proper.params).at[self.target_proper_idxs, 0].mul(energy_scale),
         )
 
-        nonbonded = replace(
-            ref_state.nonbonded,
-            params=jnp.asarray(ref_state.nonbonded.params)
+        assert ref_state.nonbonded_pair_list
+        nonbonded_pair_list = replace(
+            ref_state.nonbonded_pair_list,
+            params=jnp.asarray(ref_state.nonbonded_pair_list.params)
             .at[:, NBParamIdx.Q_IDX]
             .mul(energy_scale)  # scale q_ij
             .at[:, NBParamIdx.LJ_EPS_IDX]
             .mul(energy_scale),  # scale eps_ij
         )
 
-        return replace(ref_state, proper=proper, nonbonded=nonbonded)
+        return replace(ref_state, proper=proper, nonbonded_pair_list=nonbonded_pair_list)
 
     def combine_with_host(
         self,
-        host_system: VacuumSystem,
+        host_system: HostSystem,
         lamb: float,
         num_water_atoms: int,
         ff: Forcefield,
@@ -159,13 +160,14 @@ class SingleTopologyREST(SingleTopology):
 
         sqrt_energy_scale = np.sqrt(self.get_energy_scale_factor(lamb))
 
+        assert ref_state.nonbonded_ixn_group
         nonbonded_host_guest_ixn = replace(
-            ref_state.nonbonded_host_guest_ixn,
-            params=jnp.asarray(ref_state.nonbonded_host_guest_ixn.params)
+            ref_state.nonbonded_ixn_group,
+            params=jnp.asarray(ref_state.nonbonded_ixn_group.params)
             .at[:, NBParamIdx.Q_IDX]
             .mul(sqrt_energy_scale)  # scale ligand charges
             .at[:, NBParamIdx.LJ_EPS_IDX]
             .mul(sqrt_energy_scale),  # scale ligand epsilons
         )
 
-        return replace(ref_state, nonbonded_host_guest_ixn=nonbonded_host_guest_ixn)
+        return replace(ref_state, nonbonded_ixn_group=nonbonded_host_guest_ixn)

@@ -1,6 +1,6 @@
 import multiprocessing
 from dataclasses import dataclass
-from typing import Generic, List, Sequence, Tuple, TypeVar, Union, cast
+from typing import Generic, List, Optional, Sequence, Tuple, TypeVar, Union, cast
 
 import jax
 import numpy as np
@@ -90,20 +90,18 @@ def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
     assert isinstance(bps[1].potential, potentials.HarmonicAngle)
     assert isinstance(bps[2].potential, potentials.PeriodicTorsion)  # proper
     assert isinstance(bps[3].potential, potentials.PeriodicTorsion)  # improper
-    assert isinstance(bps[4].potential, potentials.Nonbonded)  # cursed: NB AllPairs in VacuumSystem
-
-    chiral_atom = ChiralAtomRestraint(np.array([[]], dtype=np.int32).reshape(-1, 4)).bind(
-        np.array([], dtype=np.float64).reshape(-1)
+    assert isinstance(bps[4].potential, potentials.Nonbonded)  # NB all pairs
+    return HostSystem(
+        bond=bps[0],
+        angle=bps[1],
+        proper=bps[2],
+        improper=bps[3],
+        nonbonded_all_pairs=bps[4],
     )
-    idxs = np.array([[]], dtype=np.int32).reshape(-1, 4)
-    signs = np.array([[]], dtype=np.int32).reshape(-1)
-    chiral_bond = ChiralBondRestraint(idxs, signs).bind(np.array([], dtype=np.float64).reshape(-1))
-
-    return VacuumSystem(bps[0], bps[1], bps[2], bps[3], bps[4], chiral_atom, chiral_bond)
 
 
-def convert_omm_system(omm_system) -> Tuple["VacuumSystem", List[float]]:
-    """Convert an openmm.System to a VacuumSystem object, also returning the masses"""
+def convert_omm_system(omm_system) -> Tuple["HostSystem", List[float]]:
+    """Convert an openmm.System to a HostSystem object, also returning the masses"""
     from timemachine.ff.handlers import openmm_deserializer
 
     bps, masses = openmm_deserializer.deserialize_system(omm_system, cutoff=1.2)
@@ -114,18 +112,10 @@ def convert_omm_system(omm_system) -> Tuple["VacuumSystem", List[float]]:
 _Nonbonded = TypeVar("_Nonbonded", bound=Union[Nonbonded, NonbondedPairListPrecomputed, SummedPotential])
 _HarmonicAngle = TypeVar("_HarmonicAngle", bound=Union[HarmonicAngle, HarmonicAngleStable])
 
+from abc import ABC, abstractmethod
 
-@dataclass
-class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
-    # utility system container
-    bond: BoundPotential[HarmonicBond]
-    angle: BoundPotential[_HarmonicAngle]
-    proper: BoundPotential[PeriodicTorsion]
-    improper: BoundPotential[PeriodicTorsion]
-    nonbonded: BoundPotential[_Nonbonded]
-    chiral_atom: BoundPotential[ChiralAtomRestraint]
-    chiral_bond: BoundPotential[ChiralBondRestraint]
 
+class AbstractSystem(ABC):
     def get_U_fn(self):
         """
         Return a jax function that evaluates the potential energy of a set of coordinates.
@@ -137,41 +127,94 @@ class VacuumSystem(Generic[_Nonbonded, _HarmonicAngle]):
 
         return U_fn
 
-    def get_U_fns(self) -> List[BoundPotential[Potential]]:
-        # For molecules too small for to have certain terms,
-        # skip when no params are present
-        # Chiral bond restraints are disabled until checks are added (see GH #815)
-        potentials = [self.bond, self.angle, self.proper, self.improper, self.chiral_atom, self.nonbonded]
-        terms = cast(
-            List[BoundPotential[Potential]],
-            [p for p in potentials if p],
-        )
-        return [p for p in terms if p and len(p.params) > 0]
+    @abstractmethod
+    def get_U_fns(self):
+        raise NotImplementedError()
 
 
-@dataclass
-class HostGuestSystem:
+@dataclass  # mcwitt: Generic can be removed in python 3.12
+class HostSystem(Generic[_HarmonicAngle], AbstractSystem):
+    # utility system container
     bond: BoundPotential[HarmonicBond]
-    angle: BoundPotential[HarmonicAngleStable]
+    angle: BoundPotential[_HarmonicAngle]
     proper: BoundPotential[PeriodicTorsion]
     improper: BoundPotential[PeriodicTorsion]
-    chiral_atom: BoundPotential[ChiralAtomRestraint]
-    chiral_bond: BoundPotential[ChiralBondRestraint]
-    nonbonded_guest_pairs: BoundPotential[NonbondedPairListPrecomputed]
-    nonbonded_host: BoundPotential[Nonbonded]
-    nonbonded_host_guest_ixn: BoundPotential[NonbondedInteractionGroup]
+    nonbonded_all_pairs: BoundPotential[Nonbonded]
 
-    def get_U_fns(self):
-        return [
+    def get_U_fns(self) -> List[BoundPotential[Potential]]:
+        potentials: List[BoundPotential] = [
             self.bond,
             self.angle,
             self.proper,
             self.improper,
-            # Chiral bond restraints are disabled until checks are added
-            # for consistency.
-            self.chiral_atom,
-            # self.chiral_bond,
-            self.nonbonded_guest_pairs,
-            self.nonbonded_host,
-            self.nonbonded_host_guest_ixn,
+            self.nonbonded_all_pairs,
         ]
+        # (TODO): len(p.params) > 0 is dangerous if we later on have potentials
+        # that do *not* have "free" parameters defined but should still be left on.
+        # (eg. if the force constants for something like virtual sites are defined by
+        # properties/attributes on the class, rather than attributes)
+        return [p for p in potentials if len(p.params) > 0]
+
+
+@dataclass  # mcwitt: Generic can be removed in python 3.12
+class GuestSystem(Generic[_HarmonicAngle], AbstractSystem):
+    # utility system container
+    bond: BoundPotential[HarmonicBond]
+    angle: BoundPotential[_HarmonicAngle]
+    proper: BoundPotential[PeriodicTorsion]
+    improper: BoundPotential[PeriodicTorsion]
+    chiral_atom: BoundPotential[ChiralAtomRestraint]
+    chiral_bond: BoundPotential[ChiralBondRestraint]
+    nonbonded_pair_list: BoundPotential[NonbondedPairListPrecomputed]
+
+    def get_U_fns(self) -> List[BoundPotential[Potential]]:
+        # For molecules too small for to have certain terms,
+        # skip when no params are present
+        # Chiral bond restraints are disabled until checks are added (see GH #815)
+        potentials: List[BoundPotential] = [
+            self.bond,
+            self.angle,
+            self.proper,
+            self.improper,
+            self.chiral_atom,
+            self.nonbonded_pair_list,
+        ]
+        # (TODO): len(p.params) > 0 is dangerous if we later on have potentials
+        # that do *not* have "free" parameters defined but should still be left on.
+        # (eg. if the force constants for something like virtual sites are defined by
+        # properties/attributes on the class, rather than attributes)
+        return [p for p in potentials if len(p.params) > 0]
+
+
+@dataclass  # mcwitt: Generic can be removed in python 3.12
+class HostGuestSystem(Generic[_HarmonicAngle], AbstractSystem):
+    # utility system container
+    bond: BoundPotential[HarmonicBond]
+    angle: BoundPotential[_HarmonicAngle]
+    proper: BoundPotential[PeriodicTorsion]
+    improper: BoundPotential[PeriodicTorsion]
+    chiral_atom: BoundPotential[ChiralAtomRestraint]
+    chiral_bond: BoundPotential[ChiralBondRestraint]
+    nonbonded_pair_list: BoundPotential[NonbondedPairListPrecomputed]
+    nonbonded_all_pairs: BoundPotential[Nonbonded]
+    nonbonded_ixn_group: BoundPotential[NonbondedInteractionGroup]
+
+    def get_U_fns(self) -> List[BoundPotential[Potential]]:
+        # For molecules too small for to have certain terms,
+        # skip when no params are present
+        # Chiral bond restraints are disabled until checks are added (see GH #815)
+        potentials: List[BoundPotential] = [
+            self.bond,
+            self.angle,
+            self.proper,
+            self.improper,
+            self.chiral_atom,
+            self.nonbonded_pair_list,
+            self.nonbonded_all_pairs,
+            self.nonbonded_ixn_group,
+        ]
+        # (TODO): len(p.params) > 0 is dangerous if we later on have potentials
+        # that do *not* have "free" parameters defined but should still be left on.
+        # (eg. if the force constants for something like virtual sites are defined by
+        # properties/attributes on the class, rather than attributes)
+        return [p for p in potentials if len(p.params) > 0]
