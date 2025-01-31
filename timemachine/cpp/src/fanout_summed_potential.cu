@@ -8,7 +8,7 @@ namespace timemachine {
 
 FanoutSummedPotential::FanoutSummedPotential(
     const std::vector<std::shared_ptr<Potential>> potentials, const bool parallel)
-    : potentials_(potentials), parallel_(parallel), d_u_buffer_(potentials_.size()){};
+    : potentials_(potentials), parallel_(parallel), d_u_buffer_(potentials_.size()) {};
 
 const std::vector<std::shared_ptr<Potential>> &FanoutSummedPotential::get_potentials() { return potentials_; }
 

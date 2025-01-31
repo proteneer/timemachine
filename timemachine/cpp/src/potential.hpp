@@ -8,7 +8,7 @@ namespace timemachine {
 class Potential {
 
 public:
-    virtual ~Potential(){};
+    virtual ~Potential() {};
 
     static const int D;
 

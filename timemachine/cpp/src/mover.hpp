@@ -11,12 +11,12 @@ namespace timemachine {
 class Mover {
 
 protected:
-    Mover(const int interval) : interval_(interval), step_(0){};
+    Mover(const int interval) : interval_(interval), step_(0) {};
     int interval_;
     int step_;
 
 public:
-    virtual ~Mover(){};
+    virtual ~Mover() {};
 
     // set_step is to deal with HREX where a mover may not be called during the singular frame being
     // generated.
