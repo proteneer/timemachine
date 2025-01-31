@@ -1,2 +1,2 @@
-pre-commit==3.4.0
 mypy==1.5.1
+pre-commit==4.1.0
