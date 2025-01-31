@@ -55,6 +55,7 @@ from timemachine.potentials.jax_utils import distance_on_pairs, idxs_within_cuto
         ),
     ],
 )
+@pytest.mark.nightly(reason="Takes a while to run")
 def test_fire_minimize_host_protein(pdb_path, sdf_path, mol_a_name, mol_b_name):
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     with sdf_path as ligand_path:
@@ -70,6 +71,36 @@ def test_fire_minimize_host_protein(pdb_path, sdf_path, mol_a_name, mol_b_name):
             host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
             x_host = minimizer.fire_minimize_host(mols, host_config, ff)
             assert x_host.shape == complex_coords.shape
+
+
+@pytest.mark.parametrize(
+    "pdb_path, sdf_path, mol_a_name, mol_b_name",
+    [
+        (
+            resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb"),
+            resources.path("timemachine.testsystems.data", "ligands_40.sdf"),
+            "43",
+            "234",
+        ),
+    ],
+)
+def test_fire_minimize_host_protein_spot(pdb_path, sdf_path, mol_a_name, mol_b_name):
+    # quick check for unit testing, only run for a single ligand pair
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    with sdf_path as ligand_path:
+        mols_by_name = read_sdf_mols_by_name(ligand_path)
+    mol_a = mols_by_name[mol_a_name]
+    mol_b = mols_by_name[mol_b_name]
+
+    with pdb_path as host_path:
+        for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
+            complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
+                str(host_path), ff.protein_ff, ff.water_ff, mols=mols
+            )
+            host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
+            x_host = minimizer.fire_minimize_host(mols, host_config, ff)
+            assert x_host.shape == complex_coords.shape
+            break
 
 
 def test_fire_minimize_host_solvent():
@@ -90,6 +121,7 @@ def test_fire_minimize_host_solvent():
 
 @pytest.mark.parametrize("host_name", ["solvent", "complex"])
 @pytest.mark.parametrize("mol_pair", [("20", "43")])
+@pytest.mark.nightly(reason="slow")
 def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
     ff = Forcefield.load_default()
     mol_a_name, mol_b_name = mol_pair

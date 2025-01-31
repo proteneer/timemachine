@@ -941,6 +941,7 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
 
 
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
+@pytest.mark.nightly(reason="slow")
 def test_combine_with_host_split(precision, rtol, atol):
     # test the split P-L and L-W interactions
 

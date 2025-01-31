@@ -116,6 +116,8 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
         ("290", "84"),  # failure, B-ring, core-hopping into oxazole
         ("290", "256"),  # failure, should be a simple transformation
         ("164", "163"),  # failure, B-ring has a different conformation
+        ("35", "84"),  # failure, B-ring, core-hopping into oxazole, <-- this fails
+        ("41", "50"),  # failure, moves beyond 7 A in the solvent leg
     ],
 )
 @pytest.mark.nightly(reason="Takes a while to run")
@@ -138,7 +140,6 @@ def test_confgen_hard_edges(src, dst):
     "src, dst",
     [
         ("35", "84"),  # failure, B-ring, core-hopping into oxazole, <-- this fails
-        ("41", "50"),  # failure, moves beyond 7 A in the solvent leg
     ],
 )
 def test_confgen_spot_edges(src, dst):
@@ -147,7 +148,7 @@ def test_confgen_spot_edges(src, dst):
     with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
         mols_by_name = read_sdf_mols_by_name(ligand_path)
 
-    n_windows = 12
+    n_windows = 3
 
     print("\nProcessing", src, "->", dst, "\n")
     mol_a = mols_by_name[src]
