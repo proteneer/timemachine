@@ -12,6 +12,7 @@ line-length = 120
 
 [tool.ruff.lint]
 select = [
+   "F", # Pyflakes
    "I", # sort imports
 ]
 ignore = [
