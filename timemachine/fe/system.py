@@ -1,7 +1,7 @@
 import multiprocessing
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Generic, List, Optional, Sequence, Tuple, TypeVar, Union, cast
+from abc import ABC
+from dataclasses import dataclass, fields
+from typing import Generic, List, Sequence, Tuple, TypeVar, Union
 
 import jax
 import numpy as np
@@ -110,10 +110,10 @@ def convert_omm_system(omm_system) -> Tuple["HostSystem", List[float]]:
     return system, masses
 
 
-_Nonbonded = TypeVar("_Nonbonded", bound=Union[Nonbonded, NonbondedPairListPrecomputed, SummedPotential])
 _HarmonicAngle = TypeVar("_HarmonicAngle", bound=Union[HarmonicAngle, HarmonicAngleStable])
 
 
+@dataclass
 class AbstractSystem(ABC):
     def get_U_fn(self):
         """
@@ -126,9 +126,19 @@ class AbstractSystem(ABC):
 
         return U_fn
 
-    @abstractmethod
-    def get_U_fns(self):
-        raise NotImplementedError()
+    def get_U_fns(self) -> List[BoundPotential]:
+        """
+        Return a list of bound potential"""
+        potentials: List[BoundPotential] = []
+        for f in fields(self):
+            v = getattr(self, f.name)
+            potentials.append(v)
+
+        # (TODO): len(p.params) > 0 is dangerous if we later on have potentials
+        # that do *not* have "free" parameters defined but should still be left on.
+        # (eg. if the force constants for something like virtual sites are defined by
+        # properties/attributes on the class, rather than attributes)
+        return [p for p in potentials if len(p.params) > 0]
 
 
 @dataclass  # mcwitt: Generic can be removed in python 3.12
@@ -139,20 +149,6 @@ class HostSystem(Generic[_HarmonicAngle], AbstractSystem):
     proper: BoundPotential[PeriodicTorsion]
     improper: BoundPotential[PeriodicTorsion]
     nonbonded_all_pairs: BoundPotential[Nonbonded]
-
-    def get_U_fns(self) -> List[BoundPotential[Potential]]:
-        potentials: List[BoundPotential] = [
-            self.bond,
-            self.angle,
-            self.proper,
-            self.improper,
-            self.nonbonded_all_pairs,
-        ]
-        # (TODO): len(p.params) > 0 is dangerous if we later on have potentials
-        # that do *not* have "free" parameters defined but should still be left on.
-        # (eg. if the force constants for something like virtual sites are defined by
-        # properties/attributes on the class, rather than attributes)
-        return [p for p in potentials if len(p.params) > 0]
 
 
 @dataclass  # mcwitt: Generic can be removed in python 3.12
@@ -165,24 +161,6 @@ class GuestSystem(Generic[_HarmonicAngle], AbstractSystem):
     chiral_atom: BoundPotential[ChiralAtomRestraint]
     chiral_bond: BoundPotential[ChiralBondRestraint]
     nonbonded_pair_list: BoundPotential[NonbondedPairListPrecomputed]
-
-    def get_U_fns(self) -> List[BoundPotential[Potential]]:
-        # For molecules too small for to have certain terms,
-        # skip when no params are present
-        # Chiral bond restraints are disabled until checks are added (see GH #815)
-        potentials: List[BoundPotential] = [
-            self.bond,
-            self.angle,
-            self.proper,
-            self.improper,
-            self.chiral_atom,
-            self.nonbonded_pair_list,
-        ]
-        # (TODO): len(p.params) > 0 is dangerous if we later on have potentials
-        # that do *not* have "free" parameters defined but should still be left on.
-        # (eg. if the force constants for something like virtual sites are defined by
-        # properties/attributes on the class, rather than attributes)
-        return [p for p in potentials if len(p.params) > 0]
 
 
 @dataclass  # mcwitt: Generic can be removed in python 3.12
@@ -197,23 +175,3 @@ class HostGuestSystem(Generic[_HarmonicAngle], AbstractSystem):
     nonbonded_pair_list: BoundPotential[NonbondedPairListPrecomputed]
     nonbonded_all_pairs: BoundPotential[Nonbonded]
     nonbonded_ixn_group: BoundPotential[NonbondedInteractionGroup]
-
-    def get_U_fns(self) -> List[BoundPotential[Potential]]:
-        # For molecules too small for to have certain terms,
-        # skip when no params are present
-        # Chiral bond restraints are disabled until checks are added (see GH #815)
-        potentials: List[BoundPotential] = [
-            self.bond,
-            self.angle,
-            self.proper,
-            self.improper,
-            self.chiral_atom,
-            self.nonbonded_pair_list,
-            self.nonbonded_all_pairs,
-            self.nonbonded_ixn_group,
-        ]
-        # (TODO): len(p.params) > 0 is dangerous if we later on have potentials
-        # that do *not* have "free" parameters defined but should still be left on.
-        # (eg. if the force constants for something like virtual sites are defined by
-        # properties/attributes on the class, rather than attributes)
-        return [p for p in potentials if len(p.params) > 0]

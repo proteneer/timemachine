@@ -1012,7 +1012,7 @@ class TorsionsDefinedOverLinearAngleException(Exception):
     pass
 
 
-def assert_default_system_constraints(system: HostGuestSystem | GuestSystem):
+def assert_default_system_constraints(system: GuestSystem | HostGuestSystem):
     # Assert that the system objects satisfy a set of constraints
     assert_bonds_defined_for_chiral_volumes(system)
     assert_torsions_defined_over_non_linear_angles(system)
