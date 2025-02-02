@@ -20,8 +20,6 @@ from timemachine.potentials import (
     NonbondedInteractionGroup,
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
-    Potential,
-    SummedPotential,
 )
 
 # Chiral bond restraints are disabled until checks are added (see GH #815)
@@ -131,14 +129,16 @@ class AbstractSystem(ABC):
         Return a list of bound potential"""
         potentials: List[BoundPotential] = []
         for f in fields(self):
-            v = getattr(self, f.name)
-            potentials.append(v)
+            bp = getattr(self, f.name)
+            # (TODO): len(p.params) > 0 is dangerous if we later on have potentials
+            # that do *not* have "free" parameters defined but should still be left on.
+            # (eg. if the force constants for something like virtual sites are defined by
+            # properties/attributes on the class, rather than attributes)
+            # (TODO): chiral_bonds currently disabled
+            if f.name != "chiral_bond" and len(bp.params) > 0:
+                potentials.append(bp)
 
-        # (TODO): len(p.params) > 0 is dangerous if we later on have potentials
-        # that do *not* have "free" parameters defined but should still be left on.
-        # (eg. if the force constants for something like virtual sites are defined by
-        # properties/attributes on the class, rather than attributes)
-        return [p for p in potentials if len(p.params) > 0]
+        return potentials
 
 
 @dataclass  # mcwitt: Generic can be removed in python 3.12
