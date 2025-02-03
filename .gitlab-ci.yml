@@ -160,6 +160,26 @@ nightly-tests:
     when: on_success
     expire_in: 1 week
 
+
+nightly-memcheck-tests-sm75:
+  stage: test
+  image: $DOCKER_TAG
+  needs: ["lint"]
+  tags:
+    - aws-tardis-gpu-sm75
+  rules:
+    - if: $NIGHTLY_TESTS
+  script:
+    - pip install .[test]
+    - make memcheck_tests
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nightly-memcheck-tests"
+    paths:
+        - coverage/
+    when: on_success
+    expire_in: 1 week
+
+
 nightly-memcheck-tests:
   stage: test
   image: $DOCKER_TAG
