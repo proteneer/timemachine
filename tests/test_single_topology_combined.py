@@ -64,18 +64,9 @@ def test_combined_parameters_bonded(host_system_fixture, lamb, hif2a_ligand_pair
     check_bonded_idxs_consistency(hgs.angle.potential.idxs, len(host_sys.angle.potential.idxs))
     check_bonded_idxs_consistency(hgs.proper.potential.idxs, len(host_sys.proper.potential.idxs))
     check_bonded_idxs_consistency(hgs.improper.potential.idxs, len(host_sys.improper.potential.idxs))
-
-    if host_sys.chiral_atom:
-        check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, len(host_sys.chiral_atom.potential.idxs))
-    else:
-        check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, 0)
-
-    if host_sys.chiral_bond:
-        check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, len(host_sys.chiral_bond.potential.idxs))
-    else:
-        check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, 0)
-
-    check_bonded_idxs_consistency(hgs.nonbonded_guest_pairs.potential.idxs, 0)
+    check_bonded_idxs_consistency(hgs.chiral_atom.potential.idxs, 0)
+    check_bonded_idxs_consistency(hgs.chiral_bond.potential.idxs, 0)
+    check_bonded_idxs_consistency(hgs.nonbonded_pair_list.potential.idxs, 0)
 
 
 @pytest.mark.parametrize("lamb", [0.0, 1.0])
@@ -93,14 +84,14 @@ def test_combined_parameters_nonbonded(host_system_fixture, lamb, hif2a_ligand_p
     hgs = st.combine_with_host(host_sys, lamb, num_water_atoms, st.ff, omm_topology)
     # check nonbonded terms
     # 1) ligand ixns should be omitted in hgs.nonbonded_host
-    assert isinstance(hgs.nonbonded_host.potential, potentials.Nonbonded)
-    assert hgs.nonbonded_host.potential.atom_idxs is not None
-    assert set(hgs.nonbonded_host.potential.atom_idxs) == set(range(num_host_atoms))
+    assert isinstance(hgs.nonbonded_all_pairs.potential, potentials.Nonbonded)
+    assert hgs.nonbonded_all_pairs.potential.atom_idxs is not None
+    assert set(hgs.nonbonded_all_pairs.potential.atom_idxs) == set(range(num_host_atoms))
 
     # 2) decoupling parameters for host-guest interactions
     # 2a) w offsets
-    potential = hgs.nonbonded_host_guest_ixn.potential
-    params = hgs.nonbonded_host_guest_ixn.params
+    potential = hgs.nonbonded_ixn_group.potential
+    params = hgs.nonbonded_ixn_group.params
 
     # NBIxnGroup has the ligand interaction parameters
     assert isinstance(potential, potentials.NonbondedInteractionGroup)
@@ -179,9 +170,8 @@ def test_combined_parameters_nonbonded_intermediate(
     num_host_atoms = len(host_masses)
 
     hgs = st.combine_with_host(host_sys, lamb, num_water_atoms, st.ff, omm_topology)
-
-    potential = hgs.nonbonded_host_guest_ixn.potential
-    params = hgs.nonbonded_host_guest_ixn.params
+    potential = hgs.nonbonded_ixn_group.potential
+    params = hgs.nonbonded_ixn_group.params
     assert isinstance(potential, potentials.NonbondedInteractionGroup)
 
     guest_params = np.array(params[num_host_atoms:])
@@ -217,7 +207,7 @@ def test_nonbonded_host_params_independent_of_lambda(
 
     @jax.jit
     def get_nonbonded_host_params(lamb):
-        return st.combine_with_host(host_sys, lamb, num_water_atoms, st.ff, omm_topology).nonbonded_host.params
+        return st.combine_with_host(host_sys, lamb, num_water_atoms, st.ff, omm_topology).nonbonded_all_pairs.params
 
     params0 = get_nonbonded_host_params(0.0)
     for lamb in np.linspace(0.1, 1, 10):
