@@ -176,19 +176,17 @@ def test_single_topology_rest_propers():
     # benzene: no propers are scaled
     benzene = get_mol("c1ccccc1")
     st = get_identity_transformation(benzene)
-    assert st.target_propers.shape == (0, 4)
+    assert st.target_propers == set()
 
     # cyclohexane: all 9 * 6 ring propers are scaled (|{H1, H2, C1}-C2-C3-{C4, H3, H4}| = 9 propers per C-C bond)
     cyclohexane = get_mol("C1CCCCC1")
     st = get_identity_transformation(cyclohexane)
-    rest_proper_idxs_set = {tuple(idxs) for idxs in list(st.target_propers)}
-    assert len(rest_proper_idxs_set) == 9 * 6
+    assert len(st.target_propers) == 9 * 6
 
     # phenylcyclohexane: all 9 * 6 cyclohexane ring propers and 6 rotatable bond propers are scaled
     phenylcyclohexane = get_mol("c1ccc(C2CCCCC2)cc1")
     st = get_identity_transformation(phenylcyclohexane)
-    rest_proper_idxs_set = {tuple(idxs) for idxs in list(st.target_propers)}
-    assert len(rest_proper_idxs_set) == 9 * 6 + 6
+    assert len(st.target_propers) == 9 * 6 + 6
 
 
 @pytest.mark.parametrize(
