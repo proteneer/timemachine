@@ -2006,12 +2006,3 @@ class SingleTopology(AtomMapMixin):
             nonbonded_all_pairs=host_nonbonded_all_pairs,
             nonbonded_ixn_group=host_guest_nonbonded_ixn_group,
         )
-
-    def get_component_idxs(self) -> list[NDArray]:
-        """
-        Return the atom indices for the two ligands in
-        this topology as a list of NDArray. Both lists
-        will contain atom indices for the core atoms
-        as well as the unique atom indices for each ligand.
-        """
-        return [self.a_to_c, self.b_to_c]
