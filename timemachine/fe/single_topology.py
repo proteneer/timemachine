@@ -1,7 +1,7 @@
 import warnings
 from enum import IntEnum
 from functools import partial
-from typing import Any, Collection, List, Optional, Sequence
+from typing import Any, Collection, Optional, Sequence
 
 import jax
 import jax.numpy as jnp
