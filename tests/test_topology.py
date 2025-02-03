@@ -81,11 +81,24 @@ def parameterize_nonbonded_full(
 
 
 @no_type_check
+def test_host_guest_nonbonded_tiny_mol():
+    ctor = BaseTopology
+    precision, rtol, atol = (np.float32, 1e-4, 5e-4)
+    use_tiny_mol = True
+    test_host_guest_nonbonded_impl(ctor, precision, rtol, atol, use_tiny_mol)
+
+
+@no_type_check
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("ctor", [BaseTopology, DualTopology])
 @pytest.mark.parametrize("use_tiny_mol", [True, False])
 @pytest.mark.nightly(reason="slow")
 def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
+    test_host_guest_nonbonded_impl(ctor, precision, rtol, atol, use_tiny_mol)
+
+
+@no_type_check
+def test_host_guest_nonbonded_impl(ctor, precision, rtol, atol, use_tiny_mol):
     def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
         # Use the original code to compute the nb grads and potential
         bt = Topology(ff)
