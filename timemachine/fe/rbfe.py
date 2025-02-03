@@ -696,7 +696,13 @@ def estimate_relative_free_energy_bisection(
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_interval = lambda_interval or (0.0, 1.0)
-    lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
+    lambda_min, lambda_max = min(lambda_interval), max(lambda_interval)
+
+    # REST compatibility: avoid bypassing maximally softened state @ lam=0.5
+    if lambda_min < 0.5 < lambda_max:
+        initial_lambdas = [lambda_min, 0.5, lambda_max]
+    else:
+        initial_lambdas = [lambda_min, lambda_max]
 
     temperature = DEFAULT_TEMP
 
@@ -728,7 +734,7 @@ def estimate_relative_free_energy_bisection(
 
     try:
         results, trajectories = run_sims_bisection(
-            [lambda_min, lambda_max],
+            initial_lambdas,
             make_bisection_state,
             md_params,
             n_bisections=n_windows - 2,
