@@ -1168,6 +1168,23 @@ def compute_potential_matrix(
     return U_kl
 
 
+def verify_and_sanitize_potential_matrix(
+    U_kl: NDArray, replica_idx_by_state: Sequence[int], abs_energy_threshold: float = 1e9
+) -> NDArray:
+    """Ensure energies in the diagonal are finite and below some threshold and sanitizes NaNs to infs."""
+    # Verify that the energies that the energies of the replica in the same state are finite, else a replica is no longer valid
+    replica_energies = np.diagonal(U_kl[replica_idx_by_state])
+    assert np.all(np.isfinite(replica_energies)), "Replicas have non-finite energies"
+    assert np.all(np.abs(replica_energies) < abs_energy_threshold), "Energies larger in magnitude than tolerated"
+    if np.any(np.isnan(U_kl)):
+        warn(
+            "Encountered NaNs in potential matrix. Replacing each instance with inf",
+            IndeterminateEnergyWarning,
+        )
+        U_kl = np.where(np.isnan(U_kl), np.inf, U_kl)
+    return U_kl
+
+
 def make_u_kl_fxn(trajs, initial_states):
     """fxn(k, l) = "trajs[k] evaluated in ensembles[l]"
 
@@ -1394,7 +1411,8 @@ def run_sims_hrex(
             return CoordsVelBox(frame, velos, box)
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
-        U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
+        U_kl_raw = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
+        U_kl = verify_and_sanitize_potential_matrix(U_kl_raw, hrex.replica_idx_by_state)
         log_q_kl = -U_kl / (BOLTZ * temperature)
 
         replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
