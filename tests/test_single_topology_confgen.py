@@ -148,7 +148,7 @@ def test_confgen_spot_edges(src, dst):
     with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
         mols_by_name = read_sdf_mols_by_name(ligand_path)
 
-    n_windows = 3
+    n_windows = 4
 
     print("\nProcessing", src, "->", dst, "\n")
     mol_a = mols_by_name[src]

@@ -93,14 +93,13 @@ def test_fire_minimize_host_protein_spot(pdb_path, sdf_path, mol_a_name, mol_b_n
     mol_b = mols_by_name[mol_b_name]
 
     with pdb_path as host_path:
-        for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
+        for mols in [[mol_a, mol_b]]:
             complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
                 str(host_path), ff.protein_ff, ff.water_ff, mols=mols
             )
             host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
             x_host = minimizer.fire_minimize_host(mols, host_config, ff)
             assert x_host.shape == complex_coords.shape
-            break
 
 
 def test_fire_minimize_host_solvent():
@@ -119,9 +118,8 @@ def test_fire_minimize_host_solvent():
         assert x_host.shape == solvent_coords.shape
 
 
-@pytest.mark.parametrize("host_name", ["solvent", "complex"])
+@pytest.mark.parametrize("host_name", ["solvent", pytest.param("complex", marks=pytest.mark.nightly(reason="slow"))])
 @pytest.mark.parametrize("mol_pair", [("20", "43")])
-@pytest.mark.nightly(reason="slow")
 def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
     ff = Forcefield.load_default()
     mol_a_name, mol_b_name = mol_pair
