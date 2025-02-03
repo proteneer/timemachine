@@ -11,7 +11,6 @@ from timemachine.constants import NBParamIdx
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
 from timemachine.ff import Forcefield
-from timemachine.potentials import HarmonicAngleStable, NonbondedPairListPrecomputed
 
 from .bond import CanonicalBond, mkbond
 from .interpolation import InterpolationFxn, InterpolationFxnName, Symmetric, get_interpolation_fxn
