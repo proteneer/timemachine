@@ -4,6 +4,7 @@
 #include "k_harmonic_bond.cuh"
 #include "kernel_utils.cuh"
 #include "math_utils.cuh"
+#include <cub/cub.cuh>
 #include <vector>
 
 namespace timemachine {
@@ -26,11 +27,17 @@ HarmonicBond<RealType>::HarmonicBond(const std::vector<int> &bond_idxs) : B_(bon
     cudaSafeMalloc(&d_bond_idxs_, B_ * 2 * sizeof(*d_bond_idxs_));
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_ * 2 * sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
     cudaSafeMalloc(&d_u_buffer_, B_ * sizeof(*d_u_buffer_));
+
+    void *d_temp_storage = nullptr;
+    gpuErrchk(cub::DeviceReduce::Sum(d_temp_storage, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, B_));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
 };
 
 template <typename RealType> HarmonicBond<RealType>::~HarmonicBond() {
     gpuErrchk(cudaFree(d_bond_idxs_));
     gpuErrchk(cudaFree(d_u_buffer_));
+    gpuErrchk(cudaFree(d_sum_temp_storage_));
 };
 
 template <typename RealType>
@@ -60,7 +67,7 @@ void HarmonicBond<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if (d_u) {
-            accumulate_energy(B_, d_u_buffer_, d_u, stream);
+            gpuErrchk(cub::DeviceReduce::Sum(d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_u, B_));
         }
     }
 };

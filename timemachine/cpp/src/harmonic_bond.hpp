@@ -11,6 +11,9 @@ private:
     int *d_bond_idxs_;
     __int128 *d_u_buffer_;
 
+    size_t sum_storage_bytes_;
+    char *d_sum_temp_storage_;
+
     const int B_;
 
 public:
