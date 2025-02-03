@@ -311,19 +311,33 @@ def rebalance_lambda_schedule(
     overlap_dist = make_fast_approx_overlap_distance_fxn(initial_lambs, u_kn, f_k, n_k)
     target_dist = 1.0 - target_overlap
 
-    greedy_prot = greedily_optimize_protocol(
-        overlap_dist, target_dist, bisection_xtol=xtol, protocol_interval=(lambda_min, lambda_max)
-    )
-    new_schedule = np.asarray(greedy_prot)
-    if len(greedy_prot) > len(initial_lambs):
+    # REST compatibility: optimize in sub-intervals (lambda_min, 0.5) and (0.5, lambda_max)
+    def optimize(lmin, lmax):
+        lambdas = greedily_optimize_protocol(
+            overlap_dist, target_dist, bisection_xtol=xtol, protocol_interval=(lmin, lmax)
+        )
+        return np.array(lambdas)
+
+    if lambda_min < 0.5:
+        greedy_prot_left = optimize(lambda_min, 0.5)
+    else:
+        greedy_prot_left = np.array([])
+    if lambda_max > 0.5:
+        greedy_prot_right = optimize(0.5, lambda_max)
+    else:
+        greedy_prot_right = np.array([])
+    new_schedule = np.hstack([np.array(greedy_prot_left), np.array(greedy_prot_right)])
+
+    # don't increase # of windows
+    if len(new_schedule) > len(initial_lambs):
         warnings.warn("Optimized schedule has more windows than initial schedule, falling back to initial schedule")
         new_schedule = initial_lambs
     else:
         print(
             f"Optimized schedule has {len(new_schedule)} windows compared to {len(initial_lambs)} windows initially, target overlap {target_overlap}"
         )
-
-    return [setup_initial_state_fn(lamb) for lamb in new_schedule]
+    initial_states = [setup_initial_state_fn(lamb) for lamb in new_schedule]
+    return initial_states
 
 
 def get_nearest_state_idx(lamb: float, initial_states: Sequence[InitialState]) -> int:
