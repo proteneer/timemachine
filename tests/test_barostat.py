@@ -275,6 +275,8 @@ def test_barostat_is_deterministic():
         seed,
     )
 
+    calls = 100
+
     v_0 = sample_velocities(masses, temperature, seed)
 
     baro = custom_ops.MonteCarloBarostat(
@@ -282,7 +284,7 @@ def test_barostat_is_deterministic():
     )
 
     ctxt = custom_ops.Context(coords, v_0, box, integrator.impl(), u_impls, movers=[baro])
-    ctxt.multiple_steps(15)
+    ctxt.multiple_steps(barostat_interval * calls)
     atm_box = ctxt.get_box()
     # Verify that the volume of the box has changed
     assert compute_box_volume(atm_box) != compute_box_volume(box)
@@ -291,7 +293,7 @@ def test_barostat_is_deterministic():
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
     ctxt = custom_ops.Context(coords, v_0, box, integrator.impl(), u_impls, movers=[baro])
-    ctxt.multiple_steps(15)
+    ctxt.multiple_steps(barostat_interval * calls)
     # Verify that we get back bitwise reproducible boxes
     assert compute_box_volume(atm_box) == compute_box_volume(ctxt.get_box())
 
