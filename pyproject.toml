@@ -33,7 +33,6 @@ ignore = [
   "E741", # Do not use variables named 'I', 'O', or 'l'
 
   "NPY002", # Replace legacy `np.random.choice` call with `np.random.Generator`
-  "NPY201", # `np.trapz` will be removed in NumPy 2.0. Use `numpy.trapezoid` on NumPy 2.0, or ignore this warning on earlier versions.
 
   "RUF002", # Docstring contains ambiguous `–` (EN DASH). Did you mean `-` (HYPHEN-MINUS)?
   "RUF005", # Consider `[*xi_k_sub_1, xvb]` instead of concatenation
