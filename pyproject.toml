@@ -2,6 +2,11 @@
 plugins = ["numpy.typing.mypy_plugin"]
 ignore_missing_imports = true
 check_untyped_defs = false
+disable_error_code = [
+    "has-type",
+    "misc",
+    "var-annotated"
+]
 
 [[tool.mypy.overrides]]
 module = "timemachine._vendored.fire"

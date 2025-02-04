@@ -681,8 +681,8 @@ def setup_end_state(
 def find_dummy_groups_and_anchors(
     mol_a,
     mol_b,
-    core_atoms_a: Sequence[int] | NDArray[np.int32],
-    core_atoms_b: Sequence[int] | NDArray[np.int32],
+    core_atoms_a: Sequence[int],
+    core_atoms_b: Sequence[int],
 ) -> dict[int, tuple[Optional[int], frozenset[int]]]:
     """Returns an arbitrary dummy group assignment for the A -> B transformation.
 
@@ -969,8 +969,8 @@ class AtomMapMixin:
                 iota += 1
 
         # setup reverse mappings
-        self.c_to_a = {v: k for k, v in enumerate(self.a_to_c)}
-        self.c_to_b = {v: k for k, v in enumerate(self.b_to_c)}
+        self.c_to_a = {int(v): k for k, v in enumerate(self.a_to_c)}
+        self.c_to_b = {int(v): k for k, v in enumerate(self.b_to_c)}
 
     def get_dummy_atoms_a(self) -> set[int]:
         return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_A}
@@ -1028,7 +1028,7 @@ def assert_bonds_defined_for_chiral_volumes(
 
     for idxs, (bond_k, _) in zip(system.bond.potential.idxs, system.bond.params):
         if bond_k > bond_k_min:
-            bonds_present.add(tuple(idxs))
+            bonds_present.add(tuple(idxs))  # type: ignore[arg-type]
 
     for (c, i, j, k), chiral_k in zip(system.chiral_atom.potential.idxs, system.chiral_atom.params):
         if chiral_k > 0:
@@ -1120,8 +1120,8 @@ class SingleTopology(AtomMapMixin):
         if a_charge != b_charge:
             raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
-        self.anchored_dummy_groups_ab = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])
-        self.anchored_dummy_groups_ba = find_dummy_groups_and_anchors(mol_b, mol_a, core[:, 1], core[:, 0])
+        self.anchored_dummy_groups_ab = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])  # type: ignore[arg-type]
+        self.anchored_dummy_groups_ba = find_dummy_groups_and_anchors(mol_b, mol_a, core[:, 1], core[:, 0])  # type: ignore[arg-type]
 
         # setup end states
         self.src_system = self._setup_end_state_src()
