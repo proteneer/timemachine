@@ -2,7 +2,6 @@ import pickle
 from dataclasses import replace
 from importlib import resources
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import pytest
@@ -74,7 +73,7 @@ def compute_ref_raw_log_prob(
 
 
 def verify_targeted_moves(
-    mol_groups: List,
+    mol_groups: list,
     bdem,
     ref_bdem: RefTIBDExchangeMove,
     conf: NDArray,

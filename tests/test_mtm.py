@@ -1,6 +1,5 @@
 import copy
 import functools
-from typing import List
 
 import jax
 import jax.numpy as jnp
@@ -105,7 +104,7 @@ def test_optimized_MTM():
     batch_log_prob_fn = jax.vmap(log_prob_fn)
 
     # do not take velocities into account when evaluating log probabilities
-    def batch_log_prob_wrapper(xvbs: List[CoordsVelBox]) -> List[float]:
+    def batch_log_prob_wrapper(xvbs: list[CoordsVelBox]) -> list[float]:
         batch_coords = np.array([xvb.coords for xvb in xvbs])
         batch_boxes = np.array([xvb.box for xvb in xvbs])
         return batch_log_prob_fn(batch_coords, batch_boxes)

@@ -2,8 +2,9 @@ import argparse
 import csv
 import pickle
 import traceback
+from collections.abc import Sequence
 from dataclasses import replace
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence
+from typing import Any, NamedTuple, Optional
 
 import numpy as np
 from openmm import app
@@ -20,7 +21,7 @@ from timemachine.parallel.client import AbstractClient, AbstractFileClient, CUDA
 class Edge(NamedTuple):
     mol_a_name: str
     mol_b_name: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 def get_failure_result_path(mol_a_name: str, mol_b_name: str):
@@ -33,7 +34,7 @@ def get_success_result_path(mol_a_name: str, mol_b_name: str):
 
 def run_edge_and_save_results(
     edge: Edge,
-    mols: Dict[str, Chem.rdchem.Mol],
+    mols: dict[str, Chem.rdchem.Mol],
     forcefield: Forcefield,
     protein: app.PDBFile,
     file_client: AbstractFileClient,
@@ -230,7 +231,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def read_edges_csv(path: str) -> List[Edge]:
+def read_edges_csv(path: str) -> list[Edge]:
     with open(path) as fp:
         reader = csv.reader(fp, delimiter=",")
         next(reader, None)  # skip header

@@ -1,5 +1,5 @@
 import tempfile
-from typing import List, Optional
+from typing import Optional
 
 import jax
 import numpy as np
@@ -39,7 +39,7 @@ def get_vacuum_val_and_grad_fn(mol: Chem.Mol, ff: Forcefield):
     return val_and_grad_fn
 
 
-def get_strained_atoms(mol: Chem.Mol, ff: Forcefield, max_force: Optional[float] = MAX_FORCE_NORM) -> List[float]:
+def get_strained_atoms(mol: Chem.Mol, ff: Forcefield, max_force: Optional[float] = MAX_FORCE_NORM) -> list[float]:
     """
     Return a list of atom indices that are strained based on the max_force.
 
@@ -103,7 +103,7 @@ def apply_hmr(masses, bond_list, multiplier=2):
     return masses
 
 
-def image_frame(group_idxs: List[NDArray], coords: NDArray, box: NDArray) -> NDArray:
+def image_frame(group_idxs: list[NDArray], coords: NDArray, box: NDArray) -> NDArray:
     """Given a set group indices, the coordinates of a frame and the box, will return
     the coordinates wrapped into the periodic box.
 

@@ -1,6 +1,7 @@
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Callable, List, Protocol, Sequence, Tuple
+from typing import Callable, Protocol
 from unittest.mock import patch
 
 import matplotlib.pyplot as plt
@@ -74,7 +75,7 @@ class LocalMove(MonteCarloMove[float]):
         self.proposal = proposal
         self.target = target
 
-    def propose(self, x: float) -> Tuple[float, float]:
+    def propose(self, x: float) -> tuple[float, float]:
         x_p = self.proposal(x).sample(1).item()
         log_q_diff = self.target.log_q(x_p) - self.target.log_q(x)
         log_acceptance_probability = np.minimum(log_q_diff, 0.0)
@@ -98,7 +99,7 @@ def run_hrex_with_local_proposal(
     # neighbor swaps is aperiodic in cases where swap acceptance rates approach 100%
     neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
 
-    def sample_replica(replica: float, state_idx: StateIdx, n_samples: int) -> List[float]:
+    def sample_replica(replica: float, state_idx: StateIdx, n_samples: int) -> list[float]:
         """Sample replica using local moves in the specified state"""
         move = LocalMove(proposal, states[state_idx])
         samples = move.sample_chain(replica, n_samples)
@@ -110,7 +111,7 @@ def run_hrex_with_local_proposal(
         )
         return log_q_kl
 
-    def replica_from_samples(xs: List[float]) -> float:
+    def replica_from_samples(xs: list[float]) -> float:
         return xs[-1]
 
     samples_by_state_by_iter, diagnostics = run_hrex(

@@ -5,7 +5,8 @@ __all__ = [
     "one_sided_exp",
 ]
 
-from typing import Callable, Collection
+from collections.abc import Collection
+from typing import Callable
 
 import numpy as np
 from jax import Array

@@ -1,7 +1,8 @@
 import multiprocessing
 from abc import ABC
+from collections.abc import Sequence
 from dataclasses import dataclass, fields
-from typing import Generic, List, Sequence, Tuple, TypeVar, Union
+from typing import Generic, TypeVar, Union
 
 import jax
 import numpy as np
@@ -99,7 +100,7 @@ def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
     )
 
 
-def convert_omm_system(omm_system) -> Tuple["HostSystem", List[float]]:
+def convert_omm_system(omm_system) -> tuple["HostSystem", list[float]]:
     """Convert an openmm.System to a HostSystem object, also returning the masses"""
     from timemachine.ff.handlers import openmm_deserializer
 
@@ -124,10 +125,10 @@ class AbstractSystem(ABC):
 
         return U_fn
 
-    def get_U_fns(self) -> List[BoundPotential]:
+    def get_U_fns(self) -> list[BoundPotential]:
         """
         Return a list of bound potential"""
-        potentials: List[BoundPotential] = []
+        potentials: list[BoundPotential] = []
         for f in fields(self):
             bp = getattr(self, f.name)
             # (TODO): len(p.params) > 0 is dangerous if we later on have potentials

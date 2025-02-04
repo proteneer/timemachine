@@ -1,8 +1,8 @@
 """Absolute hydration free energies"""
 
 import pickle
+from collections.abc import Sequence
 from functools import partial
-from typing import List, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray as Array
@@ -42,7 +42,7 @@ def generate_endstate_samples(
     ligand_samples: Sequence,
     ligand_log_weights: Array,
     num_ligand_atoms: int,
-) -> List[CoordsVelBox]:
+) -> list[CoordsVelBox]:
     """solvent + (noninteracting ligand) sample --> solvent + (vacuum ligand) sample
 
     Inputs
@@ -245,7 +245,7 @@ def setup_initial_states(
     temperature: float,
     lambda_schedule: Array,
     seed: int,
-) -> List[InitialState]:
+) -> list[InitialState]:
     """
     Setup the initial states for a series of lambda values. It is assumed that the lambda schedule
     is a monotonically decreasing sequence in the closed interval [0, 1].
@@ -320,7 +320,7 @@ def setup_initial_states(
 
 def run_solvent(
     mol, forcefield: Forcefield, _, md_params: MDParams, n_windows=16
-) -> Tuple[SimulationResult, app.topology.Topology, HostConfig]:
+) -> tuple[SimulationResult, app.topology.Topology, HostConfig]:
     box_width = 4.0
     solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
         box_width, forcefield.water_ff, mols=[mol]

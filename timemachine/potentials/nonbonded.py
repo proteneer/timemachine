@@ -1,5 +1,5 @@
 import warnings
-from typing import Optional, Tuple, cast
+from typing import Optional, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -347,7 +347,7 @@ def nonbonded_on_specific_pairs(
     beta: float,
     cutoff: Optional[float] = None,
     rescale_mask=None,
-) -> Tuple[Array, Array]:
+) -> tuple[Array, Array]:
     """See `nonbonded` docstring for more details
 
     Notes

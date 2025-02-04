@@ -1,4 +1,5 @@
-from typing import List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Optional
 
 import jax.numpy as jnp
 import numpy as np
@@ -11,7 +12,7 @@ def summed_potential(
     params: Params,
     box: Optional[Box],
     U_fns: Sequence[PotentialFxn],
-    shapes: Sequence[Tuple],
+    shapes: Sequence[tuple],
 ):
     """Reference implementation of the custom_ops SummedPotential.
 
@@ -37,7 +38,7 @@ def summed_potential(
     return jnp.sum(jnp.array([U_fn(conf, ps, box) for U_fn, ps in zip(U_fns, unflattened_params)]))
 
 
-def unflatten_params(params: Params, shapes: Sequence[Tuple[int, ...]]) -> List[Params]:
+def unflatten_params(params: Params, shapes: Sequence[tuple[int, ...]]) -> list[Params]:
     sizes = [int(np.prod(shape)) for shape in shapes]
     assert params.shape == (sum(sizes),)
     split_indices = np.cumsum(sizes)

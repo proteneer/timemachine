@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterator, Sequence
 from functools import partial
 from itertools import islice
-from typing import Any, Generic, Iterator, List, Sequence, Tuple, TypeVar
+from typing import Any, Generic, TypeVar
 
 import jax
 import jax.numpy as jnp
@@ -38,7 +39,7 @@ class Move(Generic[_State], ABC):
             x = self.move(x)
             yield x
 
-    def sample_chain(self, x: _State, n_samples: int) -> List[_State]:
+    def sample_chain(self, x: _State, n_samples: int) -> list[_State]:
         """Given an initial state and number of samples, returns a finite sequence of samples
 
         Subclasses may override this to use a more efficient implementation, e.g. to generate random numbers in batch.
@@ -52,7 +53,7 @@ class MonteCarloMove(Move[_State], ABC):
         self._n_accepted = 0
 
     @abstractmethod
-    def propose(self, x: _State) -> Tuple[_State, float]:
+    def propose(self, x: _State) -> tuple[_State, float]:
         """return proposed state and log acceptance probability"""
 
     def move(self, x: _State) -> _State:
@@ -85,11 +86,11 @@ class CompoundMove(Move[_State]):
         self.moves = moves
 
     @property
-    def n_accepted_by_move(self) -> List[int]:
+    def n_accepted_by_move(self) -> list[int]:
         return [m._n_accepted for m in self.moves]
 
     @property
-    def n_proposed_by_move(self) -> List[int]:
+    def n_proposed_by_move(self) -> list[int]:
         return [m._n_proposed for m in self.moves]
 
 
@@ -112,7 +113,7 @@ class MixtureOfMoves(CompoundMove[_State]):
             x = self.moves[idx].move(x)
         return x
 
-    def sample_chain(self, x: _State, n_samples: int) -> List[_State]:
+    def sample_chain(self, x: _State, n_samples: int) -> list[_State]:
         # Override default implementation to generate random selections in batch for efficiency
         idxs = np.random.choice(len(self.moves), size=n_samples, replace=True)
         samples = []
@@ -137,7 +138,7 @@ class SequenceOfMoves(CompoundMove[_State]):
 class NVTMove(Move[CoordsVelBox]):
     def __init__(
         self,
-        bps: List[BoundPotential],
+        bps: list[BoundPotential],
         masses: NDArray,
         temperature: float,
         n_steps: int,
@@ -183,7 +184,7 @@ class DeterministicMTMMove(Move):
         return self._n_accepted
 
     @abstractmethod
-    def acceptance_probability(self, x, box, key) -> Tuple[Any, Any, Any]:
+    def acceptance_probability(self, x, box, key) -> tuple[Any, Any, Any]:
         pass
 
     def move(self, xvb: CoordsVelBox) -> CoordsVelBox:

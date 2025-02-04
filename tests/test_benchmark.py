@@ -6,7 +6,7 @@ import time
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from importlib import resources
-from typing import List, Optional
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -61,7 +61,7 @@ class BenchmarkConfig:
         assert self.num_equil_batches >= 1
 
 
-def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], box_volumes: List[float], label: str):
+def plot_batch_times(steps_per_batch: int, dt: float, batch_times: list[float], box_volumes: list[float], label: str):
     """
     Plot and save a figure of the batches of benchmarks run.
 
@@ -200,7 +200,7 @@ def benchmark(
     x0: NDArray,
     v0: NDArray,
     box: NDArray,
-    bound_potentials: List[BoundPotential],
+    bound_potentials: list[BoundPotential],
     dt: float = 1.5e-3,
     barostat_interval: int = 0,
 ):
@@ -364,7 +364,7 @@ def benchmark_local(
     x0: NDArray,
     v0: NDArray,
     box: NDArray,
-    bound_potentials: List[BoundPotential],
+    bound_potentials: list[BoundPotential],
     ligand_idxs: NDArray,
     dt: float = 1.5e-3,
 ):

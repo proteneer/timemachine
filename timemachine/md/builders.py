@@ -1,5 +1,5 @@
 import os
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -27,7 +27,7 @@ def replace_clashy_waters(
     host_coords: NDArray[np.float64],
     box: NDArray[np.float64],
     water_idxs: NDArray[np.int_],
-    mols: List[Chem.Mol],
+    mols: list[Chem.Mol],
     host_ff: app.ForceField,
     water_ff: str,
     clash_distance: float = 0.4,
@@ -49,7 +49,7 @@ def replace_clashy_waters(
     water_idxs: NDArray[int]
         The indices of all of the water atoms in the system.
 
-    mols: List[Mol]
+    mols: list[Mol]
         List of molecules to determine which waters are clashy
 
     host_ff: app.ForceField
@@ -91,7 +91,7 @@ def replace_clashy_waters(
 
 
 def build_protein_system(
-    host_pdbfile: Union[app.PDBFile, str], protein_ff: str, water_ff: str, mols: Optional[List[Chem.Mol]] = None
+    host_pdbfile: Union[app.PDBFile, str], protein_ff: str, water_ff: str, mols: Optional[list[Chem.Mol]] = None
 ):
     """
     Build a solvated protein system with a 10A padding.
@@ -171,7 +171,7 @@ def build_protein_system(
     return solvated_host_system, solvated_host_coords, box, modeller.topology, num_water_atoms
 
 
-def build_water_system(box_width: float, water_ff: str, mols: Optional[List[Chem.Mol]] = None):
+def build_water_system(box_width: float, water_ff: str, mols: Optional[list[Chem.Mol]] = None):
     """
     Build a water system with a cubic box with each side of length box_width.
 

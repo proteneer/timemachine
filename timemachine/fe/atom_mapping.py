@@ -1,6 +1,6 @@
 from collections import defaultdict
 from functools import partial
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -61,7 +61,7 @@ def get_cores_and_diagnostics(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
-) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
+) -> tuple[list[NDArray], mcgregor.MCSDiagnostics]:
     """Same as :py:func:`get_cores`, but additionally returns diagnostics collected during the MCS search."""
     assert max_cores > 0
 
@@ -106,7 +106,7 @@ def get_cores(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
-) -> List[NDArray]:
+) -> list[NDArray]:
     """
     Finds set of cores between two molecules that maximizes the number of common edges.
 
@@ -261,7 +261,7 @@ def _get_cores_impl(
     disallow_planar_torsion_flips,
     min_threshold,
     initial_mapping,
-) -> Tuple[List[NDArray], mcgregor.MCSDiagnostics]:
+) -> tuple[list[NDArray], mcgregor.MCSDiagnostics]:
     if initial_mapping is None:
         initial_mapping = np.zeros((0, 2))
 

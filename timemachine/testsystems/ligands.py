@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -7,7 +7,7 @@ from rdkit import Chem
 RDKitMol = Any  # Chem.Mol does not work as a type annotation
 
 
-def get_biphenyl() -> Tuple[RDKitMol, NDArray[np.int64]]:
+def get_biphenyl() -> tuple[RDKitMol, NDArray[np.int64]]:
     MOL_SDF = """
   Mrv2118 11122115063D
 
@@ -64,7 +64,7 @@ $$$$"""
     return mol, torsion_idxs
 
 
-def get_triphenyl() -> Tuple[RDKitMol, NDArray[np.int64]]:
+def get_triphenyl() -> tuple[RDKitMol, NDArray[np.int64]]:
     MOL_SDF = """
   Mrv2118 11122114533D
 
