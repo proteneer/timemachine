@@ -70,8 +70,10 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     d_coords.copy_from(h_coords);
     d_box.copy_from(h_box);
 
-    this->compute_block_bounds_device(N, D, d_coords.data, d_box.data, static_cast<cudaStream_t>(0));
-    gpuErrchk(cudaDeviceSynchronize());
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+
+    this->compute_block_bounds_device(N, D, d_coords.data, d_box.data, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
 
     gpuErrchk(cudaMemcpy(
         &h_block_bounds_centers[0],
@@ -113,9 +115,12 @@ Neighborlist<RealType>::get_nblist_host(int N, const double *h_coords, const dou
     d_coords.copy_from(h_coords);
     d_box.copy_from(h_box);
 
-    this->build_nblist_device(N, d_coords.data, d_box.data, cutoff, static_cast<cudaStream_t>(0));
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
 
-    gpuErrchk(cudaDeviceSynchronize());
+    this->build_nblist_device(N, d_coords.data, d_box.data, cutoff, stream);
+
+    gpuErrchk(cudaStreamSynchronize(stream));
+
     const int column_blocks = this->num_column_blocks();
     const int row_blocks = this->num_row_blocks();
 
@@ -270,9 +275,10 @@ template <typename RealType> void Neighborlist<RealType>::set_row_idxs(std::vect
 
     column_idx_buffer.copy_from(&column_indices[0]);
 
-    this->set_idxs_device(
-        col_count, row_count, column_idx_buffer.data, row_idx_buffer.data, static_cast<cudaStream_t>(0));
-    gpuErrchk(cudaDeviceSynchronize());
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+
+    this->set_idxs_device(col_count, row_count, column_idx_buffer.data, row_idx_buffer.data, stream);
+    gpuErrchk(cudaStreamSynchronize(stream));
 }
 
 template <typename RealType> void Neighborlist<RealType>::reset_row_idxs() {
