@@ -434,7 +434,6 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
     """
     conf, _, group_idxs, nb = get_water_system_and_all_group_idxs(1.0)
     rng = np.random.default_rng(seed)
-    # (ytz): ask fyork if we intended to set a very large box
     box = np.eye(3) * 100.0
     N = conf.shape[0]
 

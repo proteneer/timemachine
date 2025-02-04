@@ -37,7 +37,7 @@ def test_deterministic_energies(precision, rtol, atol):
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
+        host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b])
 
     min_coords = minimizer.fire_minimize_host([mol_a, mol_b], host_config, ff)
 

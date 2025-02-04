@@ -568,7 +568,6 @@ def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, bat
     increase the number of proposals per move in the constructor that the results should be identical
     """
     rng = np.random.default_rng(seed)
-    # (YTZ): check with fyork that we intended this to be a 1 nm box width
     conf, box, all_group_idxs, nb = get_water_system_and_all_group_idxs(1.0)
 
     group_idxs = all_group_idxs[1:]

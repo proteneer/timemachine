@@ -300,7 +300,7 @@ def test_local_minimize_restrained_waters_trigger_failure(seed, minimizer_config
     # Setup a water box without a void for the mol
     host_config = builders.build_water_system(4.0, ff.water_ff)
     host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
-    box = host_config
+    box = host_config.box
     host_coords = host_config.conf
 
     bt = BaseTopology(benzene, ff)
