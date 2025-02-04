@@ -50,7 +50,7 @@ def test_reference_langevin_integrator(threshold=1e-4):
 
         # compare with e^{-U(x) / kB T} / Z
         y = np.exp(-potential_fxn(x_grid) / (BOLTZ * temperature))
-        y_ref = y / np.trapz(y, x_grid)
+        y_ref = y / np.trapezoid(y, x_grid)
 
         histogram_mse = np.mean((y_ref - y_empirical) ** 2)
         print(f"{(temperature, friction, dt, mass)}".ljust(33), "->", histogram_mse)
