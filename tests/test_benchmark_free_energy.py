@@ -118,7 +118,7 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
         run = partial(run_sims_sequential, initial_states, md_params, temperature=temperature)
     elif mode == "bisection":
         # Bisection is expected to use a slightly different initial schedule to reduce
-        # amount of minimization. The additional logic it to emulate estimate_relative_free_energy_bisection
+        # the amount of minimization. Benchmark intends to emulate estimate_relative_free_energy_bisection
         lambda_grid = bisection_lambda_schedule(
             n_windows, lambda_interval=(initial_states[0].lamb, initial_states[-1].lamb)
         )
@@ -147,8 +147,8 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
         )
 
         make_optimized_initial_state = lambda lamb: optimize_initial_state_fn(make_initial_state_fn(lamb))
-        # Bisection is a bit different since it has to generate new windows, but still good to benchmark
-        # as it is done upfront before HREX in practice
+        # Bisection is a bit different, since it has to generate new windows. The lambda schedule from bisection
+        # is used as the schedule for HREX in practice, making it important to benchmark.
         run = partial(
             run_sims_bisection,
             [initial_states[0].lamb, initial_states[-1].lamb],
