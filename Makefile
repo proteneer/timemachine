@@ -58,6 +58,10 @@ nightly_tests:
 nightly_memcheck_tests:
 	$(COMPUTE_SANITIZER_CMD) pytest -m '$(NIGHTLY_MARKER) and $(MEMCHECK_MARKER)' $(PYTEST_CI_ARGS)
 
+.PHONY: nightly_memcheck_tests_sm75
+nightly_memcheck_tests_sm75:
+	$(COMPUTE_SANITIZER_CMD) pytest -m $(MEMCHECK_MARKER) $(PYTEST_CI_ARGS)
+
 .PHONY: nocuda_nightly_tests
 nocuda_nightly_tests:
 	pytest -m '$(NIGHTLY_MARKER) and $(NOCUDA_MARKER)' $(PYTEST_CI_ARGS)

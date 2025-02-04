@@ -171,7 +171,7 @@ nightly-memcheck-tests-sm75:
     - if: $NIGHTLY_TESTS
   script:
     - pip install .[test]
-    - pytest -m memcheck
+    - make nightly_memcheck_tests_sm75
   artifacts:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nightly-memcheck-tests"
     paths:
