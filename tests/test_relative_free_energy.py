@@ -165,7 +165,7 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params: MDParams, protein_path
     check_sim_result(complex_res)
 
 
-# @pytest.mark.nightly(reason="Slow!")
+@pytest.mark.nightly(reason="Slow!")
 @pytest.mark.parametrize(
     "estimate_relative_free_energy_fn",
     [

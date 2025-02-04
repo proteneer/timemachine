@@ -336,7 +336,14 @@ def hif2a_ligand_pair_single_topology_lam0_state():
 
 
 @pytest.mark.parametrize("seed", [2024])
-@pytest.mark.parametrize("host_name", [None, "solvent", "complex"])
+@pytest.mark.parametrize(
+    "host_name",
+    [
+        None,
+        pytest.param("solvent", marks=pytest.mark.nightly(reason="slow")),
+        pytest.param("complex", marks=pytest.mark.nightly(reason="slow")),
+    ],
+)
 def test_initial_state_interacting_ligand_atoms(host_name, seed):
     lambdas = np.linspace(0.0, 1.0, 4)
     forcefield = Forcefield.load_default()
