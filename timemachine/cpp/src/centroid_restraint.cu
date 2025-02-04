@@ -10,7 +10,7 @@ namespace timemachine {
 template <typename RealType>
 CentroidRestraint<RealType>::CentroidRestraint(
     const std::vector<int> &group_a_idxs, const std::vector<int> &group_b_idxs, const double kb, const double b0)
-    : N_A_(group_a_idxs.size()), N_B_(group_b_idxs.size()), kb_(kb), b0_(b0) {
+    : N_A_(group_a_idxs.size()), N_B_(group_b_idxs.size()), kb_(kb), b0_(b0), sum_storage_bytes_(0) {
 
     cudaSafeMalloc(&d_group_a_idxs_, N_A_ * sizeof(*d_group_a_idxs_));
     gpuErrchk(cudaMemcpy(d_group_a_idxs_, &group_a_idxs[0], N_A_ * sizeof(*d_group_a_idxs_), cudaMemcpyHostToDevice));
@@ -20,8 +20,6 @@ CentroidRestraint<RealType>::CentroidRestraint(
 
     cudaSafeMalloc(&d_centroid_a_, 3 * sizeof(*d_centroid_a_));
     cudaSafeMalloc(&d_centroid_b_, 3 * sizeof(*d_centroid_b_));
-
-    cudaSafeMalloc(&d_u_buffer_, sizeof(*d_u_buffer_));
 };
 
 template <typename RealType> CentroidRestraint<RealType>::~CentroidRestraint() {
@@ -29,7 +27,6 @@ template <typename RealType> CentroidRestraint<RealType>::~CentroidRestraint() {
     gpuErrchk(cudaFree(d_group_b_idxs_));
     gpuErrchk(cudaFree(d_centroid_a_));
     gpuErrchk(cudaFree(d_centroid_b_));
-    gpuErrchk(cudaFree(d_u_buffer_));
 };
 
 template <typename RealType>
@@ -41,7 +38,7 @@ void CentroidRestraint<RealType>::execute_device(
     const double *d_box,
     unsigned long long *d_du_dx,
     unsigned long long *d_du_dp,
-    __int128 *d_u,
+    __int128 *d_u, // [1]
     cudaStream_t stream) {
 
     if (N_B_ + N_A_ > 0) {
@@ -65,12 +62,9 @@ void CentroidRestraint<RealType>::execute_device(
             kb_,
             b0_,
             d_du_dx,
-            d_u == nullptr ? nullptr : d_u_buffer_);
+            d_u // Can write directly to the energy buffer for this potential.
+        );
         gpuErrchk(cudaPeekAtLastError());
-
-        if (d_u) {
-            accumulate_energy(1, d_u_buffer_, d_u, stream);
-        }
     }
 };
 

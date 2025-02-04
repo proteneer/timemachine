@@ -2,13 +2,22 @@
 #include "fanout_summed_potential.hpp"
 #include "gpu_utils.cuh"
 #include "nonbonded_common.hpp"
+#include <cub/cub.cuh>
 #include <memory>
 
 namespace timemachine {
 
 FanoutSummedPotential::FanoutSummedPotential(
     const std::vector<std::shared_ptr<Potential>> potentials, const bool parallel)
-    : potentials_(potentials), parallel_(parallel), d_u_buffer_(potentials_.size()){};
+    : potentials_(potentials), parallel_(parallel), d_u_buffer_(potentials_.size()), sum_storage_bytes_(0) {
+
+    gpuErrchk(
+        cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_.data, d_u_buffer_.data, potentials_.size()));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
+};
+
+FanoutSummedPotential::~FanoutSummedPotential() { gpuErrchk(cudaFree(d_sum_temp_storage_)); };
 
 const std::vector<std::shared_ptr<Potential>> &FanoutSummedPotential::get_potentials() { return potentials_; }
 
@@ -46,7 +55,8 @@ void FanoutSummedPotential::execute_device(
         }
     }
     if (d_u) {
-        accumulate_energy(potentials_.size(), d_u_buffer_.data, d_u, stream);
+        gpuErrchk(cub::DeviceReduce::Sum(
+            d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_.data, d_u, potentials_.size(), stream));
     }
 };
 

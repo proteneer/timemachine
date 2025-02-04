@@ -5,6 +5,7 @@
 #include "kernels/k_nonbonded_common.cuh"
 #include "math_utils.cuh"
 #include "nonbonded_precomputed.hpp"
+#include <cub/cub.cuh>
 #include <vector>
 
 namespace timemachine {
@@ -12,7 +13,7 @@ namespace timemachine {
 template <typename RealType>
 NonbondedPairListPrecomputed<RealType>::NonbondedPairListPrecomputed(
     const std::vector<int> &idxs, const double beta, const double cutoff)
-    : B_(idxs.size() / 2), beta_(beta), cutoff_(cutoff) {
+    : B_(idxs.size() / 2), beta_(beta), cutoff_(cutoff), sum_storage_bytes_(0) {
 
     if (idxs.size() % 2 != 0) {
         throw std::runtime_error("idxs.size() must be exactly 2*B!");
@@ -31,11 +32,16 @@ NonbondedPairListPrecomputed<RealType>::NonbondedPairListPrecomputed(
     gpuErrchk(cudaMemcpy(d_idxs_, &idxs[0], B_ * 2 * sizeof(*d_idxs_), cudaMemcpyHostToDevice));
 
     cudaSafeMalloc(&d_u_buffer_, B_ * sizeof(*d_u_buffer_));
+
+    gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, B_));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
 };
 
 template <typename RealType> NonbondedPairListPrecomputed<RealType>::~NonbondedPairListPrecomputed() {
     gpuErrchk(cudaFree(d_idxs_));
     gpuErrchk(cudaFree(d_u_buffer_));
+    gpuErrchk(cudaFree(d_sum_temp_storage_));
 };
 
 template <typename RealType>
@@ -75,7 +81,7 @@ void NonbondedPairListPrecomputed<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if (d_u) {
-            accumulate_energy(B_, d_u_buffer_, d_u, stream);
+            gpuErrchk(cub::DeviceReduce::Sum(d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_u, B_, stream));
         }
     }
 };

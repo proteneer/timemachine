@@ -3,6 +3,7 @@
 #include "gpu_utils.cuh"
 #include "nonbonded_common.hpp"
 #include "summed_potential.hpp"
+#include <cub/cub.cuh>
 #include <memory>
 #include <numeric>
 #include <stdexcept>
@@ -13,11 +14,18 @@ SummedPotential::SummedPotential(
     const std::vector<std::shared_ptr<Potential>> potentials, const std::vector<int> params_sizes, const bool parallel)
     : potentials_(potentials), params_sizes_(params_sizes),
       P_(std::accumulate(params_sizes.begin(), params_sizes.end(), 0)), parallel_(parallel),
-      d_u_buffer_(potentials.size()) {
+      d_u_buffer_(potentials.size()), sum_storage_bytes_(0) {
     if (potentials_.size() != params_sizes_.size()) {
         throw std::runtime_error("number of potentials != number of parameter sizes");
     }
+
+    gpuErrchk(
+        cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_.data, d_u_buffer_.data, potentials_.size()));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
 };
+
+SummedPotential::~SummedPotential() { gpuErrchk(cudaFree(d_sum_temp_storage_)); };
 
 const std::vector<std::shared_ptr<Potential>> &SummedPotential::get_potentials() { return potentials_; }
 
@@ -73,7 +81,8 @@ void SummedPotential::execute_device(
         }
     }
     if (d_u) {
-        accumulate_energy(potentials_.size(), d_u_buffer_.data, d_u, stream);
+        gpuErrchk(cub::DeviceReduce::Sum(
+            d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_.data, d_u, potentials_.size(), stream));
     }
 };
 

@@ -15,7 +15,7 @@ NonbondedPairList<RealType, Negated>::NonbondedPairList(
     const std::vector<double> &scales, // [M, 2]
     const double beta,
     const double cutoff)
-    : M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff) {
+    : M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff), sum_storage_bytes_(0) {
 
     if (pair_idxs.size() % 2 != 0) {
         throw std::runtime_error("pair_idxs.size() must be even, but got " + std::to_string(pair_idxs.size()));

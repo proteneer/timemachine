@@ -4,6 +4,7 @@
 #include "kernel_utils.cuh"
 #include "math_utils.cuh"
 #include "periodic_torsion.hpp"
+#include <cub/cub.cuh>
 #include <vector>
 
 namespace timemachine {
@@ -11,7 +12,7 @@ namespace timemachine {
 template <typename RealType>
 PeriodicTorsion<RealType>::PeriodicTorsion(const std::vector<int> &torsion_idxs // [A, 4]
                                            )
-    : T_(torsion_idxs.size() / 4) {
+    : T_(torsion_idxs.size() / 4), sum_storage_bytes_(0) {
 
     if (torsion_idxs.size() % 4 != 0) {
         throw std::runtime_error("torsion_idxs.size() must be exactly 4*k");
@@ -31,11 +32,16 @@ PeriodicTorsion<RealType>::PeriodicTorsion(const std::vector<int> &torsion_idxs 
     gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], T_ * 4 * sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
 
     cudaSafeMalloc(&d_u_buffer_, T_ * sizeof(*d_u_buffer_));
+
+    gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, T_));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
 };
 
 template <typename RealType> PeriodicTorsion<RealType>::~PeriodicTorsion() {
     gpuErrchk(cudaFree(d_torsion_idxs_));
     gpuErrchk(cudaFree(d_u_buffer_));
+    gpuErrchk(cudaFree(d_sum_temp_storage_));
 };
 
 template <typename RealType>
@@ -66,7 +72,7 @@ void PeriodicTorsion<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if (d_u) {
-            accumulate_energy(T_, d_u_buffer_, d_u, stream);
+            gpuErrchk(cub::DeviceReduce::Sum(d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_u, T_, stream));
         }
     }
 };

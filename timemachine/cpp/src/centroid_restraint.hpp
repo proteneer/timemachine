@@ -22,6 +22,9 @@ private:
     double kb_;
     double b0_;
 
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
+
 public:
     CentroidRestraint(
         const std::vector<int> &group_a_idxs, const std::vector<int> &group_b_idxs, const double kb, const double b0);

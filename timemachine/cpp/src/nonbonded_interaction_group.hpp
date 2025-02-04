@@ -18,6 +18,9 @@ private:
     int NR_;      // number of row atoms
     int NC_;      // number of column atoms
 
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
+
     std::array<k_nonbonded_fn, 8> kernel_ptrs_;
 
     unsigned int *d_col_atom_idxs_;

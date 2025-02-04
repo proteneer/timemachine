@@ -10,7 +10,8 @@
 namespace timemachine {
 
 template <typename RealType>
-HarmonicBond<RealType>::HarmonicBond(const std::vector<int> &bond_idxs) : B_(bond_idxs.size() / 2) {
+HarmonicBond<RealType>::HarmonicBond(const std::vector<int> &bond_idxs)
+    : B_(bond_idxs.size() / 2), sum_storage_bytes_(0) {
 
     if (bond_idxs.size() % 2 != 0) {
         throw std::runtime_error("bond_idxs.size() must be exactly 2*k!");
@@ -28,8 +29,7 @@ HarmonicBond<RealType>::HarmonicBond(const std::vector<int> &bond_idxs) : B_(bon
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_ * 2 * sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
     cudaSafeMalloc(&d_u_buffer_, B_ * sizeof(*d_u_buffer_));
 
-    void *d_temp_storage = nullptr;
-    gpuErrchk(cub::DeviceReduce::Sum(d_temp_storage, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, B_));
+    gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, B_));
 
     gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
 };
@@ -67,7 +67,7 @@ void HarmonicBond<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if (d_u) {
-            gpuErrchk(cub::DeviceReduce::Sum(d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_u, B_));
+            gpuErrchk(cub::DeviceReduce::Sum(d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_u, B_, stream));
         }
     }
 };

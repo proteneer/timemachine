@@ -4,6 +4,7 @@
 #include "../gpu_utils.cuh"
 #include "k_nonbonded_common.cuh"
 #include "kernel_utils.cuh"
+#include <cub/cub.cuh>
 
 namespace timemachine {
 
@@ -419,13 +420,16 @@ void __global__ k_nonbonded_unified(
         tile_idx += stride;
     }
     if (COMPUTE_U) {
-        // Sync to ensure the shared buffers are populated
-        __syncthreads();
+        using BlockReduce = cub::BlockReduce<__int128, THREADS_PER_BLOCK>;
 
-        block_energy_reduce<THREADS_PER_BLOCK>(block_energy_buffer, threadIdx.x);
+        // Allocate shared memory for BlockReduce
+        __shared__ typename BlockReduce::TempStorage temp_storage;
+
+        // Sum's return value is only valid in thread 0
+        __int128 aggregate = BlockReduce(temp_storage).Sum(block_energy_buffer[threadIdx.x]);
 
         if (threadIdx.x == 0) {
-            u_buffer[blockIdx.x] = block_energy_buffer[0];
+            u_buffer[blockIdx.x] = aggregate;
         }
     }
 }

@@ -10,6 +10,7 @@
 #include "kernels/kernel_utils.cuh"
 #include "nonbonded_all_pairs.hpp"
 #include "nonbonded_common.hpp"
+#include <cub/cub.cuh>
 
 #include <numeric>
 
@@ -27,7 +28,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     const double nblist_padding)
     : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), steps_since_last_sort_(0),
       d_atom_idxs_(nullptr), nblist_(N_), nblist_padding_(nblist_padding), hilbert_sort_(nullptr),
-      disable_hilbert_(disable_hilbert_sort),
+      disable_hilbert_(disable_hilbert_sort), sum_storage_bytes_(0),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // Set threads to 1 if not computing energy to reduced unused shared memory
@@ -71,6 +72,10 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     cudaSafeMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_));
     gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
 
+    gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, NONBONDED_KERNEL_BLOCKS));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
+
     if (!disable_hilbert_) {
         this->hilbert_sort_.reset(new HilbertSort(N_));
     }
@@ -100,6 +105,8 @@ template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
     gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
 
     gpuErrchk(cudaEventDestroy(nblist_flag_sync_event_));
+
+    gpuErrchk(cudaFree(d_sum_temp_storage_));
 };
 
 // Set atom idxs upon which to compute the non-bonded potential. This will trigger a neighborlist rebuild.
@@ -276,7 +283,8 @@ void NonbondedAllPairs<RealType>::execute_device(
     }
 
     if (d_u) {
-        accumulate_energy(NONBONDED_KERNEL_BLOCKS, d_u_buffer_, d_u, stream);
+        gpuErrchk(cub::DeviceReduce::Sum(
+            d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_u, NONBONDED_KERNEL_BLOCKS, stream));
     }
     // Increment steps
     steps_since_last_sort_++;

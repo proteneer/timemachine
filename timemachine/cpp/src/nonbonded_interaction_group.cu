@@ -11,6 +11,7 @@
 #include "nonbonded_common.hpp"
 #include "nonbonded_interaction_group.hpp"
 #include "set_utils.hpp"
+#include <cub/cub.cuh>
 
 #include "k_nonbonded.cuh"
 
@@ -27,7 +28,7 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     const double cutoff,
     const bool disable_hilbert_sort,
     const double nblist_padding)
-    : N_(N), NR_(row_atom_idxs.size()), NC_(col_atom_idxs.size()),
+    : N_(N), NR_(row_atom_idxs.size()), NC_(col_atom_idxs.size()), sum_storage_bytes_(0),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // Set threads to 1 if not computing energy to reduced unused shared memory
@@ -68,6 +69,10 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
     cudaSafeMalloc(&d_rebuild_nblist_, 1 * sizeof(*d_rebuild_nblist_));
     gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1 * sizeof(*p_rebuild_nblist_)));
 
+    gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, NONBONDED_KERNEL_BLOCKS));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
+
     if (!disable_hilbert_) {
         this->hilbert_sort_.reset(new HilbertSort(N_));
     }
@@ -97,6 +102,8 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
     gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
 
     gpuErrchk(cudaEventDestroy(nblist_flag_sync_event_));
+
+    gpuErrchk(cudaFree(d_sum_temp_storage_));
 };
 
 template <typename RealType> bool NonbondedInteractionGroup<RealType>::needs_sort() {
@@ -248,7 +255,8 @@ void NonbondedInteractionGroup<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
     if (d_u) {
-        accumulate_energy(NONBONDED_KERNEL_BLOCKS, d_u_buffer_, d_u, stream);
+        gpuErrchk(cub::DeviceReduce::Sum(
+            d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_u, NONBONDED_KERNEL_BLOCKS, stream));
     }
     // Increment steps
     steps_since_last_sort_++;

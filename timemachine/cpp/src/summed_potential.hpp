@@ -18,11 +18,16 @@ private:
     DeviceBuffer<__int128> d_u_buffer_;
     StreamManager manager_;
 
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
+
 public:
     SummedPotential(
         const std::vector<std::shared_ptr<Potential>> potentials,
         const std::vector<int> params_sizes,
         const bool parallel);
+
+    ~SummedPotential();
 
     const std::vector<std::shared_ptr<Potential>> &get_potentials();
 

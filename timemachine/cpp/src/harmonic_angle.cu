@@ -4,6 +4,7 @@
 #include "k_harmonic_angle.cuh"
 #include "kernel_utils.cuh"
 #include "math_utils.cuh"
+#include <cub/cub.cuh>
 #include <vector>
 
 namespace timemachine {
@@ -11,7 +12,7 @@ namespace timemachine {
 template <typename RealType>
 HarmonicAngle<RealType>::HarmonicAngle(const std::vector<int> &angle_idxs // [A, 3]
                                        )
-    : A_(angle_idxs.size() / 3) {
+    : A_(angle_idxs.size() / 3), sum_storage_bytes_(0) {
 
     if (angle_idxs.size() % 3 != 0) {
         throw std::runtime_error("angle_idxs.size() must be exactly 3*A");
@@ -30,11 +31,16 @@ HarmonicAngle<RealType>::HarmonicAngle(const std::vector<int> &angle_idxs // [A,
     gpuErrchk(cudaMemcpy(d_angle_idxs_, &angle_idxs[0], A_ * 3 * sizeof(*d_angle_idxs_), cudaMemcpyHostToDevice));
 
     cudaSafeMalloc(&d_u_buffer_, A_ * sizeof(*d_u_buffer_));
+
+    gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, A_));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
 };
 
 template <typename RealType> HarmonicAngle<RealType>::~HarmonicAngle() {
     gpuErrchk(cudaFree(d_angle_idxs_));
     gpuErrchk(cudaFree(d_u_buffer_));
+    gpuErrchk(cudaFree(d_sum_temp_storage_));
 };
 
 template <typename RealType>
@@ -64,7 +70,7 @@ void HarmonicAngle<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if (d_u) {
-            accumulate_energy(A_, d_u_buffer_, d_u, stream);
+            gpuErrchk(cub::DeviceReduce::Sum(d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_u, A_, stream));
         }
     }
 }
