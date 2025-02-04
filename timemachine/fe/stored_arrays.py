@@ -42,8 +42,7 @@ class StoredArrays(Sequence[NDArray]):
 
     def __iter__(self) -> Iterator[NDArray]:
         for chunk in self._chunks():
-            for array in chunk:
-                yield array
+            yield from chunk
 
     def __len__(self) -> int:
         return sum(self._chunk_sizes)
