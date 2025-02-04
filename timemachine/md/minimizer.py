@@ -14,7 +14,6 @@ from timemachine.fe import topology
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.utils import get_romol_conf, set_romol_conf
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md.barker import BarkerProposal
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
@@ -233,7 +232,7 @@ def pre_equilibrate_host(
         max_lambda=minimizer_max_lambda,
     )
 
-    host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+    # host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.host_system, cutoff=1.2)
 
     num_host_atoms = host_config.conf.shape[0]
 
@@ -244,7 +243,7 @@ def pre_equilibrate_host(
     else:
         raise ValueError("mols must be length 1 or 2")
 
-    mass_list = [np.array(host_masses)]
+    mass_list = [np.array(host_config.masses)]
     conf_list = [minimized_host_coords]
     for mol in mols:
         # Set ligand masses to inf to ensure ligands don't move
@@ -258,7 +257,9 @@ def pre_equilibrate_host(
     combined_masses = np.concatenate(mass_list)
     combined_coords = np.concatenate(conf_list)
 
-    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms, ff, host_config.omm_topology)
+    hgt = topology.HostGuestTopology(
+        host_config.host_system.get_U_fns(), top, host_config.num_water_atoms, ff, host_config.omm_topology
+    )
 
     dt = 1.5e-3
     friction = 1.0
@@ -380,7 +381,7 @@ def make_host_du_dx_fxn(
     assert host_config.box.shape == (3, 3)
 
     # openmm host_system -> timemachine host_bps
-    host_bps, _ = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+    # host_bps, _ = openmm_deserializer.deserialize_system(host_config.host_syste, cutoff=1.2)
 
     # construct appropriate topology from (mols, ff)
     if len(mols) == 1:
@@ -390,7 +391,9 @@ def make_host_du_dx_fxn(
     else:
         raise ValueError("mols must be length 1 or 2")
 
-    hgt = topology.HostGuestTopology(host_bps, top, host_config.num_water_atoms, ff, host_config.omm_topology)
+    hgt = topology.HostGuestTopology(
+        host_config.host_system.get_U_fns(), top, host_config.num_water_atoms, ff, host_config.omm_topology
+    )
 
     # read conformers from mol_coords if given, or each mol's conf0 otherwise
     conf_list = [np.asarray(host_config.conf)]

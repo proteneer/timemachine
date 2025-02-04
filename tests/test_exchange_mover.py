@@ -6,24 +6,19 @@ import numpy as np
 import pytest
 
 from timemachine.constants import DEFAULT_KT, DEFAULT_WATER_FF
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.builders import build_water_system
 from timemachine.md.exchange import exchange_mover
 from timemachine.md.exchange.exchange_mover import delta_r_np
-from timemachine.potentials import HarmonicBond
-from timemachine.potentials.potential import get_bound_potential_by_type
 
 pytestmark = [pytest.mark.nocuda]
 
 
 @pytest.mark.parametrize("num_lig_atoms", [1, 2, 3, 4, 10])
 def test_get_water_idxs(num_lig_atoms):
-    system, host_conf, _, top = build_water_system(3.0, DEFAULT_WATER_FF)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
+    host_config = build_water_system(3.0, DEFAULT_WATER_FF)
+    host_conf = host_config.conf
+    bond_pot = host_config.host_system.bond.potential
     all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
 
     assert exchange_mover.get_water_idxs(all_group_idxs) == all_group_idxs

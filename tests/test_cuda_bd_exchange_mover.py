@@ -10,11 +10,10 @@ from scipy.spatial.transform import Rotation
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
-from timemachine.fe.free_energy import HostConfig, InitialState, MDParams, get_water_sampler_params, sample
+from timemachine.fe.free_energy import InitialState, MDParams, get_water_sampler_params, sample
 from timemachine.fe.model_utils import apply_hmr, image_frame
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
@@ -199,14 +198,7 @@ def test_bd_exchange_get_set_params(precision):
 @pytest.mark.parametrize("seed", [2023])
 def test_pair_of_waters_in_box(proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed):
     """Given two waters in a large box most moves should be accepted. This is a useful test for verifying memory doesn't leak"""
-    ff = Forcefield.load_default()
-    system, host_conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
+    host_conf, box, all_group_idxs, nb = get_water_system_and_all_group_idxs(4.0)
 
     # Get first two mols
     group_idxs = all_group_idxs[:2]
@@ -259,15 +251,7 @@ def test_sampling_single_water_in_bulk(
     proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed
 ):
     """Sample a single water in a box of water. Useful to verify that we are hitting the tail end of buffers"""
-    ff = Forcefield.load_default()
-    system, conf, box, top = builders.build_water_system(2.5, ff.water_ff)
-    box += np.diag([0.1, 0.1, 0.1])
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    conf, box, all_group_idxs, nb = get_water_system_and_all_group_idxs(2.5)
 
     # Randomly select a water to sample
     rng = np.random.default_rng(seed)
@@ -312,25 +296,22 @@ def test_sampling_single_water_in_bulk(
 @pytest.mark.parametrize("seed", [2023])
 def test_bias_deletion_bulk_water_with_context(precision, seed, batch_size):
     ff = Forcefield.load_default()
-    system, conf, box, top = builders.build_water_system(4.0, ff.water_ff)
-    box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    bond_list = get_bond_list(bond_pot)
+    host_config = builders.build_water_system(4.0, ff.water_ff)
+    host_config.box += np.diag([0.1, 0.1, 0.1])
+    nb = host_config.host_system.nonbonded_all_pairs
+    conf = host_config.conf
+    box = host_config.box
+    bond_list = get_bond_list(host_config.host_system.bond.potential)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # only act on waters
     water_idxs = get_water_idxs(all_group_idxs)
 
     dt = 2.5e-3
-
-    masses = apply_hmr(masses, bond_list)
+    masses = apply_hmr(host_config.masses, bond_list)
 
     bound_impls = []
-
-    for potential in bps:
+    for potential in host_config.host_system.get_U_fns():
         bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)
 
     klass = custom_ops.BDExchangeMove_f32
@@ -401,17 +382,8 @@ def test_bd_exchange_deterministic_moves(proposals_per_move, batch_size, precisi
       * It is difficult to test each move when there are K proposals per move so we need to know that it matches the single proposals per move case
     * When we attempt K proposals in a batch (each proposal is made up of K proposals) it produces the same as the serial version
     """
-    ff = Forcefield.load_default()
-    system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
-
+    conf, box, group_idxs, nb = get_water_system_and_all_group_idxs(1.0)
     box = np.eye(3) * 100.0
-
     N = conf.shape[0]
 
     params = nb.params
@@ -460,19 +432,10 @@ def test_bd_exchange_deterministic_batch_moves(proposals_per_move, batch_size, p
     """Verify that if we run with the same batch size but either call `move()` repeatedly or just
     increase the number of proposals per move in the constructor that the results should be identical
     """
-    ff = Forcefield.load_default()
-    system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
-
+    conf, _, group_idxs, nb = get_water_system_and_all_group_idxs(1.0)
     rng = np.random.default_rng(seed)
-
+    # (ytz): ask fyork if we intended to set a very large box
     box = np.eye(3) * 100.0
-
     N = conf.shape[0]
 
     params = nb.params
@@ -543,14 +506,13 @@ def test_moves_in_a_water_box(
 ):
     """Verify that the log acceptance probability between the reference and cuda implementation agree"""
     ff = Forcefield.load_default()
-    system, conf, box, top = builders.build_water_system(box_size, ff.water_ff)
-    box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    bond_list = get_bond_list(bond_pot)
+    host_config = builders.build_water_system(box_size, ff.water_ff)
+    host_config.box += np.diag([0.1, 0.1, 0.1])
+    nb = host_config.host_system.nonbonded_all_pairs
+    conf = host_config.conf
+    box = host_config.box
+    bond_list = get_bond_list(host_config.host_system.bond.potential)
     group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     N = conf.shape[0]
@@ -558,11 +520,10 @@ def test_moves_in_a_water_box(
     # Re-image coords so that everything is imaged to begin with
 
     dt = 2.5e-3
-
-    masses = apply_hmr(masses, bond_list)
+    masses = apply_hmr(host_config.masses, bond_list)
     bound_impls = []
 
-    for potential in bps:
+    for potential in host_config.host_system.get_U_fns():
         bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)
 
     intg = LangevinIntegrator(DEFAULT_TEMP, dt, 1.0, np.array(masses), seed).impl()
@@ -698,6 +659,18 @@ def test_compute_incremental_log_weights_match_initial_log_weights_when_recomput
     np.testing.assert_array_equal(before_log_weights, ref_log_weights, err_msg=f"idxs {diff_idxs} don't match")
 
 
+def get_water_system_and_all_group_idxs(box_width):
+    ff = Forcefield.load_default()
+    host_config = builders.build_water_system(box_width, ff.water_ff)
+    box = host_config.box
+    coords = host_config.conf
+    bond_pot = host_config.host_system.bond.potential
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), coords.shape[0])
+    nb = host_config.host_system.nonbonded_all_pairs
+
+    return coords, box, all_group_idxs, nb
+
+
 @pytest.mark.parametrize(
     "batch_size,samples,box_size",
     [
@@ -711,14 +684,7 @@ def test_compute_incremental_log_weights_match_initial_log_weights_when_recomput
 def test_compute_incremental_log_weights(batch_size, samples, box_size, precision, rtol, atol, seed):
     """Verify that the incremental weights computed are valid for different collections of rotations/translations"""
     proposals_per_move = batch_size  # Number doesn't matter here, we aren't calling move
-    ff = Forcefield.load_default()
-    system, conf, box, top = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    conf, box, group_idxs, nb = get_water_system_and_all_group_idxs(box_size)
 
     N = conf.shape[0]
 
@@ -779,14 +745,11 @@ def hif2a_complex():
     seed = 2023
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, conf, box, complex_top, _ = builders.build_protein_system(
-            str(path_to_pdb), ff.protein_ff, ff.water_ff
-        )
-    box += np.diag([0.1, 0.1, 0.1])
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    bond_list = get_bond_list(bond_pot)
+        host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
+    host_config.box += np.diag([0.1, 0.1, 0.1])
+    bond_list = get_bond_list(host_config.host_system.bond.potential)
+    conf = host_config.conf
+    box = host_config.box
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
 
     # Equilibrate the system a bit before hand, which reduces clashes in the system which results greater differences
@@ -795,12 +758,12 @@ def hif2a_complex():
     temperature = DEFAULT_TEMP
     pressure = DEFAULT_PRESSURE
 
-    masses = apply_hmr(masses, bond_list)
+    masses = apply_hmr(host_config.masses, bond_list)
     intg = LangevinIntegrator(temperature, dt, 1.0, np.array(masses), seed).impl()
 
     bound_impls = []
 
-    for potential in bps:
+    for potential in host_config.host_system.get_U_fns():
         bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
 
     barostat_interval = 5
@@ -828,7 +791,11 @@ def hif2a_complex():
     for bp in bound_impls:
         du_dx, _ = bp.execute(conf, box, True, False)
         check_force_norm(-du_dx)
-    return complex_system, conf, box, complex_top
+
+    host_config.conf = conf
+    host_config.box = box
+    return host_config
+    # return complex_system, conf, box, complex_top
 
 
 @pytest.mark.parametrize(
@@ -842,10 +809,12 @@ def hif2a_complex():
 def test_moves_with_complex(
     hif2a_complex, num_proposals_per_move, total_num_proposals, batch_size, precision, rtol, atol, seed
 ):
-    complex_system, conf, box, complex_top = hif2a_complex
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+    host_config = hif2a_complex
+    nb = host_config.host_system.nonbonded_all_pairs
+    bond_pot = host_config.host_system.bond.potential
+
+    box = host_config.box
+    conf = host_config.conf
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -892,11 +861,8 @@ def hif2a_rbfe_state() -> InitialState:
     seed = 2023
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_conf, box, complex_top, num_water_atoms = builders.build_protein_system(
-            str(path_to_pdb), ff.protein_ff, ff.water_ff
-        )
-    box += np.diag([0.1, 0.1, 0.1])
-    host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms, complex_top)
+        host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
+    host_config.box += np.diag([0.1, 0.1, 0.1])
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     st = SingleTopology(mol_a, mol_b, core, ff)
 

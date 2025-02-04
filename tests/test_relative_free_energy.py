@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 
 from timemachine.fe.free_energy import (
-    HostConfig,
     HREXParams,
     HREXSimulationResult,
     MDParams,
@@ -34,11 +33,8 @@ def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estim
 
     box_width = 4.0
     n_windows = 3
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
-        box_width, forcefield.water_ff, mols=[mol_a, mol_b]
-    )
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
+    solvent_host_config = builders.build_water_system(box_width, forcefield.water_ff, mols=[mol_a, mol_b])
+    solvent_host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
 
     solvent_res = estimate_relative_free_energy_fn(
         mol_a,
@@ -124,11 +120,8 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params: MDParams, protein_path
     check_sim_result(vacuum_res)
 
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
-        box_width, forcefield.water_ff, mols=[mol_a, mol_b]
-    )
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
+    solvent_host_config = builders.build_water_system(box_width, forcefield.water_ff, mols=[mol_a, mol_b])
+    solvent_host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_res = estimate_relative_free_energy_fn(
         mol_a,
         mol_b,
@@ -144,11 +137,8 @@ def run_triple(mol_a, mol_b, core, forcefield, md_params: MDParams, protein_path
     print("solvent")
     check_sim_result(solvent_res)
 
-    complex_sys, complex_conf, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
-        protein_path, forcefield.protein_ff, forcefield.water_ff
-    )
-    complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, num_water_atoms, complex_top)
+    complex_host_config = builders.build_protein_system(protein_path, forcefield.protein_ff, forcefield.water_ff)
+    complex_host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_res = estimate_relative_free_energy_fn(
         mol_a,
         mol_b,
@@ -327,7 +317,7 @@ def test_local_md_parameters(freeze_reference):
     # All of the particles should have moved, since it was global MD
     assert np.all(res.frames[0][0] == res.frames[0][-1], axis=1).sum() == 0
 
-    res, _, _ = run_solvent(
+    res, _ = run_solvent(
         mol_a,
         mol_b,
         core,
@@ -377,7 +367,7 @@ def test_imaging_frames():
     md_params = MDParams(n_frames=frames, n_eq_steps=equil_steps, steps_per_frame=steps_per_frame, seed=seed)
 
     windows = 2
-    res, _, _ = run_solvent(
+    res, _ = run_solvent(
         mol_a,
         mol_b,
         core,

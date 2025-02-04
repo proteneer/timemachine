@@ -57,7 +57,7 @@ def run_edge_and_save_results(
         )
         core = all_cores[0]
 
-        complex_res, complex_top, _ = rbfe.run_complex(
+        complex_res, complex_host_config = rbfe.run_complex(
             mol_a,
             mol_b,
             core,
@@ -66,6 +66,8 @@ def run_edge_and_save_results(
             md_params,
             n_windows=n_windows,
         )
+
+        complex_top = complex_host_config.omm_topology
 
         if isinstance(complex_res, rbfe.HREXSimulationResult):
             file_client.store(
@@ -80,7 +82,7 @@ def run_edge_and_save_results(
                 complex_res.hrex_plots.replica_state_distribution_heatmap_png,
             )
 
-        solvent_res, solvent_top, _ = rbfe.run_solvent(
+        solvent_res, solvent_host_config = rbfe.run_solvent(
             mol_a,
             mol_b,
             core,
@@ -89,6 +91,7 @@ def run_edge_and_save_results(
             md_params,
             n_windows=n_windows,
         )
+        solvent_top = solvent_host_config.omm_topology
         if isinstance(solvent_res, rbfe.HREXSimulationResult):
             file_client.store(
                 f"{edge_prefix}_solvent_hrex_transition_matrix.png", solvent_res.hrex_plots.transition_matrix_png

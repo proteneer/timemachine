@@ -1,13 +1,12 @@
 import multiprocessing
 from abc import ABC
 from dataclasses import dataclass, fields
-from typing import Generic, List, Sequence, Tuple, TypeVar, Union
+from typing import Generic, List, TypeVar, Union
 
 import jax
 import numpy as np
 import scipy
 
-from timemachine import potentials
 from timemachine.integrator import simulate
 from timemachine.potentials import (
     BoundPotential,
@@ -84,30 +83,6 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
     return frames
 
 
-def convert_bps_into_system(bps: Sequence[potentials.BoundPotential]):
-    assert isinstance(bps[0].potential, potentials.HarmonicBond)
-    assert isinstance(bps[1].potential, potentials.HarmonicAngle)
-    assert isinstance(bps[2].potential, potentials.PeriodicTorsion)  # proper
-    assert isinstance(bps[3].potential, potentials.PeriodicTorsion)  # improper
-    assert isinstance(bps[4].potential, potentials.Nonbonded)  # NB all pairs
-    return HostSystem(
-        bond=bps[0],
-        angle=bps[1],
-        proper=bps[2],
-        improper=bps[3],
-        nonbonded_all_pairs=bps[4],
-    )
-
-
-def convert_omm_system(omm_system) -> Tuple["HostSystem", List[float]]:
-    """Convert an openmm.System to a HostSystem object, also returning the masses"""
-    from timemachine.ff.handlers import openmm_deserializer
-
-    bps, masses = openmm_deserializer.deserialize_system(omm_system, cutoff=1.2)
-    system = convert_bps_into_system(bps)
-    return system, masses
-
-
 _HarmonicAngle = TypeVar("_HarmonicAngle", bound=Union[HarmonicAngle, HarmonicAngleStable])
 
 
@@ -130,12 +105,9 @@ class AbstractSystem(ABC):
         potentials: List[BoundPotential] = []
         for f in fields(self):
             bp = getattr(self, f.name)
-            # (TODO): len(p.params) > 0 is dangerous if we later on have potentials
-            # that do *not* have "free" parameters defined but should still be left on.
-            # (eg. if the force constants for something like virtual sites are defined by
-            # properties/attributes on the class, rather than attributes)
             # (TODO): chiral_bonds currently disabled
-            if f.name != "chiral_bond" and len(bp.params) > 0:
+            # if f.name != "chiral_bond" and len(bp.params) > 0:
+            if f.name != "chiral_bond":
                 potentials.append(bp)
 
         return potentials

@@ -15,7 +15,7 @@ def test_run_solvent_absolute_hydration():
     mol, _ = testsystems.ligands.get_biphenyl()
     ff = Forcefield.load_default()
     md_params = MDParams(seed=seed, n_eq_steps=n_eq_steps, n_frames=n_frames, steps_per_frame=steps_per_frame)
-    res, _, host_config = absolute_hydration.run_solvent(mol, ff, None, md_params=md_params, n_windows=n_windows)
+    res, host_config = absolute_hydration.run_solvent(mol, ff, None, md_params=md_params, n_windows=n_windows)
 
     assert res.plots.overlap_summary_png is not None
     assert res.plots.overlap_detail_png is not None

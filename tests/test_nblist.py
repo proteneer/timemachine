@@ -315,7 +315,7 @@ def test_neighborlist_on_subset_of_system():
     ligand_coords = get_romol_conf(ligand)
     ff = Forcefield.load_default()
 
-    system, host_coords, box, top = build_water_system(4.0, ff.water_ff, mols=[ligand])
+    host_coords = build_water_system(4.0, ff.water_ff, mols=[ligand]).conf
     num_host_atoms = host_coords.shape[0]
     host_coords = np.array(host_coords)
 
@@ -397,23 +397,19 @@ def setup_hif2a_initial_state(host_name: str):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     if host_name == "complex":
         with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-            host_sys, host_conf, box, host_top, num_water_atoms = build_protein_system(
+            host_config = build_protein_system(
                 str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )
-            box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-        host_config = HostConfig(host_sys, host_conf, box, num_water_atoms, host_top)
+            host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     elif host_name == "solvent":
-        solvent_sys, solvent_conf, box, sovlent_top = build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
-        box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-        host_config = HostConfig(solvent_sys, solvent_conf, box, solvent_conf.shape[0], sovlent_top)
+        host_config = build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
+        host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     else:
         assert 0, "Invalid host name"
 
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     host = setup_optimized_host(st, host_config)
-
     lambda_grid = np.array([0.0])
-
     initial_state = setup_initial_states(st, host, DEFAULT_TEMP, lambda_grid, seed=2024, min_cutoff=None)[0]
 
     return st, host, host_name, initial_state

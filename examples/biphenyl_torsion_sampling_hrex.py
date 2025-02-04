@@ -19,12 +19,11 @@ from numpy.typing import NDArray
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import model_utils
-from timemachine.fe.free_energy import HostConfig, HREXParams, InitialState, MDParams, run_sims_bisection, run_sims_hrex
+from timemachine.fe.free_energy import HREXParams, InitialState, MDParams, run_sims_bisection, run_sims_hrex
 from timemachine.fe.plots import plot_hrex_replica_state_distribution_heatmap, plot_hrex_transition_matrix
 from timemachine.fe.topology import BaseTopology, HostGuestTopology
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield, ForcefieldParams
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
@@ -167,15 +166,13 @@ def sample_biphenyl_hrex(
 
     if solvent:
         # construct water box
-        water_system, water_coords, water_box, water_top = builders.build_water_system(
-            box_width=3.0, water_ff=ff.water_ff, mols=[mol]
-        )
-        water_box += 0.5 * np.eye(3)  # add a small margin around the box for stability
-        num_water_atoms = water_coords.shape[0]
-        host_config = HostConfig(water_system, water_coords, water_box, num_water_atoms, water_top)
-        host_bps, host_masses = openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
+        host_config = builders.build_water_system(box_width=3.0, water_ff=ff.water_ff, mols=[mol])
+        host_config.box += 0.5 * np.eye(3)  # add a small margin around the box for stability
+        num_water_atoms = host_config.conf.shape[0]
 
-        top = HostGuestTopology(host_bps, bt, num_water_atoms, ff, water_top)
+        host_bps = host_config.host_system.get_U_fns()
+        host_masses = host_config.masses
+        top = HostGuestTopology(host_bps, bt, num_water_atoms, ff, host_config.omm_topology)
 
         # translate ligand indices to system indices
         intramol_atom_pairs_to_decouple += num_water_atoms
@@ -195,7 +192,7 @@ def sample_biphenyl_hrex(
 
         x0_env = minimizer.fire_minimize_host([mol], host_config, ff)
         x0 = np.concatenate([x0_env, x0_ligand])
-        box0 = water_box
+        box0 = host_config.box
 
         ligand_idxs = np.arange(num_water_atoms, top.get_num_atoms())
     else:
