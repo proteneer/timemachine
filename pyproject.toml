@@ -38,8 +38,6 @@ ignore = [
   "RUF002", # Docstring contains ambiguous `–` (EN DASH). Did you mean `-` (HYPHEN-MINUS)?
   "RUF005", # Consider `[*xi_k_sub_1, xvb]` instead of concatenation
   "RUF015", # Prefer `next(...)` over single element slice
-
-  "UP008", # Use `super()` instead of `super(__class__, self)`
 ]
 
 [build-system]

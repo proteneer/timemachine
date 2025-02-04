@@ -25,7 +25,7 @@ class InvalidSmirksError(RechargeException):
             The SMIRKS pattern which could not be parsed.
         """
 
-        super(InvalidSmirksError, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.smirks = smirks
 
 
