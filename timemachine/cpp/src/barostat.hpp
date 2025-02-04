@@ -59,6 +59,9 @@ private:
 
     int num_grouped_atoms_;
 
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
+
     int *d_num_attempted_;
     int *d_num_accepted_;
 
