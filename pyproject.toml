@@ -40,7 +40,6 @@ ignore = [
   "RUF015", # Prefer `next(...)` over single element slice
 
   "UP008", # Use `super()` instead of `super(__class__, self)`
-  "UP028", # Replace `yield` over `for` loop with `yield from`
 ]
 
 [build-system]
