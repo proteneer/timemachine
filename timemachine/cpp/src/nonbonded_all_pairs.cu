@@ -1,7 +1,6 @@
 #include <string>
 
 #include "device_buffer.hpp"
-#include "energy_accumulation.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "kernels/k_indices.cuh"

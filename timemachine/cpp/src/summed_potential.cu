@@ -1,4 +1,3 @@
-#include "energy_accumulation.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "nonbonded_common.hpp"

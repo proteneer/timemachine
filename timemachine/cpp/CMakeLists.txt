@@ -85,7 +85,6 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/nonbonded_all_pairs.cu
   src/nonbonded_pair_list.cu
   src/nonbonded_interaction_group.cu
-  src/energy_accumulation.cu
   src/local_md_utils.cu
   src/neighborlist.cu
   src/segmented_sumexp.cu

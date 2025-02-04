@@ -1,4 +1,3 @@
-#include "energy_accumulation.hpp"
 #include "flat_bottom_bond.hpp"
 #include "gpu_utils.cuh"
 #include "k_flat_bottom_bond.cuh"

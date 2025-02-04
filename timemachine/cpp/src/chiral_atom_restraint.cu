@@ -1,5 +1,4 @@
 #include "chiral_atom_restraint.hpp"
-#include "energy_accumulation.hpp"
 #include "gpu_utils.cuh"
 #include "k_chiral_restraint.cuh"
 #include "kernel_utils.cuh"

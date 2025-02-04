@@ -1,5 +1,4 @@
 #include "centroid_restraint.hpp"
-#include "energy_accumulation.hpp"
 #include "gpu_utils.cuh"
 #include "k_centroid_restraint.cuh"
 #include "math_utils.cuh"
