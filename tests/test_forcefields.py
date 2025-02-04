@@ -157,9 +157,6 @@ def test_amber14_tip3p_matches_tip3p():
     assert constants.DEFAULT_WATER_FF != tip3p_water_ff
     ref_host_config = builders.build_water_system(4.0, constants.DEFAULT_WATER_FF)
     tip3p_host_config = builders.build_water_system(4.0, tip3p_water_ff)
-
-    # ref_pots, ref_masses = openmm_deserializer.deserialize_system(ref_host_config.host_system, cutoff)
-    # test_pots, test_masses = openmm_deserializer.deserialize_system(tip3p_host_config, cutoff)
     np.testing.assert_array_equal(ref_host_config.masses, tip3p_host_config.masses)
     ref_pots = ref_host_config.host_system.get_U_fns()
     test_pots = tip3p_host_config.host_system.get_U_fns()

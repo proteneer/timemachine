@@ -232,8 +232,6 @@ def pre_equilibrate_host(
         max_lambda=minimizer_max_lambda,
     )
 
-    # host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.host_system, cutoff=1.2)
-
     num_host_atoms = host_config.conf.shape[0]
 
     if len(mols) == 1:
@@ -379,9 +377,6 @@ def make_host_du_dx_fxn(
     """construct function to compute du_dx w.r.t. host coords, given fixed mols and box"""
 
     assert host_config.box.shape == (3, 3)
-
-    # openmm host_system -> timemachine host_bps
-    # host_bps, _ = openmm_deserializer.deserialize_system(host_config.host_syste, cutoff=1.2)
 
     # construct appropriate topology from (mols, ff)
     if len(mols) == 1:

@@ -38,16 +38,12 @@ def test_deterministic_energies(precision, rtol, atol):
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
-    # host_fns, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
 
-    # resolve host clashes
-    # host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
     min_coords = minimizer.fire_minimize_host([mol_a, mol_b], host_config, ff)
 
     x0 = min_coords
     v0 = np.zeros_like(x0)
 
-    # harmonic_bond_potential = get_bound_potential_by_type(host_fns, HarmonicBond)
     bond_list = get_bond_list(host_config.host_system.bond.potential)
     group_idxs = get_group_indices(bond_list, len(host_config.masses))
     water_idxs = [group for group in group_idxs if len(group) == 3]

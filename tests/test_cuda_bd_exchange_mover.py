@@ -795,7 +795,6 @@ def hif2a_complex():
     host_config.conf = conf
     host_config.box = box
     return host_config
-    # return complex_system, conf, box, complex_top
 
 
 @pytest.mark.parametrize(

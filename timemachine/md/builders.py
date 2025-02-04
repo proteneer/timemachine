@@ -167,7 +167,6 @@ def build_protein_system(
         modeller.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
     )
 
-    # note, masses are not needed....
     (bond, angle, proper, improper, nonbonded), masses = openmm_deserializer.deserialize_system(
         solvated_omm_host_system, cutoff=1.2
     )
@@ -253,7 +252,6 @@ def build_water_system(box_width: float, water_ff: str, mols: Optional[List[Chem
     # Determine box from the system's coordinates
     box = get_box_from_coords(solvated_host_coords)
 
-    # note, masses are not needed....
     (bond, angle, proper, improper, nonbonded), masses = openmm_deserializer.deserialize_system(
         omm_host_system, cutoff=1.2
     )

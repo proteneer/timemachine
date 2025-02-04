@@ -88,7 +88,6 @@ def test_barostat_with_clashes():
     host_config.box -= np.eye(3) * 0.1
     bt = BaseTopology(mol_a, ff)
     afe = AbsoluteFreeEnergy(mol_a, bt)
-    # host_config = HostConfig(host_system, host_coords, box, host_coords.shape[0], host_top)
     unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff, host_config, 0.0)
     coords = afe.prepare_combined_coords(host_coords=host_config.conf)
 

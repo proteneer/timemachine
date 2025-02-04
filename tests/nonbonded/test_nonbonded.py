@@ -166,10 +166,7 @@ def test_nblist_box_resize(precision, rtol, atol, du_dp_rtol, du_dp_atol):
     # test that running the coordinates under two different boxes produces correct results
     # since we should be rebuilding the nblist when the box sizes change.
     ff = Forcefield.load_default()
-
     host_config = builders.build_water_system(3.0, ff.water_ff)
-
-    # host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
     box = host_config.box
     test_bp = host_config.host_system.nonbonded_all_pairs
     assert test_bp.params is not None
