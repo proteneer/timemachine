@@ -553,7 +553,7 @@ def make_expand(
 
         children = [
             child
-            for child in mapped_children + [unmapped_child]
+            for child in [*mapped_children, unmapped_child]
             if child.marcs.num_edges_upper_bound >= best_num_edges
             if satisfies_connected_components_constraints(child)
             if filter_fxn(child.atom_map.a_to_b)

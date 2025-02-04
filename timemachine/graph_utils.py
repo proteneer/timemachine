@@ -47,7 +47,7 @@ def enumerate_simple_paths_from(graph: nx.Graph, start_node: _Node, length: int)
         if cutoff == 1:
             return [[node]]
         return [
-            [node] + path
+            [node, *path]
             for neighbor in nx.neighbors(graph, node)
             if neighbor not in visited
             for path in go(neighbor, cutoff - 1, visited | {node})

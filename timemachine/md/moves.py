@@ -320,7 +320,7 @@ class ReferenceMTMMove(DeterministicMTMMove):
         xi_k_sub_1 = self.batch_proposal_fn(y_proposed, self.K - 1, key)
         _, key = jrandom.split(key)
 
-        xi = xi_k_sub_1 + [xvb]
+        xi = [*xi_k_sub_1, xvb]
         log_Q_x_y = self.batch_log_Q_fn(xi, y_proposed)
         assert len(xi) == self.K
 
