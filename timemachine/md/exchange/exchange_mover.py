@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import jax
 import jax.numpy as jnp
@@ -13,7 +13,7 @@ from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import nonbonded
 
 
-def get_water_idxs(mol_groups: List[NDArray], ligand_idxs: Optional[NDArray] = None) -> List[NDArray]:
+def get_water_idxs(mol_groups: list[NDArray], ligand_idxs: Optional[NDArray] = None) -> list[NDArray]:
     """Given a list of lists that make up the individual molecules in a system, return the subset that is only the waters.
 
     Contains additional logic to handle the case where ligand_idxs is also of size 3.
@@ -190,7 +190,7 @@ class BDExchangeMove(moves.MonteCarloMove):
         self.batch_log_weights_incremental = batch_log_weights_incremental
         self.batch_log_weights = batch_log_weights
 
-    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+    def propose(self, x: CoordsVelBox) -> tuple[CoordsVelBox, float]:
         coords = x.coords
         box = x.box
         log_weights_before = self.batch_log_weights(coords, box)
@@ -330,7 +330,7 @@ class TIBDExchangeMove(BDExchangeMove):
         nb_params: NDArray,
         water_idxs: NDArray,
         temperature: float,
-        ligand_idxs: List[int],
+        ligand_idxs: list[int],
         radius: float,
     ):
         """
@@ -351,7 +351,7 @@ class TIBDExchangeMove(BDExchangeMove):
             Each element is a 3-tuple denoting the index for oxygen, hydrogen, hydrogen (or whatever is
             consistent with the nb_params)
 
-        ligand_idxs: List[int]
+        ligand_idxs: list[int]
             Indices corresponding to the atoms that should be used to compute the centroid
 
         temperature: float
@@ -368,8 +368,8 @@ class TIBDExchangeMove(BDExchangeMove):
 
     def swap_vi_into_vj(
         self,
-        vi_mols: List[int],
-        vj_mols: List[int],
+        vi_mols: list[int],
+        vj_mols: list[int],
         x: CoordsVelBox,
         vj_site: NDArray,
         vol_i: float,
@@ -426,7 +426,7 @@ class TIBDExchangeMove(BDExchangeMove):
 
         return new_state, log_p_accept
 
-    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
+    def propose(self, x: CoordsVelBox) -> tuple[CoordsVelBox, float]:
         box = x.box
         coords = x.coords
         center = np.mean(coords[self.ligand_idxs], axis=0)

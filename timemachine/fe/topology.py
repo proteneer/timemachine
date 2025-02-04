@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Tuple
+from typing import Any, Optional
 
 import jax.numpy as jnp
 import numpy as np
@@ -106,7 +106,7 @@ class HostGuestTopology:
         else:
             return to_np(self.get_component_idxs())
 
-    def get_component_idxs(self) -> List[NDArray]:
+    def get_component_idxs(self) -> list[NDArray]:
         """
         Return the atom indices for each component of
         this topology as a list of NDArray. If the host is
@@ -256,7 +256,7 @@ class BaseTopology:
     def get_num_atoms(self):
         return self.mol.GetNumAtoms()
 
-    def get_component_idxs(self) -> List[NDArray]:
+    def get_component_idxs(self) -> list[NDArray]:
         """
         Return the atom indices for the molecule in
         this topology as a list of NDArray.
@@ -506,7 +506,7 @@ class DualTopology(BaseTopology):
     def get_num_atoms(self):
         return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms()
 
-    def get_component_idxs(self) -> List[NDArray]:
+    def get_component_idxs(self) -> list[NDArray]:
         """
         Return the atom indices for the two ligands in
         this topology as a list of NDArray.
@@ -663,7 +663,7 @@ class DualTopology(BaseTopology):
         return params_with_offsets, nb_potential
 
 
-def exclude_all_ligand_ligand_ixns(num_host_atoms: int, num_guest_atoms: int) -> Tuple[NDArray, NDArray]:
+def exclude_all_ligand_ligand_ixns(num_host_atoms: int, num_guest_atoms: int) -> tuple[NDArray, NDArray]:
     """
     Return a tuple of the ligand exclusions and scale factors which exclude
     all ligand-ligand interactions. This is done to mask out these interactions
@@ -689,7 +689,7 @@ def get_ligand_ixn_pots_params(
     guest_params_ixn_env: Params,
     beta=2.0,
     cutoff=1.2,
-) -> Tuple[potentials.NonbondedInteractionGroup, Params]:
+) -> tuple[potentials.NonbondedInteractionGroup, Params]:
     """
     Return the interaction group potentials and corresponding parameters
     for the ligand-water and ligand-protein interaction terms.

@@ -1,7 +1,8 @@
 import time
+from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass, is_dataclass, replace
 from functools import cache
-from typing import Callable, Iterator, List, Optional, Sequence, Tuple
+from typing import Callable, Optional
 from warnings import warn
 
 import jax
@@ -172,7 +173,7 @@ class InitialState:
     This object can be pickled safely.
     """
 
-    potentials: List[BoundPotential]
+    potentials: list[BoundPotential]
     integrator: LangevinIntegrator
     barostat: Optional[MonteCarloBarostat]
     x0: NDArray
@@ -220,18 +221,18 @@ class HREXPlots:
 class PairBarResult:
     """Results of BAR analysis on L-1 adjacent pairs of states given a sequence of L states."""
 
-    initial_states: List[InitialState]  # length L
-    bar_results: List[BarResult]  # length L - 1
+    initial_states: list[InitialState]  # length L
+    bar_results: list[BarResult]  # length L - 1
 
     def __post_init__(self):
         assert len(self.bar_results) == len(self.initial_states) - 1
 
     @property
-    def dGs(self) -> List[float]:
+    def dGs(self) -> list[float]:
         return [r.dG for r in self.bar_results]
 
     @property
-    def dG_errs(self) -> List[float]:
+    def dG_errs(self) -> list[float]:
         return [r.dG_err for r in self.bar_results]
 
     @property
@@ -239,7 +240,7 @@ class PairBarResult:
         return np.array([r.dG_err_by_component for r in self.bar_results])
 
     @property
-    def overlaps(self) -> List[float]:
+    def overlaps(self) -> list[float]:
         return [r.overlap for r in self.bar_results]
 
     @property
@@ -254,7 +255,7 @@ class PairBarResult:
 @dataclass
 class Trajectory:
     frames: StoredArrays  # (frame, atom, dim)
-    boxes: List[NDArray]  # (frame, dim, dim)
+    boxes: list[NDArray]  # (frame, dim, dim)
     final_velocities: Optional[NDArray]  # (atom, dim)
     final_barostat_volume_scale_factor: Optional[float] = None
 
@@ -284,19 +285,19 @@ class Trajectory:
 class SimulationResult:
     final_result: PairBarResult
     plots: PairBarPlots
-    trajectories: List[Trajectory]
+    trajectories: list[Trajectory]
     md_params: MDParams
-    intermediate_results: List[PairBarResult]
+    intermediate_results: list[PairBarResult]
 
     @property
-    def frames(self) -> List[StoredArrays]:
+    def frames(self) -> list[StoredArrays]:
         return [traj.frames for traj in self.trajectories]
 
     @property
-    def boxes(self) -> List[NDArray]:
+    def boxes(self) -> list[NDArray]:
         return [np.array(traj.boxes) for traj in self.trajectories]
 
-    def compute_u_kn(self) -> Tuple[NDArray, NDArray]:
+    def compute_u_kn(self) -> tuple[NDArray, NDArray]:
         """get MBAR input matrices u_kn and N_k"""
 
         return compute_u_kn(self.trajectories, self.final_result.initial_states)
@@ -616,7 +617,7 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
 def sample_with_context_iter(
     ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, batch_size: int
-) -> Iterator[Tuple[NDArray, NDArray, NDArray]]:
+) -> Iterator[tuple[NDArray, NDArray, NDArray]]:
     """Sample a context using MDParams returning batches of frames up to `batch_size`. All results are returned
     as numpy arrays that are in memory, and it is left to the user to act accordingly.
 
@@ -672,7 +673,7 @@ def sample_with_context_iter(
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
-    def run_production_steps(n_steps: int) -> Tuple[NDArray, NDArray, NDArray]:
+    def run_production_steps(n_steps: int) -> tuple[NDArray, NDArray, NDArray]:
         coords, boxes = ctxt.multiple_steps(
             n_steps=n_steps,
             store_x_interval=md_params.steps_per_frame,
@@ -681,7 +682,7 @@ def sample_with_context_iter(
 
         return coords, boxes, final_velocities
 
-    def run_production_local_steps(n_steps: int) -> Tuple[NDArray, NDArray, NDArray]:
+    def run_production_local_steps(n_steps: int) -> tuple[NDArray, NDArray, NDArray]:
         coords = []
         boxes = []
         for steps in batches(n_steps, md_params.steps_per_frame):
@@ -725,7 +726,7 @@ def sample_with_context(
     Refer to `sample_with_context_iter` for parameter documentation
     """
     all_coords = StoredArrays()
-    all_boxes: List[NDArray] = []
+    all_boxes: list[NDArray] = []
     final_velocities: NDArray = None  # type: ignore # work around "possibly unbound" error
     for batch_coords, batch_boxes, final_velocities in sample_with_context_iter(
         ctxt, md_params, temperature, ligand_idxs, max_buffer_frames
@@ -906,7 +907,7 @@ def run_sims_sequential(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
     temperature: float,
-) -> Tuple[PairBarResult, List[Trajectory]]:
+) -> tuple[PairBarResult, list[Trajectory]]:
     """Sequentially run simulations at each state in initial_states,
     returning summaries that can be used for pair BAR, energy decomposition, and other diagnostics
 
@@ -981,7 +982,7 @@ def run_sims_bisection(
     temperature: float,
     min_overlap: Optional[float] = None,
     verbose: bool = True,
-) -> Tuple[List[PairBarResult], List[Trajectory]]:
+) -> tuple[list[PairBarResult], list[Trajectory]]:
     r"""Starting from a specified lambda schedule, successively bisect the lambda interval between the pair of states
     with the lowest BAR overlap and sample the new state with MD.
 
@@ -1261,7 +1262,7 @@ def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
         assert (state_a.box0 == state_b.box0).all()
 
 
-def compute_u_kn(trajs, initial_states) -> Tuple[NDArray, NDArray]:
+def compute_u_kn(trajs, initial_states) -> tuple[NDArray, NDArray]:
     """makes K^2 calls to execute_batch_sparse"""
 
     u_kl = make_u_kl_fxn(trajs, initial_states)
@@ -1283,7 +1284,7 @@ def run_sims_hrex(
     md_params: MDParams,
     n_swap_attempts_per_iter: Optional[int] = None,
     print_diagnostics_interval: Optional[int] = 10,
-) -> Tuple[PairBarResult, List[Trajectory], HREXDiagnostics]:
+) -> tuple[PairBarResult, list[Trajectory], HREXDiagnostics]:
     r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
 
     See documentation for :py:func:`timemachine.md.hrex.run_hrex` for details of the algorithm and implementation.
@@ -1357,9 +1358,9 @@ def run_sims_hrex(
 
     hrex = HREX.from_replicas([CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states])
 
-    samples_by_state: List[Trajectory] = [Trajectory.empty() for _ in initial_states]
-    replica_idx_by_state_by_iter: List[List[ReplicaIdx]] = []
-    fraction_accepted_by_pair_by_iter: List[List[Tuple[int, int]]] = []
+    samples_by_state: list[Trajectory] = [Trajectory.empty() for _ in initial_states]
+    replica_idx_by_state_by_iter: list[list[ReplicaIdx]] = []
+    fraction_accepted_by_pair_by_iter: list[list[tuple[int, int]]] = []
 
     if (
         md_params.water_sampling_params is not None
@@ -1372,7 +1373,7 @@ def run_sims_hrex(
 
     for current_frame in range(md_params.n_frames):
 
-        def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> Tuple[NDArray, NDArray, NDArray, Optional[float]]:
+        def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> tuple[NDArray, NDArray, NDArray, Optional[float]]:
             context.set_x_t(xvb.coords)
             context.set_v_t(xvb.velocities)
             context.set_box(xvb.box)
@@ -1408,7 +1409,7 @@ def run_sims_hrex(
 
             return frame[-1], box[-1], final_velos, final_barostat_volume_scale_factor
 
-        def replica_from_samples(last_sample: Tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
+        def replica_from_samples(last_sample: tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
             frame, box, velos, _ = last_sample
             return CoordsVelBox(frame, velos, box)
 
@@ -1480,7 +1481,7 @@ def run_sims_hrex(
     unbound_impls = potential.get_potentials()
 
     def make_energy_decomposed_state(
-        results: Tuple[StoredArrays, List[NDArray], InitialState],
+        results: tuple[StoredArrays, list[NDArray], InitialState],
     ) -> EnergyDecomposedState[StoredArrays]:
         frames, boxes, initial_state = results
         # Reuse the existing unbound potentials already constructed to make a batch Us fn

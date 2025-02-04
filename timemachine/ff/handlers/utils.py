@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, TypeAlias
+from typing import Optional, TypeAlias
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -116,7 +116,7 @@ def get_query_mol(mol: Mol) -> Mol:
     return query_generic_bonds
 
 
-def make_residue_mol(name: str, elements: List[str], bonds: List[Tuple[int, int]]) -> Mol:
+def make_residue_mol(name: str, elements: list[str], bonds: list[tuple[int, int]]) -> Mol:
     """
     Generate an rdkit molecule given a list of elements and a list of bonds
     for a residue.
@@ -240,7 +240,7 @@ def update_mol_topology(topology_res_mol: Mol, template_res_mol: Mol):
     topology_res_mol.UpdatePropertyCache()
 
 
-def get_res_name(template_name: str) -> Tuple[str, bool, bool]:
+def get_res_name(template_name: str) -> tuple[str, bool, bool]:
     """
     Parameters
     ----------

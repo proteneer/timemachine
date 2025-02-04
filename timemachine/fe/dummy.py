@@ -1,7 +1,8 @@
 import warnings
 from collections import defaultdict
+from collections.abc import Collection, Iterable, Iterator, Sequence
 from itertools import product
-from typing import Collection, DefaultDict, Iterable, Iterator, Optional, Sequence, TypeVar
+from typing import Optional, TypeVar
 
 import networkx as nx
 
@@ -198,7 +199,7 @@ _V = TypeVar("_V")
 
 def union_by_key(ts: Iterable[tuple[_K, frozenset[_V]]]) -> dict[_K, frozenset[_V]]:
     """Given an iterable of key-value pairs where the values are sets, returns a dictionary of sets merged by key."""
-    d: DefaultDict[_K, frozenset[_V]] = defaultdict(frozenset)
+    d: defaultdict[_K, frozenset[_V]] = defaultdict(frozenset)
     for k, xs in ts:
         d[k] = d[k].union(xs)
     return dict(d)

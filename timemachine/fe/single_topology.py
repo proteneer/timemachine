@@ -1,7 +1,8 @@
 import warnings
+from collections.abc import Collection, Sequence
 from enum import IntEnum
 from functools import partial
-from typing import Any, Collection, Optional, Sequence
+from typing import Any, Optional
 
 import jax
 import jax.numpy as jnp

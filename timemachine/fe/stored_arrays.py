@@ -1,15 +1,14 @@
 import io
 import tempfile
+from collections.abc import Collection, Iterable, Iterator, Sequence
 from itertools import count
 from pathlib import Path
-from typing import Collection, Iterable, Iterator, List, NoReturn, Sequence, Type, TypeVar, overload
+from typing import NoReturn, Self, overload
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from timemachine.parallel.client import AbstractFileClient
-
-_T = TypeVar("_T", bound="StoredArrays")
 
 
 class StoredArrays(Sequence[NDArray]):
@@ -31,11 +30,11 @@ class StoredArrays(Sequence[NDArray]):
     """
 
     def __init__(self) -> None:
-        self._chunk_sizes: List[int] = []
+        self._chunk_sizes: list[int] = []
         self._dir = tempfile.TemporaryDirectory()
 
     @classmethod
-    def from_chunks(cls: Type[_T], chunks: Iterable[Collection[NDArray]]) -> _T:
+    def from_chunks(cls, chunks: Iterable[Collection[NDArray]]) -> Self:
         sa = cls()
         for chunk in chunks:
             sa.extend(chunk)
@@ -122,7 +121,7 @@ class StoredArrays(Sequence[NDArray]):
                 client.store_stream(str(dest_path), ifs)
 
     @classmethod
-    def load(cls: Type[_T], client: AbstractFileClient, prefix: Path = Path(".")) -> _T:
+    def load(cls, client: AbstractFileClient, prefix: Path = Path(".")) -> Self:
         sa = cls()
         for idx in count():
             path = cls.get_chunk_path(prefix, idx)

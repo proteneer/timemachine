@@ -1,8 +1,9 @@
 # maximum common subgraph routines based off of the mcgregor paper
 import warnings
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import cache, cached_property
-from typing import Callable, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Optional
 
 import networkx as nx
 import numpy as np
@@ -50,8 +51,8 @@ class Graph:
 
     def mapping_incompatible_with_cc_constraints(
         self,
-        mapped_nodes: Set[int],
-        unvisited_nodes: Set[int],
+        mapped_nodes: set[int],
+        unvisited_nodes: set[int],
         max_connected_components: Optional[int],
         min_connected_component_size: int,
     ):
@@ -85,8 +86,8 @@ class Graph:
 
     def mapping_incompatible_with_cc_constraints_fast(
         self,
-        mapped_nodes: Set[int],
-        unvisited_nodes: Set[int],
+        mapped_nodes: set[int],
+        unvisited_nodes: set[int],
         max_connected_components: Optional[int],
         min_connected_component_size: int,
     ):
@@ -121,8 +122,8 @@ class Graph:
 
     def mapping_incompatible_with_cc_constraints_ref(
         self,
-        mapped_nodes: Set[int],
-        unvisited_nodes: Set[int],
+        mapped_nodes: set[int],
+        unvisited_nodes: set[int],
         max_connected_components: Optional[int],
         min_connected_component_size: int,
     ):
@@ -227,15 +228,15 @@ class Marcs:
 
 @dataclass(frozen=True)
 class AtomMap:
-    a_to_b: Tuple[int, ...]
-    b_to_a: Tuple[int, ...]
+    a_to_b: tuple[int, ...]
+    b_to_a: tuple[int, ...]
 
     @classmethod
     def init(cls, n_1: int, n_2: int) -> "AtomMap":
         return cls((UNMAPPED,) * n_1, (UNMAPPED,) * n_2)
 
     def add(self, new_v1: int, new_v2: int) -> "AtomMap":
-        def set_at(xs: Tuple[int, ...], idx: int, val: int) -> Tuple[int, ...]:
+        def set_at(xs: tuple[int, ...], idx: int, val: int) -> tuple[int, ...]:
             return xs[:idx] + (val,) + xs[idx + 1 :]
 
         return AtomMap(
@@ -306,8 +307,8 @@ class Node:
 
 @dataclass(frozen=True)
 class MCSResult:
-    all_maps: Tuple[Tuple[int, ...], ...]
-    all_marcs: Tuple[NDArray, ...]
+    all_maps: tuple[tuple[int, ...], ...]
+    all_marcs: tuple[NDArray, ...]
     num_edges: int
     timed_out: bool
     nodes_visited: int
@@ -315,10 +316,10 @@ class MCSResult:
 
     @classmethod
     def from_nodes(
-        cls, nodes: Iterable[Node], leaf_filter_fxn: Callable[[Tuple[int, ...]], bool], max_nodes: int, max_leaves: int
+        cls, nodes: Iterable[Node], leaf_filter_fxn: Callable[[tuple[int, ...]], bool], max_nodes: int, max_leaves: int
     ) -> "MCSResult":
-        all_maps: List[Tuple[int, ...]] = []
-        all_marcs: List[NDArray[np.bool_]] = []
+        all_maps: list[tuple[int, ...]] = []
+        all_marcs: list[NDArray[np.bool_]] = []
 
         node = None
         nodes_visited = 0
@@ -407,7 +408,7 @@ def mcs(
     initial_mapping,
     filter_fxn: Callable[[Sequence[int]], bool] = lambda _: True,
     leaf_filter_fxn: Callable[[Sequence[int]], bool] = lambda _: True,
-) -> Tuple[List[NDArray], List[NDArray], MCSDiagnostics]:
+) -> tuple[list[NDArray], list[NDArray], MCSDiagnostics]:
     assert n_a <= n_b
     assert max_connected_components is None or max_connected_components > 0, "Must have max_connected_components > 0"
 
@@ -500,7 +501,7 @@ def make_expand(
     min_connected_component_size: int,
     filter_fxn: Callable[[Sequence[int]], bool],
     leaf_filter_fxn: Callable[[Sequence[int]], bool],
-) -> Callable[[Node, int], Tuple[Sequence[Node], int]]:
+) -> Callable[[Node, int], tuple[Sequence[Node], int]]:
     def satisfies_connected_components_constraints(node: Node) -> bool:
         if max_connected_components is not None or min_connected_component_size > 1:
             g1_mapped_nodes = {a1 for a1, a2 in enumerate(node.atom_map.a_to_b[: node.layer]) if a2 != UNMAPPED}
@@ -528,7 +529,7 @@ def make_expand(
 
         return True
 
-    def expand(node: Node, best_num_edges: int) -> Tuple[List[Node], int]:
+    def expand(node: Node, best_num_edges: int) -> tuple[list[Node], int]:
         if node.marcs.num_edges_upper_bound < best_num_edges:
             return [], best_num_edges
 

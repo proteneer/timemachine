@@ -1,5 +1,6 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, cast
+from typing import Optional, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -258,7 +259,7 @@ class SummedPotential(Potential):
     def params_shapes(self):
         return [ps.shape for ps in self.params_init]
 
-    def unflatten_params(self, params: Params) -> List[Params]:
+    def unflatten_params(self, params: Params) -> list[Params]:
         return summed.unflatten_params(params, self.params_shapes)
 
 

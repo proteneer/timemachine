@@ -1,5 +1,3 @@
-from typing import List
-
 import hypothesis.strategies as st
 import numpy as np
 import pytest
@@ -46,7 +44,7 @@ def test_get_samples_by_iter_by_replica_invalid_args():
         get_samples_by_iter_by_replica([[1, 2], [3, 4]], [[ReplicaIdx(0)], [ReplicaIdx(0), ReplicaIdx(1)]])
 
 
-def simulate_perfect_mixing_hrex(num_states: int, num_frames: int) -> List[List[int]]:
+def simulate_perfect_mixing_hrex(num_states: int, num_frames: int) -> list[list[int]]:
     """assume every step of HREX perfectly mixed all replicas"""
     inds: list[int] = np.arange(num_states).tolist()  # type: ignore
     traj = []
@@ -56,7 +54,7 @@ def simulate_perfect_mixing_hrex(num_states: int, num_frames: int) -> List[List[
     return traj
 
 
-def simulate_slow_mixing_hrex(num_states: int, num_frames: int) -> List[List[int]]:
+def simulate_slow_mixing_hrex(num_states: int, num_frames: int) -> list[list[int]]:
     """assume every step of HREX only succeeds in making num_states nearest-neighbor swaps"""
     traj: list[list[int]] = [np.arange(num_states).tolist()]  # type: ignore
     for _ in range(num_frames - 1):
@@ -75,7 +73,7 @@ def simulate_slow_mixing_hrex(num_states: int, num_frames: int) -> List[List[int
     return traj
 
 
-def simulate_bottlenecked_hrex(num_states: int, num_frames: int) -> List[List[int]]:
+def simulate_bottlenecked_hrex(num_states: int, num_frames: int) -> list[list[int]]:
     """simulate_slow_mixing_hrex, but there's a state near num_states/2 that never swaps with neighbors"""
     traj: list[list[int]] = [np.arange(num_states).tolist()]  # type: ignore
 
@@ -97,7 +95,7 @@ def simulate_bottlenecked_hrex(num_states: int, num_frames: int) -> List[List[in
     return traj
 
 
-def simulate_no_mixing_hrex(num_states: int, num_frames: int) -> List[List[int]]:
+def simulate_no_mixing_hrex(num_states: int, num_frames: int) -> list[list[int]]:
     traj: list[list[int]] = [np.arange(num_states).tolist()] * num_frames  # type:ignore
     return traj
 

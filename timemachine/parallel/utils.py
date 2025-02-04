@@ -1,7 +1,7 @@
 import os
 from collections import defaultdict
 from subprocess import check_output
-from typing import List, Optional
+from typing import Optional
 
 
 def get_gpu_count() -> int:
@@ -20,7 +20,7 @@ def get_gpu_count() -> int:
     return len(gpu_list)
 
 
-def batch_list(values: List, num_workers: Optional[int] = None) -> List[List]:
+def batch_list(values: list, num_workers: Optional[int] = None) -> list[list]:
     """
     Split a list of values into `num_workers` batches.
     If num_workers is None, then split each value into a separate batch.

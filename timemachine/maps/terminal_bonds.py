@@ -8,7 +8,6 @@ Examples:
 """
 
 from dataclasses import dataclass
-from typing import Tuple
 
 import numpy as np
 from jax import config, jacobian, jit, vmap
@@ -17,7 +16,6 @@ from numpy.typing import NDArray as Array
 
 config.update("jax_enable_x64", True)
 
-from typing import List
 
 import networkx as nx
 
@@ -69,7 +67,7 @@ def interval_map(x, src_lb, src_ub, dst_lb, dst_ub):
     return jnp.where(in_support, mapped, np.nan)
 
 
-def conf_map(x, bond, param) -> Tuple[Array, Array]:
+def conf_map(x, bond, param) -> tuple[Array, Array]:
     """Apply map to a single bond in a conformer x, return (updated x, logdetjac)"""
     a, b = bond
     dim = 3
@@ -114,7 +112,7 @@ def conf_map(x, bond, param) -> Tuple[Array, Array]:
 apply_conf_map_to_traj = jit(vmap(conf_map, in_axes=(0, None, None)))
 
 
-def apply_conf_maps_to_traj(xs, bond_idxs, params) -> Tuple[Array, Array]:
+def apply_conf_maps_to_traj(xs, bond_idxs, params) -> tuple[Array, Array]:
     """Apply maps to several bonds in a trajectory of conformers xs, return (updated xs, logdetjacs)"""
     xs_shape = xs.shape
 
@@ -139,7 +137,7 @@ def get_degrees(bond_idxs) -> Array:
     return degrees
 
 
-def get_terminal_bonds(bond_idxs) -> List[Tuple]:
+def get_terminal_bonds(bond_idxs) -> list[tuple]:
     """Get bonded pairs that involve a terminal atom"""
 
     degrees = get_degrees(bond_idxs)
@@ -270,6 +268,6 @@ class TerminalBondMap:
         bond_idxs, params = states_to_conf_map_params(src, dst)
         return cls(bond_idxs, params)
 
-    def __call__(self, xs: Array) -> Tuple[Array, Array]:
+    def __call__(self, xs: Array) -> tuple[Array, Array]:
         mapped_xs, logdetjacs = apply_conf_maps_to_traj(xs, self.mapped_bond_idxs, self.map_params)
         return mapped_xs, logdetjacs

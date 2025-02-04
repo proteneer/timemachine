@@ -1,6 +1,7 @@
 import hashlib
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -74,7 +75,7 @@ def draw_mol(mol, highlightAtoms, highlightColors):
     # display(SVG(svg))
 
 
-def draw_mol_idx(mol, highlight: Optional[List[int]] = None, scale_factor=None):
+def draw_mol_idx(mol, highlight: Optional[list[int]] = None, scale_factor=None):
     """
     Draw mol with atom indices labeled.
 
@@ -252,7 +253,7 @@ def plot_atom_mapping_grid(
     all_mols = [mol_a_3d, mol_b_3d, *extra_mols]
     num_mols = len(all_mols)
 
-    legends: List[str] = []
+    legends: list[str] = []
     while len(legends) < num_mols:
         legends.append(get_mol_name(mol_a) + " (3D)")
         legends.append(get_mol_name(mol_b) + " (3D)")
@@ -464,7 +465,7 @@ def sanitize_energies(full_us, lamb_idx, cutoff=10000):
     return np.where(abs_us < cutoff, full_us, np.inf)
 
 
-def read_sdf(fname: str | Path, removeHs: bool = False) -> List[Chem.Mol]:
+def read_sdf(fname: str | Path, removeHs: bool = False) -> list[Chem.Mol]:
     """Read list of mols from an SDF
 
     Parameters
@@ -485,7 +486,7 @@ def read_sdf(fname: str | Path, removeHs: bool = False) -> List[Chem.Mol]:
     return mols
 
 
-def read_sdf_mols_by_name(fname: str | Path, removeHs: bool = False) -> Dict[str, Chem.Mol]:
+def read_sdf_mols_by_name(fname: str | Path, removeHs: bool = False) -> dict[str, Chem.Mol]:
     mols = read_sdf(fname, removeHs)
     mols_by_name = {get_mol_name(mol): mol for mol in mols}
     return mols_by_name
