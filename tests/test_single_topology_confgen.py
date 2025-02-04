@@ -180,7 +180,7 @@ def test_min_cutoff_failure(pair, seed, n_windows):
     lambda_grid = np.linspace(0.0, 1.0, n_windows)
 
     solvent_host_config = builders.build_water_system(box_width, ff.water_ff, mols=[mol_a, mol_b])
-    solvent_host_config += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    solvent_host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host = setup_optimized_host(st, solvent_host_config)
     ligand_idxs = np.arange(st.get_num_atoms()) + solvent_host.conf.shape[0]
     expected_moved = ligand_idxs[st.c_flags != 2]
