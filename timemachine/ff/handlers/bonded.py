@@ -158,7 +158,7 @@ class ProperTorsionHandler:
         for p_idx in param_idxs:
             start = pfxsum[p_idx]
             end = pfxsum[p_idx + 1]
-            scatter_idxs.extend((range(start, end)))
+            scatter_idxs.extend(range(start, end))
             repeats.append(counts[p_idx])
 
         # for k, _, _ in params[scatter_idxs]:

@@ -1,8 +1,8 @@
 __all__ = [
-    "one_sided_exp",
     "construct_endpoint_reweighting_estimator",
     "construct_mixture_reweighting_estimator",
     "interpret_as_mixture_potential",
+    "one_sided_exp",
 ]
 
 from typing import Callable, Collection

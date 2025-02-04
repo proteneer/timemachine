@@ -745,7 +745,7 @@ def test_am1_differences():
                 a = am1_params[atom_idx]
                 b = bcc_params[atom_idx]
                 c = ccc_params[atom_idx]
-                print("{:6.2f}".format(a), "{:6.2f}".format(c), "{:6.2f}".format(b), atom.GetSymbol(), end="")
+                print(f"{a:6.2f}", f"{c:6.2f}", f"{b:6.2f}", atom.GetSymbol(), end="")
                 if np.abs(b - c) > 0.1:
                     print(" *")
                 else:

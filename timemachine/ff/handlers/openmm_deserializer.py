@@ -88,7 +88,7 @@ def deserialize_nonbonded_force(force, N):
 
         if initial_q == 0:
             if desired_q == 0:
-                q_scale_factor = 1  # noqa
+                q_scale_factor = 1
             else:
                 raise RuntimeError("No ES scaling factor possible to arrive at desired_q")
         else:
