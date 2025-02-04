@@ -3,9 +3,9 @@ plugins = ["numpy.typing.mypy_plugin"]
 ignore_missing_imports = true
 check_untyped_defs = false
 disable_error_code = [
-    "has-type",
-    "misc",
-    "var-annotated"
+  "has-type",
+  "misc",
+  "var-annotated"
 ]
 
 [[tool.mypy.overrides]]
@@ -17,9 +17,9 @@ line-length = 120
 
 [tool.ruff.lint]
 select = [
-   "E", # pycodestyle
-   "F", # Pyflakes
-   "I", # isort
+  "E", # pycodestyle
+  "F", # Pyflakes
+  "I", # isort
 ]
 ignore = [
   "E402", # Module level import not at top of file
