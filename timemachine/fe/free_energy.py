@@ -872,11 +872,11 @@ def assert_deep_eq(obj1, obj2, custom_assertion=lambda path, x1, x2: False):
         elif isinstance(x1, dict):
             assert_(x1.keys() == x2.keys(), "dataclass fields or dictionary keys differ")
             for k in x1.keys():
-                go(x1[k], x2[k], path + (str(k),))
+                go(x1[k], x2[k], (*path, str(k)))
         elif isinstance(x1, Sequence):
             assert_(len(x1) == len(x2), f"lengths differ (left={len(x1)}, right={len(x2)})")
             for idx, (v1, v2) in enumerate(zip(x1, x2)):
-                go(v1, v2, path + (f"[{idx}]",))
+                go(v1, v2, (*path, f"[{idx}]"))
         else:
             assert_(x1 == x2, "left != right")
 
@@ -1350,7 +1350,7 @@ def run_sims_hrex(
 
     if len(initial_states) == 2:
         # Add an identity move to the mixture to ensure aperiodicity
-        neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
+        neighbor_pairs = [(StateIdx(0), StateIdx(0)), *neighbor_pairs]
 
     barostat = context.get_barostat()
 

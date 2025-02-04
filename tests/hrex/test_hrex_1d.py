@@ -97,7 +97,7 @@ def run_hrex_with_local_proposal(
 
     # Add (0, 0) to the list of neighbor pairs considered for swap moves to ensure that performing a fixed number of
     # neighbor swaps is aperiodic in cases where swap acceptance rates approach 100%
-    neighbor_pairs = [(StateIdx(0), StateIdx(0))] + neighbor_pairs
+    neighbor_pairs = [(StateIdx(0), StateIdx(0)), *neighbor_pairs]
 
     def sample_replica(replica: float, state_idx: StateIdx, n_samples: int) -> list[float]:
         """Sample replica using local moves in the specified state"""
