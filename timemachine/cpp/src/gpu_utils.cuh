@@ -5,6 +5,7 @@
 #include "exceptions.hpp"
 #include "fixed_point.hpp"
 #include "kernels/kernel_utils.cuh"
+#include "math_utils.cuh"
 #include <iostream>
 
 namespace timemachine {
@@ -72,7 +73,7 @@ inline void curandAssert(curandStatus_t code, const char *file, int line, bool a
     })
 
 // safe is for use of gpuErrchk
-template <typename T> T *gpuErrchkCudaMallocAndCopy(const T *host_array, int count) {
+template <typename T> T *gpuErrchkCudaMallocAndCopy(const T *host_array, const int count) {
     T *device_array;
     cudaSafeMalloc(&device_array, count * sizeof(*host_array));
     gpuErrchk(cudaMemcpy(device_array, host_array, count * sizeof(*host_array), cudaMemcpyHostToDevice));
@@ -83,7 +84,7 @@ template <typename T> T *gpuErrchkCudaMallocAndCopy(const T *host_array, int cou
 // uses the seed provided + the index in the array. Offsets and sequences always set to 0
 void __global__ k_initialize_curand_states(const int count, const int seed, curandState_t *states);
 
-template <typename T> void __global__ k_initialize_array(int count, T *array, T val) {
+template <typename T> void __global__ k_initialize_array(int count, T *__restrict__ array, T val) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= count) {
         return;
@@ -92,14 +93,13 @@ template <typename T> void __global__ k_initialize_array(int count, T *array, T 
     array[idx] = val;
 }
 
-template <typename T> void initializeArray(int count, T *array, T val) {
-
-    int tpb = DEFAULT_THREADS_PER_BLOCK;
-    int B = (count + tpb - 1) / tpb; // total number of blocks we need to process
+template <typename T> void initializeArray(const int count, const T *array, T val) {
     // Nothing to allocate
     if (count == 0) {
         return;
     }
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
+    const int B = ceil_divide(count, tpb); // total number of blocks we need to process
     k_initialize_array<<<B, tpb, 0>>>(count, array, val);
     gpuErrchk(cudaPeekAtLastError());
 }
