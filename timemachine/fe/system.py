@@ -106,7 +106,6 @@ class AbstractSystem(ABC):
         for f in fields(self):
             bp = getattr(self, f.name)
             # (TODO): chiral_bonds currently disabled
-            # if f.name != "chiral_bond" and len(bp.params) > 0:
             if f.name != "chiral_bond":
                 potentials.append(bp)
 
