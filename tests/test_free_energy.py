@@ -37,6 +37,7 @@ from timemachine.fe.free_energy import (
     run_sims_bisection,
     sample,
     trajectories_by_replica_to_by_state,
+    verify_and_sanitize_potential_matrix,
 )
 from timemachine.fe.rbfe import Host, setup_initial_state, setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
@@ -603,6 +604,7 @@ def test_compute_potential_matrix(hif2a_ligand_pair_single_topology, n_states: i
     hrex = HREX(xvbs, replica_idx_by_state)
 
     U_test = compute_potential_matrix(unbound_impl, hrex, params_by_state, max_delta_states)
+    verify_and_sanitize_potential_matrix(U_test, hrex.replica_idx_by_state)
 
     state_idx = np.arange(n_states)
     state_idx_by_replica = np.argsort(replica_idx_by_state)

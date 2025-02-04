@@ -450,7 +450,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
             assert bond_idxs_are_canonical(system.angle.potential.idxs)
             assert bond_idxs_are_canonical(system.proper.potential.idxs)
             assert_improper_idxs_are_canonical(system.improper.potential.idxs)
-            assert bond_idxs_are_canonical(system.nonbonded.potential.idxs)
+            assert bond_idxs_are_canonical(system.nonbonded_pair_list.potential.idxs)
             assert bond_idxs_are_canonical(system.chiral_bond.potential.idxs)
             assert chiral_atom_idxs_are_canonical(system.chiral_atom.potential.idxs)
             U_fn = jax.jit(system.get_U_fn())
@@ -739,15 +739,15 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
 
     for lamb in np.linspace(0.0, 1.0, 10):
         nonbonded_ref = setup_intermediate_nonbonded_term_ref(
-            st.src_system.nonbonded,
-            st.dst_system.nonbonded,
+            st.src_system.nonbonded_pair_list,
+            st.dst_system.nonbonded_pair_list,
             lamb,
             align_nonbonded_idxs_and_params,
             linear_interpolation,
         )
         nonbonded_test = st._setup_intermediate_nonbonded_term(
-            st.src_system.nonbonded,
-            st.dst_system.nonbonded,
+            st.src_system.nonbonded_pair_list,
+            st.dst_system.nonbonded_pair_list,
             lamb,
             align_nonbonded_idxs_and_params,
             linear_interpolation,
@@ -758,7 +758,7 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
 
 
 @pytest.mark.nocuda
-def test_combine_with_host():
+def test_combine_achiral_ligand_with_host():
     """Verifies that combine_with_host correctly sets up all of the U functions"""
     mol_a = ligand_from_smiles("BrC1=CC=CC=C1", seed=2022)
     mol_b = ligand_from_smiles("C1=CN=CC=C1F", seed=2022)
@@ -770,8 +770,36 @@ def test_combine_with_host():
     host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
 
     st = SingleTopology(mol_a, mol_b, core, ff)
-    host_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5, solvent_conf.shape[0], ff, top)
-    assert set(type(bp.potential) for bp in host_system.get_U_fns()) == {
+    combined_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5, solvent_conf.shape[0], ff, top)
+    assert set(type(bp.potential) for bp in combined_system.get_U_fns()) == {
+        potentials.HarmonicBond,
+        potentials.HarmonicAngleStable,
+        potentials.PeriodicTorsion,
+        potentials.NonbondedPairListPrecomputed,
+        potentials.Nonbonded,
+        potentials.NonbondedInteractionGroup,  # L-P + L-W interactions
+        # potentials.ChiralAtomRestraint, # this is missing since the atoms do not define tetrahedral chiral centers
+        # potentials.ChiralBondRestraint,
+        # NOTE: chiral bond restraints excluded
+        # This should be updated when chiral restraints are re-enabled.
+    }
+
+
+@pytest.mark.nocuda
+def test_combine_chiral_ligand_with_host():
+    """Verifies that combine_with_host correctly sets up all of the U functions"""
+    mol_a = ligand_from_smiles("BrC1CCCCC1", seed=2022)
+    mol_b = ligand_from_smiles("C1=CN=CC=C1F", seed=2022)
+
+    core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    solvent_sys, solvent_conf, _, top = build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
+    host_bps, _ = openmm_deserializer.deserialize_system(solvent_sys, cutoff=1.2)
+
+    st = SingleTopology(mol_a, mol_b, core, ff)
+    combined_system = st.combine_with_host(convert_bps_into_system(host_bps), 0.5, solvent_conf.shape[0], ff, top)
+    assert set(type(bp.potential) for bp in combined_system.get_U_fns()) == {
         potentials.HarmonicBond,
         potentials.HarmonicAngleStable,
         potentials.PeriodicTorsion,
@@ -1012,11 +1040,11 @@ def test_combine_with_host_split(precision, rtol, atol):
         combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
         num_total_atoms = combined_conf.shape[0]
 
-        cutoff = host_system.nonbonded.potential.cutoff
+        cutoff = host_system.nonbonded_all_pairs.potential.cutoff
         u = potentials.NonbondedInteractionGroup(
             num_total_atoms,
             ligand_idxs,
-            host_system.nonbonded.potential.beta,
+            host_system.nonbonded_all_pairs.potential.beta,
             cutoff,
             col_atom_idxs=water_idxs if is_solvent else protein_idxs,
         )
@@ -1025,7 +1053,7 @@ def test_combine_with_host_split(precision, rtol, atol):
         lj_handle = ff.lj_handle
         guest_params = st._get_guest_params(q_handle, lj_handle, lamb, cutoff)
 
-        host_ixn_params = host_system.nonbonded.params.copy()
+        host_ixn_params = host_system.nonbonded_all_pairs.params.copy()
         if not is_solvent and ff.env_bcc_handle is not None:  # protein
             env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
             host_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
@@ -1683,8 +1711,8 @@ def assert_symmetric_interpolation(mol_a, mol_b, core):
         )
 
         _assert_u_and_grad_consistent(
-            sys_fwd.nonbonded,
-            sys_rev.nonbonded,
+            sys_fwd.nonbonded_pair_list,
+            sys_rev.nonbonded_pair_list,
             test_conf,
             fused_map,
             canon_fn=lambda idxs, _: tuple(canonicalize_bond(idxs)),

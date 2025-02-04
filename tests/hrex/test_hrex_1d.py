@@ -1,6 +1,7 @@
 from dataclasses import dataclass, replace
 from functools import partial
 from typing import Callable, List, Protocol, Sequence, Tuple
+from unittest.mock import patch
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -136,6 +137,24 @@ def run_hrex_with_local_proposal(
         plt.show()
 
     return samples_by_state_by_iter, diagnostics
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_hrex_nan_poisoned_log_q(seed):
+    np.random.seed(seed)
+
+    locs = [0.0, 0.5, 1.0]
+    states = [gaussian(loc, 0.3) for loc in locs]
+    initial_replicas = locs
+
+    proposal_radius = 0.1
+    proposal = lambda x: gaussian(x, proposal_radius)
+    with patch.object(GaussianMixture, "log_q") as mock_log_q:
+        mock_log_q.return_value = float("NaN")
+
+        samples_by_state_by_iter, diagnostics = run_hrex_with_local_proposal(states, initial_replicas, proposal, seed)
+    final_swap_acceptance_rates = diagnostics.cumulative_swap_acceptance_rates[-1]
+    np.testing.assert_array_equal(0.0, final_swap_acceptance_rates)
 
 
 @pytest.mark.parametrize("seed", range(5))
