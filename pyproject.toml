@@ -35,7 +35,6 @@ ignore = [
   "NPY002", # Replace legacy `np.random.choice` call with `np.random.Generator`
 
   "RUF002", # Docstring contains ambiguous `–` (EN DASH). Did you mean `-` (HYPHEN-MINUS)?
-  "RUF015", # Prefer `next(...)` over single element slice
 ]
 
 [build-system]
