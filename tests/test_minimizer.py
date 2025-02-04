@@ -71,7 +71,6 @@ from timemachine.potentials.jax_utils import distance_on_pairs, idxs_within_cuto
         ),
     ],
 )
-
 def test_fire_minimize_host_protein(pdb_path, sdf_path, mol_a_name, mol_b_name, run_one_test):
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     with sdf_path as ligand_path:
