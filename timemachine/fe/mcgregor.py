@@ -428,7 +428,7 @@ def mcs(
     priority_idxs = tuple(tuple(x) for x in priority_idxs)
     # Keep start time for debugging purposes below
     # import time
-    # start_time = time.time()  # noqa
+    # start_time = time.time()
 
     cached_leaf_filter_fxn = cache(leaf_filter_fxn)
 

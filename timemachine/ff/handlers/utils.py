@@ -87,7 +87,7 @@ def match_smirks(mol, smirks):
     # Set up query.
     qmol = Chem.MolFromSmarts(smirks)  # cannot catch the error
     if qmol is None:
-        raise ValueError('RDKit could not parse the SMIRKS string "{}"'.format(smirks))
+        raise ValueError(f'RDKit could not parse the SMIRKS string "{smirks}"')
 
     # Create atom mapping for query molecule
     idx_map = dict()

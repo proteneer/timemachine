@@ -76,7 +76,7 @@ def verify_potential_validation(potential):
         potential(np.zeros((1, 4)), np.ones((3, 3)))
 
     with pytest.raises(RuntimeError, match="box must be 3x3"):
-        potential(np.zeros((1, 3)), np.ones((3)))
+        potential(np.zeros((1, 3)), np.ones(3))
 
     with pytest.raises(RuntimeError, match="box must be 3x3"):
         potential(np.zeros((1, 3)), np.ones((2, 2)))

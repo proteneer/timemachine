@@ -175,9 +175,7 @@ def setup_initial_state(
     # provide a different run_seed for every lambda window,
     # but in a way that should be symmetric for
     # A -> B vs. B -> A edge definitions
-    run_seed = (
-        int(seed + bytes_to_id(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % MAX_SEED_VALUE
-    )
+    run_seed = int(seed + bytes_to_id(b"".join([np.array(p.params).tobytes() for p in potentials]))) % MAX_SEED_VALUE
 
     # initialize velocities
     v0 = sample_velocities(hmr_masses, temperature, init_seed)

@@ -170,7 +170,7 @@ def get_rbfe_edge_list_hif2a_path(seed):
             _ = run_example("rbfe_edge_list.py", get_cli_args(config), cwd=temp_dir)
             return Path(temp_dir)
 
-        with open(hif2a_data / "results_edges_5ns.csv", "r") as fp:
+        with open(hif2a_data / "results_edges_5ns.csv") as fp:
             edges_rows = fp.readlines()
 
         edges_rows_sample = edges_rows[:3]  # keep header and first 2 edges (338 -> 165, 338 -> 215)

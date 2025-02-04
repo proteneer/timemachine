@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 # mypy: ignore-errors
 
 # converts smirnoff xmls into python dictionaries.
