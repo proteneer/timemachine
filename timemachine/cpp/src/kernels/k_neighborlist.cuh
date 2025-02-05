@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kernel_utils.cuh"
+#include <assert.h>
 
 namespace timemachine {
 
@@ -148,6 +149,8 @@ void __global__ k_compact_trim_atoms(
         if (interacts) {
             // only interacting atoms partake in this
             int index = neighborsInBuffer + __popc(includeAtomFlags & warpMask); // where to store this in shared memory
+
+            assert(index < WARP_SIZE * 2);
             ixn_j_buffer[index] = atom_j_idx;
         }
         neighborsInBuffer += __popc(includeAtomFlags);
@@ -438,6 +441,7 @@ void __global__ k_find_blocks_with_ixns(
         if (interacts) {
             int index = neighborsInBuffer + __popc(includeAtomFlags & warpMask); // where to store this in shared memory
             // Indices can be at most 64
+            assert(index < WARP_SIZE * 2);
             ixn_j_buffer[index] = atom_j_idx;
         }
         neighborsInBuffer += __popc(includeAtomFlags);
