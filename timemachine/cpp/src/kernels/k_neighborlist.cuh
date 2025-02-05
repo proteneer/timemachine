@@ -128,6 +128,7 @@ void __global__ k_compact_trim_atoms(
 
     ixn_j_buffer[threadIdx.x] = N;
     ixn_j_buffer[WARP_SIZE + threadIdx.x] = N;
+    __syncthreads();
 
     const int indexInWarp = threadIdx.x % WARP_SIZE;
     const int warpMask = (1 << indexInWarp) - 1;
@@ -143,12 +144,14 @@ void __global__ k_compact_trim_atoms(
 
         int includeAtomFlags = __ballot_sync(FULL_MASK, interacts);
 
+        __syncthreads();
         if (interacts) {
             // only interacting atoms partake in this
             int index = neighborsInBuffer + __popc(includeAtomFlags & warpMask); // where to store this in shared memory
             ixn_j_buffer[index] = atom_j_idx;
         }
         neighborsInBuffer += __popc(includeAtomFlags);
+        __syncthreads();
 
         if (neighborsInBuffer > WARP_SIZE) {
             const int tiles_to_store = 1;
@@ -226,6 +229,7 @@ void __global__ k_find_blocks_with_ixns(
     // initialize
     ixn_j_buffer[threadIdx.x] = N;
     ixn_j_buffer[WARP_SIZE + threadIdx.x] = N;
+    __syncthreads();
 
     int sync_start;
 
@@ -429,6 +433,7 @@ void __global__ k_find_blocks_with_ixns(
             }
         }
 
+        __syncthreads();
         // Add any interacting atoms to the buffer.
         if (interacts) {
             int index = neighborsInBuffer + __popc(includeAtomFlags & warpMask); // where to store this in shared memory
@@ -436,6 +441,7 @@ void __global__ k_find_blocks_with_ixns(
             ixn_j_buffer[index] = atom_j_idx;
         }
         neighborsInBuffer += __popc(includeAtomFlags);
+        __syncthreads();
 
         if (neighborsInBuffer > WARP_SIZE) {
             const int tilesToStore = 1;
@@ -451,6 +457,7 @@ void __global__ k_find_blocks_with_ixns(
             neighborsInBuffer -= WARP_SIZE;
         }
     }
+    __syncthreads();
 
     // store trim
     const int Y = gridDim.y;
