@@ -114,7 +114,6 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
         fully_coupled_ligand_atoms = np.setdiff1d(ligand_idxs, lambda_coupled_ligand_atoms)
         nb_params[fully_coupled_ligand_atoms, NBParamIdx.W_IDX] = 0
     else:
-        # host_fns, combined_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=nb_cutoff)
         host_fns = host_config.host_system.get_U_fns()
         combined_masses = host_config.masses
         potentials = [bp.potential for bp in host_fns]
