@@ -37,7 +37,7 @@ from timemachine.fe.plots import (
 )
 from timemachine.fe.rest.single_topology import SingleTopologyREST
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology, assert_default_system_constraints
-from timemachine.fe.system import HostSystem, convert_omm_system
+from timemachine.fe.system import HostSystem
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
@@ -224,9 +224,8 @@ def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
     Host
         Minimized host state
     """
-    system, masses = convert_omm_system(config.omm_system)
     conf, box = minimizer.pre_equilibrate_host([st.mol_a, st.mol_b], config, st.ff)
-    return Host(system, masses, conf, box, config.num_water_atoms, config.omm_topology)
+    return Host(config.host_system, config.masses, conf, box, config.num_water_atoms, config.omm_topology)
 
 
 def setup_initial_states(
@@ -1107,11 +1106,8 @@ def run_solvent(
         md_params = replace(md_params, water_sampling_params=None)
         warnings.warn("Solvent simulations don't benefit from water sampling, disabling")
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
-        box_width, forcefield.water_ff, mols=[mol_a, mol_b]
-    )
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
+    solvent_host_config = builders.build_water_system(box_width, forcefield.water_ff, mols=[mol_a, mol_b])
+    solvent_host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     # min_cutoff defaults to None since the original poses tend to come from posing in a complex and
     # in solvent the molecules may adopt significantly different poses
     solvent_res = estimate_relative_free_energy_bisection_or_hrex(
@@ -1126,7 +1122,7 @@ def run_solvent(
         min_overlap=min_overlap,
         min_cutoff=min_cutoff,
     )
-    return solvent_res, solvent_top, solvent_host_config
+    return solvent_res, solvent_host_config
 
 
 def run_complex(
@@ -1140,11 +1136,10 @@ def run_complex(
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
 ):
-    complex_sys, complex_conf, complex_box, complex_top, nwa = builders.build_protein_system(
+    complex_host_config = builders.build_protein_system(
         protein, forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
     )
-    complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
-    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, nwa, complex_top)
+    complex_host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes, deboggle later
     complex_res = estimate_relative_free_energy_bisection_or_hrex(
         mol_a,
         mol_b,
@@ -1157,4 +1152,4 @@ def run_complex(
         min_overlap=min_overlap,
         min_cutoff=min_cutoff,
     )
-    return complex_res, complex_top, complex_host_config
+    return complex_res, complex_host_config

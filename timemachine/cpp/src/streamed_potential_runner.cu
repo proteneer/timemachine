@@ -2,7 +2,7 @@
 
 namespace timemachine {
 
-StreamedPotentialRunner::StreamedPotentialRunner(){};
+StreamedPotentialRunner::StreamedPotentialRunner() {};
 
 StreamedPotentialRunner::~StreamedPotentialRunner() {}
 

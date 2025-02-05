@@ -120,15 +120,9 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
 
 @cache
 def get_solvent_host(st: SingleTopology) -> tuple[Host, HostConfig]:
-    def get_solvent_host_config(box_width=4.0):
-        solvent_sys, solvent_conf, solvent_box, omm_topology = builders.build_water_system(
-            box_width, forcefield.water_ff, mols=[st.mol_a, st.mol_b]
-        )
-        solvent_box += np.diag([0.1, 0.1, 0.1])
-        return HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], omm_topology)
-
-    host_config = get_solvent_host_config()
-
+    box_width = 4.0
+    host_config = builders.build_water_system(box_width, forcefield.water_ff, mols=[st.mol_a, st.mol_b])
+    host_config.box += np.diag([0.1, 0.1, 0.1])
     host = setup_optimized_host(st, host_config)
 
     return host, host_config
@@ -176,19 +170,17 @@ def test_single_topology_rest_propers():
     # benzene: no propers are scaled
     benzene = get_mol("c1ccccc1")
     st = get_identity_transformation(benzene)
-    assert st.target_propers.shape == (0, 4)
+    assert st.target_propers == set()
 
     # cyclohexane: all 9 * 6 ring propers are scaled (|{H1, H2, C1}-C2-C3-{C4, H3, H4}| = 9 propers per C-C bond)
     cyclohexane = get_mol("C1CCCCC1")
     st = get_identity_transformation(cyclohexane)
-    rest_proper_idxs_set = {tuple(idxs) for idxs in list(st.target_propers)}
-    assert len(rest_proper_idxs_set) == 9 * 6
+    assert len(st.target_propers) == 9 * 6
 
     # phenylcyclohexane: all 9 * 6 cyclohexane ring propers and 6 rotatable bond propers are scaled
     phenylcyclohexane = get_mol("c1ccc(C2CCCCC2)cc1")
     st = get_identity_transformation(phenylcyclohexane)
-    rest_proper_idxs_set = {tuple(idxs) for idxs in list(st.target_propers)}
-    assert len(rest_proper_idxs_set) == 9 * 6 + 6
+    assert len(st.target_propers) == 9 * 6 + 6
 
 
 @pytest.mark.parametrize(

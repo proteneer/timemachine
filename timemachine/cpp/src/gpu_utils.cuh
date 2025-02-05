@@ -24,7 +24,9 @@ curandStatus_t templateCurandUniform(curandGenerator_t generator, float *outputP
 curandStatus_t templateCurandUniform(curandGenerator_t generator, double *outputPtr, size_t n);
 
 #define gpuErrchk(ans)                                                                                                 \
-    { gpuAssert((ans), __FILE__, __LINE__); }
+    {                                                                                                                  \
+        gpuAssert((ans), __FILE__, __LINE__);                                                                          \
+    }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = true) {
     if (code != cudaSuccess) {
         fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
@@ -50,7 +52,9 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
 }
 
 #define curandErrchk(ans)                                                                                              \
-    { curandAssert((ans), __FILE__, __LINE__); }
+    {                                                                                                                  \
+        curandAssert((ans), __FILE__, __LINE__);                                                                       \
+    }
 inline void curandAssert(curandStatus_t code, const char *file, int line, bool abort = true) {
     if (code != CURAND_STATUS_SUCCESS) {
         fprintf(stderr, "curand failure, code: %d %s %d\n", code, file, line);

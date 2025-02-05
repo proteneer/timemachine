@@ -81,14 +81,28 @@ def parameterize_nonbonded_full(
 
 
 @no_type_check
+def test_host_guest_nonbonded_tiny_mol():
+    ctor = BaseTopology
+    precision, rtol, atol = (np.float32, 1e-4, 5e-4)
+    use_tiny_mol = True
+    host_guest_nonbonded_impl(ctor, precision, rtol, atol, use_tiny_mol)
+
+
+@no_type_check
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
 @pytest.mark.parametrize("ctor", [BaseTopology, DualTopology])
 @pytest.mark.parametrize("use_tiny_mol", [True, False])
+@pytest.mark.nightly(reason="slow")
 def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
-    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
+    host_guest_nonbonded_impl(ctor, precision, rtol, atol, use_tiny_mol)
+
+
+@no_type_check
+def host_guest_nonbonded_impl(ctor, precision, rtol, atol, use_tiny_mol):
+    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_system, omm_topology):
         # Use the original code to compute the nb grads and potential
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms, ff, omm_topology)
+        hgt = topology.HostGuestTopology(host_system.get_U_fns(), bt, num_water_atoms, ff, omm_topology)
         params, us = parameterize_nonbonded_full(
             hgt,
             ff.q_handle.params,
@@ -100,10 +114,10 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(x0, box)
 
-    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
+    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_system, omm_topology):
         # Use the updated topology code to compute the nb grads and potential
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms, ff, omm_topology)
+        hgt = topology.HostGuestTopology(host_system.get_U_fns(), bt, num_water_atoms, ff, omm_topology)
         params, us = hgt.parameterize_nonbonded(
             ff.q_handle.params,
             ff.q_handle_intra.params,
@@ -138,7 +152,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         box,
         lamb,
         num_water_atoms,
-        host_bps,
+        host_system,
         water_idxs,
         ligand_idxs,
         protein_idxs,
@@ -148,7 +162,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         assert num_water_atoms == len(water_idxs)
         num_total_atoms = len(ligand_idxs) + len(protein_idxs) + num_water_atoms
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms, ff, omm_topology)
+        hgt = topology.HostGuestTopology(host_system.get_U_fns(), bt, num_water_atoms, ff, omm_topology)
         u = potentials.NonbondedInteractionGroup(
             num_total_atoms,
             ligand_idxs,

@@ -8,7 +8,7 @@ namespace timemachine {
 class Integrator {
 
 public:
-    virtual ~Integrator(){};
+    virtual ~Integrator() {};
 
     virtual void step_fwd(
         std::vector<std::shared_ptr<BoundPotential>> &bps,

@@ -11,9 +11,8 @@ from timemachine.constants import NBParamIdx
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
 from timemachine.ff import Forcefield
-from timemachine.potentials import HarmonicAngleStable, NonbondedPairListPrecomputed
 
-from .bond import CanonicalBond, mkbond
+from .bond import CanonicalBond, CanonicalProper, mkbond, mkproper
 from .interpolation import InterpolationFxn, InterpolationFxnName, Symmetric, get_interpolation_fxn
 from .queries import get_aliphatic_ring_bonds, get_rotatable_bonds
 
@@ -77,7 +76,7 @@ class SingleTopologyREST(SingleTopology):
         """
         super().__init__(mol_a, mol_b, core, forcefield)
 
-        self._temperature_scale_interpolation_fxn = get_temperature_scale_interpolation_fxn(
+        self._temperature_scale_interpolation_fxn: InterpolationFxn = get_temperature_scale_interpolation_fxn(
             max_temperature_scale, temperature_scale_interpolation
         )
 
@@ -96,25 +95,25 @@ class SingleTopologyREST(SingleTopology):
         return rotatable_bonds_c
 
     @cached_property
-    def propers(self) -> NDArray[np.int32]:
+    def propers(self) -> list[CanonicalProper]:
         # TODO: refactor SingleTopology to compute src and dst alignment at initialization
-        return super().setup_intermediate_state(0.0).proper.potential.idxs
+        return [mkproper(*idxs) for idxs in super().setup_intermediate_state(0.0).proper.potential.idxs]
 
     @cached_property
     def target_proper_idxs(self) -> list[int]:
         return [
             idx
-            for idx, (_, j, k, _) in enumerate(self.propers)
-            for bond in [mkbond(j, k)]
+            for idx, proper in enumerate(self.propers)
+            for bond in [mkbond(proper.j, proper.k)]
             if bond in self.rotatable_bonds or bond in self.aliphatic_ring_bonds
         ]
 
     @cached_property
-    def target_propers(self) -> NDArray[np.int32]:
-        return self.propers[self.target_proper_idxs, :]
+    def target_propers(self) -> set[CanonicalProper]:
+        return {self.propers[i] for i in self.target_proper_idxs}
 
     def get_energy_scale_factor(self, lamb: float) -> float:
-        temperature_factor = self._temperature_scale_interpolation_fxn(lamb).item()
+        temperature_factor = float(self._temperature_scale_interpolation_fxn(lamb))
         return 1.0 / temperature_factor
 
     def setup_intermediate_state(self, lamb: float) -> GuestSystem:

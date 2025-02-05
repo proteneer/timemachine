@@ -839,7 +839,7 @@ def test_chiral_inversion_in_single_topology_solvent():
     md_params = DEFAULT_HREX_PARAMS
     md_params = replace(md_params, n_frames=100)
 
-    res, _, _ = run_solvent(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, md_params, n_windows=3)
+    res, _ = run_solvent(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, md_params, n_windows=3)
     heatmap_a, heatmap_b = make_chiral_flip_heatmaps(res, atom_map)
     assert (heatmap_a[0] == 0).all(), "chirality in end state A was not preserved"
     assert (heatmap_b[-1] == 0).all(), "chirality in end state B was not preserved"

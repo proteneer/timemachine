@@ -224,8 +224,8 @@ def plot_atom_mapping_grid(
     atom_colors_a = {}
     atom_colors_b = {}
     for (a_idx, b_idx), rgb in zip(core, np.random.random((len(core), 3))):
-        atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
-        atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
+        atom_colors_a[int(a_idx)] = tuple(rgb.tolist())  # type: ignore[arg-type]
+        atom_colors_b[int(b_idx)] = tuple(rgb.tolist())  # type: ignore[arg-type]
 
     # highlight bond idxs and colors
     bond_idxs_a, bond_colors_a = generate_bond_idxs_and_colors(mol_a, mol_b, core)

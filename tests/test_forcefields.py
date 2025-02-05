@@ -12,7 +12,7 @@ from rdkit import Chem
 
 from timemachine import constants
 from timemachine.ff import Forcefield, combine_params
-from timemachine.ff.handlers import nonbonded, openmm_deserializer
+from timemachine.ff.handlers import nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.md import builders
 
@@ -154,15 +154,12 @@ def test_amber14_tip3p_matches_tip3p():
     """Verify that given a water box, the same parameters are produced for amber14/tip3p as tip3p, but with additional
     support for Ions"""
     tip3p_water_ff = "tip3p"
-    cutoff = 1.2
     assert constants.DEFAULT_WATER_FF != tip3p_water_ff
-    ref_system, _, _, ref_top = builders.build_water_system(4.0, constants.DEFAULT_WATER_FF)
-    tip3p_system, _, _, tip3p_top = builders.build_water_system(4.0, tip3p_water_ff)
-
-    ref_pots, ref_masses = openmm_deserializer.deserialize_system(ref_system, cutoff)
-    test_pots, test_masses = openmm_deserializer.deserialize_system(tip3p_system, cutoff)
-    np.testing.assert_array_equal(ref_masses, test_masses)
-
+    ref_host_config = builders.build_water_system(4.0, constants.DEFAULT_WATER_FF)
+    tip3p_host_config = builders.build_water_system(4.0, tip3p_water_ff)
+    np.testing.assert_array_equal(ref_host_config.masses, tip3p_host_config.masses)
+    ref_pots = ref_host_config.host_system.get_U_fns()
+    test_pots = tip3p_host_config.host_system.get_U_fns()
     assert len(ref_pots) == len(test_pots)
     for ref, test in zip(ref_pots, test_pots):
         np.testing.assert_array_equal(ref.params, test.params)
