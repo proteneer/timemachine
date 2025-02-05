@@ -29,7 +29,6 @@ from timemachine.fe.rest.single_topology import InterpolationFxnName
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield, ForcefieldParams
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
@@ -54,13 +53,16 @@ WATER_SAMPLER_MOVERS = (
 )
 
 
+# (YTZ): make dataclass/immutable later?
+# (YTZ): deduplicate with rbfe.py
 class HostConfig:
-    def __init__(self, omm_system, conf, box, num_water_atoms, omm_topology):
-        self.omm_system = omm_system
+    def __init__(self, host_system, conf, box, num_water_atoms, omm_topology, masses):
+        self.host_system = host_system
         self.conf = conf
         self.box = box
         self.num_water_atoms = num_water_atoms
         self.omm_topology = omm_topology
+        self.masses = np.array(masses)
 
 
 @dataclass(frozen=True)
@@ -465,9 +467,9 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         """
         ligand_masses = get_mol_masses(self.mol)
         ff_params = ff.get_params()
-
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
-        hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms, ff, host_config.omm_topology)
+        hgt = topology.HostGuestTopology(
+            host_config.host_system.get_U_fns(), self.top, host_config.num_water_atoms, ff, host_config.omm_topology
+        )
 
         final_params = []
         final_potentials = []
@@ -484,7 +486,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             else:
                 final_params.append(params)
                 final_potentials.append(pot)
-        combined_masses = self._combine(ligand_masses, np.array(host_masses))
+        combined_masses = self._combine(ligand_masses, np.array(host_config.masses))
         return tuple(final_potentials), tuple(final_params), combined_masses
 
     def prepare_vacuum_edge(self, ff: Forcefield) -> tuple[tuple[Potential, ...], tuple, NDArray]:

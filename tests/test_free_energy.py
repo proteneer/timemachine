@@ -42,7 +42,6 @@ from timemachine.fe.free_energy import (
 from timemachine.fe.rbfe import Host, setup_initial_state, setup_initial_states, setup_optimized_host
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
-from timemachine.fe.system import convert_omm_system
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator
 from timemachine.md import builders
@@ -199,11 +198,8 @@ def test_absolute_complex_with_water_sampling():
     ff = Forcefield.load_default()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-        host_sys, host_conf, box, top, num_water_atoms = builders.build_protein_system(
-            str(protein_path), ff.protein_ff, ff.water_ff, mols=[mol]
-        )
-        box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    host_config = HostConfig(host_sys, host_conf, box, num_water_atoms, top)
+        host_config = builders.build_protein_system(str(protein_path), ff.protein_ff, ff.water_ff, mols=[mol])
+        host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
 
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
@@ -212,7 +208,7 @@ def test_absolute_complex_with_water_sampling():
 
     intg = LangevinIntegrator(DEFAULT_TEMP, 1.5e-3, 1.0, complex_masses, seed)
 
-    x0 = afe.prepare_combined_coords(host_conf)
+    x0 = afe.prepare_combined_coords(host_config.conf)
 
     state = InitialState(
         potentials=[pot.bind(params) for pot, params in zip(complex_unbound_potentials, complex_sys_params)],
@@ -220,10 +216,10 @@ def test_absolute_complex_with_water_sampling():
         barostat=None,
         x0=x0,
         v0=np.zeros_like(x0),
-        box0=box,
+        box0=host_config.box,
         lamb=lamb,
-        ligand_idxs=np.arange(len(host_conf), len(x0)),
-        protein_idxs=np.arange(0, len(host_conf) - num_water_atoms),
+        ligand_idxs=np.arange(len(host_config.conf), len(x0)),
+        protein_idxs=np.arange(0, len(host_config.conf) - host_config.num_water_atoms),
     )
 
     md_params = MDParams(10, 0, 10, seed, water_sampling_params=WaterSamplingParams())
@@ -255,15 +251,12 @@ def test_vacuum_and_solvent_edge_types():
     mol = mols[0]
 
     ff = Forcefield.load_default()
-    solvent_system, solvent_coords, solvent_box, top = builders.build_water_system(3.0, ff.water_ff, mols=[mol])
-    host_system = HostConfig(solvent_system, solvent_coords, solvent_box, solvent_coords.shape[0], top)
-
+    host_config = builders.build_water_system(3.0, ff.water_ff, mols=[mol])
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
 
     vacuum_unbound_potentials, vacuum_sys_params, vacuum_masses = afe.prepare_vacuum_edge(ff)
-
-    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(ff, host_system, 0.0)
+    solvent_unbound_potentials, solvent_sys_params, solvent_masses = afe.prepare_host_edge(ff, host_config, 0.0)
 
     assert isinstance(vacuum_unbound_potentials, type(solvent_unbound_potentials))
     assert isinstance(vacuum_sys_params, type(solvent_sys_params))
@@ -281,10 +274,7 @@ def hif2a_ligand_pair_single_topology():
 @pytest.fixture(scope="module")
 def solvent_hif2a_ligand_pair_single_topology_lam0_state(hif2a_ligand_pair_single_topology):
     st, forcefield = hif2a_ligand_pair_single_topology
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
-        3.0, forcefield.water_ff, mols=[st.mol_a, st.mol_b]
-    )
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
+    solvent_host_config = builders.build_water_system(3.0, forcefield.water_ff, mols=[st.mol_a, st.mol_b])
     solvent_host = setup_optimized_host(st, solvent_host_config)
     state = setup_initial_states(st, solvent_host, DEFAULT_TEMP, [0.0], 2023)[0]
     return state
@@ -353,23 +343,23 @@ def test_initial_state_interacting_ligand_atoms(host_name, seed):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     if host_name == "complex":
         with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-            host_sys, host_conf, box, top, num_water_atoms = builders.build_protein_system(
+            host_config = builders.build_protein_system(
                 str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )
-            box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-        host_config = HostConfig(host_sys, host_conf, box, num_water_atoms, top)
+        host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     elif host_name == "solvent":
-        host_sys, host_conf, box, top = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
-        box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-        host_config = HostConfig(host_sys, host_conf, box, host_conf.shape[0], top)
+        host_config = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
+        host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    else:
+        # vacuum
+        pass
 
     single_topology = SingleTopology(mol_a, mol_b, core, forcefield)
 
     host_atoms = 0
     if host_config is not None:
-        # system, masses = convert_omm_system(host_config.omm_system)
         host = setup_optimized_host(single_topology, host_config)
-        host_atoms += len(host_conf)
+        host_atoms += len(host_config.conf)
 
     initial_states = setup_initial_states(
         single_topology, host, DEFAULT_TEMP, lambdas, seed=seed, min_cutoff=0.7 if host_name is not None else None
@@ -423,13 +413,18 @@ def test_get_water_sampler_params(num_windows):
     # Use the simple charges simply because it is faster
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, forcefield)
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
-        3.0, forcefield.water_ff, mols=[mol_a, mol_b]
+    host_config = builders.build_water_system(3.0, forcefield.water_ff, mols=[mol_a, mol_b])
+
+    # (YTZ): dedup later with rbfe.Host
+    solvent_host = Host(
+        host_config.host_system,
+        host_config.masses,
+        host_config.conf,
+        host_config.box,
+        host_config.num_water_atoms,
+        host_config.omm_topology,
     )
 
-    num_host_atoms = solvent_conf.shape[0]
-    host_system, masses = convert_omm_system(solvent_sys)
-    solvent_host = Host(host_system, masses, solvent_conf, solvent_box, num_host_atoms, solvent_top)
     mol_a_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 1])
     mol_b_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 2])
     for lamb in np.linspace(0.0, 1.0, num_windows, endpoint=True):
@@ -444,24 +439,30 @@ def test_get_water_sampler_params(num_windows):
             assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == nb_pot.cutoff)
             assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == 0.0)
 
-        np.testing.assert_array_equal(water_sampler_nb_params[num_host_atoms:], ligand_water_params)
+        np.testing.assert_array_equal(water_sampler_nb_params[host_config.num_water_atoms :], ligand_water_params)
 
 
 @pytest.mark.nocuda
 def test_get_water_sampler_params_complex():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    # Use the simple charges simply because it is faster
+    # Use the simple charges because it is faster
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
-        host_sys, host_conf, box, top, num_water_atoms = builders.build_protein_system(
+        host_config = builders.build_protein_system(
             str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )
-        box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    host_config = HostConfig(host_sys, host_conf, box, num_water_atoms, top)
-    system, masses = convert_omm_system(host_config.omm_system)
-    host = Host(system, masses, host_conf, box, host_config.num_water_atoms, host_config.omm_topology)
+        host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes near boundary
+
+    host = Host(
+        host_config.host_system,
+        host_config.masses,
+        host_config.conf,
+        host_config.box,
+        host_config.num_water_atoms,
+        host_config.omm_topology,
+    )
 
     lamb = 0.5  # arbitrary
 
@@ -735,10 +736,7 @@ def test_initial_state_to_bound_impl():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
-        3.0, forcefield.water_ff, mols=[st.mol_a, st.mol_b]
-    )
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
+    solvent_host_config = builders.build_water_system(3.0, forcefield.water_ff, mols=[st.mol_a, st.mol_b])
     solvent_host = setup_optimized_host(st, solvent_host_config)
     initial_state = setup_initial_states(st, solvent_host, DEFAULT_TEMP, [0.5], 2024)[0]
 

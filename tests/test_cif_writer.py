@@ -19,21 +19,21 @@ def test_write_single_topology_frame():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
     top = SingleTopology(mol_a, mol_b, core, forcefield)
-    _, solvent_coords, _, solvent_top = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
+    host_config = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
 
     with NamedTemporaryFile(suffix=".cif") as temp:
-        writer = CIFWriter([solvent_top, mol_a, mol_b], temp.name)
+        writer = CIFWriter([host_config.omm_topology, mol_a, mol_b], temp.name)
 
         ligand_coords = top.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
 
-        bad_coords = np.concatenate([solvent_coords, ligand_coords])
+        bad_coords = np.concatenate([host_config.conf, ligand_coords])
 
         with pytest.raises(ValueError):
             # Should fail, as incorrect number of coords
             bad_coords = bad_coords * 10
             writer.write_frame(bad_coords)
 
-        good_coords = np.concatenate([solvent_coords, convert_single_topology_mols(ligand_coords, top)], axis=0)
+        good_coords = np.concatenate([host_config.conf, convert_single_topology_mols(ligand_coords, top)], axis=0)
 
         # tbd replace with atom map mixin
         writer.write_frame(good_coords * 10)
@@ -76,12 +76,12 @@ def test_cif_writer(n_frames):
         assert cif.getPositions(asNumpy=True).shape == good_coords.shape
         np.testing.assert_allclose(cif.getPositions(asNumpy=True), good_coords)
 
-    _, solvent_coords, _, solvent_top = builders.build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
+    solvent_host_config = builders.build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
 
     # test solvent
     with NamedTemporaryFile(suffix=".cif") as temp:
-        writer = CIFWriter([solvent_top, mol_a, mol_b], temp.name)
-        good_coords = np.concatenate([solvent_coords, get_romol_conf(mol_a), get_romol_conf(mol_b)], axis=0)
+        writer = CIFWriter([solvent_host_config.omm_topology, mol_a, mol_b], temp.name)
+        good_coords = np.concatenate([solvent_host_config.conf, get_romol_conf(mol_a), get_romol_conf(mol_b)], axis=0)
         for _ in range(n_frames):
             writer.write_frame(good_coords * 10)
         writer.close()
@@ -93,13 +93,13 @@ def test_cif_writer(n_frames):
 
     # test complex
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        _, complex_coords, _, complex_top, _ = builders.build_protein_system(
-            str(path_to_pdb), ff.protein_ff, ff.water_ff
-        )
+        complex_host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
 
         with NamedTemporaryFile(suffix=".cif") as temp:
-            writer = CIFWriter([complex_top, mol_a, mol_b], temp.name)
-            good_coords = np.concatenate([complex_coords, get_romol_conf(mol_a), get_romol_conf(mol_b)], axis=0)
+            writer = CIFWriter([complex_host_config.omm_topology, mol_a, mol_b], temp.name)
+            good_coords = np.concatenate(
+                [complex_host_config.conf, get_romol_conf(mol_a), get_romol_conf(mol_b)], axis=0
+            )
             for _ in range(n_frames):
                 writer.write_frame(good_coords * 10)
             writer.close()

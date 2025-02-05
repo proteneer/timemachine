@@ -32,12 +32,12 @@ def residue_mol_inputs():
     for protein_path in ["5dfr_solv_equil.pdb", "hif2a_nowater_min.pdb"]:
         with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
             host_pdb = app.PDBFile(str(path_to_pdb))
-            _, _, _, topology, _ = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
+            host_config = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
         ff = OMMForceField(f"{DEFAULT_PROTEIN_FF}.xml", f"{DEFAULT_WATER_FF}.xml")
-        data = OMMForceField._SystemData(topology)
+        data = OMMForceField._SystemData(host_config.omm_topology)
         residueTemplates = {}
         template_for_residue = ff._matchAllResiduesToTemplates(
-            data, topology, residueTemplates, ignoreExternalBonds=False
+            data, host_config.omm_topology, residueTemplates, ignoreExternalBonds=False
         )
 
         for tfr in template_for_residue:

@@ -14,7 +14,7 @@ pytestmark = [pytest.mark.nogpu, pytest.mark.nightly]
 
 def test_no_gpu_raises_exception():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    solvent_system, solvent_coords, solvent_box, top = builders.build_water_system(3.0, ff.water_ff)
+    solvent_system = builders.build_water_system(3.0, ff.water_ff).host_system
 
     host_fns, _ = openmm_deserializer.deserialize_system(solvent_system, cutoff=1.2)
 
