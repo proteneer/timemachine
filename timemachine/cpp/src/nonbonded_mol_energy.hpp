@@ -26,7 +26,7 @@ public:
     NonbondedMolEnergyPotential(
         const int N, const std::vector<std::vector<int>> &target_mols, const double beta, const double cutoff);
 
-    ~NonbondedMolEnergyPotential(){};
+    ~NonbondedMolEnergyPotential() {};
 
     void mol_energies_device(
         const int N,
