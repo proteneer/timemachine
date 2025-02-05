@@ -22,6 +22,9 @@ private:
     int *d_pair_idxs_;     // [M, 2]
     double *d_scales_;     // [M, 2]
 
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
+
 public:
     NonbondedPairList(
         const std::vector<int> &pair_idxs, // [M, 2]

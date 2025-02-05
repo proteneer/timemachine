@@ -8,10 +8,13 @@ namespace timemachine {
 template <typename RealType> class HarmonicBond : public Potential {
 
 private:
+    const int B_;
+
     int *d_bond_idxs_;
     __int128 *d_u_buffer_;
 
-    const int B_;
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
 
 public:
     int num_bonds() const { return B_; }

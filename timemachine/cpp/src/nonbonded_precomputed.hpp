@@ -10,11 +10,14 @@ template <typename RealType> class NonbondedPairListPrecomputed : public Potenti
 private:
     const int B_;
 
-    double beta_;
-    double cutoff_;
+    const double beta_;
+    const double cutoff_;
 
     int *d_idxs_;
     __int128 *d_u_buffer_;
+
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
 
 public:
     int num_bonds() const { return B_; }

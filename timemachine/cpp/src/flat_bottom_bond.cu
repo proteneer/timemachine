@@ -1,15 +1,16 @@
-#include "energy_accumulation.hpp"
 #include "flat_bottom_bond.hpp"
 #include "gpu_utils.cuh"
 #include "k_flat_bottom_bond.cuh"
 #include "kernel_utils.cuh"
 #include "math_utils.cuh"
+#include <cub/cub.cuh>
 #include <vector>
 
 namespace timemachine {
 
 template <typename RealType>
-FlatBottomBond<RealType>::FlatBottomBond(const std::vector<int> &bond_idxs) : B_(bond_idxs.size() / 2) {
+FlatBottomBond<RealType>::FlatBottomBond(const std::vector<int> &bond_idxs)
+    : B_(bond_idxs.size() / 2), sum_storage_bytes_(0) {
 
     // validate bond_idxs: even length, all idxs non-negative, and no self-edges
     if (bond_idxs.size() % 2 != 0) {
@@ -33,11 +34,16 @@ FlatBottomBond<RealType>::FlatBottomBond(const std::vector<int> &bond_idxs) : B_
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_ * 2 * sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
 
     cudaSafeMalloc(&d_u_buffer_, B_ * sizeof(*d_u_buffer_));
+
+    gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, B_));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
 };
 
 template <typename RealType> FlatBottomBond<RealType>::~FlatBottomBond() {
     gpuErrchk(cudaFree(d_bond_idxs_));
     gpuErrchk(cudaFree(d_u_buffer_));
+    gpuErrchk(cudaFree(d_sum_temp_storage_));
 };
 
 template <typename RealType>
@@ -70,7 +76,7 @@ void FlatBottomBond<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if (d_u) {
-            accumulate_energy(B_, d_u_buffer_, d_u, stream);
+            gpuErrchk(cub::DeviceReduce::Sum(d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_u, B_, stream));
         }
     }
 };

@@ -8,10 +8,13 @@ namespace timemachine {
 template <typename RealType> class FlatBottomBond : public Potential {
 
 private:
+    int B_; // TBD make this a constant
+
     int *d_bond_idxs_;
     __int128 *d_u_buffer_;
 
-    int B_;
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
 
 public:
     int num_bonds() const { return B_; }

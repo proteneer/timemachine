@@ -1,9 +1,9 @@
-#include "energy_accumulation.hpp"
 #include "gpu_utils.cuh"
 #include "k_nonbonded_pair_list.cuh"
 #include "kernels/kernel_utils.cuh"
 #include "math_utils.cuh"
 #include "nonbonded_pair_list.hpp"
+#include <cub/cub.cuh>
 #include <stdexcept>
 #include <vector>
 
@@ -15,7 +15,7 @@ NonbondedPairList<RealType, Negated>::NonbondedPairList(
     const std::vector<double> &scales, // [M, 2]
     const double beta,
     const double cutoff)
-    : M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff) {
+    : M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff), sum_storage_bytes_(0) {
 
     if (pair_idxs.size() % 2 != 0) {
         throw std::runtime_error("pair_idxs.size() must be even, but got " + std::to_string(pair_idxs.size()));
@@ -43,12 +43,17 @@ NonbondedPairList<RealType, Negated>::NonbondedPairList(
 
     cudaSafeMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, M_));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
 };
 
 template <typename RealType, bool Negated> NonbondedPairList<RealType, Negated>::~NonbondedPairList() {
     gpuErrchk(cudaFree(d_pair_idxs_));
     gpuErrchk(cudaFree(d_scales_));
     gpuErrchk(cudaFree(d_u_buffer_));
+    gpuErrchk(cudaFree(d_sum_temp_storage_));
 };
 
 template <typename RealType, bool Negated>
@@ -83,7 +88,7 @@ void NonbondedPairList<RealType, Negated>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if (d_u) {
-            accumulate_energy(M_, d_u_buffer_, d_u, stream);
+            gpuErrchk(cub::DeviceReduce::Sum(d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_u, M_, stream));
         }
     }
 }

@@ -13,7 +13,6 @@
 #include "chiral_atom_restraint.hpp"
 #include "chiral_bond_restraint.hpp"
 #include "context.hpp"
-#include "energy_accumulation.hpp"
 #include "exceptions.hpp"
 #include "exchange.hpp"
 #include "fanout_summed_potential.hpp"
@@ -2016,24 +2015,6 @@ py_rmsd_align(const py::array_t<double, py::array::c_style> &x1, const py::array
     return py_x2_aligned;
 }
 
-double py_accumulate_energy(const py::array_t<long long, py::array::c_style> &input_data) {
-
-    int N = input_data.size();
-
-    std::vector<__int128> h_buffer = py_array_to_vector_with_cast<long long, __int128>(input_data);
-
-    DeviceBuffer<__int128> d_input_buffer(h_buffer);
-
-    DeviceBuffer<__int128> d_output_buffer(1);
-
-    // Use default stream which will sync with the output_buffer copy_to
-    accumulate_energy(N, d_input_buffer.data, d_output_buffer.data, static_cast<cudaStream_t>(0));
-    std::vector<__int128> res(1);
-    d_output_buffer.copy_to(&res[0]);
-
-    return static_cast<long long>(res[0]);
-}
-
 template <typename RealType>
 py::array_t<RealType, py::array::c_style> py_atom_by_atom_energies(
     const py::array_t<int, py::array::c_style> &target_atoms,
@@ -2260,11 +2241,6 @@ PYBIND11_MODULE(custom_ops, m) {
         "cuda_device_reset",
         &py_cuda_device_reset,
         "Destroy all allocations and reset all state on the current device in the current process.");
-    m.def(
-        "_accumulate_energy",
-        &py_accumulate_energy,
-        "Function for testing accumulating energy in a block reduce",
-        py::arg("x"));
     m.def(
         "rotate_coords_f32",
         &py_rotate_coords<float>,
