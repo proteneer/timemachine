@@ -467,3 +467,57 @@ def test_infer_node_vals_and_errs_incorrect_sizes():
         ref_node_vals,
         ref_node_stddevs,
     )
+
+
+def instance_to_nx(instance):
+    node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = instance
+    g = nx.DiGraph()
+    for i in range(len(edge_idxs)):
+        e = tuple(edge_idxs[i])
+        d = dict()
+        d["edge_diff"] = obs_edge_diffs[i]
+        d["edge_stddev"] = edge_stddevs[i]
+        g.add_edge(*e, **d)
+    return g
+
+
+def compare_inferred_and_ref_dgs(inferred_dgs: dict, node_vals, mse_thresh=1e-5):
+    nodes = sorted(inferred_dgs.keys())
+    ref_node = nodes[0]
+    x = []
+    y = []
+    for n in inferred_dgs:
+        x.append(inferred_dgs[n] - inferred_dgs[ref_node])
+        y.append(node_vals[n] - node_vals[ref_node])
+    mse = np.mean((np.array(y) - np.array(x)) ** 2)
+    assert mse < mse_thresh, f"{mse} >= {mse_thresh}"
+
+
+def test_disconnection():
+    """infer dgs on largest connected component of disconnected random trees"""
+    np.random.seed(0)
+    for i in range(5):
+        # generate random spanning tree, remove one random edge
+        K = np.random.randint(10, 100)
+        g = nx.random_tree(K, seed=hash(K * i))
+        edges = list(g.edges)
+        random_edge = edges[np.random.randint(len(edges))]
+        g.remove_edge(*random_edge)
+        size_of_largest_component = max([len(c) for c in nx.connected_components(g)])
+        assert size_of_largest_component < K
+
+        # convert to digraph with appropriate edge labels
+        instance = generate_instance(g, 1e-3)
+        test_g = instance_to_nx(instance)
+        node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = instance
+
+        # infer results
+        labeled_graph = infer_node_vals_and_errs_networkx(
+            test_g, "edge_diff", "edge_stddev", "ref", "ref_stddev", n_bootstrap=1
+        )
+        assert labeled_graph.number_of_nodes() == size_of_largest_component
+
+        # assert inferred dgs match ref dgs, up to an additive offset
+        inferred_dgs = nx.get_node_attributes(labeled_graph, "inferred_dg")
+        assert len(inferred_dgs) == size_of_largest_component
+        compare_inferred_and_ref_dgs(inferred_dgs, node_vals)
