@@ -215,6 +215,7 @@ def _find_atom_map_chiral_conflicts_one_direction(
     chiral_set_b: ChiralRestrIdxSet,
     mode: ChiralCheckMode = ChiralCheckMode.FLIP,
 ) -> Set[ChiralConflict]:
+    conflict_condition_fxn: Callable[[FourTuple], bool]
     if mode == ChiralCheckMode.FLIP:
         conflict_condition_fxn = chiral_set_b.disallows
     elif mode == ChiralCheckMode.UNDEFINED:

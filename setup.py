@@ -106,8 +106,8 @@ setup(
     extras_require={
         "dev": [
             "ruff==0.9.3",
-            "mypy==1.5.1",
-            "pre-commit==3.4.0",
+            "mypy==1.14.1",
+            "pre-commit==4.1.0",
         ],
         "test": [
             "pytest",
