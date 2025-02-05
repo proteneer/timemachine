@@ -7,12 +7,11 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import MAX_FORCE_NORM
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig
+from timemachine.fe.free_energy import AbsoluteFreeEnergy
 from timemachine.fe.model_utils import get_vacuum_val_and_grad_fn
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import compute_box_volume
 from timemachine.md.minimizer import equilibrate_host_barker, make_host_du_dx_fxn
@@ -80,16 +79,10 @@ def test_fire_minimize_host_protein(pdb_path, sdf_path, mol_a_name, mol_b_name, 
     mol_b = mols_by_name[mol_b_name]
 
     with pdb_path as host_path:
-        for mols in [[mol_a, mol_b], [mol_a], [mol_b]]:
-            complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
-                str(host_path), ff.protein_ff, ff.water_ff, mols=mols
-            )
-            host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
+        for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
+            host_config = builders.build_protein_system(str(host_path), ff.protein_ff, ff.water_ff, mols=mols)
             x_host = minimizer.fire_minimize_host(mols, host_config, ff)
-            assert x_host.shape == complex_coords.shape
-            # To speed up unit tests
-            if run_one_test:
-                break
+            assert x_host.shape == host_config.conf.shape
 
 
 def test_fire_minimize_host_solvent():
@@ -100,12 +93,9 @@ def test_fire_minimize_host_solvent():
     mol_b = all_mols[4]
 
     for mols in [[mol_a], [mol_b], [mol_a, mol_b]]:
-        solvent_system, solvent_coords, solvent_box, solvent_top = builders.build_water_system(
-            4.0, ff.water_ff, mols=mols
-        )
-        host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords), solvent_top)
+        host_config = builders.build_water_system(4.0, ff.water_ff, mols=mols)
         x_host = minimizer.fire_minimize_host(mols, host_config, ff)
-        assert x_host.shape == solvent_coords.shape
+        assert x_host.shape == host_config.conf.shape
 
 
 @pytest.mark.parametrize("host_name", ["solvent", pytest.param("complex", marks=pytest.mark.nightly(reason="slow"))])
@@ -119,16 +109,10 @@ def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
     mol_b = mols_by_name[mol_b_name]
     mols = [mol_a, mol_b]
     if host_name == "solvent":
-        solvent_system, solvent_coords, solvent_box, solvent_top = builders.build_water_system(
-            4.0, ff.water_ff, mols=mols
-        )
-        host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords), solvent_top)
+        host_config = builders.build_water_system(4.0, ff.water_ff, mols=mols)
     else:
         with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
-            complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
-                str(pdb_path), ff.protein_ff, ff.water_ff, mols=mols
-            )
-        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
+            host_config = builders.build_protein_system(str(pdb_path), ff.protein_ff, ff.water_ff, mols=mols)
     x_host, x_box = minimizer.pre_equilibrate_host(mols, host_config, ff)
     assert x_host.shape == host_config.conf.shape
     box_vol_before = compute_box_volume(host_config.box)
@@ -144,10 +128,9 @@ def test_fire_minimize_host_adamantane():
     mol = Chem.AddHs(Chem.MolFromSmiles("C1C3CC2CC(CC1C2)C3"))
     AllChem.EmbedMolecule(mol, randomSeed=2024)
     # If don't delete the relevant water this minimization fails
-    solvent_system, solvent_coords, solvent_box, solvent_top = builders.build_water_system(4.0, ff.water_ff, mols=[mol])
-    host_config = HostConfig(solvent_system, solvent_coords, solvent_box, len(solvent_coords), solvent_top)
+    host_config = builders.build_water_system(4.0, ff.water_ff, mols=[mol])
     x_host = minimizer.fire_minimize_host([mol], host_config, ff)
-    assert x_host.shape == solvent_coords.shape
+    assert x_host.shape == host_config.conf.shape
 
 
 @pytest.mark.nightly(reason="Currently not used in practice")
@@ -159,10 +142,7 @@ def test_equilibrate_host_barker():
     mol_b = all_mols[4]
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, complex_coords, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
-            str(path_to_pdb), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b]
-        )
-        host_config = HostConfig(complex_system, complex_coords, complex_box, num_water_atoms, complex_top)
+        host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b])
 
     # TODO[requirements-gathering]:
     #   do we really want to minimize here ("equilibrate to temperature ~= 0"),
@@ -183,23 +163,23 @@ def test_equilibrate_host_barker():
         print(f"using unadjusted Barker proposal @ temperature = {room_temperature} K...")
         t0 = time()
         x_host = equilibrate_host_barker(mols, host_config, ff, temperature=room_temperature)
-        assert x_host.shape == complex_coords.shape
+        assert x_host.shape == host_config.conf.shape
         t1 = time()
         max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
         print(f"\tforce norm after room-temperature equilibration: {max_frc:.3f} kJ/mol / nm")
-        print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
+        print(f"\tmax distance traveled = {np.linalg.norm(np.array(host_config.conf) - x_host, axis=-1).max():.3f} nm")
         print(f"\tdone in {(t1 - t0):.3f} s")
 
         print(f"using unadjusted Barker proposal @ temperature = {zero_temperature} K...")
         t0 = time()
         x_host = equilibrate_host_barker(mols, host_config, ff, temperature=zero_temperature)
-        assert x_host.shape == complex_coords.shape
+        assert x_host.shape == host_config.conf.shape
         t1 = time()
 
         max_frc = np.linalg.norm(host_du_dx_fxn(x_host), axis=-1).max()
 
         print(f"\tforce norm after low-temperature 'equilibration': {max_frc:.3f} kJ/mol / nm")
-        print(f"\tmax distance traveled = {np.linalg.norm(np.array(complex_coords) - x_host, axis=-1).max():.3f} nm")
+        print(f"\tmax distance traveled = {np.linalg.norm(np.array(host_config.conf) - x_host, axis=-1).max():.3f} nm")
         print(f"\tdone in {(t1 - t0):.3f} s")
 
 
@@ -216,11 +196,11 @@ def test_local_minimize_water_box(minimizer_config):
     Test that we can locally relax a box of water by selecting some random indices.
     """
     ff = Forcefield.load_default()
-
-    system, x0, box0, top = builders.build_water_system(4.0, ff.water_ff)
-    host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    host_config = builders.build_water_system(4.0, ff.water_ff)
+    box0 = host_config.box
     box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
-
+    host_fns = host_config.host_system.get_U_fns()
+    x0 = host_config.conf
     val_and_grad_fn = minimizer.get_val_and_grad_fn(host_fns, box0)
 
     free_idxs = [0, 2, 3, 6, 7, 9, 15, 16]
@@ -257,8 +237,10 @@ def test_local_minimize_restrained_subset(seed, minimizer_config):
     rng = np.random.default_rng(seed)
     ff = Forcefield.load_default()
 
-    system, x0, box0, top = builders.build_water_system(4.0, ff.water_ff)
-    host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    host_config = builders.build_water_system(4.0, ff.water_ff)
+    host_fns = host_config.host_system.get_U_fns()
+    x0 = host_config.conf
+    box0 = host_config.box
     box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
 
     val_and_grad_fn = minimizer.get_val_and_grad_fn(host_fns, box0)
@@ -266,8 +248,6 @@ def test_local_minimize_restrained_subset(seed, minimizer_config):
     free_idxs = rng.choice(np.arange(len(x0), dtype=np.int32), size=128, replace=False)
     frozen_idxs = set(range(len(x0))).difference(set(free_idxs))
     frozen_idxs = list(frozen_idxs)
-
-    u_init, g_init = val_and_grad_fn(x0)
 
     with pytest.raises(AssertionError, match="Restraint k be greater than 0.0 if restrained indices provided"):
         minimizer.local_minimize(x0, box0, val_and_grad_fn, free_idxs, minimizer_config, restrained_idxs=frozen_idxs)
@@ -318,12 +298,13 @@ def test_local_minimize_restrained_waters_trigger_failure(seed, minimizer_config
     lamb = 0.1
 
     # Setup a water box without a void for the mol
-    host_system, host_coords, box, host_top = builders.build_water_system(4.0, ff.water_ff)
-    box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
+    host_config = builders.build_water_system(4.0, ff.water_ff)
+    host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
+    box = host_config.box
+    host_coords = host_config.conf
 
     bt = BaseTopology(benzene, ff)
     afe = AbsoluteFreeEnergy(benzene, bt)
-    host_config = HostConfig(host_system, host_coords, box, host_coords.shape[0], host_top)
     unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff, host_config, lamb)
     coords = afe.prepare_combined_coords(host_coords=host_coords)
 
@@ -362,10 +343,11 @@ def test_local_minimize_water_box_with_bounds():
     """
     ff = Forcefield.load_default()
 
-    system, x0, box0, top = builders.build_water_system(4.0, ff.water_ff)
-    host_fns, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    box0 += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
-
+    host_config = builders.build_water_system(4.0, ff.water_ff)
+    host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes at the boundary
+    box0 = host_config.box
+    x0 = host_config.conf
+    host_fns = host_config.host_system.get_U_fns()
     val_and_grad_fn = minimizer.get_val_and_grad_fn(host_fns, box0)
 
     free_idxs = [0, 2, 3, 6, 7, 9, 15, 16]

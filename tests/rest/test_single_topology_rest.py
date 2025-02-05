@@ -120,15 +120,9 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
 
 @cache
 def get_solvent_host(st: SingleTopology) -> tuple[Host, HostConfig]:
-    def get_solvent_host_config(box_width=4.0):
-        solvent_sys, solvent_conf, solvent_box, omm_topology = builders.build_water_system(
-            box_width, forcefield.water_ff, mols=[st.mol_a, st.mol_b]
-        )
-        solvent_box += np.diag([0.1, 0.1, 0.1])
-        return HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], omm_topology)
-
-    host_config = get_solvent_host_config()
-
+    box_width = 4.0
+    host_config = builders.build_water_system(box_width, forcefield.water_ff, mols=[st.mol_a, st.mol_b])
+    host_config.box += np.diag([0.1, 0.1, 0.1])
     host = setup_optimized_host(st, host_config)
 
     return host, host_config

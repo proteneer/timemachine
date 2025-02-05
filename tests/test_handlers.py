@@ -1321,15 +1321,19 @@ def test_environment_bcc_full_protein(protein_path, is_nn, env_nn_args):
     """
     with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
         host_pdb = app.PDBFile(str(path_to_pdb))
-        _, _, _, topology, _ = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
+        host_config = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
 
     if is_nn:
         patterns, params, props = env_nn_args
-        pbcc = nonbonded.EnvironmentNNHandler(patterns, params, props, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
+        pbcc = nonbonded.EnvironmentNNHandler(
+            patterns, params, props, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, host_config.omm_topology
+        )
     else:
         patterns = [smirks for (smirks, param) in AM1CCC_CHARGES["patterns"]]
         params = np.random.rand(len(patterns)) - 0.5
-        pbcc = nonbonded.EnvironmentBCCHandler(patterns, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, topology)
+        pbcc = nonbonded.EnvironmentBCCHandler(
+            patterns, params, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, host_config.omm_topology
+        )
 
     # test that we can mechanically parameterize everything
     final_q_params = pbcc.parameterize(params)

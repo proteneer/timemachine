@@ -4,7 +4,6 @@ from common import assert_energy_arrays_match
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
@@ -23,8 +22,10 @@ def test_nonbonded_atom_by_atom_energies_match(num_mols, adjustments, precision,
     """Verify that if looking at not computing the subsets of energies matches the references"""
     rng = np.random.default_rng(2023)
     ff = Forcefield.load_default()
-    system, conf, box, top = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    host_config = builders.build_water_system(4.0, ff.water_ff)
+    bps = host_config.host_system.get_U_fns()
+    conf = host_config.conf
+    box = host_config.box
     nb = get_bound_potential_by_type(bps, Nonbonded)
     bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
 

@@ -6,7 +6,6 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping, cif_writer, utils
-from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.rbfe import (
     get_free_idxs,
     optimize_coords_state,
@@ -54,11 +53,8 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
 
     # solvent
     box_width = 4.0
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
-        box_width, ff.water_ff, mols=[mol_a, mol_b]
-    )
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
+    solvent_host_config = builders.build_water_system(box_width, ff.water_ff, mols=[mol_a, mol_b])
+    solvent_host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host = setup_optimized_host(st, solvent_host_config)
     initial_states = setup_initial_states(st, solvent_host, DEFAULT_TEMP, lambda_schedule, seed)
 
@@ -69,16 +65,13 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
             mol_b,
             core,
             all_frames,
-            solvent_top,
+            solvent_host_config.omm_topology,
             f"solvent_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.cif",
         )
 
     # complex
-    complex_sys, complex_conf, complex_box, complex_top, num_water_atoms = builders.build_protein_system(
-        protein_path, ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b]
-    )
-    complex_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    complex_host_config = HostConfig(complex_sys, complex_conf, complex_box, num_water_atoms, complex_top)
+    complex_host_config = builders.build_protein_system(protein_path, ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b])
+    complex_host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     complex_host = setup_optimized_host(st, complex_host_config)
     initial_states = setup_initial_states(st, complex_host, DEFAULT_TEMP, lambda_schedule, seed, min_cutoff=0.7)
 
@@ -89,7 +82,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
             mol_b,
             core,
             all_frames,
-            complex_top,
+            complex_host_config.omm_topology,
             f"complex_{get_mol_name(mol_a)}_{get_mol_name(mol_b)}.cif",
         )
 
@@ -186,11 +179,8 @@ def test_min_cutoff_failure(pair, seed, n_windows):
     # Use the lambda grid as defined for Bisection
     lambda_grid = np.linspace(0.0, 1.0, n_windows)
 
-    solvent_sys, solvent_conf, solvent_box, solvent_top = builders.build_water_system(
-        box_width, ff.water_ff, mols=[mol_a, mol_b]
-    )
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    solvent_host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], solvent_top)
+    solvent_host_config = builders.build_water_system(box_width, ff.water_ff, mols=[mol_a, mol_b])
+    solvent_host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
     solvent_host = setup_optimized_host(st, solvent_host_config)
     ligand_idxs = np.arange(st.get_num_atoms()) + solvent_host.conf.shape[0]
     expected_moved = ligand_idxs[st.c_flags != 2]

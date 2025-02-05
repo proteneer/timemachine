@@ -14,7 +14,6 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_TEMP
 from timemachine.fe import atom_mapping
 from timemachine.fe.free_energy import (
     AbsoluteFreeEnergy,
-    HostConfig,
     InitialState,
     MDParams,
     get_water_sampler_params,
@@ -25,7 +24,6 @@ from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
@@ -170,22 +168,30 @@ def verify_targeted_moves(
     np.testing.assert_allclose(bdem.acceptance_fraction(), bdem.n_accepted() / bdem.n_proposed())
 
 
+# (YTZ) not-@cacheable for some reason, maybe results are being modified? investigate later
+# (failure is in): FAILED tests/test_cuda_targeted_insertion_mover.py::test_targeted_moves_in_bulk_water[2023-float64-2e-05-2e-05-1-500-1-4.0-1.2]
+# - RuntimeError: Molecules are not contiguous: mol 502
+def get_water_system_and_all_group_idxs(box_width):
+    ff = Forcefield.load_default()
+    host_config = builders.build_water_system(box_width, ff.water_ff)
+    box = host_config.box
+    coords = host_config.conf
+    bond_pot = host_config.host_system.bond.potential
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), coords.shape[0])
+    nb = host_config.host_system.nonbonded_all_pairs
+
+    return coords, box, all_group_idxs, nb
+
+
 @pytest.mark.memcheck
 @pytest.mark.parametrize("seed", [2023, 2024])
 @pytest.mark.parametrize("radius", [0.1, 0.5, 1.2, 2.0])
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 def test_inner_and_outer_water_groups(seed, radius, precision):
     rng = np.random.default_rng(seed)
-    ff = Forcefield.load_default()
-    system, coords, box, top = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), coords.shape[0])
+    coords, box, all_group_idxs, _ = get_water_system_and_all_group_idxs(4.0)
 
     center_group_idx = rng.choice(np.arange(len(all_group_idxs)))
-
     center_group = all_group_idxs.pop(center_group_idx)
 
     group_idxs = np.delete(np.array(all_group_idxs).reshape(-1), center_group)
@@ -216,16 +222,8 @@ def test_inner_and_outer_water_groups(seed, radius, precision):
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 def test_translations_inside_and_outside_sphere(seed, n_translations, radius, precision):
     rng = np.random.default_rng(seed)
-    ff = Forcefield.load_default()
-    system, coords, box, top = builders.build_water_system(4.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), coords.shape[0])
-
+    coords, box, all_group_idxs, _ = get_water_system_and_all_group_idxs(4.0)
     center_group_idx = rng.choice(np.arange(len(all_group_idxs)))
-
     center_group = all_group_idxs.pop(center_group_idx)
 
     center = np.mean(coords[center_group], axis=0)
@@ -388,13 +386,10 @@ def brd4_rbfe_state() -> InitialState:
     # BRD4 is a known target that has waters in the binding site, use the structure with the water stripped from
     # the binding pocket
     with resources.path("timemachine.datasets.water_exchange", "brd4_no_water.pdb") as pdb_path:
-        complex_system, complex_conf, box, complex_top, num_water_atoms = builders.build_protein_system(
-            str(pdb_path), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b]
-        )
-    box += np.diag([0.1, 0.1, 0.1])
+        host_config = builders.build_protein_system(str(pdb_path), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b])
+        host_config.box += np.diag([0.1, 0.1, 0.1])
 
     core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
-    host_config = HostConfig(complex_system, complex_conf, box, num_water_atoms, complex_top)
     st = SingleTopology(mol_a, mol_b, core, ff)
 
     initial_state = prepare_single_topology_initial_state(st, host_config, lamb=lamb)
@@ -436,20 +431,17 @@ def test_targeted_insertion_buckyball_edge_cases(
         mol = mols[0]
 
     # Build the protein system using the solvent PDB for buckyball
-    host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
-        str(host_pdb), ff.protein_ff, ff.water_ff
-    )
-    host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms, host_topology)
+    host_config = builders.build_protein_system(str(host_pdb), ff.protein_ff, ff.water_ff)
+    host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    box = host_config.box
+    num_water_atoms = host_config.num_water_atoms
 
     bt = BaseTopology(mol, ff)
     afe = AbsoluteFreeEnergy(mol, bt)
     # Fully embed the ligand
-    potentials, params, combined_masses = afe.prepare_host_edge(ff, host_config, 0.0)
+    potentials, params, _ = afe.prepare_host_edge(ff, host_config, 0.0)
     ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
-
     conf = afe.prepare_combined_coords(host_config.conf)
-    box = host_box
 
     bps = [pot.bind(p) for pot, p in zip(potentials, params)]
     nb = get_bound_potential_by_type(bps, Nonbonded)
@@ -576,14 +568,7 @@ def test_tibd_exchange_deterministic_batch_moves(radius, proposals_per_move, bat
     increase the number of proposals per move in the constructor that the results should be identical
     """
     rng = np.random.default_rng(seed)
-    ff = Forcefield.load_default()
-    system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    conf, box, all_group_idxs, nb = get_water_system_and_all_group_idxs(1.0)
 
     group_idxs = all_group_idxs[1:]
 
@@ -669,16 +654,15 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
         mol = mols[0]
 
     # Build the protein system using the solvent PDB for buckyball
-    host_sys, host_conf, host_box, host_topology, num_water_atoms = builders.build_protein_system(
-        str(host_pdb), ff.protein_ff, ff.water_ff
-    )
-    host_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    host_config = HostConfig(host_sys, host_conf, host_box, num_water_atoms, host_topology)
+    host_config = builders.build_protein_system(str(host_pdb), ff.protein_ff, ff.water_ff)
+    host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    host_box = host_config.box
+    num_water_atoms = host_config.num_water_atoms
 
     bt = BaseTopology(mol, ff)
     afe = AbsoluteFreeEnergy(mol, bt)
     # Fully embed the ligand
-    potentials, params, combined_masses = afe.prepare_host_edge(ff, host_config, 0.0)
+    potentials, params, _ = afe.prepare_host_edge(ff, host_config, 0.0)
     ligand_idxs = np.arange(num_water_atoms, num_water_atoms + mol.GetNumAtoms())
 
     conf = afe.prepare_combined_coords(host_config.conf)
@@ -754,22 +738,13 @@ def test_tibd_exchange_deterministic_moves(radius, proposals_per_move, batch_siz
     """Given a set of waters in a large box the exchange mover should nearly accept every move and the results should be deterministic
     if the seed and proposals per move are the same.
 
-
     There are three forms of determinism we require:
     * Constructing an exchange move produces the same results every time
     * Calling an exchange move with one proposals per move or K proposals per move produce the same state.
       * It is difficult to test each move when there are K proposals per move so we need to know that it matches the single proposals per move case
     * When batch size is greater than one (each batch is made up of K proposals) it produces the same result as the serial version (batch size == 1)
     """
-    ff = Forcefield.load_default()
-    system, conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
-
+    conf, _, all_group_idxs, nb = get_water_system_and_all_group_idxs(1.0)
     group_idxs = all_group_idxs[1:]
 
     # Target the first water
@@ -851,15 +826,7 @@ def test_targeted_moves_in_bulk_water(
     radius, proposals_per_move, total_num_proposals, batch_size, box_size, precision, rtol, atol, seed
 ):
     """Given bulk water molecules with one of them treated as the targeted region"""
-    ff = Forcefield.load_default()
-    system, conf, ref_box, top = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
-
+    conf, ref_box, all_group_idxs, nb = get_water_system_and_all_group_idxs(box_size)
     center_group = all_group_idxs[-1]
     box = np.eye(3) * (radius * 2)
     # If box volume of system is larger than the box defined by radius, use that instead
@@ -868,7 +835,6 @@ def test_targeted_moves_in_bulk_water(
 
     # Re-image coords so that everything is imaged to begin with
     conf = image_frame(all_group_idxs, conf, box)
-
     group_idxs = all_group_idxs[:-1]
 
     N = conf.shape[0]
@@ -918,15 +884,7 @@ def test_moves_with_three_waters(
     radius, proposals_per_move, batch_size, total_num_proposals, precision, rtol, atol, seed
 ):
     """Given three water molecules with one of them treated as the targeted region."""
-    ff = Forcefield.load_default()
-    system, host_conf, _, top = builders.build_water_system(1.0, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
-
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_conf.shape[0])
-
+    host_conf, box, all_group_idxs, nb = get_water_system_and_all_group_idxs(1.0)
     # Get first two mols as the ones two move
     group_idxs = all_group_idxs[:2]
 
