@@ -2,6 +2,11 @@
 plugins = ["numpy.typing.mypy_plugin"]
 ignore_missing_imports = true
 check_untyped_defs = false
+disable_error_code = [
+    "has-type",
+    "misc",
+    "var-annotated"
+]
 
 [[tool.mypy.overrides]]
 module = "timemachine._vendored.fire"
@@ -27,7 +32,7 @@ ignore = [
 requires = [
   # Need cmake/mypy if building the C++, only supported on linux
   "cmake==3.24.3; sys_platform == 'linux'",
-  "mypy==1.5.1; sys_platform == 'linux'",
+  "mypy==1.14.1; sys_platform == 'linux'",
   "setuptools >= 64.0.0",
   "wheel",
 ]

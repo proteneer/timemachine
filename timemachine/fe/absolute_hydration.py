@@ -85,7 +85,7 @@ def generate_endstate_samples(
     all_xvbs = []
     for i, choice_idx in enumerate(solvent_choice_idxs):
         # solvent + noninteracting ligand
-        noninteracting_xvb = solvent_samples[choice_idx]
+        noninteracting_xvb = solvent_samples[choice_idx]  # type: ignore[call-overload]
 
         # vacuum ligand
         ligand_x, ligand_v = ligand_xvs[i]

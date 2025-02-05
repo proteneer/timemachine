@@ -46,7 +46,7 @@ HilbertSort::HilbertSort(const int N)
     d_sort_storage_.realloc(d_sort_storage_bytes_);
 }
 
-HilbertSort::~HilbertSort(){};
+HilbertSort::~HilbertSort() {};
 
 void HilbertSort::sort_device(
     const int N,
