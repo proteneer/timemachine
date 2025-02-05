@@ -504,7 +504,7 @@ def test_disconnection():
         random_edge = edges[np.random.randint(len(edges))]
         g.remove_edge(*random_edge)
         size_of_largest_component = max([len(c) for c in nx.connected_components(g)])
-        assert size_of_largest_component < K
+        assert K > size_of_largest_component > (K - 1) / 2
 
         # convert to digraph with appropriate edge labels
         instance = generate_instance(g, 1e-3)
