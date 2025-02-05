@@ -259,11 +259,9 @@ def infer_node_vals_and_errs_networkx(
     assert isinstance(graph, (nx.DiGraph, nx.MultiDiGraph)), "Graph must be a DiGraph or MultiDiGraph"
 
     # remove edges without edge_diff, edge_stddev properties
-    def has_preds(edge):
-        d = graph.edges[edge]
-        return (d.get(edge_diff_prop) is not None) and (d.get(edge_stddev_prop) is not None)
-
-    edges_with_props = [e for e in graph.edges if has_preds(e)]
+    edges_with_props = [
+        e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
+    ]
     sg = graph.edge_subgraph(edges_with_props).copy()
     if not sg.nodes:
         raise ValueError("Empty graph after removing edges without predictions")
