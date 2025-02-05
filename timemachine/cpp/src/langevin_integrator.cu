@@ -94,7 +94,7 @@ void LangevinIntegrator<RealType>::initialize(
     double *d_v_t,
     double *d_box_t,
     unsigned int *d_idxs,
-    cudaStream_t stream){};
+    cudaStream_t stream) {};
 
 template <typename RealType>
 void LangevinIntegrator<RealType>::finalize(
@@ -103,7 +103,7 @@ void LangevinIntegrator<RealType>::finalize(
     double *d_v_t,
     double *d_box_t,
     unsigned int *d_idxs,
-    cudaStream_t stream){};
+    cudaStream_t stream) {};
 
 template class LangevinIntegrator<float>;
 template class LangevinIntegrator<double>;

@@ -4,7 +4,7 @@
 
 namespace timemachine {
 
-StreamManager::StreamManager(){};
+StreamManager::StreamManager() {};
 
 StreamManager::~StreamManager() {
     for (const auto &[key, value] : streams_) {

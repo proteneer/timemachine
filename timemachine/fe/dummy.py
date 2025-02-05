@@ -4,8 +4,6 @@ from itertools import product
 from typing import Collection, DefaultDict, Iterable, Iterator, Optional, Sequence, TypeVar
 
 import networkx as nx
-import numpy as np
-from numpy.typing import NDArray
 
 
 class MultipleAnchorWarning(UserWarning):
@@ -94,8 +92,8 @@ def generate_anchored_dummy_group_assignments(
     dummy_groups: dict[int, frozenset[int]],
     bond_graph_a: nx.Graph,
     bond_graph_b: nx.Graph,
-    core_atoms_a: NDArray[np.int32] | Sequence[int],
-    core_atoms_b: NDArray[np.int32] | Sequence[int],
+    core_atoms_a: Sequence[int],
+    core_atoms_b: Sequence[int],
 ) -> Iterator[dict[int, tuple[Optional[int], frozenset[int]]]]:
     """Returns an iterator over candidate anchored dummy group assignments.
 
@@ -176,8 +174,8 @@ def canonicalize_bond(ixn: tuple[int, ...]) -> tuple[int, ...]:
 def get_core_bonds(
     bonds_a: Collection[tuple[int, int]],
     bonds_b: Collection[tuple[int, int]],
-    core_atoms_a: NDArray[np.int32] | Sequence[int],
-    core_atoms_b: NDArray[np.int32] | Sequence[int],
+    core_atoms_a: Sequence[int],
+    core_atoms_b: Sequence[int],
 ) -> frozenset[tuple[int, ...]]:
     """Returns core-core bonds that are present in both mol_a and mol_b"""
     a_to_c = {a: c for c, a in enumerate(core_atoms_a)}

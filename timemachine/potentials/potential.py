@@ -13,7 +13,7 @@ from .types import Box, Conf, Params
 
 Precision = Any
 
-_P = TypeVar("_P", bound="Potential")
+_P = TypeVar("_P", bound="Potential", covariant=True)
 
 
 @dataclass
