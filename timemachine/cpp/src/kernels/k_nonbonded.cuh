@@ -112,10 +112,10 @@ void __device__ v_nonbonded_unified(
     const int tile_idx,
     const int N,
     const int NR,
-    const double *__restrict__ coords,    // [N * 3]
-    const double *__restrict__ params,    // [N * PARAMS_PER_ATOM]
+    const double *__restrict__ coords, // [N * 3]
+    const double *__restrict__ params, // [N * PARAMS_PER_ATOM]
     box_cache<RealType> &shared_box,
-    __int128 *__restrict__ energy_buffer, // [blockDim.x]
+    __int128 &energy_accumulator,
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -265,7 +265,7 @@ void __device__ v_nonbonded_unified(
             }
 
             if (COMPUTE_U) {
-                energy_buffer[threadIdx.x] += FLOAT_TO_FIXED_ENERGY<RealType>(u);
+                energy_accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(u);
             }
         }
 
@@ -345,10 +345,7 @@ void __global__ k_nonbonded_unified(
 ) {
     static_assert(THREADS_PER_BLOCK <= 256 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
     __shared__ box_cache<RealType> shared_box;
-    __shared__ __int128 block_energy_buffer[THREADS_PER_BLOCK];
-    if (COMPUTE_U) {
-        block_energy_buffer[threadIdx.x] = 0; // Zero out the energy buffer
-    }
+    __int128 energy_accumulator = 0;
     if (threadIdx.x == 0) {
         shared_box.x = box[0 * 3 + 0];
         shared_box.y = box[1 * 3 + 1];
@@ -392,7 +389,7 @@ void __global__ k_nonbonded_unified(
                 coords,
                 params,
                 shared_box,
-                block_energy_buffer,
+                energy_accumulator,
                 beta,
                 cutoff,
                 row_idxs,
@@ -408,7 +405,7 @@ void __global__ k_nonbonded_unified(
                 coords,
                 params,
                 shared_box,
-                block_energy_buffer,
+                energy_accumulator,
                 beta,
                 cutoff,
                 row_idxs,
@@ -426,7 +423,7 @@ void __global__ k_nonbonded_unified(
         __shared__ typename BlockReduce::TempStorage temp_storage;
 
         // Sum's return value is only valid in thread 0
-        __int128 aggregate = BlockReduce(temp_storage).Sum(block_energy_buffer[threadIdx.x]);
+        __int128 aggregate = BlockReduce(temp_storage).Sum(energy_accumulator);
 
         if (threadIdx.x == 0) {
             u_buffer[blockIdx.x] = aggregate;
