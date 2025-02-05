@@ -44,18 +44,18 @@ void SummedPotential::execute_device(
     }
 
     int offset = 0;
-    if (parallel_) {
-        for (auto i = 0; i < potentials_.size(); i++) {
-            // Always sync the new streams with the incoming stream to ensure that the state
-            // of the incoming buffers are valid
-            manager_.sync_from(i, stream);
-        }
-    }
+    // if (parallel_) {
+    //     for (auto i = 0; i < potentials_.size(); i++) {
+    //         // Always sync the new streams with the incoming stream to ensure that the state
+    //         // of the incoming buffers are valid
+    //         manager_.sync_from(i, stream);
+    //     }
+    // }
     cudaStream_t pot_stream = stream;
     for (auto i = 0; i < potentials_.size(); i++) {
-        if (parallel_) {
-            pot_stream = manager_.get_stream(i);
-        }
+        // if (parallel_) {
+        //     pot_stream = manager_.get_stream(i);
+        // }
         potentials_[i]->execute_device(
             N,
             params_sizes_[i],
@@ -68,9 +68,9 @@ void SummedPotential::execute_device(
             pot_stream);
 
         offset += params_sizes_[i];
-        if (parallel_) {
-            manager_.sync_to(i, stream);
-        }
+        // if (parallel_) {
+        //     manager_.sync_to(i, stream);
+        // }
     }
     if (d_u) {
         accumulate_energy(potentials_.size(), d_u_buffer_.data, d_u, stream);
