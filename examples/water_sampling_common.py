@@ -6,6 +6,7 @@ from openmm import app
 from timemachine.constants import AVOGADRO, DEFAULT_PRESSURE, DEFAULT_TEMP, NBParamIdx
 from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig, InitialState
 from timemachine.fe.model_utils import apply_hmr
+from timemachine.fe.system import HostSystem
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff.handlers import openmm_deserializer
@@ -21,7 +22,7 @@ DEFAULT_BB_RADIUS = 0.46
 # from timemachine.md.minimizer import fire_minimize_host
 
 
-def build_system(host_pdbfile: str, water_ff: str, padding: float):
+def build_host_config(host_pdbfile: str, water_ff: str, padding: float):
     if isinstance(host_pdbfile, str):
         assert os.path.exists(host_pdbfile)
         host_pdb = app.PDBFile(host_pdbfile)
@@ -38,14 +39,26 @@ def build_system(host_pdbfile: str, water_ff: str, padding: float):
     box = np.eye(3, dtype=np.float64) * box_lengths
 
     host_ff = app.ForceField(f"{water_ff}.xml")
-    nwa = len(host_coords)
-    solvated_host_system = host_ff.createSystem(
+    num_water_atoms = len(host_coords)
+    solvated_omm_system = host_ff.createSystem(
         host_pdb.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
     )
     solvated_host_coords = host_coords
     solvated_topology = host_pdb.topology
 
-    return solvated_host_system, solvated_host_coords, box, solvated_topology, nwa
+    (bond, angle, proper, improper, nonbonded), masses = openmm_deserializer.deserialize_system(
+        solvated_omm_system, cutoff=1.2
+    )
+
+    solvated_host_system = HostSystem(
+        bond=bond,
+        angle=angle,
+        proper=proper,
+        improper=improper,
+        nonbonded_all_pairs=nonbonded,
+    )
+
+    return HostConfig(solvated_host_system, solvated_host_coords, box, num_water_atoms, solvated_topology, masses)
 
 
 def compute_density(n_waters, box):
@@ -73,14 +86,12 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
     assert nb_cutoff == 1.2  # hardcoded in prepare_host_edge
 
     # read water system
-    solvent_sys, solvent_conf, solvent_box, solvent_topology, num_water_atoms = build_system(
-        water_pdb, ff.water_ff, padding=0.1
-    )
-    solvent_box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+    host_config = build_host_config(water_pdb, ff.water_ff, padding=0.1)
+    host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
 
-    assert num_water_atoms == len(solvent_conf)
+    num_water_atoms = host_config.num_water_atoms
+    solvent_conf = host_config.conf
 
-    host_config = HostConfig(solvent_sys, solvent_conf, solvent_box, num_water_atoms, solvent_topology)
     if mol is not None:
         # Assumes the mol is a buckyball
         bt = BaseTopology(mol, ff)
@@ -103,7 +114,9 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
         fully_coupled_ligand_atoms = np.setdiff1d(ligand_idxs, lambda_coupled_ligand_atoms)
         nb_params[fully_coupled_ligand_atoms, NBParamIdx.W_IDX] = 0
     else:
-        host_fns, combined_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=nb_cutoff)
+        # host_fns, combined_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=nb_cutoff)
+        host_fns = host_config.host_system.get_U_fns()
+        combined_masses = host_config.masses
         potentials = [bp.potential for bp in host_fns]
         params = [bp.params for bp in host_fns]
         final_conf = solvent_conf
@@ -158,7 +171,7 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
         barostat,
         final_conf,
         np.zeros_like(final_conf),
-        solvent_box,
+        host_config.box,
         lamb,
         ligand_idxs,
         np.array([], dtype=np.int32),
@@ -167,4 +180,4 @@ def get_initial_state(water_pdb, mol, ff, seed, nb_cutoff, use_hmr, lamb):
     assert num_water_atoms % 3 == 0
     num_water_mols = num_water_atoms // 3
 
-    return initial_state, num_water_mols, solvent_topology
+    return initial_state, num_water_mols, host_config.omm_topology
