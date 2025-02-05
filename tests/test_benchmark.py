@@ -28,7 +28,6 @@ from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
@@ -111,10 +110,9 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        host_system, host_coords, host_box, host_top, num_water_atoms = builders.build_protein_system(
+        host_config = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )
-    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms, host_top)
     initial_state = prepare_single_topology_initial_state(st, host_config)
 
     intg = initial_state.integrator.impl()
@@ -443,7 +441,8 @@ def run_single_topology_benchmarks(
     initial_state = prepare_single_topology_initial_state(st, host_config)
     barostat_interval = 0
     if host_config is not None:
-        host_fns, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
+        host_fns = host_config.host_system.get_U_fns()
+        host_masses = host_config.masses
 
         # RBFE
         x0 = initial_state.x0[: len(host_config.conf)]
@@ -527,12 +526,9 @@ def benchmark_hif2a(config: BenchmarkConfig):
 
     # build the protein system.
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        host_system, host_coords, host_box, top, host_num_waters = builders.build_protein_system(
+        host_config = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )
-
-    # resolve host clashes
-    host_config = HostConfig(host_system, host_coords, host_box, host_num_waters, top)
 
     run_single_topology_benchmarks(config, "hif2a", st, host_config)
 
@@ -542,15 +538,7 @@ def benchmark_solvent(config: BenchmarkConfig):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, forcefield)
-
-    host_system, host_coords, host_box, host_top = builders.build_water_system(
-        4.0, forcefield.water_ff, mols=[mol_a, mol_b]
-    )
-
-    num_water_atoms = host_coords.shape[0]
-
-    # resolve host clashes
-    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms, host_top)
+    host_config = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
     run_single_topology_benchmarks(config, "solvent", st, host_config)
 
 
@@ -568,14 +556,7 @@ def benchmark_ahfe(config: BenchmarkConfig):
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     seed = 2024
     mol, _, _ = get_hif2a_ligand_pair_single_topology()
-
-    host_system, host_coords, host_box, host_top = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol])
-
-    num_water_atoms = host_coords.shape[0]
-
-    # resolve host clashes
-    host_config = HostConfig(host_system, host_coords, host_box, num_water_atoms, host_top)
-
+    host_config = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol])
     bt = BaseTopology(mol, forcefield)
     afe = AbsoluteFreeEnergy(mol, bt)
 

@@ -8,14 +8,11 @@ from scipy.special import logsumexp
 from timemachine.constants import DEFAULT_KT, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.model_utils import apply_hmr
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.fixed_point import fixed_to_float
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove, randomly_rotate_and_translate
-from timemachine.potentials import HarmonicBond, Nonbonded
-from timemachine.potentials.potential import get_bound_potential_by_type
 
 
 @pytest.mark.memcheck
@@ -23,13 +20,13 @@ from timemachine.potentials.potential import get_bound_potential_by_type
 def test_nonbonded_mol_energy_potential_validation(precision):
     rng = np.random.default_rng(2023)
     ff = Forcefield.load_default()
-    system, conf, box, _ = builders.build_water_system(2.0, ff.water_ff)
+    host_config = builders.build_water_system(2.0, ff.water_ff)
 
     N = 10
     cutoff = 1.2
     beta = 2.0
 
-    conf = conf[:N]
+    conf = host_config.conf[:N]
     params = rng.uniform(size=(conf.shape[0], 4))
 
     indices_beyond_range_group_indices = [[0, 1, 2], [N + 1]]
@@ -51,15 +48,15 @@ def test_nonbonded_mol_energy_potential_validation(precision):
     group_idxs = [[0, 1, 2]]
     pot = klass(N, group_idxs, beta, cutoff)
     with pytest.raises(RuntimeError, match="params N != coords N"):
-        pot.execute(np.concatenate([conf] * 2), params, box)
+        pot.execute(np.concatenate([conf] * 2), params, host_config.box)
 
     with pytest.raises(RuntimeError, match="params N != coords N"):
-        pot.execute(conf, np.concatenate([params] * 2), box)
+        pot.execute(conf, np.concatenate([params] * 2), host_config.box)
 
     with pytest.raises(RuntimeError, match="N != N_"):
-        pot.execute(np.concatenate([conf] * 2), np.concatenate([conf] * 2), box)
+        pot.execute(np.concatenate([conf] * 2), np.concatenate([conf] * 2), host_config.box)
 
-    pot.execute(conf, params, box)
+    pot.execute(conf, params, host_config.box)
 
 
 @pytest.mark.memcheck
@@ -69,13 +66,12 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision
     """Assert that NonbondedMolEnergyPotential Cuda implementation produces the same
     energies as the reference jax version in the BDExchangeMover"""
     ff = Forcefield.load_default()
-    system, conf, box, top = builders.build_water_system(5.0, ff.water_ff)
-    box += np.eye(3) * 0.1
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+    host_config = builders.build_water_system(5.0, ff.water_ff)
+    host_config.box += np.eye(3) * 0.1
+    nb = host_config.host_system.nonbonded_all_pairs
+    bond_pot = host_config.host_system.bond.potential
 
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_config.conf.shape[0])
 
     assert len(all_group_idxs) >= num_mols
 
@@ -83,7 +79,7 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision
     group_idxs = all_group_idxs[:num_mols]
 
     conf_idxs = np.array(group_idxs).reshape(-1)
-    conf = conf[conf_idxs]
+    conf = host_config.conf[conf_idxs]
     N = conf.shape[0]
 
     params = nb.params[conf_idxs]
@@ -98,7 +94,7 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision
 
     mol_by_mol_pot = klass(N, group_idxs, beta, cutoff)
 
-    def u_ref(x, box, params):
+    def u_ref(x, box):
         return mover.batch_U_fn(x, box, mover.all_a_idxs, mover.all_b_idxs)
 
     def u_test(x, box, params):
@@ -110,7 +106,9 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U(num_mols, precision
         np.testing.assert_array_equal(mol_energies, comp_mol_energies)
         return mol_energies
 
-    np.testing.assert_allclose(u_test(conf, box, params), u_ref(conf, box, params), rtol=rtol, atol=atol)
+    np.testing.assert_allclose(
+        u_test(conf, host_config.box, params), u_ref(conf, host_config.box), rtol=rtol, atol=atol
+    )
 
 
 @pytest.mark.parametrize("moves,box_size,num_mols", [(100, 4.0, 500), (1, 6.5, 5500)])
@@ -122,12 +120,11 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
     rng = np.random.default_rng(2023)
     ff = Forcefield.load_default()
 
-    system, conf, _, top = builders.build_water_system(box_size, ff.water_ff)
-    bps, _ = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+    host_config = builders.build_water_system(box_size, ff.water_ff)
+    nb = host_config.host_system.nonbonded_all_pairs
+    bond_pot = host_config.host_system.bond.potential
 
-    all_group_idxs = get_group_indices(get_bond_list(bond_pot), conf.shape[0])
+    all_group_idxs = get_group_indices(get_bond_list(bond_pot), host_config.conf.shape[0])
 
     assert len(all_group_idxs) >= num_mols
 
@@ -136,7 +133,7 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
 
     conf_idxs = np.array(group_idxs).reshape(-1)
 
-    conf = conf[conf_idxs]
+    conf = host_config.conf[conf_idxs]
     # Compute the box
     box_lengths = np.amax(conf, axis=0) - np.amin(conf, axis=0)
     box = np.eye(3, dtype=np.float64) * box_lengths
@@ -155,7 +152,7 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
 
     mol_by_mol_pot = klass(N, group_idxs, beta, cutoff)
 
-    def u_ref(x, box, params):
+    def u_ref(x, box):
         return mover.batch_U_fn(x, box, mover.all_a_idxs, mover.all_b_idxs)
 
     def u_test(x, box, params):
@@ -167,11 +164,11 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
         np.testing.assert_array_equal(mol_energies, comp_mol_energies)
         return mol_energies
 
-    np.testing.assert_allclose(u_test(conf, box, params), u_ref(conf, box, params), rtol=rtol, atol=atol)
+    np.testing.assert_allclose(u_test(conf, box, params), u_ref(conf, box), rtol=rtol, atol=atol)
 
     mols_to_move = rng.choice(np.arange(len(group_idxs)), size=moves)
 
-    true_log_z = logsumexp(u_ref(conf, box, params) / DEFAULT_KT)
+    true_log_z = logsumexp(u_ref(conf, box) / DEFAULT_KT)
     test_log_z = logsumexp(u_test(conf, box, params) / DEFAULT_KT)
 
     for mol_idx in mols_to_move:
@@ -181,7 +178,7 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
         updated_conf = conf.copy()
         updated_conf[atom_idxs] = moved_coords
         test_mol_energies = u_test(updated_conf, box, params)
-        ref_mol_energies = u_ref(updated_conf, box, params)
+        ref_mol_energies = u_ref(updated_conf, box)
 
         assert_energy_arrays_match(ref_mol_energies, test_mol_energies, rtol=rtol, atol=atol)
 
@@ -205,10 +202,12 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
     """Test that computing the per water energies of a system with a complex is equivalent."""
     ff = Forcefield.load_default()
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, conf, box, top, _ = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
-    bps, masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
-    nb = get_bound_potential_by_type(bps, Nonbonded)
-    bond_pot = get_bound_potential_by_type(bps, HarmonicBond).potential
+        complex_host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
+
+    conf = complex_host_config.conf
+
+    nb = complex_host_config.host_system.nonbonded_all_pairs
+    bond_pot = complex_host_config.host_system.bond.potential
 
     bond_list = get_bond_list(bond_pot)
     all_group_idxs = get_group_indices(bond_list, conf.shape[0])
@@ -220,12 +219,12 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
     temperature = DEFAULT_TEMP
     pressure = DEFAULT_PRESSURE
 
-    masses = apply_hmr(masses, bond_list)
+    masses = apply_hmr(complex_host_config.masses, bond_list)
     intg = LangevinIntegrator(temperature, dt, 1.0, np.array(masses), seed).impl()
 
     bound_impls = []
 
-    for potential in bps:
+    for potential in complex_host_config.host_system.get_U_fns():
         bound_impls.append(potential.to_gpu(precision=np.float32).bound_impl)  # get the bound implementation
 
     barostat_interval = 5
@@ -242,7 +241,7 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
     ctxt = custom_ops.Context(
         conf,
         np.zeros_like(conf),
-        box,
+        complex_host_config.box,
         intg,
         bound_impls,
         movers=[baro_impl],
@@ -272,7 +271,7 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
 
     mol_by_mol_pot = klass(N, water_groups, beta, cutoff)
 
-    def u_ref(x, box, params):
+    def u_ref(x, box):
         return mover.batch_U_fn(x, box, mover.all_a_idxs, mover.all_b_idxs)
 
     def u_test(x, box, params):
@@ -285,7 +284,7 @@ def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precisio
         return mol_energies
 
     test_mol_energies = u_test(conf, box, params)
-    ref_mol_energies = u_ref(conf, box, params)
+    ref_mol_energies = u_ref(conf, box)
 
     # for idx, (x,y) in enumerate(zip(test_mol_energies, ref_mol_energies)):
     #     if np.abs(x-y) > 1e-3:
