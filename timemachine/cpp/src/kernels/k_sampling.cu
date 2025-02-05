@@ -73,7 +73,8 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
     while (idx < N) {
         const RealType log_weight = log_weights[idx];
         // -inf is alright since that is log(0.0), +inf is not
-        assert(!isnan(log_weight) && log_weight != INFINITY);
+        assert(!isnan(log_weight));
+        assert(log_weight != INFINITY);
 
         const RealType gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
 
@@ -189,7 +190,8 @@ void __global__ k_setup_gumbel_max_trick_targeted_insertion(
     while (idx < N) {
         const RealType log_weight = log_weights[segment_start + idx];
         // -inf is alright since that is log(0.0), +inf is not
-        assert(!isnan(log_weight) && log_weight != INFINITY);
+        assert(!isnan(log_weight));
+        assert(log_weight != INFINITY);
 
         const RealType gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
 
