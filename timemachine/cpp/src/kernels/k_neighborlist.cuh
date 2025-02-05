@@ -133,7 +133,7 @@ void __global__ k_compact_trim_atoms(
     const int warpMask = (1 << indexInWarp) - 1;
     const int row_block_idx = blockIdx.x;
 
-    __shared__ volatile int sync_start[1];
+    int sync_start;
     int neighborsInBuffer = 0;
 
     for (int trim_block_idx = 0; trim_block_idx < Y; trim_block_idx++) {
@@ -151,13 +151,13 @@ void __global__ k_compact_trim_atoms(
         neighborsInBuffer += __popc(includeAtomFlags);
 
         if (neighborsInBuffer > WARP_SIZE) {
-            int tilesToStore = 1;
+            const int tiles_to_store = 1;
             if (indexInWarp == 0) {
-                sync_start[0] = atomicAdd(interactionCount, tilesToStore);
+                sync_start = atomicAdd(interactionCount, tiles_to_store);
             }
-            __syncwarp();
-            interactingTiles[sync_start[0]] = row_block_idx; // IS THIS CORRECT? CONTESTED
-            interactingAtoms[sync_start[0] * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+            sync_start = __shfl_sync(FULL_MASK, sync_start, 0);
+            interactingTiles[sync_start] = row_block_idx; // IS THIS CORRECT? CONTESTED
+            interactingAtoms[sync_start * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
             ixn_j_buffer[threadIdx.x] = ixn_j_buffer[WARP_SIZE + threadIdx.x];
             ixn_j_buffer[WARP_SIZE + threadIdx.x] = N; // reset old values
@@ -166,13 +166,13 @@ void __global__ k_compact_trim_atoms(
     }
 
     if (neighborsInBuffer > 0) {
-        int tilesToStore = 1;
+        const int tiles_to_store = 1;
         if (indexInWarp == 0) {
-            sync_start[0] = atomicAdd(interactionCount, tilesToStore);
+            sync_start = atomicAdd(interactionCount, tiles_to_store);
         }
-        __syncwarp();
-        interactingTiles[sync_start[0]] = row_block_idx;
-        interactingAtoms[sync_start[0] * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+        sync_start = __shfl_sync(FULL_MASK, sync_start, 0);
+        interactingTiles[sync_start] = row_block_idx;
+        interactingAtoms[sync_start * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
     }
 }
 
@@ -227,7 +227,7 @@ void __global__ k_find_blocks_with_ixns(
     ixn_j_buffer[threadIdx.x] = N;
     ixn_j_buffer[WARP_SIZE + threadIdx.x] = N;
 
-    __shared__ volatile int sync_start[1];
+    int sync_start;
 
     unsigned int atom_i_idx = blockIdx.x * blockDim.x + threadIdx.x;
     atom_i_idx = atom_i_idx < NR ? row_idxs[atom_i_idx] : N;
@@ -438,13 +438,13 @@ void __global__ k_find_blocks_with_ixns(
         neighborsInBuffer += __popc(includeAtomFlags);
 
         if (neighborsInBuffer > WARP_SIZE) {
-            int tilesToStore = 1;
+            const int tilesToStore = 1;
             if (indexInWarp == 0) {
-                sync_start[0] = atomicAdd(interactionCount, tilesToStore);
+                sync_start = atomicAdd(interactionCount, tilesToStore);
             }
-            __syncwarp();
-            interactingTiles[sync_start[0]] = row_block_idx;
-            interactingAtoms[sync_start[0] * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+            sync_start = __shfl_sync(FULL_MASK, sync_start, 0);
+            interactingTiles[sync_start] = row_block_idx;
+            interactingAtoms[sync_start * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
             ixn_j_buffer[threadIdx.x] = ixn_j_buffer[WARP_SIZE + threadIdx.x];
             ixn_j_buffer[WARP_SIZE + threadIdx.x] = N; // reset old values
