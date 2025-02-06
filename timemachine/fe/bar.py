@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Tuple
+from typing import Optional
 
 import jax
 import jax.numpy as jnp
@@ -98,7 +98,7 @@ def dG_dw(w):
     return dG_dw
 
 
-def ukln_to_ukn(u_kln: NDArray) -> Tuple[NDArray, NDArray]:
+def ukln_to_ukn(u_kln: NDArray) -> tuple[NDArray, NDArray]:
     """Convert 2-state u_kln matrix to u_kn and N_k, i.e. the inputs expected by pymbar.MBAR.
 
     NOTE: similar to https://pymbar.readthedocs.io/en/master/utils.html#pymbar.utils.kln_to_kn, but uses the (current)
@@ -125,7 +125,7 @@ DEFAULT_RELATIVE_TOLERANCE = 1e-6  # pymbar default 1e-7
 DEFAULT_MAXIMUM_ITERATIONS = 1_000  # pymbar default 10_000
 
 
-def df_and_err_from_u_kln(u_kln: NDArray, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS) -> Tuple[float, float]:
+def df_and_err_from_u_kln(u_kln: NDArray, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS) -> tuple[float, float]:
     """Compute free energy difference and uncertainty given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
     mbar = pymbar.MBAR(u_kn, N_k, maximum_iterations=maximum_iterations)
@@ -151,7 +151,7 @@ def df_from_u_kln(
 
 def bootstrap_bar(
     u_kln: NDArray, n_bootstrap: int = 100, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS
-) -> Tuple[float, float, NDArray]:
+) -> tuple[float, float, NDArray]:
     """Given a 2-state u_kln matrix, subsample u_kln with replacement and re-run df_from_u_kln many times
 
     Parameters
@@ -203,7 +203,7 @@ def bootstrap_bar(
 
 def bar_with_pessimistic_uncertainty(
     u_kln: NDArray, n_bootstrap=100, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Given 2-state u_kln, returns free energy difference and the uncertainty. The uncertainty can be produced either by
     BAR using all samples or the bootstrapped error, whichever is greater.
 
@@ -242,7 +242,7 @@ def bar_with_pessimistic_uncertainty(
     return df, ddf
 
 
-def works_from_ukln(u_kln: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def works_from_ukln(u_kln: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Extract forward and reverse works from 2-state u_kln matrix"""
     k, l, _ = u_kln.shape
     assert k == l == 2
@@ -251,7 +251,7 @@ def works_from_ukln(u_kln: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return w_fwd, w_rev
 
 
-def df_from_ukln_by_lambda(ukln_by_lambda: NDArray) -> Tuple[float, float]:
+def df_from_ukln_by_lambda(ukln_by_lambda: NDArray) -> tuple[float, float]:
     """Extract df and df error computed by BAR over a series of lambda windows
 
     Parameters
@@ -302,7 +302,7 @@ def pair_overlap_from_ukln(u_kln: NDArray) -> float:
 
 def compute_fwd_and_reverse_df_over_time(
     ukln_by_lambda: NDArray, frames_per_step: int = 100
-) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
+) -> tuple[NDArray, NDArray, NDArray, NDArray]:
     """Provided a u_kln computes the forward and reverse dF estimates.
 
     Computes the dF value for increasing numbers of samples in both the forward and reverse direction.

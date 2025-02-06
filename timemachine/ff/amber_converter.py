@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 # mypy: ignore-errors
 
 # converts smirnoff xmls into python dictionaries.
@@ -8,7 +7,7 @@
 
 import pprint
 from argparse import ArgumentParser
-from typing import Any, Dict, List
+from typing import Any
 from xml.dom import minidom
 
 import numpy as np
@@ -141,16 +140,16 @@ def process_ff(args):
                 print("==== Processing residue", res_name, "====")
                 atom_iota = 0
                 atom_symbols = []
-                atom_idxs_to_types: Dict[int, str] = {}
+                atom_idxs_to_types: dict[int, str] = {}
                 atom_idxs_to_names = {}
                 atom_types_to_idxs = {}
 
-                bond_types_to_param_idx: Dict[str, int] = {}
+                bond_types_to_param_idx: dict[str, int] = {}
                 bond_param_idxs = []
                 bond_list = []
                 bond_iota = 0
 
-                bond_type_map: Dict[tuple, int] = {}
+                bond_type_map: dict[tuple, int] = {}
 
                 for idx, cn in enumerate(res.childNodes):
                     if cn.nodeName == "Atom":
@@ -279,7 +278,7 @@ def process_ff(args):
 
     all_patterns_and_params = []
     for res_name, bond_idxs_list, bond_classes in zip(all_residues, all_bond_idxs, all_bond_classes):
-        bc_dict: Dict[int, List] = {}
+        bc_dict: dict[int, list] = {}
         for bc, bil in zip(bond_classes, bond_idxs_list):
             if bc not in bc_dict:
                 bc_dict[bc] = []

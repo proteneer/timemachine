@@ -1,8 +1,9 @@
 import pickle
 import warnings
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union, cast
+from typing import Callable, Optional, Union, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -71,7 +72,7 @@ DEFAULT_REST_PARAMS = replace(
 @dataclass
 class Host:
     system: HostSystem
-    physical_masses: List[float]
+    physical_masses: list[float]
     conf: NDArray
     box: NDArray
     num_water_atoms: int
@@ -125,7 +126,7 @@ def setup_in_env(
     return x0, hmr_masses, potentials, baro
 
 
-def assert_all_states_have_same_masses(initial_states: List[InitialState]):
+def assert_all_states_have_same_masses(initial_states: list[InitialState]):
     """
     hmr masses should be identical throughout the lambda schedule
     bond idxs should be the same at the two end-states, note that a possible corner
@@ -175,9 +176,7 @@ def setup_initial_state(
     # provide a different run_seed for every lambda window,
     # but in a way that should be symmetric for
     # A -> B vs. B -> A edge definitions
-    run_seed = (
-        int(seed + bytes_to_id(bytes().join([np.array(p.params).tobytes() for p in potentials]))) % MAX_SEED_VALUE
-    )
+    run_seed = int(seed + bytes_to_id(b"".join([np.array(p.params).tobytes() for p in potentials]))) % MAX_SEED_VALUE
 
     # initialize velocities
     v0 = sample_velocities(hmr_masses, temperature, init_seed)
@@ -235,7 +234,7 @@ def setup_initial_states(
     lambda_schedule: Union[NDArray, Sequence[float]],
     seed: int,
     min_cutoff: Optional[float] = None,
-) -> List[InitialState]:
+) -> list[InitialState]:
     """
     Given a sequence of lambda values, return a list of initial states.
 
@@ -380,7 +379,7 @@ def optimize_coords_state(
     potentials: Sequence[BoundPotential],
     x0: NDArray,
     box: NDArray,
-    free_idxs: List[int],
+    free_idxs: list[int],
     assert_energy_decreased: bool,
     k: float,
     restrained_idxs: Optional[NDArray] = None,
@@ -406,7 +405,7 @@ def optimize_coords_state(
     return x_opt
 
 
-def get_free_idxs(initial_state: InitialState, cutoff: float = 0.5) -> List[int]:
+def get_free_idxs(initial_state: InitialState, cutoff: float = 0.5) -> list[int]:
     """Select particles within cutoff of ligand"""
     x = initial_state.x0
     x_lig = x[initial_state.ligand_idxs]
@@ -416,8 +415,8 @@ def get_free_idxs(initial_state: InitialState, cutoff: float = 0.5) -> List[int]
 
 
 def _optimize_coords_along_states(
-    initial_states: List[InitialState], k: float, minimization_config: minimizer.MinimizationConfig
-) -> List[NDArray]:
+    initial_states: list[InitialState], k: float, minimization_config: minimizer.MinimizationConfig
+) -> list[NDArray]:
     # use the end-state to define the optimization settings
     end_state = initial_states[0]
 
@@ -446,11 +445,11 @@ def _optimize_coords_along_states(
 
 
 def optimize_coordinates(
-    initial_states: List[InitialState],
+    initial_states: list[InitialState],
     min_cutoff: Optional[float] = 0.7,
     k: float = DEFAULT_POSITIONAL_RESTRAINT_K,
     minimization_config: Optional[minimizer.MinimizationConfig] = None,
-) -> List[NDArray]:
+) -> list[NDArray]:
     """
     Optimize geometries of the initial states.
 
@@ -532,7 +531,7 @@ def estimate_relative_free_energy(
     ff: Forcefield,
     host_config: Optional[HostConfig],
     prefix: str = "",
-    lambda_interval: Optional[Tuple[float, float]] = None,
+    lambda_interval: Optional[tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     md_params: MDParams = DEFAULT_MD_PARAMS,
     min_cutoff: Optional[float] = 0.7,
@@ -634,7 +633,7 @@ def estimate_relative_free_energy_bisection(
     host_config: Optional[HostConfig],
     md_params: MDParams = DEFAULT_MD_PARAMS,
     prefix: str = "",
-    lambda_interval: Optional[Tuple[float, float]] = None,
+    lambda_interval: Optional[tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,
@@ -833,7 +832,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
             scale_factors = [traj.final_barostat_volume_scale_factor for traj in trajectories_by_state]
             if any(x is not None for x in scale_factors):
                 assert all(x is not None for x in scale_factors)
-                sfs = cast(List[float], scale_factors)  # implied by assertion but required by mypy
+                sfs = cast(list[float], scale_factors)  # implied by assertion but required by mypy
                 return float(np.mean(sfs))
             else:
                 return None
@@ -924,7 +923,7 @@ def estimate_relative_free_energy_bisection_hrex(
     host_config: Optional[HostConfig],
     md_params: MDParams = DEFAULT_HREX_PARAMS,
     prefix: str = "",
-    lambda_interval: Optional[Tuple[float, float]] = None,
+    lambda_interval: Optional[tuple[float, float]] = None,
     n_windows: Optional[int] = None,
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = 0.7,

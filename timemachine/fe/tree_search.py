@@ -1,5 +1,6 @@
 import heapq
-from typing import Callable, Iterator, Sequence, TypeVar
+from collections.abc import Iterator, Sequence
+from typing import Callable, TypeVar
 
 Node = TypeVar("Node")
 State = TypeVar("State")

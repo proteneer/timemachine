@@ -1,4 +1,5 @@
-from typing import Callable, Iterable, Iterator, Optional, Sequence, TypeVar
+from collections.abc import Iterable, Iterator, Sequence
+from typing import Callable, Optional, TypeVar
 
 
 def batches(n: int, batch_size: int) -> Iterator[int]:

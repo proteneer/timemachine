@@ -1,5 +1,3 @@
-from typing import List
-
 import numpy as np
 from jax import numpy as jnp
 from jax.ops import segment_sum
@@ -92,7 +90,7 @@ class NPTMove(NVTMove):
 
     def __init__(
         self,
-        bps: List[BoundPotential],
+        bps: list[BoundPotential],
         masses: NDArray,
         temperature: float,
         pressure: float,

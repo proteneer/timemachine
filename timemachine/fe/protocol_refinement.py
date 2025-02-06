@@ -1,13 +1,13 @@
-from typing import Callable, List, Tuple, TypeVar
+from typing import Callable, TypeVar
 
 _T = TypeVar("_T")
 
 
 def greedy_bisection_step(
-    protocol: List[_T],
+    protocol: list[_T],
     local_cost: Callable[[_T, _T], float],
     make_intermediate: Callable[[_T, _T], _T],
-) -> Tuple[List[_T], Tuple[List[float], int, _T]]:
+) -> tuple[list[_T], tuple[list[float], int, _T]]:
     r"""Perform a single step of greedy bisection.
 
     Parameters
@@ -42,7 +42,7 @@ def greedy_bisection_step(
     return refined_protocol, (costs, left_idx, new_state)
 
 
-def copy_and_insert(xs: List[_T], idx: int, x: _T) -> List[_T]:
+def copy_and_insert(xs: list[_T], idx: int, x: _T) -> list[_T]:
     assert idx <= len(xs)
     xs_ = xs.copy()
     xs_.insert(idx, x)

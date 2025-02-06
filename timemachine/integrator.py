@@ -1,7 +1,7 @@
 import time
 from abc import ABC, abstractmethod
 from functools import partial
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 
 import jax
 import jax.numpy as jnp
@@ -55,7 +55,7 @@ def langevin_coefficients(temperature, dt, friction, masses):
 
 class Integrator(ABC):
     @abstractmethod
-    def step(self, x, v) -> Tuple[Any, Any]:
+    def step(self, x, v) -> tuple[Any, Any]:
         """Return copies x and v, updated by a single timestep"""
         pass
 
@@ -74,12 +74,12 @@ class Integrator(ABC):
 
 class StochasticIntegrator(ABC):
     @abstractmethod
-    def step(self, x, v, rng: np.random.Generator) -> Tuple[Any, Any]:
+    def step(self, x, v, rng: np.random.Generator) -> tuple[Any, Any]:
         """Return copies x and v, updated by a single timestep. Accepts a numpy Generator instance for determinism."""
         pass
 
     @abstractmethod
-    def step_lax(self, key, x, v) -> Tuple[Any, Any]:
+    def step_lax(self, key, x, v) -> tuple[Any, Any]:
         """Return copies x and v, updated by a single timestep. Accepts a jax PRNG key for determinism."""
         pass
 
