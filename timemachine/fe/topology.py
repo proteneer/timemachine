@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 from timemachine import potentials
 from timemachine.constants import DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K, NBParamIdx
 from timemachine.fe import chiral_utils
-from timemachine.fe.system import VacuumSystem
+from timemachine.fe.system import GuestSystem
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import nonbonded
@@ -432,7 +432,7 @@ class BaseTopology:
 
         return chiral_atom_potential, chiral_bond_potential
 
-    def setup_chiral_end_state(self) -> VacuumSystem:
+    def setup_chiral_end_state(self) -> GuestSystem:
         """
         Setup an end-state with chiral restraints attached.
         """
@@ -445,7 +445,7 @@ class BaseTopology:
         system.chiral_bond = chiral_bond_potential
         return system
 
-    def setup_end_state(self) -> VacuumSystem:
+    def setup_end_state(self) -> GuestSystem:
         mol_bond_params, mol_hb = self.parameterize_harmonic_bond(self.ff.hb_handle.params)
         mol_angle_params, mol_ha = self.parameterize_harmonic_angle(self.ff.ha_handle.params)
         mol_proper_params, mol_pt = self.parameterize_proper_torsion(self.ff.pt_handle.params)
@@ -470,17 +470,15 @@ class BaseTopology:
         signs = np.array([[]], dtype=np.int32).reshape(-1)
         chiral_bond = ChiralBondRestraint(idxs, signs).bind(np.array([], dtype=np.float64).reshape(-1))
 
-        system = VacuumSystem(
-            bond_potential,
-            angle_potential,
-            proper_potential,
-            improper_potential,
-            nonbonded_potential,
-            chiral_atom,
-            chiral_bond,
+        return GuestSystem(
+            bond=bond_potential,
+            angle=angle_potential,
+            proper=proper_potential,
+            improper=improper_potential,
+            nonbonded_pair_list=nonbonded_potential,
+            chiral_atom=chiral_atom,
+            chiral_bond=chiral_bond,
         )
-
-        return system
 
 
 class DualTopology(BaseTopology):
@@ -517,18 +515,14 @@ class DualTopology(BaseTopology):
         num_b_atoms = self.mol_b.GetNumAtoms()
         return [np.arange(num_a_atoms), num_a_atoms + np.arange(num_b_atoms)]
 
-    def parameterize_nonbonded(
+    def _parameterize_nonbonded(
         self,
         ff_q_params,
         ff_q_params_intra,
         ff_lj_params,
         ff_lj_params_intra,
-        lamb: float,
         intramol_params=True,
     ):
-        # NOTE: lamb is unused here, but is used by the subclass DualTopologyMinimization
-        del lamb
-
         # dummy is either "a or "b"
         if intramol_params:
             q_params_a = self.ff.q_handle_intra.partial_parameterize(ff_q_params_intra, self.mol_a)
@@ -644,8 +638,6 @@ class DualTopology(BaseTopology):
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
 
-
-class DualTopologyMinimization(DualTopology):
     def parameterize_nonbonded(
         self,
         ff_q_params,
@@ -658,16 +650,15 @@ class DualTopologyMinimization(DualTopology):
         # both mol_a and mol_b are standardized.
         # we don't actually need derivatives for this stage.
 
-        params, nb_potential = super().parameterize_nonbonded(
+        params, nb_potential = self._parameterize_nonbonded(
             ff_q_params,
             ff_q_params_intra,
             ff_lj_params,
             ff_lj_params_intra,
-            lamb,
             intramol_params=intramol_params,
         )
         cutoff = nb_potential.cutoff
-        params_with_offsets = jnp.asarray(params).at[:, 3].set(lamb * cutoff)
+        params_with_offsets = jnp.asarray(params).at[:, NBParamIdx.W_IDX].set(lamb * cutoff)
 
         return params_with_offsets, nb_potential
 

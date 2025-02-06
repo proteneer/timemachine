@@ -12,7 +12,7 @@ from rdkit.Chem import AllChem
 from timemachine import potentials
 from timemachine.constants import NBParamIdx
 from timemachine.fe import topology
-from timemachine.fe.topology import _SCALE_14_LJ, _SCALE_14_Q, BaseTopology, DualTopology, DualTopologyMinimization
+from timemachine.fe.topology import _SCALE_14_LJ, _SCALE_14_Q, BaseTopology, DualTopology
 from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name, set_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
@@ -56,46 +56,6 @@ def test_base_topology_14_exclusions():
     assert (28, 0) not in kvs
 
 
-def test_dual_topology_nonbonded_pairlist():
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        all_mols = read_sdf(path_to_ligand)
-
-    mol_a = all_mols[1]
-    mol_b = all_mols[4]
-    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    dt = topology.DualTopology(mol_a, mol_b, ff)
-
-    nb_params, nb = dt.parameterize_nonbonded(
-        ff.q_handle.params,
-        ff.q_handle_intra.params,
-        ff.lj_handle.params,
-        ff.lj_handle_intra.params,
-        0.0,
-    )
-
-    nb_pairlist_params, nb_pairlist = dt.parameterize_nonbonded_pairlist(
-        ff.q_handle.params, ff.q_handle_intra.params, ff.lj_handle.params, ff.lj_handle_intra.params
-    )
-
-    x0 = np.concatenate([get_romol_conf(mol_a), get_romol_conf(mol_b)])
-    box = np.eye(3) * 4.0
-
-    for precision, rtol, atol in [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)]:
-        nb_unbound = nb.to_gpu(precision).unbound_impl
-        nb_pairlist_unbound = nb_pairlist.to_gpu(precision).unbound_impl
-
-        du_dx, du_dp, u = nb_unbound.execute(x0, nb_params, box)
-
-        pairlist_du_dx, pairlist_du_dp, pairlist_u = nb_pairlist_unbound.execute(x0, nb_pairlist_params, box)
-
-        np.testing.assert_allclose(du_dx, pairlist_du_dx, atol=atol, rtol=rtol)
-
-        # Different parameters, and so no expectation of shapes agreeing
-        assert du_dp.shape != pairlist_du_dp.shape
-
-        np.testing.assert_allclose(u, pairlist_u, atol=atol, rtol=rtol)
-
-
 def parameterize_nonbonded_full(
     hgt: topology.HostGuestTopology,
     ff_q_params,
@@ -121,14 +81,28 @@ def parameterize_nonbonded_full(
 
 
 @no_type_check
+def test_host_guest_nonbonded_tiny_mol():
+    ctor = BaseTopology
+    precision, rtol, atol = (np.float32, 1e-4, 5e-4)
+    use_tiny_mol = True
+    host_guest_nonbonded_impl(ctor, precision, rtol, atol, use_tiny_mol)
+
+
+@no_type_check
 @pytest.mark.parametrize("precision, rtol, atol", [(np.float64, 1e-8, 1e-8), (np.float32, 1e-4, 5e-4)])
-@pytest.mark.parametrize("ctor", [BaseTopology, DualTopology, DualTopologyMinimization])
+@pytest.mark.parametrize("ctor", [BaseTopology, DualTopology])
 @pytest.mark.parametrize("use_tiny_mol", [True, False])
+@pytest.mark.nightly(reason="slow")
 def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
-    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
+    host_guest_nonbonded_impl(ctor, precision, rtol, atol, use_tiny_mol)
+
+
+@no_type_check
+def host_guest_nonbonded_impl(ctor, precision, rtol, atol, use_tiny_mol):
+    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_system, omm_topology):
         # Use the original code to compute the nb grads and potential
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms, ff, omm_topology)
+        hgt = topology.HostGuestTopology(host_system.get_U_fns(), bt, num_water_atoms, ff, omm_topology)
         params, us = parameterize_nonbonded_full(
             hgt,
             ff.q_handle.params,
@@ -140,10 +114,10 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         u_impl = us.bind(params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(x0, box)
 
-    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_bps, omm_topology):
+    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_system, omm_topology):
         # Use the updated topology code to compute the nb grads and potential
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms, ff, omm_topology)
+        hgt = topology.HostGuestTopology(host_system.get_U_fns(), bt, num_water_atoms, ff, omm_topology)
         params, us = hgt.parameterize_nonbonded(
             ff.q_handle.params,
             ff.q_handle_intra.params,
@@ -178,7 +152,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         box,
         lamb,
         num_water_atoms,
-        host_bps,
+        host_system,
         water_idxs,
         ligand_idxs,
         protein_idxs,
@@ -188,7 +162,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
         assert num_water_atoms == len(water_idxs)
         num_total_atoms = len(ligand_idxs) + len(protein_idxs) + num_water_atoms
         bt = Topology(ff)
-        hgt = topology.HostGuestTopology(host_bps, bt, num_water_atoms, ff, omm_topology)
+        hgt = topology.HostGuestTopology(host_system.get_U_fns(), bt, num_water_atoms, ff, omm_topology)
         u = potentials.NonbondedInteractionGroup(
             num_total_atoms,
             ligand_idxs,
@@ -229,7 +203,7 @@ def test_host_guest_nonbonded(ctor, precision, rtol, atol, use_tiny_mol):
             mol = mols_by_name["67"]
         ligand_conf = get_romol_conf(mol)
         Topology = partial(ctor, mol)
-    elif ctor in [DualTopology, DualTopologyMinimization]:
+    elif ctor == DualTopology:
         if use_tiny_mol:
             mol_a = mols_by_name["H2S"]
             mol_b = mols_by_name["67"]

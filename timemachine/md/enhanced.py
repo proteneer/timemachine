@@ -18,7 +18,6 @@ from scipy.special import logsumexp
 from timemachine import lib
 from timemachine.constants import BOLTZ
 from timemachine.fe import free_energy, topology
-from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.integrator import simulate
 from timemachine.lib import custom_ops
@@ -431,11 +430,8 @@ def get_solvent_phase_system(
     """
 
     # construct water box
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(
-        box_width, ff.water_ff, mols=[mol]
-    )
-    water_box = water_box + np.eye(3) * margin  # add a small margin around the box for stability
-    host_config = HostConfig(water_system, water_coords, water_box, water_coords.shape[0], water_topology)
+    host_config = builders.build_water_system(box_width, ff.water_ff, mols=[mol])
+    host_config.box += np.eye(3) * margin  # add a small margin around the box for stability
 
     # construct alchemical system
     bt = topology.BaseTopology(mol, ff)
@@ -448,9 +444,9 @@ def get_solvent_phase_system(
         new_water_coords = minimizer.fire_minimize_host([mol], host_config, ff)
         coords = np.concatenate([new_water_coords, ligand_coords])
     else:
-        coords = np.concatenate([water_coords, ligand_coords])
+        coords = np.concatenate([host_config.conf, ligand_coords])
 
-    return potentials, params, masses, coords, water_box
+    return potentials, params, masses, coords, host_config.box
 
 
 def equilibrate_solvent_phase(

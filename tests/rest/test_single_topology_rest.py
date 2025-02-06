@@ -15,7 +15,7 @@ from timemachine.fe.rbfe import Host, setup_optimized_host
 from timemachine.fe.rest.interpolation import Exponential, Linear, Quadratic, Symmetric, plot_interpolation_fxn
 from timemachine.fe.rest.single_topology import InterpolationFxnName, SingleTopologyREST
 from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.system import VacuumSystem
+from timemachine.fe.system import GuestSystem
 from timemachine.fe.utils import get_romol_conf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.md import builders
@@ -80,8 +80,8 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
     U_proper = state.proper(ligand_conf, None)
     U_proper_ref = state_ref.proper(ligand_conf, None)
 
-    U_nonbonded = state.nonbonded(ligand_conf, None)
-    U_nonbonded_ref = state_ref.nonbonded(ligand_conf, None)
+    U_nonbonded = state.nonbonded_pair_list(ligand_conf, None)
+    U_nonbonded_ref = state_ref.nonbonded_pair_list(ligand_conf, None)
 
     U = state.get_U_fn()(ligand_conf)
     U_ref = state_ref.get_U_fn()(ligand_conf)
@@ -104,7 +104,7 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
             if energy_scale < 1.0:
                 assert U_proper < U_proper_ref
 
-        def get_proper_subset_energy(state: VacuumSystem, ixn_idxs):
+        def get_proper_subset_energy(state: GuestSystem, ixn_idxs):
             assert state.proper
             idxs = state.proper.potential.idxs[ixn_idxs, :]
             params = state.proper.params[ixn_idxs, :]
@@ -120,15 +120,9 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
 
 @cache
 def get_solvent_host(st: SingleTopology) -> tuple[Host, HostConfig]:
-    def get_solvent_host_config(box_width=4.0):
-        solvent_sys, solvent_conf, solvent_box, omm_topology = builders.build_water_system(
-            box_width, forcefield.water_ff, mols=[st.mol_a, st.mol_b]
-        )
-        solvent_box += np.diag([0.1, 0.1, 0.1])
-        return HostConfig(solvent_sys, solvent_conf, solvent_box, solvent_conf.shape[0], omm_topology)
-
-    host_config = get_solvent_host_config()
-
+    box_width = 4.0
+    host_config = builders.build_water_system(box_width, forcefield.water_ff, mols=[st.mol_a, st.mol_b])
+    host_config.box += np.diag([0.1, 0.1, 0.1])
     host = setup_optimized_host(st, host_config)
 
     return host, host_config
@@ -151,7 +145,7 @@ def test_single_topology_rest_solvent(mol_pair, temperature_scale_interpolation_
 
     def get_nonbonded_host_guest_ixn_energy(st: SingleTopology):
         hgs = st.combine_with_host(host.system, lamb, host_config.num_water_atoms, st.ff, host_config.omm_topology)
-        return hgs.nonbonded_host_guest_ixn(conf, host_config.box)
+        return hgs.nonbonded_ixn_group(conf, host_config.box)
 
     U = get_nonbonded_host_guest_ixn_energy(st_rest)
     U_ref = get_nonbonded_host_guest_ixn_energy(st)
@@ -176,19 +170,17 @@ def test_single_topology_rest_propers():
     # benzene: no propers are scaled
     benzene = get_mol("c1ccccc1")
     st = get_identity_transformation(benzene)
-    assert st.target_propers.shape == (0, 4)
+    assert st.target_propers == set()
 
     # cyclohexane: all 9 * 6 ring propers are scaled (|{H1, H2, C1}-C2-C3-{C4, H3, H4}| = 9 propers per C-C bond)
     cyclohexane = get_mol("C1CCCCC1")
     st = get_identity_transformation(cyclohexane)
-    rest_proper_idxs_set = {tuple(idxs) for idxs in list(st.target_propers)}
-    assert len(rest_proper_idxs_set) == 9 * 6
+    assert len(st.target_propers) == 9 * 6
 
     # phenylcyclohexane: all 9 * 6 cyclohexane ring propers and 6 rotatable bond propers are scaled
     phenylcyclohexane = get_mol("c1ccc(C2CCCCC2)cc1")
     st = get_identity_transformation(phenylcyclohexane)
-    rest_proper_idxs_set = {tuple(idxs) for idxs in list(st.target_propers)}
-    assert len(rest_proper_idxs_set) == 9 * 6 + 6
+    assert len(st.target_propers) == 9 * 6 + 6
 
 
 @pytest.mark.parametrize(

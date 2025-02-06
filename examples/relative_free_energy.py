@@ -28,26 +28,23 @@ def write_trajectory_as_cif(mol_a, mol_b, core, all_frames, host_topology, prefi
 
 
 def run_pair(mol_a, mol_b, core, forcefield, md_params, protein_path):
-    solvent_res, solvent_top, solvent_host_config = run_solvent(
-        mol_a, mol_b, core, forcefield, None, md_params=md_params
-    )
+    solvent_res, solvent_host_config = run_solvent(mol_a, mol_b, core, forcefield, None, md_params=md_params)
 
     with open("solvent_overlap.png", "wb") as fh:
         fh.write(solvent_res.plots.overlap_detail_png)
 
     # this st is only needed to deal with visualization jank
-    write_trajectory_as_cif(mol_a, mol_b, core, solvent_res.frames, solvent_top, "solvent_traj")
+    write_trajectory_as_cif(mol_a, mol_b, core, solvent_res.frames, solvent_host_config.omm_topology, "solvent_traj")
 
     print(
         f"solvent dG: {np.sum(solvent_res.final_result.dGs):.3f} +- {np.linalg.norm(solvent_res.final_result.dG_errs):.3f} kJ/mol"
     )
 
-    complex_res, complex_top, complex_host_config = run_complex(
-        mol_a, mol_b, core, forcefield, protein_path, md_params=md_params
-    )
+    complex_res, complex_host_config = run_complex(mol_a, mol_b, core, forcefield, protein_path, md_params=md_params)
+
     with open("complex_overlap.png", "wb") as fh:
         fh.write(complex_res.plots.overlap_detail_png)
-    write_trajectory_as_cif(mol_a, mol_b, core, complex_res.frames, complex_top, "complex_traj")
+    write_trajectory_as_cif(mol_a, mol_b, core, complex_res.frames, complex_host_config.omm_topology, "complex_traj")
 
     print(
         f"complex dG: {np.sum(complex_res.final_result.dGs):.3f} +- {np.linalg.norm(complex_res.final_result.dG_errs):.3f} kJ/mol"

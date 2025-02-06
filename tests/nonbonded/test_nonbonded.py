@@ -8,9 +8,7 @@ from numpy.typing import NDArray
 
 from timemachine import potentials
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md import builders
-from timemachine.potentials.potential import get_bound_potential_by_type
 
 np.set_printoptions(linewidth=500)
 
@@ -168,12 +166,9 @@ def test_nblist_box_resize(precision, rtol, atol, du_dp_rtol, du_dp_atol):
     # test that running the coordinates under two different boxes produces correct results
     # since we should be rebuilding the nblist when the box sizes change.
     ff = Forcefield.load_default()
-
-    host_system, host_conf, box, top = builders.build_water_system(3.0, ff.water_ff)
-
-    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-
-    test_bp = get_bound_potential_by_type(host_fns, potentials.Nonbonded)
+    host_config = builders.build_water_system(3.0, ff.water_ff)
+    box = host_config.box
+    test_bp = host_config.host_system.nonbonded_all_pairs
     assert test_bp.params is not None
 
     big_box = box + np.eye(3) * 1000
@@ -182,7 +177,7 @@ def test_nblist_box_resize(precision, rtol, atol, du_dp_rtol, du_dp_atol):
     # the rebuild is triggered as long as the box *changes*.
     for test_box in [big_box, box]:
         GradientTest().compare_forces(
-            host_conf,
+            host_config.conf,
             test_bp.params,
             test_box,
             test_bp.potential,
@@ -200,15 +195,14 @@ def test_nblist_box_resize(precision, rtol, atol, du_dp_rtol, du_dp_atol):
 def test_nonbonded_water(size, cutoff, precision, rtol, atol):
     np.random.seed(4321)
     ff = Forcefield.load_default()
-
-    _, all_coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
-    coords = all_coords[:size]
+    host_config = builders.build_water_system(3.0, ff.water_ff)
+    coords = host_config.conf[:size]
 
     # E = 0 # DEBUG!
     charge_params, potential = prepare_water_system(coords, p_scale=5.0, cutoff=cutoff)
     test_impl = potential.to_gpu(precision)
     for params in gen_nonbonded_params_with_4d_offsets(np.random.default_rng(2022), charge_params, cutoff):
-        GradientTest().compare_forces(coords, params, box, potential, test_impl, rtol=rtol, atol=atol)
+        GradientTest().compare_forces(coords, params, host_config.box, potential, test_impl, rtol=rtol, atol=atol)
 
 
 @pytest.mark.parametrize("precision,rtol", [(np.float64, 1e-8), (np.float32, 1e-4)])
@@ -221,14 +215,14 @@ def test_nonbonded_exclusions(precision, rtol):
     np.random.seed(2020)
     ff = Forcefield.load_default()
 
-    _, water_coords, box, _ = builders.build_water_system(3.0, ff.water_ff)
+    host_config = builders.build_water_system(3.0, ff.water_ff)
     N = 126  # multiple of 3
-    test_system = water_coords[:N]
+    test_coords = host_config.conf[:N]
     box = np.eye(3) * 3
 
     EA = 10
 
-    atom_idxs = np.arange(test_system.shape[0])
+    atom_idxs = np.arange(test_coords.shape[0])
 
     # pick a set of atoms that will be mutually excluded from each other.
     # we will need to set their exclusions manually
@@ -245,13 +239,13 @@ def test_nonbonded_exclusions(precision, rtol):
     scales = np.ones((E, 2), dtype=np.float64)
     # perturb the system
     for idx in exclusion_atoms:
-        test_system[idx] = np.zeros(3) + np.random.rand() / 1000 + 2
+        test_coords[idx] = np.zeros(3) + np.random.rand() / 1000 + 2
 
     beta = 2.0
     cutoff = 1.2
 
     potential = potentials.Nonbonded(N, exclusion_idxs, scales, beta, cutoff)
 
-    params = prepare_system_params(test_system, cutoff)
+    params = prepare_system_params(test_coords, cutoff)
 
-    GradientTest().compare_forces(test_system, params, box, potential, potential.to_gpu(precision), rtol)
+    GradientTest().compare_forces(test_coords, params, box, potential, potential.to_gpu(precision), rtol)

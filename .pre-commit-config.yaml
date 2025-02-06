@@ -1,6 +1,6 @@
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
     -   id: check-yaml
     -   id: end-of-file-fixer
@@ -14,22 +14,22 @@ repos:
     -   id: ruff-format
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.5.1
+    rev: v1.14.1
     hooks:
     -   id: mypy
         # include dependencies that export types (i.e. have a py.typed file in the root module) so that they can be used
         # by mypy in pre-commit
         additional_dependencies:
           - "jax==0.4.28"
-          - "numpy==1.26.4"
+          - "numpy==2.2.2"
           - "scipy==1.15.1"
-          - "matplotlib==3.7.1"
+          - "matplotlib==3.10.0"
 
         # Exclude custom_ops.py to work around clash with stub file when typechecking
         exclude: '^timemachine/lib/custom_ops.py$'
 
 -   repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v16.0.6
+    rev: v19.1.7
     hooks:
     -   id: clang-format
         types_or: [c, c++, cuda]

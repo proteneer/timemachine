@@ -29,7 +29,6 @@ from timemachine.fe.rest.single_topology import InterpolationFxnName
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield, ForcefieldParams
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
@@ -54,13 +53,16 @@ WATER_SAMPLER_MOVERS = (
 )
 
 
+# (YTZ): make dataclass/immutable later?
+# (YTZ): deduplicate with rbfe.py
 class HostConfig:
-    def __init__(self, omm_system, conf, box, num_water_atoms, omm_topology):
-        self.omm_system = omm_system
+    def __init__(self, host_system, conf, box, num_water_atoms, omm_topology, masses):
+        self.host_system = host_system
         self.conf = conf
         self.box = box
         self.num_water_atoms = num_water_atoms
         self.omm_topology = omm_topology
+        self.masses = np.array(masses)
 
 
 @dataclass(frozen=True)
@@ -465,9 +467,9 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         """
         ligand_masses = get_mol_masses(self.mol)
         ff_params = ff.get_params()
-
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_config.omm_system, cutoff=1.2)
-        hgt = topology.HostGuestTopology(host_bps, self.top, host_config.num_water_atoms, ff, host_config.omm_topology)
+        hgt = topology.HostGuestTopology(
+            host_config.host_system.get_U_fns(), self.top, host_config.num_water_atoms, ff, host_config.omm_topology
+        )
 
         final_params = []
         final_potentials = []
@@ -484,7 +486,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             else:
                 final_params.append(params)
                 final_potentials.append(pot)
-        combined_masses = self._combine(ligand_masses, np.array(host_masses))
+        combined_masses = self._combine(ligand_masses, np.array(host_config.masses))
         return tuple(final_potentials), tuple(final_params), combined_masses
 
     def prepare_vacuum_edge(self, ff: Forcefield) -> tuple[tuple[Potential, ...], tuple, NDArray]:
@@ -595,8 +597,8 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
 
         water_sampler = custom_ops.TIBDExchangeMove_f32(
             initial_state.x0.shape[0],
-            initial_state.ligand_idxs.tolist(),
-            [water_group.tolist() for water_group in water_idxs],
+            initial_state.ligand_idxs.tolist(),  # type: ignore
+            [water_group.tolist() for water_group in water_idxs],  # type: ignore
             water_params,
             initial_state.integrator.temperature,
             nb.beta,
@@ -1085,7 +1087,7 @@ def run_sims_bisection(
         result = compute_intermediate_result(lambdas)
         results.append(result)
     else:
-        if min_overlap is not None:
+        if min_overlap is not None and np.min(result.overlaps) < min_overlap:
             warn(
                 f"Reached n_bisections={n_bisections} iterations without achieving min_overlap={min_overlap}. "
                 f"The minimum BAR overlap was {np.min(result.overlaps)}.",
@@ -1130,7 +1132,7 @@ def compute_potential_matrix(
         n_states = len(hrex.replicas)
         state_idx = np.argsort(hrex.replica_idx_by_state)
         neighbor_state_idxs = state_idx[:, None] + np.arange(-k, k + 1)[None, :]
-        valid_idxs = np.nonzero((0 <= neighbor_state_idxs) & (neighbor_state_idxs < n_states))
+        valid_idxs: tuple = np.nonzero((0 <= neighbor_state_idxs) & (neighbor_state_idxs < n_states))
         coords_batch_idxs = valid_idxs[0].astype(np.uint32)
         params_batch_idxs = neighbor_state_idxs[valid_idxs].astype(np.uint32)
 
@@ -1149,6 +1151,23 @@ def compute_potential_matrix(
 
     U_kl = compute_sparse(max_delta_states) if max_delta_states is not None else compute_dense()
 
+    return U_kl
+
+
+def verify_and_sanitize_potential_matrix(
+    U_kl: NDArray, replica_idx_by_state: Sequence[int], abs_energy_threshold: float = 1e9
+) -> NDArray:
+    """Ensure energies in the diagonal are finite and below some threshold and sanitizes NaNs to infs."""
+    # Verify that the energies that the energies of the replica in the same state are finite, else a replica is no longer valid
+    replica_energies = np.diagonal(U_kl[replica_idx_by_state])
+    assert np.all(np.isfinite(replica_energies)), "Replicas have non-finite energies"
+    assert np.all(np.abs(replica_energies) < abs_energy_threshold), "Energies larger in magnitude than tolerated"
+    if np.any(np.isnan(U_kl)):
+        warn(
+            "Encountered NaNs in potential matrix. Replacing each instance with inf",
+            IndeterminateEnergyWarning,
+        )
+        U_kl = np.where(np.isnan(U_kl), np.inf, U_kl)
     return U_kl
 
 
@@ -1439,7 +1458,8 @@ def run_sims_hrex(
             return CoordsVelBox(frame, velos, box)
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
-        U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
+        U_kl_raw = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
+        U_kl = verify_and_sanitize_potential_matrix(U_kl_raw, hrex.replica_idx_by_state)
         log_q_kl = -U_kl / (BOLTZ * temperature)
 
         replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)

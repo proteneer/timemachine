@@ -48,19 +48,19 @@ def test_get_samples_by_iter_by_replica_invalid_args():
 
 def simulate_perfect_mixing_hrex(num_states: int, num_frames: int) -> List[List[int]]:
     """assume every step of HREX perfectly mixed all replicas"""
-    inds = np.arange(num_states)
+    inds: list[int] = np.arange(num_states).tolist()  # type: ignore
     traj = []
     for _ in range(num_frames):
         np.random.shuffle(inds)
-        traj.append(np.array(inds).tolist())
+        traj.append(list(inds))
     return traj
 
 
 def simulate_slow_mixing_hrex(num_states: int, num_frames: int) -> List[List[int]]:
     """assume every step of HREX only succeeds in making num_states nearest-neighbor swaps"""
-    traj = [np.arange(num_states).tolist()]
+    traj: list[list[int]] = [np.arange(num_states).tolist()]  # type: ignore
     for _ in range(num_frames - 1):
-        current_state = np.array(traj[-1])
+        current_state = list(traj[-1])
         for _ in range(num_states):
             i = np.random.randint(num_states - 1)
             j = i + 1
@@ -71,17 +71,17 @@ def simulate_slow_mixing_hrex(num_states: int, num_frames: int) -> List[List[int
             current_state[j] = x_i
             current_state[i] = x_j
 
-        traj.append(current_state.tolist())
+        traj.append(current_state)
     return traj
 
 
 def simulate_bottlenecked_hrex(num_states: int, num_frames: int) -> List[List[int]]:
     """simulate_slow_mixing_hrex, but there's a state near num_states/2 that never swaps with neighbors"""
-    traj = [np.arange(num_states).tolist()]
+    traj: list[list[int]] = [np.arange(num_states).tolist()]  # type: ignore
 
     bottleneck_i = int(round(num_states / 2))
     for _ in range(num_frames - 1):
-        current_state = np.array(traj[-1])
+        current_state = list(traj[-1])
         for _ in range(num_states):
             i = np.random.randint(num_states - 1)
             j = i + 1
@@ -93,12 +93,12 @@ def simulate_bottlenecked_hrex(num_states: int, num_frames: int) -> List[List[in
                 current_state[j] = x_i
                 current_state[i] = x_j
 
-        traj.append(current_state.tolist())
+        traj.append(current_state)
     return traj
 
 
 def simulate_no_mixing_hrex(num_states: int, num_frames: int) -> List[List[int]]:
-    traj = [np.arange(num_states).tolist()] * num_frames
+    traj: list[list[int]] = [np.arange(num_states).tolist()] * num_frames  # type:ignore
     return traj
 
 

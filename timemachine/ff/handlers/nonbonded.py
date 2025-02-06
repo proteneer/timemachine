@@ -569,7 +569,7 @@ class NNHandler(SerializableMixIn):
 
     @staticmethod
     def static_parameterize(flat_params, encoded_unflatten_str, mol):
-        am1_charges = compute_or_load_oe_charges(mol, mode=AM1BCC)
+        am1_charges = compute_or_load_oe_charges(mol, mode=AM1BCCELF10)
         bond_idxs, deltas = NNHandler.get_bond_idxs_and_charge_deltas(flat_params, encoded_unflatten_str, mol)
         final_charges = apply_bond_charge_corrections(am1_charges, bond_idxs, jnp.array(deltas), runtime_validate=False)
         return final_charges

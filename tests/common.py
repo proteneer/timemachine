@@ -18,7 +18,7 @@ from timemachine.fe import rbfe
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import nonbonded, openmm_deserializer
+from timemachine.ff.handlers import nonbonded
 from timemachine.lib import custom_ops
 from timemachine.md.builders import build_protein_system
 from timemachine.potentials import Nonbonded
@@ -447,17 +447,20 @@ def check_split_ixns(
     ffs = load_split_forcefields()
 
     with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        complex_system, host_conf, box, complex_top, num_water_atoms = build_protein_system(
-            str(path_to_pdb), ffs.ref.protein_ff, ffs.ref.water_ff
-        )
-        box += np.diag([0.1, 0.1, 0.1])
+        host_config = build_protein_system(str(path_to_pdb), ffs.ref.protein_ff, ffs.ref.water_ff)
+        host_config.box += np.diag([0.1, 0.1, 0.1])
+
+    host_conf = host_config.conf
+    box = host_config.box
+    complex_top = host_config.omm_topology
+    num_water_atoms = host_config.num_water_atoms
+    host_system = host_config.host_system
 
     coords0 = np.concatenate([host_conf, ligand_conf])
     num_protein_atoms = host_conf.shape[0] - num_water_atoms
     protein_idxs = np.arange(num_protein_atoms, dtype=np.int32)
     water_idxs = np.arange(num_water_atoms, dtype=np.int32) + num_protein_atoms
     num_host_atoms = host_conf.shape[0]
-    host_bps, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.2)
     ligand_idxs += num_host_atoms  # shift for the host
 
     n_lambdas = 3
@@ -482,7 +485,7 @@ def check_split_ixns(
             ffs.ref, precision, ligand_conf, box, lamb, num_water_atoms, num_host_atoms
         )
         sum_grad_ref, sum_u_ref = compute_ref_grad_u(
-            ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_bps, complex_top
+            ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_system, complex_top
         )
         PL_grad_ref, PL_u_ref = compute_ixn_grad_u(
             ffs.ref,
@@ -491,7 +494,7 @@ def check_split_ixns(
             box,
             lamb,
             num_water_atoms,
-            host_bps,
+            host_system,
             water_idxs,
             ligand_idxs,
             protein_idxs,
@@ -505,7 +508,7 @@ def check_split_ixns(
             box,
             lamb,
             num_water_atoms,
-            host_bps,
+            host_system,
             water_idxs,
             ligand_idxs,
             protein_idxs,
@@ -515,7 +518,7 @@ def check_split_ixns(
 
         # Should be the same as the new code with the orig ff
         sum_grad_new, sum_u_new = compute_new_grad_u(
-            ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_bps, complex_top
+            ffs.ref, precision, coords0, box, lamb, num_water_atoms, host_system, complex_top
         )
 
         np.testing.assert_allclose(sum_u_ref, sum_u_new, rtol=rtol, atol=atol)
@@ -523,7 +526,7 @@ def check_split_ixns(
 
         # Compute the grads, potential with the intramolecular terms scaled
         sum_grad_intra, sum_u_intra = compute_new_grad_u(
-            ffs.intra, precision, coords0, box, lamb, num_water_atoms, host_bps, complex_top
+            ffs.intra, precision, coords0, box, lamb, num_water_atoms, host_system, complex_top
         )
         LL_grad_intra, LL_u_intra = compute_intra_grad_u(
             ffs.intra, precision, ligand_conf, box, lamb, num_water_atoms, num_host_atoms
@@ -538,7 +541,7 @@ def check_split_ixns(
 
         # Compute the grads, potential with the ligand-env terms scaled
         sum_grad_prot, sum_u_prot = compute_new_grad_u(
-            ffs.env, precision, coords0, box, lamb, num_water_atoms, host_bps, complex_top
+            ffs.env, precision, coords0, box, lamb, num_water_atoms, host_system, complex_top
         )
         PL_grad_env, PL_u_env = compute_ixn_grad_u(
             ffs.env,
@@ -547,7 +550,7 @@ def check_split_ixns(
             box,
             lamb,
             num_water_atoms,
-            host_bps,
+            host_system,
             water_idxs,
             ligand_idxs,
             protein_idxs,
@@ -561,7 +564,7 @@ def check_split_ixns(
             box,
             lamb,
             num_water_atoms,
-            host_bps,
+            host_system,
             water_idxs,
             ligand_idxs,
             protein_idxs,

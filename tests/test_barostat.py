@@ -3,10 +3,9 @@ import pytest
 
 from timemachine.constants import AVOGADRO, BAR_TO_KJ_PER_NM3, BOLTZ, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import model_utils
-from timemachine.fe.free_energy import AbsoluteFreeEnergy, HostConfig
+from timemachine.fe.free_energy import AbsoluteFreeEnergy
 from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
 from timemachine.lib import LangevinIntegrator, custom_ops
 from timemachine.md.barostat.moves import CentroidRescaler
 from timemachine.md.barostat.utils import compute_box_center, compute_box_volume, get_bond_list, get_group_indices
@@ -14,7 +13,7 @@ from timemachine.md.builders import build_water_system
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.potentials import HarmonicBond, Nonbonded, NonbondedInteractionGroup, NonbondedPairListPrecomputed
-from timemachine.potentials.potential import get_bound_potential_by_type, get_potential_by_type
+from timemachine.potentials.potential import get_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 
 
@@ -84,14 +83,13 @@ def test_barostat_with_clashes():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     # Construct water box without removing the waters around the ligand to ensure clashes
-    host_system, host_coords, box, host_top = build_water_system(3.0, ff.water_ff)
+    host_config = build_water_system(3.0, ff.water_ff)
     # Shrink the box to ensure the energies are NaN
-    box -= np.eye(3) * 0.1
+    host_config.box -= np.eye(3) * 0.1
     bt = BaseTopology(mol_a, ff)
     afe = AbsoluteFreeEnergy(mol_a, bt)
-    host_config = HostConfig(host_system, host_coords, box, host_coords.shape[0], host_top)
     unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff, host_config, 0.0)
-    coords = afe.prepare_combined_coords(host_coords=host_coords)
+    coords = afe.prepare_combined_coords(host_coords=host_config.conf)
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = get_potential_by_type(unbound_potentials, HarmonicBond)
@@ -106,7 +104,7 @@ def test_barostat_with_clashes():
         u_impls.append(unbound_pot.bind(params).to_gpu(precision=np.float32).bound_impl)
 
     # The energy of the system should be non-finite
-    nrg = np.sum([bp.execute(coords, box, compute_du_dx=False)[1] for bp in u_impls])
+    nrg = np.sum([bp.execute(coords, host_config.box, compute_du_dx=False)[1] for bp in u_impls])
     assert not np.isfinite(nrg)
 
     integrator = LangevinIntegrator(
@@ -125,14 +123,14 @@ def test_barostat_with_clashes():
     )
 
     # The clashes will result in overflows, so the box should never change as no move is accepted
-    ctxt = custom_ops.Context(coords, v_0, box, integrator_impl, u_impls, movers=[baro])
+    ctxt = custom_ops.Context(coords, v_0, host_config.box, integrator_impl, u_impls, movers=[baro])
     # Will trigger the unstable check since the box is so small.
     with pytest.raises(
         RuntimeError,
         match="simulation unstable: dimensions of coordinates two orders of magnitude larger than max box dimension",
     ):
         ctxt.multiple_steps(barostat_interval * 100)
-    assert np.all(box == ctxt.get_box())
+    assert np.all(host_config.box == ctxt.get_box())
 
 
 @pytest.mark.memcheck
@@ -307,19 +305,14 @@ def test_barostat_varying_pressure():
 
     # Start out with a very large pressure
     pressure = 1013.0
-    host_system, coords, box, host_top = build_water_system(3.0, ff.water_ff)
-    box += np.eye(3) * 0.1
-    bps, masses_ = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-
-    masses = np.array(masses_)
-
-    # get list of molecules for barostat by looking at bond table
-    harmonic_bond_potential = get_bound_potential_by_type(bps, HarmonicBond)
+    host_config = build_water_system(3.0, ff.water_ff)
+    host_config.box += np.eye(3) * 0.1
+    harmonic_bond_potential = host_config.host_system.bond
     bond_list = get_bond_list(harmonic_bond_potential.potential)
-    group_indices = get_group_indices(bond_list, len(masses))
+    group_indices = get_group_indices(bond_list, len(host_config.masses))
 
     u_impls = []
-    for bp in bps:
+    for bp in host_config.host_system.get_U_fns():
         bp_impl = bp.to_gpu(precision=np.float32).bound_impl
         u_impls.append(bp_impl)
 
@@ -327,23 +320,23 @@ def test_barostat_varying_pressure():
         temperature,
         timestep,
         collision_rate,
-        masses,
+        host_config.masses,
         seed,
     )
     integrator_impl = integrator.impl()
 
-    v_0 = sample_velocities(masses, temperature, seed)
+    v_0 = sample_velocities(host_config.masses, temperature, seed)
 
     baro = custom_ops.MonteCarloBarostat(
-        coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
+        host_config.conf.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
 
-    ctxt = custom_ops.Context(coords, v_0, box, integrator_impl, u_impls, movers=[baro])
+    ctxt = custom_ops.Context(host_config.conf, v_0, host_config.box, integrator_impl, u_impls, movers=[baro])
     ctxt.multiple_steps(1000)
     ten_atm_box = ctxt.get_box()
     ten_atm_box_vol = compute_box_volume(ten_atm_box)
     # Expect the box to shrink thanks to the barostat
-    assert compute_box_volume(box) - ten_atm_box_vol > 0.4
+    assert compute_box_volume(host_config.box) - ten_atm_box_vol > 0.4
 
     # Set the pressure to 1 atm
     baro.set_pressure(DEFAULT_PRESSURE)
