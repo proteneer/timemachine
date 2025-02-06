@@ -3,9 +3,10 @@ import multiprocessing
 import os
 import pickle
 from abc import ABC, abstractmethod
+from collections.abc import Iterator, Sequence
 from concurrent import futures
 from pathlib import Path
-from typing import Any, Iterator, List, Optional, Sequence
+from typing import Any, Optional
 from uuid import uuid4
 
 from timemachine.parallel.utils import get_gpu_count
@@ -84,7 +85,7 @@ class AbstractClient:
 
 
 class _MockFuture(BaseFuture):
-    __slots__ = ("val", "_id")
+    __slots__ = ("_id", "val")
 
     def __init__(self, val):
         self.val = val
@@ -369,7 +370,7 @@ class FileClient(AbstractFileClient):
         Path(self.full_path(path)).unlink()
 
 
-def save_results(result_paths: List[str], local_file_client: FileClient, remote_file_client: AbstractFileClient):
+def save_results(result_paths: list[str], local_file_client: FileClient, remote_file_client: AbstractFileClient):
     """
     Load the results from `remote_file_client`, which may be remote and
     store them on the local file system using `local_file_client`.

@@ -1,7 +1,8 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any, Generic, Iterable, Optional, Tuple, TypeVar, Union
+from typing import Any, Generic, Optional, TypeVar, Union
 from warnings import warn
 
 from numpy.testing import assert_equal
@@ -26,7 +27,7 @@ class ForcefieldParams(Generic[_T]):
     lj_params_intra: _T
 
 
-def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> ForcefieldParams[Tuple[_T, _T]]:
+def combine_params(a: ForcefieldParams[_T], b: ForcefieldParams[_T]) -> ForcefieldParams[tuple[_T, _T]]:
     return ForcefieldParams(
         (a.hb_params, b.hb_params),
         (a.ha_params, b.ha_params),

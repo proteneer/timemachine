@@ -1,5 +1,3 @@
-from typing import List, Tuple
-
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
@@ -25,7 +23,7 @@ def compute_box_center(box: np.ndarray) -> np.ndarray:
     return center
 
 
-def get_bond_list(harmonic_bond_potential: HarmonicBond) -> List[Tuple[int, int]]:
+def get_bond_list(harmonic_bond_potential: HarmonicBond) -> list[tuple[int, int]]:
     """Read off topology from indices of harmonic bond force
 
     Notes
@@ -39,7 +37,7 @@ def get_bond_list(harmonic_bond_potential: HarmonicBond) -> List[Tuple[int, int]
     return bond_list
 
 
-def get_group_indices(bond_list: List[Tuple[int, int]], num_atoms: int) -> List[NDArray]:
+def get_group_indices(bond_list: list[tuple[int, int]], num_atoms: int) -> list[NDArray]:
     """Connected components of bond graph"""
 
     topology = nx.Graph(bond_list)
@@ -60,6 +58,6 @@ def get_group_indices(bond_list: List[Tuple[int, int]], num_atoms: int) -> List[
     return components
 
 
-def compute_intramolecular_distances(coords: NDArray, group_indices: List[NDArray]) -> List[NDArray]:
+def compute_intramolecular_distances(coords: NDArray, group_indices: list[NDArray]) -> list[NDArray]:
     """pairwise distances within each group"""
     return [pdist(coords[inds]) for inds in group_indices]

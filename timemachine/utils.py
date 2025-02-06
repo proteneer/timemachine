@@ -1,4 +1,4 @@
-from typing import Iterator, Sequence
+from collections.abc import Iterator, Sequence
 
 
 def batches(n: int, batch_size: int) -> Iterator[int]:

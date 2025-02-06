@@ -14,9 +14,9 @@ if __name__ == "__main__":
         if not os.path.isfile(path):
             print("No such path:", path)
             sys.exit(1)
-    with open(ref_path, "r") as ifs:
+    with open(ref_path) as ifs:
         ref_ff = ast.literal_eval(ifs.read())
-    with open(comp_path, "r") as ifs:
+    with open(comp_path) as ifs:
         comp_ff = ast.literal_eval(ifs.read())
     ref_keys = set(ref_ff.keys())
     comp_keys = set(comp_ff.keys())

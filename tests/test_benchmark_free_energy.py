@@ -6,7 +6,7 @@ from dataclasses import replace
 from functools import partial
 from importlib import resources
 from itertools import product
-from typing import Callable, Optional, Tuple, TypeVar
+from typing import Callable, Optional, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -37,7 +37,7 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 A = TypeVar("A")
 
 
-def run_with_timing(f: Callable[[], A]) -> Tuple[A, float]:
+def run_with_timing(f: Callable[[], A]) -> tuple[A, float]:
     start_time = time.perf_counter_ns()
     result = f()
     elapsed_ns = time.perf_counter_ns() - start_time
@@ -58,7 +58,7 @@ def hif2a_single_topology_leg(request):
     return setup_hif2a_single_topology_leg(host_name, n_windows, (0.0, 0.2))
 
 
-def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpoints: Tuple[float, float]):
+def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpoints: tuple[float, float]):
     forcefield = Forcefield.load_default()
     host_config: Optional[HostConfig] = None
     assert len(lambda_endpoints) == 2

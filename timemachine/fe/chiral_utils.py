@@ -1,7 +1,8 @@
 import itertools
+from collections.abc import Iterator, Mapping, Sequence
 from enum import Enum
 from functools import partial
-from typing import Callable, Iterator, List, Mapping, Sequence, Set, Tuple
+from typing import Callable
 
 import numpy as np
 from jax import jit
@@ -15,9 +16,9 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.graph_utils import convert_to_nx, enumerate_simple_paths
 from timemachine.potentials.chiral_restraints import U_chiral_atom_batch, pyramidal_volume, torsion_volume
 
-FourTuple = Tuple[int, int, int, int]
+FourTuple = tuple[int, int, int, int]
 
-ChiralConflict = Tuple[FourTuple, FourTuple]
+ChiralConflict = tuple[FourTuple, FourTuple]
 
 
 class ChiralCheckMode(Enum):
@@ -159,7 +160,7 @@ def find_chiral_atoms(mol):
     return chiral_atoms
 
 
-def setup_all_chiral_atom_restr_idxs(mol, conf) -> List[FourTuple]:
+def setup_all_chiral_atom_restr_idxs(mol, conf) -> list[FourTuple]:
     """Apply setup_chiral_atom_restraints to all atoms found by find_chiral_atoms"""
     chiral_atom_set = find_chiral_atoms(mol)
     chiral_atom_restr_idxs = []
@@ -174,7 +175,7 @@ def setup_all_chiral_atom_restr_idxs(mol, conf) -> List[FourTuple]:
 class ChiralRestrIdxSet:
     """Support fast checks of whether a trial 4-tuple is consistent with a set of chiral atom idxs"""
 
-    def __init__(self, restr_idxs: List[FourTuple] | NDArray):
+    def __init__(self, restr_idxs: list[FourTuple] | NDArray):
         self.restr_idxs = restr_idxs
         self.allowed_set, self.disallowed_set = self.expand_symmetries()
 
@@ -183,7 +184,7 @@ class ChiralRestrIdxSet:
         restr_idxs = setup_all_chiral_atom_restr_idxs(mol, conf)
         return ChiralRestrIdxSet(restr_idxs)
 
-    def expand_symmetries(self) -> Tuple[Set[FourTuple], Set[FourTuple]]:
+    def expand_symmetries(self) -> tuple[set[FourTuple], set[FourTuple]]:
         allowed_set = set()
         disallowed_set = set()
 
@@ -214,7 +215,7 @@ def _find_atom_map_chiral_conflicts_one_direction(
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
     mode: ChiralCheckMode = ChiralCheckMode.FLIP,
-) -> Set[ChiralConflict]:
+) -> set[ChiralConflict]:
     conflict_condition_fxn: Callable[[FourTuple], bool]
     if mode == ChiralCheckMode.FLIP:
         conflict_condition_fxn = chiral_set_b.disallows
@@ -264,7 +265,7 @@ def find_atom_map_chiral_conflicts(
     chiral_set_a: ChiralRestrIdxSet,
     chiral_set_b: ChiralRestrIdxSet,
     mode: ChiralCheckMode = ChiralCheckMode.FLIP,
-) -> Set[ChiralConflict]:
+) -> set[ChiralConflict]:
     """
 
     Parameters
@@ -356,7 +357,7 @@ def _find_flipped_torsions(
 
 def setup_find_flipped_planar_torsions(
     mol_a: Chem.rdchem.Mol, mol_b: Chem.rdchem.Mol
-) -> Callable[[Sequence[int]], Iterator[Tuple[FourTuple, FourTuple]]]:
+) -> Callable[[Sequence[int]], Iterator[tuple[FourTuple, FourTuple]]]:
     """Returns a function that enumerates core planar torsions that would be flipped by the given mapping.
 
     A planar torsion is defined here to be a torsion whose central bond is one of
