@@ -103,11 +103,11 @@ void __global__ k_setup_barostat_move(
         return; // Only a single thread needs to perform this operation
     }
     const RealType volume = d_box[0 * 3 + 0] * d_box[1 * 3 + 1] * d_box[2 * 3 + 2];
-    const RealType delta_volume = d_volume_scale[0] * 2 * (rand[0] - 0.5);
     const RealType new_volume = volume + delta_volume;
     if (adaptive && *d_volume_scale == 0.0) {
         *d_volume_scale = 0.01 * volume;
     }
+    const RealType delta_volume = *d_volume_scale * 2 * (rand[0] - 0.5);
     *d_volume = volume;
     *d_volume_delta = delta_volume;
     *d_length_scale = cbrt(new_volume / volume);
