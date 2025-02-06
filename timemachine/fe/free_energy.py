@@ -1286,7 +1286,7 @@ def generate_pair_bar_ulkns(
     assert len(unbound_impls) == len(initial_states[0].potentials)
     kBT = temperature * BOLTZ
     # Construct an empty array
-    state_to_params = np.zeros((len(initial_states), len(initial_states), len(unbound_impls)), dtype=object)
+    energy_by_frames_by_params = np.zeros((len(initial_states), len(initial_states), len(unbound_impls)), dtype=object)
     for i, state in enumerate(initial_states):
         frames = np.array(samples_by_state[i].frames)
         boxes = np.asarray(samples_by_state[i].boxes)
@@ -1311,16 +1311,19 @@ def generate_pair_bar_ulkns(
             Us = Us.T  # Transpose to get energies by params
             us = Us.reshape(len(state_idxs), -1) / kBT
             for p_idx, p_us in zip(state_idxs, us):
-                state_to_params[i, p_idx, j] = p_us
+                energy_by_frames_by_params[i, p_idx, j] = p_us
 
-    uklns = np.empty((len(initial_states) - 1, len(unbound_impls), 2, 2, len(state_to_params[0][0][0])))
+    u_kln_by_component_by_lambda = np.empty(
+        (len(initial_states) - 1, len(unbound_impls), 2, 2, len(energy_by_frames_by_params[0][0][0]))
+    )
     for i, states in enumerate(zip(range(len(initial_states)), range(1, len(initial_states)))):
+        assert len(states) == 2
         for j in range(len(unbound_impls)):
-            for l in range(len(states)):
-                for k in range(len(states)):
-                    # state_to_params is frames of state l to params of k
-                    uklns[i, j, k, l] = state_to_params[states[l]][states[k]][j]
-    return uklns
+            for l in range(2):
+                for k in range(2):
+                    # energy_by_frames_by_params is frames of state l to params of k
+                    u_kln_by_component_by_lambda[i, j, k, l] = energy_by_frames_by_params[states[l]][states[k]][j]
+    return u_kln_by_component_by_lambda
 
 
 def run_sims_hrex(
