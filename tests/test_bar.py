@@ -1,6 +1,5 @@
 from functools import partial
 from pathlib import Path
-from typing import Tuple
 from unittest.mock import patch
 
 import numpy as np
@@ -24,8 +23,8 @@ pytestmark = [pytest.mark.nocuda]
 
 
 def make_gaussian_ukln_example(
-    params_a: Tuple[float, float], params_b: Tuple[float, float], seed: int = 0, n_samples: int = 2000
-) -> Tuple[NDArray, float]:
+    params_a: tuple[float, float], params_b: tuple[float, float], seed: int = 0, n_samples: int = 2000
+) -> tuple[NDArray, float]:
     """Generate 2-state u_kln matrix for a pair of normal distributions."""
 
     def u(mu, sigma, x):

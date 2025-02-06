@@ -1,12 +1,12 @@
 from importlib import resources
-from typing import List, Optional, Set
+from typing import Optional
 
 from rdkit import Chem
 
 from timemachine.fe.utils import get_mol_name, read_sdf
 
 
-def fetch_freesolv(n_mols: Optional[int] = None, exclude_mols: Optional[Set[str]] = None) -> List[Chem.Mol]:
+def fetch_freesolv(n_mols: Optional[int] = None, exclude_mols: Optional[set[str]] = None) -> list[Chem.Mol]:
     """
     Return the (potentially truncated) FreeSolv data set.
 

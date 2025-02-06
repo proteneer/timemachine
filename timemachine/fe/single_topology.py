@@ -1,7 +1,8 @@
 import warnings
+from collections.abc import Collection, Sequence
 from enum import IntEnum
 from functools import partial
-from typing import Any, Collection, Optional, Sequence
+from typing import Any, Optional
 
 import jax
 import jax.numpy as jnp
@@ -314,7 +315,7 @@ def setup_dummy_interactions(
     dummy_group = list(dummy_group)
 
     # dummy group and anchor
-    dga = dummy_group + [root_anchor_atom]
+    dga = [*dummy_group, root_anchor_atom]
 
     for idxs, params in zip(angle_idxs, angle_params):
         if all([a in dga for a in idxs]):

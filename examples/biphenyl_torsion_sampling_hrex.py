@@ -9,8 +9,9 @@
 # $ python biphenyl_torsion_sampling_hrex.py plot
 
 import argparse
+from collections.abc import Iterable
 from dataclasses import replace
-from typing import Iterable, List, Optional, Tuple, cast
+from typing import Optional, cast
 
 import jax
 import matplotlib.pyplot as plt
@@ -41,7 +42,7 @@ def get_potentials(
     intramol_atom_pairs_to_decouple: NDArray,  # (n_pairs, 2)
     atoms_to_decouple_from_env: NDArray,
     lamb: float,
-) -> List[BoundPotential]:
+) -> list[BoundPotential]:
     assert 0.0 <= lamb <= 1.0
 
     if isinstance(top, BaseTopology):
@@ -57,7 +58,7 @@ def get_potentials_vacuum(
     ff_params: ForcefieldParams,
     intramol_atom_pairs_to_decouple: NDArray,
     lamb: float,
-) -> List[BoundPotential]:
+) -> list[BoundPotential]:
     hb_params, hb_pot = top.parameterize_harmonic_bond(ff_params.hb_params)
     ha_params, ha_pot = top.parameterize_harmonic_angle(ff_params.ha_params)
 
@@ -89,7 +90,7 @@ def get_potentials_solvent(
     intramol_atom_pairs_to_decouple: NDArray,
     atoms_to_decouple_from_env: NDArray,
     lamb: float,
-) -> List[BoundPotential]:
+) -> list[BoundPotential]:
     hb_params, hb_pot = top.parameterize_harmonic_bond(ff_params.hb_params)
     ha_params, ha_pot = top.parameterize_harmonic_angle(ff_params.ha_params)
 
@@ -138,7 +139,7 @@ def get_potentials_solvent(
 
 def sample_biphenyl_hrex(
     solvent: bool, min_overlap: float, n_frames_bisection: int, n_frames: int
-) -> Tuple[List[NDArray], List[NDArray], List[float], HREXDiagnostics]:
+) -> tuple[list[NDArray], list[NDArray], list[float], HREXDiagnostics]:
     seed = 2023
 
     md_params = MDParams(

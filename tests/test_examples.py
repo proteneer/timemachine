@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from glob import glob
 from importlib import resources
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -27,7 +27,7 @@ EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
 
 
 def run_example(
-    example_name: str, cli_args: List[str], env: Optional[Dict[str, str]] = None, cwd: Optional[str] = None
+    example_name: str, cli_args: list[str], env: Optional[dict[str, str]] = None, cwd: Optional[str] = None
 ) -> subprocess.CompletedProcess:
     """
     Runs an example script
@@ -65,7 +65,7 @@ def run_example(
     return proc
 
 
-def get_cli_args(config: Dict) -> List[str]:
+def get_cli_args(config: dict) -> list[str]:
     return [(f"--{key}={val}" if val is not None else f"--{key}") for (key, val) in config.items()]
 
 
@@ -81,7 +81,7 @@ def smc_free_solv_path():
         yield temp_dir
 
 
-def get_smc_free_solv_results(result_path: str) -> Tuple[Array, Array]:
+def get_smc_free_solv_results(result_path: str) -> tuple[Array, Array]:
     # return the dG_preds, dG_expts for the given free solv run
     experimental_dGs = {get_mol_name(mol): float(mol.GetProp("dG")) for mol in fetch_freesolv()}
 
@@ -170,7 +170,7 @@ def get_rbfe_edge_list_hif2a_path(seed):
             _ = run_example("rbfe_edge_list.py", get_cli_args(config), cwd=temp_dir)
             return Path(temp_dir)
 
-        with open(hif2a_data / "results_edges_5ns.csv", "r") as fp:
+        with open(hif2a_data / "results_edges_5ns.csv") as fp:
             edges_rows = fp.readlines()
 
         edges_rows_sample = edges_rows[:3]  # keep header and first 2 edges (338 -> 165, 338 -> 215)
@@ -193,7 +193,7 @@ def rbfe_edge_list_hif2a_path():
         yield r
 
 
-def load_simulation_results(path: Path) -> Tuple[SimulationResult, SimulationResult]:
+def load_simulation_results(path: Path) -> tuple[SimulationResult, SimulationResult]:
     with path.open("rb") as fp:
         results = pickle.load(fp)
 

@@ -1,5 +1,3 @@
-from typing import List, Tuple
-
 import numpy as np
 import openmm as mm
 from openmm import unit
@@ -88,7 +86,7 @@ def deserialize_nonbonded_force(force, N):
 
         if initial_q == 0:
             if desired_q == 0:
-                q_scale_factor = 1  # noqa
+                q_scale_factor = 1
             else:
                 raise RuntimeError("No ES scaling factor possible to arrive at desired_q")
         else:
@@ -130,7 +128,7 @@ def deserialize_nonbonded_force(force, N):
     return nb_params, exclusion_idxs, beta, scale_factors
 
 
-def deserialize_system(system: mm.System, cutoff: float) -> Tuple[List[potentials.BoundPotential], List[float]]:
+def deserialize_system(system: mm.System, cutoff: float) -> tuple[list[potentials.BoundPotential], list[float]]:
     """
     Deserialize an OpenMM XML file
 

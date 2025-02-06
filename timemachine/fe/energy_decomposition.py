@@ -1,6 +1,7 @@
 import functools
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Callable, Generic, List, Sequence, TypeVar
+from typing import Callable, Generic, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -10,7 +11,7 @@ from timemachine.lib.custom_ops import Potential
 from timemachine.potentials.types import Params
 
 Frames = TypeVar("Frames")
-Boxes = List[NDArray]
+Boxes = list[NDArray]
 ReducedEnergies = np.ndarray
 Batch_u_fn = Callable[[Frames, Boxes], ReducedEnergies]
 
@@ -28,7 +29,7 @@ def get_batch_u_fns(
     pots: Sequence[Potential],
     params: Sequence[Params],
     temperature: float = DEFAULT_TEMP,
-) -> List[Batch_u_fn]:
+) -> list[Batch_u_fn]:
     """Get a list of functions that take in (coords, boxes), return reduced_potentials
 
     Parameters
@@ -44,7 +45,7 @@ def get_batch_u_fns(
     kBT = temperature * BOLTZ
 
     assert len(pots) == len(params)
-    batch_u_fns: List[Batch_u_fn] = []
+    batch_u_fns: list[Batch_u_fn] = []
     for p, pot in zip(params, pots):
 
         def batch_u_fn(xs: Frames, boxes: Boxes, pot_impl, pot_params) -> ReducedEnergies:
@@ -68,7 +69,7 @@ def get_batch_u_fns(
     return batch_u_fns
 
 
-def compute_energy_decomposed_u_kln(states: List[EnergyDecomposedState]) -> np.ndarray:
+def compute_energy_decomposed_u_kln(states: list[EnergyDecomposedState]) -> np.ndarray:
     """Compute a stack of u_kln matrices, one per energy component
 
     Parameters
