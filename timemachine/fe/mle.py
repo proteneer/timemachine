@@ -276,8 +276,8 @@ def infer_node_vals_and_errs_networkx(
         name = max(component)  # last resort: node names are unique
         return (size, num_expt_refs, name)
 
-    connected_components = sorted(connected_components, key=_sort_key, reverse=True)
-    sg = sg.subgraph(connected_components[0])
+    largest_connected_component = max(connected_components, key=_sort_key)
+    sg = sg.subgraph(largest_connected_component)
 
     # Relabel the nodes with integers {1..n_nodes}
     node_to_idx = {n: idx for idx, n in enumerate(sorted(sg.nodes))}
