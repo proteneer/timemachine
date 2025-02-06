@@ -46,7 +46,7 @@ from timemachine.potentials import (
     make_summed_potential,
 )
 from timemachine.potentials.potential import get_bound_potential_by_type
-from timemachine.utils import batches, pairwise_transform_and_combine
+from timemachine.utils import batches
 
 WATER_SAMPLER_MOVERS = (
     custom_ops.TIBDExchangeMove_f32,
@@ -931,12 +931,6 @@ def run_sims_sequential(
     """
     stored_trajectories = []
 
-    # keep no more than 2 states in memory at once
-    prev_state: Optional[EnergyDecomposedState] = None
-
-    # u_kln matrix (2, 2, n_frames) for each pair of adjacent lambda windows and energy term
-    u_kln_by_component_by_lambda = []
-
     # Ensure that states differ only in their parameters so that we can safely instantiate potentials from the first
     # state and use set_params for efficiency
     for s in initial_states[1:]:
@@ -951,23 +945,15 @@ def run_sims_sequential(
         # keep samples from any requested states in memory
         stored_trajectories.append(traj)
 
-        cur_batch_U_fns = get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature)
+    neighbor_ulkns_by_component = generate_pair_bar_ulkns(
+        initial_states, stored_trajectories, temperature, unbound_impls=unbound_impls
+    )
 
-        state = EnergyDecomposedState(traj.frames, traj.boxes, cur_batch_U_fns)
-
-        # analysis that depends on current and previous state
-        if prev_state:
-            state_pair = [prev_state, state]
-            u_kln_by_component = compute_energy_decomposed_u_kln(state_pair)
-            u_kln_by_component_by_lambda.append(u_kln_by_component)
-
-        prev_state = state
-
-    bar_results = [
-        estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in u_kln_by_component_by_lambda
+    pair_bar_results = [
+        estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in neighbor_ulkns_by_component
     ]
 
-    return PairBarResult(list(initial_states), bar_results), stored_trajectories
+    return PairBarResult(list(initial_states), pair_bar_results), stored_trajectories
 
 
 class MinOverlapWarning(UserWarning):
@@ -1279,6 +1265,72 @@ def compute_u_kn(trajs, initial_states) -> tuple[NDArray, NDArray]:
     return u_kn, np.array(N_k)
 
 
+def generate_pair_bar_ulkns(
+    initial_states: Sequence[InitialState],
+    samples_by_state: Sequence[Trajectory],
+    temperature: float,
+    unbound_impls: Sequence[custom_ops.Potential] | None,
+) -> NDArray:
+    """Generate pair bair u_klns.
+    This is a specialized variant of generating u_klns, only loading each set of frames into memory once.
+    Each set of frames is loaded once then all of the parameters of interest are run in a batch.
+    This improves throughput for potentials that use Neighborlists, as there are at most len(frames) neighborlist
+    rebuilds, rather than 3 * len(frames).
+
+    Returns
+    -------
+        u_klns: np.array[len(initial_states) - 1, len(unbound_impls), 2, 2, n_frames]
+    """
+
+    assert len(initial_states) > 0
+    assert len(initial_states) == len(samples_by_state)
+    if unbound_impls is None:
+        unbound_impls = [pot.potential.to_gpu(np.float32).unbound_impl for pot in initial_states[0].potentials]
+    assert len(unbound_impls) == len(initial_states[0].potentials)
+    kBT = temperature * BOLTZ
+    # Construct an empty array
+    energies_by_frames_by_params = np.zeros(
+        (len(initial_states), len(initial_states), len(unbound_impls)), dtype=object
+    )
+    for i, state in enumerate(initial_states):
+        frames = np.array(samples_by_state[i].frames)
+        boxes = np.asarray(samples_by_state[i].boxes)
+
+        state_idxs = []
+        if i > 0:
+            state_idxs.append(i - 1)
+        state_idxs.append(i)
+        if i < len(initial_states) - 1:
+            state_idxs.append(i + 1)
+        for j, pot in enumerate(state.potentials):
+            params = np.array([initial_states[idx].potentials[j].params for idx in state_idxs])
+            _, _, Us = unbound_impls[j].execute_batch(
+                frames,
+                params,
+                boxes,
+                compute_du_dx=False,
+                compute_du_dp=False,
+                compute_u=True,
+            )
+
+            Us = Us.T  # Transpose to get energies by params
+            us = Us.reshape(len(state_idxs), -1) / kBT
+            for p_idx, p_us in zip(state_idxs, us):
+                energies_by_frames_by_params[i, p_idx, j] = p_us
+
+    u_kln_by_component_by_lambda = np.empty(
+        (len(initial_states) - 1, len(unbound_impls), 2, 2, len(energies_by_frames_by_params[0][0][0]))
+    )
+    for i, states in enumerate(zip(range(len(initial_states)), range(1, len(initial_states)))):
+        assert len(states) == 2
+        for j in range(len(unbound_impls)):
+            for l in range(2):
+                for k in range(2):
+                    # energies_by_frames_by_params is frames of state l to params of k
+                    u_kln_by_component_by_lambda[i, j, k, l] = energies_by_frames_by_params[states[l]][states[k]][j]
+    return u_kln_by_component_by_lambda
+
+
 def run_sims_hrex(
     initial_states: Sequence[InitialState],
     md_params: MDParams,
@@ -1480,30 +1532,14 @@ def run_sims_hrex(
     assert isinstance(potential, custom_ops.SummedPotential)
     unbound_impls = potential.get_potentials()
 
-    def make_energy_decomposed_state(
-        results: tuple[StoredArrays, list[NDArray], InitialState],
-    ) -> EnergyDecomposedState[StoredArrays]:
-        frames, boxes, initial_state = results
-        # Reuse the existing unbound potentials already constructed to make a batch Us fn
-        return EnergyDecomposedState(
-            frames,
-            boxes,
-            get_batch_u_fns(unbound_impls, [p.params for p in initial_state.potentials], temperature),
-        )
-
-    results_by_state = [
-        (samples.frames, samples.boxes, initial_state)
-        for samples, initial_state in zip(samples_by_state, initial_states)
-    ]
-
-    bar_results = list(
-        pairwise_transform_and_combine(
-            results_by_state,
-            make_energy_decomposed_state,
-            lambda s1, s2: estimate_free_energy_bar(compute_energy_decomposed_u_kln([s1, s2]), temperature),
-        )
+    neighbor_ulkns_by_component = generate_pair_bar_ulkns(
+        initial_states, samples_by_state, temperature, unbound_impls=unbound_impls
     )
+
+    pair_bar_results = [
+        estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in neighbor_ulkns_by_component
+    ]
 
     diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
 
-    return PairBarResult(list(initial_states), bar_results), samples_by_state, diagnostics
+    return PairBarResult(list(initial_states), pair_bar_results), samples_by_state, diagnostics
