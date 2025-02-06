@@ -130,9 +130,9 @@ void __global__ k_decide_move(
     const __int128 *__restrict__ d_init_u,       // [1]
     const __int128 *__restrict__ d_final_u,      // [1]
     double *__restrict__ d_box,                  // [3*3]
-    const double *__restrict__ d_box_output,     // [3*3]
+    const double *__restrict__ d_box_proposed,   // [3*3]
     double *__restrict__ d_x,                    // [N*3]
-    const double *__restrict__ d_x_output,       // [N*3]
+    const double *__restrict__ d_x_proposed,     // [N*3]
     int *__restrict__ num_accepted,              // [1]
     int *__restrict__ num_attempted              // [1]
 ) {
@@ -177,12 +177,12 @@ void __global__ k_decide_move(
         // If the mc move was accepted copy all of the data into place
 
         if (idx < 9) {
-            d_box[idx] = d_box_output[idx];
+            d_box[idx] = d_box_proposed[idx];
         }
 
 #pragma unroll 3
         for (int i = 0; i < 3; i++) {
-            d_x[idx * 3 + i] = d_x_output[idx * 3 + i];
+            d_x[idx * 3 + i] = d_x_proposed[idx * 3 + i];
         }
         idx += gridDim.x * blockDim.x;
     }

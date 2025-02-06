@@ -54,10 +54,10 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     cudaSafeMalloc(&d_rand_, RANDOM_BATCH_SIZE * 2 * sizeof(*d_rand_));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed_));
 
-    cudaSafeMalloc(&d_x_after_, N_ * 3 * sizeof(*d_x_after_));
-    cudaSafeMalloc(&d_box_after_, 3 * 3 * sizeof(*d_box_after_));
+    cudaSafeMalloc(&d_x_proposed_, N_ * 3 * sizeof(*d_x_proposed_));
+    cudaSafeMalloc(&d_box_proposed_, 3 * 3 * sizeof(*d_box_proposed_));
     cudaSafeMalloc(&d_u_buffer_, bps_.size() * sizeof(*d_u_buffer_));
-    cudaSafeMalloc(&d_u_after_buffer_, bps_.size() * sizeof(*d_u_after_buffer_));
+    cudaSafeMalloc(&d_u_proposed_buffer_, bps_.size() * sizeof(*d_u_proposed_buffer_));
 
     cudaSafeMalloc(&d_init_u_, 1 * sizeof(*d_init_u_));
     cudaSafeMalloc(&d_final_u_, 1 * sizeof(*d_final_u_));
@@ -99,13 +99,13 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
 };
 
 template <typename RealType> MonteCarloBarostat<RealType>::~MonteCarloBarostat() {
-    gpuErrchk(cudaFree(d_x_after_));
+    gpuErrchk(cudaFree(d_x_proposed_));
     gpuErrchk(cudaFree(d_centroids_));
     gpuErrchk(cudaFree(d_atom_idxs_));
     gpuErrchk(cudaFree(d_mol_idxs_));
     gpuErrchk(cudaFree(d_mol_offsets_));
-    gpuErrchk(cudaFree(d_box_after_));
-    gpuErrchk(cudaFree(d_u_after_buffer_));
+    gpuErrchk(cudaFree(d_box_proposed_));
+    gpuErrchk(cudaFree(d_u_proposed_buffer_));
     gpuErrchk(cudaFree(d_u_buffer_));
     gpuErrchk(cudaFree(d_init_u_));
     gpuErrchk(cudaFree(d_final_u_));
@@ -184,8 +184,9 @@ void MonteCarloBarostat<RealType>::move(
     gpuErrchk(cudaPeekAtLastError());
 
     // Create duplicates of the coords/box that we can modify
-    gpuErrchk(cudaMemcpyAsync(d_x_after_, d_x, N_ * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-    gpuErrchk(cudaMemcpyAsync(d_box_after_, d_box, 3 * 3 * sizeof(*d_box_after_), cudaMemcpyDeviceToDevice, stream));
+    gpuErrchk(cudaMemcpyAsync(d_x_proposed_, d_x, N_ * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
+    gpuErrchk(
+        cudaMemcpyAsync(d_box_proposed_, d_box, 3 * 3 * sizeof(*d_box_proposed_), cudaMemcpyDeviceToDevice, stream));
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     // TBD: For larger systems (20k >) may be better to reduce the number of blocks, rather than
@@ -194,16 +195,16 @@ void MonteCarloBarostat<RealType>::move(
     const int blocks = ceil_divide(num_grouped_atoms_, tpb);
 
     k_find_group_centroids<RealType>
-        <<<blocks, tpb, 0, stream>>>(num_grouped_atoms_, d_x_after_, d_atom_idxs_, d_mol_idxs_, d_centroids_);
+        <<<blocks, tpb, 0, stream>>>(num_grouped_atoms_, d_x_proposed_, d_atom_idxs_, d_mol_idxs_, d_centroids_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Scale centroids
     k_rescale_positions<RealType><<<blocks, tpb, 0, stream>>>(
         num_grouped_atoms_,
-        d_x_after_,
+        d_x_proposed_,
         d_length_scale_,
         d_box,
-        d_box_after_, // Box will be rescaled by length_scale
+        d_box_proposed_, // Box will be rescaled by length_scale
         d_atom_idxs_,
         d_mol_idxs_,
         d_mol_offsets_,
@@ -213,8 +214,9 @@ void MonteCarloBarostat<RealType>::move(
     runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
     accumulate_energy(bps_.size(), d_u_buffer_, d_init_u_, stream);
 
-    runner_.execute_potentials(bps_, N_, d_x_after_, d_box_after_, nullptr, nullptr, d_u_after_buffer_, stream);
-    accumulate_energy(bps_.size(), d_u_after_buffer_, d_final_u_, stream);
+    runner_.execute_potentials(
+        bps_, N_, d_x_proposed_, d_box_proposed_, nullptr, nullptr, d_u_proposed_buffer_, stream);
+    accumulate_energy(bps_.size(), d_u_proposed_buffer_, d_final_u_, stream);
 
     double pressure = pressure_ * AVOGADRO * 1e-25;
     const double kT = BOLTZ * temperature_;
@@ -232,9 +234,9 @@ void MonteCarloBarostat<RealType>::move(
         d_init_u_,
         d_final_u_,
         d_box,
-        d_box_after_,
+        d_box_proposed_,
         d_x,
-        d_x_after_,
+        d_x_proposed_,
         d_num_accepted_,
         d_num_attempted_);
     gpuErrchk(cudaPeekAtLastError());
