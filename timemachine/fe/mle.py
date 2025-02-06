@@ -265,6 +265,19 @@ def infer_node_vals_and_errs_networkx(
     if not sg.nodes:
         raise ValueError("Empty graph after removing edges without predictions")
 
+    # extract largest connected component
+    connected_components = list(nx.connected_components(sg.to_undirected()))
+
+    def _sort_key(component):
+        """break ties using # expt. refs in case more than one component has the same size"""
+        size = len(component)
+        num_expt_refs = sum(sg.nodes[c].get(ref_node_val_prop) is not None for c in component)
+        name = max(component)  # last resort: node names are unique
+        return (size, num_expt_refs, name)
+
+    largest_connected_component = max(connected_components, key=_sort_key)
+    sg = sg.subgraph(largest_connected_component)
+
     # Relabel the nodes with integers {1..n_nodes}
     node_to_idx = {n: idx for idx, n in enumerate(sorted(sg.nodes))}
     idx_to_node = {idx: n for n, idx in node_to_idx.items()}
