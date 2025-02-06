@@ -482,6 +482,7 @@ def instance_to_nx(instance):
 
 
 def compare_inferred_and_ref_dgs(inferred_dgs: dict, node_vals, mse_thresh=1e-5):
+    """assert inferred_dgs agree with node_vals (ignoring an additive offset)"""
     nodes = sorted(inferred_dgs.keys())
     ref_node = nodes[0]
     x = []
