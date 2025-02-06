@@ -174,7 +174,13 @@ void MonteCarloBarostat<RealType>::move(
     gpuErrchk(cudaMemsetAsync(d_centroids_, 0, num_molecules * 3 * sizeof(*d_centroids_), stream));
 
     k_setup_barostat_move<RealType><<<1, 1, 0, stream>>>(
-        adaptive_scaling_enabled_, d_rand_ + random_offset, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
+        adaptive_scaling_enabled_,
+        d_rand_ + random_offset,
+        d_box,
+        d_volume_delta_,
+        d_volume_scale_,
+        d_length_scale_,
+        d_volume_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Create duplicates of the coords/box that we can modify
@@ -220,6 +226,7 @@ void MonteCarloBarostat<RealType>::move(
         kT,
         pressure,
         d_rand_ + random_offset,
+        d_volume_,
         d_volume_delta_,
         d_volume_scale_,
         d_init_u_,
