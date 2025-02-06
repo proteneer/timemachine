@@ -1355,7 +1355,7 @@ def test_environment_bcc_full_protein(protein_path, is_nn, env_nn_args):
     else:
         partial_cc = nonbonded.EnvironmentBCCPartialHandler(patterns, params, None)
 
-    pbcc2 = partial_cc.get_env_handle(topology, ff)
+    pbcc2 = partial_cc.get_env_handle(host_config.omm_topology, ff)
     np.testing.assert_array_equal(pbcc.parameterize(params), pbcc2.parameterize(params))
 
     def loss_fn2(bcc_params):
