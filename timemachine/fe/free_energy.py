@@ -944,11 +944,13 @@ def run_sims_sequential(
         # keep samples from any requested states in memory
         stored_trajectories.append(traj)
 
-    neighbor_ulkns = generate_pair_bar_ulkns(
+    neighbor_ulkns_by_component = generate_pair_bar_ulkns(
         initial_states, stored_trajectories, temperature, unbound_impls=unbound_impls
     )
 
-    pair_bar_results = [estimate_free_energy_bar(u_kln, temperature) for u_kln in neighbor_ulkns]
+    pair_bar_results = [
+        estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in neighbor_ulkns_by_component
+    ]
 
     return PairBarResult(list(initial_states), pair_bar_results), stored_trajectories
 
@@ -1529,9 +1531,13 @@ def run_sims_hrex(
     assert isinstance(potential, custom_ops.SummedPotential)
     unbound_impls = potential.get_potentials()
 
-    neighbor_ulkns = generate_pair_bar_ulkns(initial_states, samples_by_state, temperature, unbound_impls=unbound_impls)
+    neighbor_ulkns_by_component = generate_pair_bar_ulkns(
+        initial_states, samples_by_state, temperature, unbound_impls=unbound_impls
+    )
 
-    pair_bar_results = [estimate_free_energy_bar(u_kln, temperature) for u_kln in neighbor_ulkns]
+    pair_bar_results = [
+        estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in neighbor_ulkns_by_component
+    ]
 
     diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
 
