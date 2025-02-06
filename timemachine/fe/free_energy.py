@@ -1104,7 +1104,7 @@ def run_sims_bisection(
         result = compute_intermediate_result(lambdas)
         results.append(result)
     else:
-        if min_overlap is not None:
+        if min_overlap is not None and np.min(result.overlaps) < min_overlap:
             warn(
                 f"Reached n_bisections={n_bisections} iterations without achieving min_overlap={min_overlap}. "
                 f"The minimum BAR overlap was {np.min(result.overlaps)}.",
