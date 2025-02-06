@@ -1,7 +1,7 @@
 import multiprocessing
 from abc import ABC
 from dataclasses import dataclass, fields
-from typing import Generic, List, TypeVar, Union
+from typing import Generic, TypeVar, Union
 
 import jax
 import numpy as np
@@ -99,10 +99,10 @@ class AbstractSystem(ABC):
 
         return U_fn
 
-    def get_U_fns(self) -> List[BoundPotential]:
+    def get_U_fns(self) -> list[BoundPotential]:
         """
         Return a list of bound potential"""
-        potentials: List[BoundPotential] = []
+        potentials: list[BoundPotential] = []
         for f in fields(self):
             bp = getattr(self, f.name)
             # (TODO): chiral_bonds currently disabled

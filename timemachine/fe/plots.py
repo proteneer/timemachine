@@ -1,6 +1,7 @@
 import io
 import warnings
-from typing import Callable, Sequence, Tuple, cast
+from collections.abc import Sequence
+from typing import Callable, cast
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -325,7 +326,7 @@ def plot_fwd_reverse_predictions(
     plt.tight_layout()
 
 
-def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[float, float] = (13, 10), prefix: str = ""):
+def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: tuple[float, float] = (13, 10), prefix: str = ""):
     """Plot matrix of chiral restraint energies as a heatmap.
 
     For use with the outputs of timemachine.fe.chiral_utils.make_chiral_flip_heatmaps.
@@ -349,7 +350,7 @@ def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[floa
 
 def plot_hrex_transition_matrix(
     transition_probability: NDArray,
-    figsize: Tuple[float, float] = (13, 10),
+    figsize: tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
     format_annotation: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}",
     format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}%",
@@ -406,7 +407,7 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
 def plot_hrex_replica_state_distribution_heatmap(
     cumulative_replica_state_counts: NDArray,
     lambdas: Sequence[float],
-    figsize: Tuple[float, float] = (13, 10),
+    figsize: tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
     format_annotation: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}",
     format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}%",

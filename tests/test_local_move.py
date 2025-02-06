@@ -81,7 +81,7 @@ def assert_no_drift(
     if avg_at_start == avg_at_end:
         assert not np.all(expected_selection_fraction_traj == avg_at_end), "Observable values all identical"
 
-    percent_diff = np.abs(((avg_at_start - avg_at_end) / avg_at_start))
+    percent_diff = np.abs((avg_at_start - avg_at_end) / avg_at_start)
     if percent_diff > threshold:
         msg = f"""
             observable avg over start frames = {avg_at_start:.3f}

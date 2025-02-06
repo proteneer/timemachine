@@ -1,6 +1,6 @@
 # adapted from https://github.com/proteneer/timemachine/blob/7d6099b0f5b4a2d0b26c3edc7a91c18f7a526c00/md/experimental/smc.py
 
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable
 
 import numpy as np
 from jax import numpy as jnp
@@ -11,7 +11,7 @@ from scipy.special import logsumexp
 
 # type annotations
 Sample = Any
-Samples = List[Sample]  # e.g. List[CoordsVelBox]
+Samples = list[Sample]  # e.g. list[CoordsVelBox]
 
 Lambda = float
 LogWeight = float
@@ -24,8 +24,8 @@ BatchPropagator = Callable[[Samples, Lambda], Samples]
 BatchLogProb = Callable[[Samples, Lambda], LogWeights]
 BatchLogProbASMC = Callable[[Samples, Lambda, First], LogWeights]
 
-Resampler = Callable[[LogWeights], Tuple[IndexArray, LogWeights]]
-ResultDict = Dict[str, Any]
+Resampler = Callable[[LogWeights], tuple[IndexArray, LogWeights]]
+ResultDict = dict[str, Any]
 
 
 def sequential_monte_carlo(
@@ -406,7 +406,7 @@ def refine_samples(samples: Samples, log_weights: LogWeights, propagate: BatchPr
 
 def get_endstate_samples_from_smc_result(
     smc_result: ResultDict, propagate: BatchPropagator, lambdas: Array
-) -> Tuple[Samples, Samples]:
+) -> tuple[Samples, Samples]:
     """unweighted approximate samples from lambdas[0] and lambdas[-1]
 
     TODO: include lambdas array in smc_result dict? Some other way to match up {lambdas[0], lambdas[-1]} to {0.0, 1.0}?

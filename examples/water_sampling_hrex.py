@@ -1,7 +1,6 @@
 # Water sampling script that uses HREX to generate fully-interacting end-state distributions
 import argparse
 import sys
-from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -54,8 +53,8 @@ def estimate_relative_free_energy_hrex_bb(
 
 def plot_hrex_water_transitions(
     sim_res: SimulationResult,
-    lamb_schedule: List[float],
-    ligand_idxs: List[int],
+    lamb_schedule: list[float],
+    ligand_idxs: list[int],
 ):
     plt.figure(figsize=(12, 6))
     for lamb_idx, lamb in enumerate(lamb_schedule):
