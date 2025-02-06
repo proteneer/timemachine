@@ -9,7 +9,7 @@ namespace timemachine {
 template <typename RealType>
 CentroidRestraint<RealType>::CentroidRestraint(
     const std::vector<int> &group_a_idxs, const std::vector<int> &group_b_idxs, const double kb, const double b0)
-    : N_A_(group_a_idxs.size()), N_B_(group_b_idxs.size()), kb_(kb), b0_(b0), sum_storage_bytes_(0) {
+    : N_A_(group_a_idxs.size()), N_B_(group_b_idxs.size()), kb_(kb), b0_(b0) {
 
     cudaSafeMalloc(&d_group_a_idxs_, N_A_ * sizeof(*d_group_a_idxs_));
     gpuErrchk(cudaMemcpy(d_group_a_idxs_, &group_a_idxs[0], N_A_ * sizeof(*d_group_a_idxs_), cudaMemcpyHostToDevice));
