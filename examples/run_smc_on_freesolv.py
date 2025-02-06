@@ -1,7 +1,6 @@
 import argparse
 import pickle
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 from rdkit import Chem
@@ -76,7 +75,7 @@ def get_full_traj_path(mol_id: str) -> str:
 def save_smc_result(
     file_client: AbstractFileClient,
     mol: Chem.rdchem.Mol,
-    smc_result: Dict,
+    smc_result: dict,
     cmd_args: argparse.Namespace,
     save_full_trajectories=False,
 ):
@@ -176,8 +175,8 @@ def run_on_freesolv_mol(
 
 
 def run_on_mols(
-    file_client: AbstractFileClient, mols: List[Chem.rdchem.Mol], ff: Forcefield, cmd_args: argparse.Namespace
-) -> List[str]:
+    file_client: AbstractFileClient, mols: list[Chem.rdchem.Mol], ff: Forcefield, cmd_args: argparse.Namespace
+) -> list[str]:
     results = []
     for mol in mols:
         results.append(run_on_freesolv_mol(file_client, mol, ff, cmd_args))

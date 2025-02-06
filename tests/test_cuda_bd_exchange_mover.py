@@ -1,6 +1,5 @@
 from dataclasses import replace
 from importlib import resources
-from typing import List
 
 import numpy as np
 import pytest
@@ -26,7 +25,7 @@ from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topolo
 
 
 def verify_bias_deletion_moves(
-    mol_groups: List,
+    mol_groups: list,
     bdem,
     ref_bdem: RefBDExchangeMove,
     conf: NDArray,

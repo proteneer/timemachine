@@ -1,4 +1,4 @@
-from typing import Iterable, Tuple
+from collections.abc import Iterable
 
 import numpy as np
 import pytest
@@ -16,8 +16,8 @@ pytestmark = [pytest.mark.memcheck]
 
 
 def filter_valid_exclusions(
-    num_atoms: int, exclusions: Iterable[Tuple[int, int]], scales: Iterable[Tuple[float, float]]
-) -> Tuple[np.ndarray, np.ndarray]:
+    num_atoms: int, exclusions: Iterable[tuple[int, int]], scales: Iterable[tuple[float, float]]
+) -> tuple[np.ndarray, np.ndarray]:
     filtered_pairs = (((i, j), scales) for (i, j), scales in zip(exclusions, scales) if i < num_atoms and j < num_atoms)
     idxs, scales = zip(*filtered_pairs)
     return np.array(idxs, dtype=np.int32), np.array(scales)

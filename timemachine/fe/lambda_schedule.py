@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -23,7 +23,7 @@ def interpolate_pre_optimized_protocol(pre_optimized_protocol: NDArray, num_wind
 
 
 def bisection_lambda_schedule(
-    num_windows: int, lambda_interval: Tuple[float, float] = (0.0, 1.0)
+    num_windows: int, lambda_interval: tuple[float, float] = (0.0, 1.0)
 ) -> NDArray[np.float64]:
     """
     Construct a lambda schedule for setting up initial states that will be used for the basis of `run_sims_bisection`.

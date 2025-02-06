@@ -1,4 +1,4 @@
-from typing import Callable, Tuple
+from typing import Callable
 
 import numpy as np
 import pytest
@@ -15,7 +15,7 @@ class RWMH1D(MonteCarloMove[float]):
         self.log_q = log_q
         self.proposal_radius = proposal_radius
 
-    def propose(self, x: float) -> Tuple[float, float]:
+    def propose(self, x: float) -> tuple[float, float]:
         x_prop = np.random.normal(x, self.proposal_radius)
         log_q_diff = self.log_q(x_prop) - self.log_q(x)
         log_acceptance_probability = np.minimum(log_q_diff, 0.0)

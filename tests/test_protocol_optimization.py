@@ -138,7 +138,7 @@ def summarize_protocol(lambdas, dist_fxn):
     neighbor_distances = np.array(neighbor_distances)
     min_dist, max_dist = np.min(neighbor_distances), np.max(neighbor_distances)
     msg = f"\t# states = {K}, min(d(i,i+1)) = {min_dist:.3f}, max(d(i,i+1)) = {max_dist:.3f}"
-    msg += f"\t{str(neighbor_distances)}"
+    msg += f"\t{neighbor_distances!s}"
     print(msg)
     return neighbor_distances
 

@@ -1,6 +1,7 @@
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeAlias
+from typing import Any, Callable, Optional, TypeAlias
 
 import jax
 import jax.numpy as jnp
@@ -76,7 +77,7 @@ def check_force_norm(forces: NDArray, threshold: float = MAX_FORCE_NORM):
         raise MinimizationError(message)
 
 
-def parameterize_system(topo, ff: Forcefield, lamb: float) -> Tuple[List[Potential], List[NDArray]]:
+def parameterize_system(topo, ff: Forcefield, lamb: float) -> tuple[list[Potential], list[NDArray]]:
     # setup the parameter handlers for the ligand
     ff_params = ff.get_params()
     params_potential_pairs = [
@@ -95,12 +96,12 @@ def parameterize_system(topo, ff: Forcefield, lamb: float) -> Tuple[List[Potenti
     return [pot for (_, pot) in params_potential_pairs], [params for (params, _) in params_potential_pairs]
 
 
-def flatten_params(params: List[NDArray]) -> NDArray:
+def flatten_params(params: list[NDArray]) -> NDArray:
     return np.concatenate([p.reshape(-1) for p in params])
 
 
 def summed_potential_bound_impl_from_potentials_and_params(
-    potentials: List[Potential], params: List[NDArray]
+    potentials: list[Potential], params: list[NDArray]
 ) -> custom_ops.BoundPotential:
     flat_params = flatten_params(params)
     return SummedPotential(potentials, params).bind(flat_params).to_gpu(precision=np.float32).bound_impl
@@ -156,10 +157,10 @@ def fire_minimize(
 
 
 def pre_equilibrate_host(
-    mols: List[Chem.Mol],
+    mols: list[Chem.Mol],
     host_config: HostConfig,
     ff: Forcefield,
-    mol_coords: Optional[List[NDArray]] = None,
+    mol_coords: Optional[list[NDArray]] = None,
     minimizer_steps_per_window: int = 500,
     minimizer_windows: int = 2,
     minimizer_max_lambda: float = 0.1,
@@ -168,7 +169,7 @@ def pre_equilibrate_host(
     temperature: float = DEFAULT_TEMP,
     barostat_interval: int = 5,
     seed: int = 2024,
-) -> Tuple[NDArray, NDArray]:
+) -> tuple[NDArray, NDArray]:
     """pre_equilibrate_host is a utility function that performs minimization than some amount of equilibration.
 
     The intention of this function is to resolve any potential clashes in the system, then to equilibrate the box size, all while
@@ -307,10 +308,10 @@ def pre_equilibrate_host(
 
 
 def fire_minimize_host(
-    mols: List[Chem.Mol],
+    mols: list[Chem.Mol],
     host_config: HostConfig,
     ff: Forcefield,
-    mol_coords: Optional[List[NDArray]] = None,
+    mol_coords: Optional[list[NDArray]] = None,
     n_steps_per_window: int = 500,
     max_lambda: float = 0.1,
     n_windows: int = 2,
@@ -368,10 +369,10 @@ def fire_minimize_host(
 
 
 def make_host_du_dx_fxn(
-    mols: List[Chem.Mol],
+    mols: list[Chem.Mol],
     host_config: HostConfig,
     ff: Forcefield,
-    mol_coords: Optional[List[NDArray]] = None,
+    mol_coords: Optional[list[NDArray]] = None,
     lamb: float = 0.0,
 ):
     """construct function to compute du_dx w.r.t. host coords, given fixed mols and box"""
@@ -426,10 +427,10 @@ def make_host_du_dx_fxn(
 
 
 def equilibrate_host_barker(
-    mols: List[Chem.Mol],
+    mols: list[Chem.Mol],
     host_config: HostConfig,
     ff: Forcefield,
-    mol_coords: Optional[List[NDArray]] = None,
+    mol_coords: Optional[list[NDArray]] = None,
     temperature: float = DEFAULT_TEMP,
     proposal_stddev: float = 0.0001,
     n_steps: int = 1000,
@@ -497,12 +498,12 @@ def get_val_and_grad_fn(bps: Sequence[BoundPotential], box: NDArray, precision=n
 
 
 def wrap_val_and_grad_with_positional_restraint(
-    val_and_grad_fn: Callable[[NDArray], Tuple[float, NDArray]],
+    val_and_grad_fn: Callable[[NDArray], tuple[float, NDArray]],
     x0: NDArray,
     box0: NDArray,
     free_idxs: NDArray,
     k: float,
-) -> Callable[[NDArray], Tuple[float, NDArray]]:
+) -> Callable[[NDArray], tuple[float, NDArray]]:
     restraint_val_and_grad = jax.value_and_grad(harmonic_positional_restraint, argnums=1)
 
     starting_free = np.array(x0[free_idxs])
@@ -518,7 +519,7 @@ def wrap_val_and_grad_with_positional_restraint(
 
 
 def scipy_minimize(
-    x0: NDArray, val_and_grad_fn: Callable[[NDArray], Tuple[float, NDArray]], config: ScipyMinimizationConfig
+    x0: NDArray, val_and_grad_fn: Callable[[NDArray], tuple[float, NDArray]], config: ScipyMinimizationConfig
 ):
     final_shape = x0.shape
 
@@ -545,8 +546,8 @@ def scipy_minimize(
 def local_minimize(
     x0: NDArray,
     box0: NDArray,
-    val_and_grad_fn: Callable[[NDArray], Tuple[float, NDArray]],
-    local_idxs: List[int] | NDArray,
+    val_and_grad_fn: Callable[[NDArray], tuple[float, NDArray]],
+    local_idxs: list[int] | NDArray,
     minimizer_config: MinimizationConfig,
     verbose: bool = True,
     assert_energy_decreased: bool = True,
