@@ -294,6 +294,72 @@ def test_barostat_is_deterministic():
     assert compute_box_volume(atm_box) == compute_box_volume(ctxt.get_box())
 
 
+def test_barostat_is_deterministic_on_large_systems():
+    """Verify that the barostat results in the same box size shift after a fixed number of steps
+    This is important to debugging as well as providing the ability to replicate
+    simulations.
+
+    This test is not reliable. It tests a race condition in which
+    """
+    temperature = DEFAULT_TEMP
+    timestep = 1.5e-3
+    barostat_interval = 3
+    collision_rate = 1.0
+    seed = 2021
+    np.random.seed(seed)
+
+    pressure = DEFAULT_PRESSURE
+
+    mol_a, _, _ = get_hif2a_ligand_pair_single_topology()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    # Build a large system, to test a race condition in the barostat.
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
+        mol_a, ff, box_width=10.0, lamb=1.0, minimize_energy=False
+    )
+
+    # get list of molecules for barostat by looking at bond table
+    harmonic_bond_potential = get_potential_by_type(unbound_potentials, HarmonicBond)
+    bond_list = get_bond_list(harmonic_bond_potential)
+    group_indices = get_group_indices(bond_list, len(masses))
+
+    u_impls = []
+    for params, unbound_pot in zip(sys_params, unbound_potentials):
+        bp = unbound_pot.bind(params)
+        bp_impl = bp.to_gpu(precision=np.float32).bound_impl
+        u_impls.append(bp_impl)
+
+    integrator = LangevinIntegrator(
+        temperature,
+        timestep,
+        collision_rate,
+        masses,
+        seed,
+    )
+
+    iterations = 1000
+
+    v_0 = sample_velocities(masses, temperature, seed)
+
+    baro = custom_ops.MonteCarloBarostat(
+        coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
+    )
+
+    ctxt = custom_ops.Context(coords, v_0, box, integrator.impl(), u_impls, movers=[baro])
+    ctxt.multiple_steps(iterations * barostat_interval)
+    atm_box = ctxt.get_box()
+    # Verify that the volume of the box has changed
+    assert compute_box_volume(atm_box) != compute_box_volume(box)
+
+    baro = custom_ops.MonteCarloBarostat(
+        coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
+    )
+    ctxt = custom_ops.Context(coords, v_0, box, integrator.impl(), u_impls, movers=[baro])
+    ctxt.multiple_steps(iterations * barostat_interval)
+    # Verify that we get back bitwise reproducible boxes
+    assert compute_box_volume(atm_box) == compute_box_volume(ctxt.get_box())
+
+
 def test_barostat_varying_pressure():
     temperature = DEFAULT_TEMP
     timestep = 1.5e-3
