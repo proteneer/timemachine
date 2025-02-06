@@ -139,7 +139,6 @@ setup(
             "**/*.hpp",
             "**/*.cpp",
             "CMakeLists.txt",
-            "generate_stubs",
         ],
     },
     project_urls={
