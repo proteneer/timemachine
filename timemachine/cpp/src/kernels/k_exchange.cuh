@@ -3,6 +3,7 @@
 #include "k_fixed_point.cuh"
 #include "k_logsumexp.cuh"
 #include <assert.h>
+#include <cub/cub.cuh>
 
 namespace timemachine {
 
@@ -208,7 +209,12 @@ void __global__ k_set_sampled_energy_block(
     const RealType *__restrict__ per_atom_energies,
     __int128 *__restrict__ intermediate_accum // [batch_size, ceil_divide(N, THREADS_PER_BLOCK)]
 ) {
-    __shared__ __int128 accumulators[THREADS_PER_BLOCK];
+    __int128 accumulator;
+
+    using BlockReduce = cub::BlockReduce<__int128, THREADS_PER_BLOCK>;
+
+    // Allocate shared memory for BlockReduce
+    __shared__ typename BlockReduce::TempStorage temp_storage;
 
     int idx_in_batch = blockIdx.y;
 
@@ -218,7 +224,7 @@ void __global__ k_set_sampled_energy_block(
 
         int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
         // Zero all of the accumulators
-        __int128 accumulator = 0;
+        accumulator = 0;
         while (atom_idx < N) {
             if (atom_idx < min_atom_idx || atom_idx > max_atom_idx) {
                 for (int i = idx_in_batch * mol_size; i < (idx_in_batch + 1) * mol_size; i++) {
@@ -227,11 +233,11 @@ void __global__ k_set_sampled_energy_block(
             }
             atom_idx += gridDim.x * blockDim.x;
         }
-        accumulators[threadIdx.x] = accumulator;
+        // Sum's return value is only valid in thread 0
+        __int128 aggregate = BlockReduce(temp_storage).Sum(accumulator);
         __syncthreads();
-        block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
         if (threadIdx.x == 0) {
-            intermediate_accum[idx_in_batch * gridDim.x + blockIdx.x] = accumulators[0];
+            intermediate_accum[idx_in_batch * gridDim.x + blockIdx.x] = aggregate;
         }
         idx_in_batch += gridDim.y * blockDim.y;
     }
@@ -246,7 +252,12 @@ void __global__ k_set_sampled_energy_reduce(
     const __int128 *__restrict__ intermediate_accum, // [batch_size, num_intermediates]
     __int128 *__restrict__ mol_energies              // [batch_size, num_energies]
 ) {
-    __shared__ __int128 accumulators[THREADS_PER_BLOCK];
+    __int128 accumulator;
+
+    using BlockReduce = cub::BlockReduce<__int128, THREADS_PER_BLOCK>;
+
+    // Allocate shared memory for BlockReduce
+    __shared__ typename BlockReduce::TempStorage temp_storage;
 
     // One y block per set of energies, used instead of x block to avoid nuance of setting idx based only on
     // the thread idx
@@ -257,18 +268,18 @@ void __global__ k_set_sampled_energy_reduce(
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
         // Zero all of the accumulators
-        __int128 accumulator = 0;
+        accumulator = 0;
         while (idx < num_intermediates) {
             accumulator += intermediate_accum[offset + idx];
             idx += gridDim.x * blockDim.x;
         }
         // Each block reduces on a specific set of energies which is why just threadIdx.x
-        accumulators[threadIdx.x] = accumulator;
+        // Sum's return value is only valid in thread 0
+        __int128 aggregate = BlockReduce(temp_storage).Sum(accumulator);
         __syncthreads();
-        block_energy_reduce<THREADS_PER_BLOCK>(accumulators, threadIdx.x);
         if (threadIdx.x == 0) {
             int mol_idx = samples[idx_in_batch];
-            mol_energies[idx_in_batch * num_energies + mol_idx] = accumulators[0];
+            mol_energies[idx_in_batch * num_energies + mol_idx] = aggregate;
         }
 
         idx_in_batch += gridDim.y * blockDim.y;

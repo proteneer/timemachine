@@ -13,6 +13,9 @@ private:
 
     const int A_;
 
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
+
 public:
     HarmonicAngle(const std::vector<int> &angle_idxs);
 
