@@ -92,23 +92,25 @@ template <typename RealType>
 void __global__ k_setup_barostat_move(
     const bool adaptive,
     const RealType *__restrict__ rand,     // [2], use first value, second value is metropolis condition
-    double *__restrict__ d_box,            // [3*3]
+    const double *__restrict__ d_box,      // [3*3]
     RealType *__restrict__ d_volume_delta, // [1]
     double *__restrict__ d_volume_scale,   // [1]
-    RealType *__restrict__ d_length_scale  // [1]
+    RealType *__restrict__ d_length_scale, // [1]
+    RealType *__restrict__ d_volume        // [1]
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= 1) {
         return; // Only a single thread needs to perform this operation
     }
     const RealType volume = d_box[0 * 3 + 0] * d_box[1 * 3 + 1] * d_box[2 * 3 + 2];
-    if (d_volume_scale[0] == 0.0 && adaptive) {
-        d_volume_scale[0] = 0.01 * volume;
+    if (adaptive && *d_volume_scale == 0.0) {
+        *d_volume_scale = 0.01 * volume;
     }
-    const RealType delta_volume = d_volume_scale[0] * 2 * (rand[0] - 0.5);
+    const RealType delta_volume = *d_volume_scale * 2 * (rand[0] - 0.5);
     const RealType new_volume = volume + delta_volume;
-    d_volume_delta[0] = delta_volume;
-    d_length_scale[0] = cbrt(new_volume / volume);
+    *d_volume = volume;
+    *d_volume_delta = delta_volume;
+    *d_length_scale = cbrt(new_volume / volume);
 }
 
 // k_decide_move handles the metropolis check for whether or not to accept a barostat move that scales
@@ -121,20 +123,23 @@ void __global__ k_decide_move(
     const int num_molecules,
     const double kt,
     const double pressure,
-    const RealType *__restrict__ rand, // [2] Use second value
-    RealType *__restrict__ d_volume_delta,
-    double *__restrict__ d_volume_scale,
-    const __int128 *__restrict__ d_init_u,
-    const __int128 *__restrict__ d_final_u,
-    double *__restrict__ d_box,
-    const double *__restrict__ d_box_output,
-    double *__restrict__ d_x,
-    const double *__restrict__ d_x_output,
-    int *__restrict__ num_accepted,
-    int *__restrict__ num_attempted) {
+    const RealType *__restrict__ rand,           // [2] Use second value
+    const RealType *__restrict__ d_volume,       // [1]
+    const RealType *__restrict__ d_volume_delta, // [1]
+    double *__restrict__ d_volume_scale,         // [1]
+    const __int128 *__restrict__ d_init_u,       // [1]
+    const __int128 *__restrict__ d_final_u,      // [1]
+    double *__restrict__ d_box,                  // [3*3]
+    const double *__restrict__ d_box_proposed,   // [3*3]
+    double *__restrict__ d_x,                    // [N*3]
+    const double *__restrict__ d_x_proposed,     // [N*3]
+    int *__restrict__ num_accepted,              // [1]
+    int *__restrict__ num_attempted              // [1]
+) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    const RealType volume = d_box[0 * 3 + 0] * d_box[1 * 3 + 1] * d_box[2 * 3 + 2];
+    // Don't compute volume from the box. It leads to a race condition since `d_box` is updated in this kernel
+    const RealType volume = *d_volume;
     const RealType volume_delta = d_volume_delta[0];
     const RealType new_volume = volume + volume_delta;
     RealType energy_delta = INFINITY;
@@ -172,12 +177,12 @@ void __global__ k_decide_move(
         // If the mc move was accepted copy all of the data into place
 
         if (idx < 9) {
-            d_box[idx] = d_box_output[idx];
+            d_box[idx] = d_box_proposed[idx];
         }
 
 #pragma unroll 3
         for (int i = 0; i < 3; i++) {
-            d_x[idx * 3 + i] = d_x_output[idx * 3 + i];
+            d_x[idx * 3 + i] = d_x_proposed[idx * 3 + i];
         }
         idx += gridDim.x * blockDim.x;
     }
