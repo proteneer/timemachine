@@ -82,8 +82,9 @@ def compute_energy_decomposed_u_kln(states: list[EnergyDecomposedState]) -> np.n
     u_kln_by_component : [n_components, K, K, n_frames]
 
         u_kln_by_component[comp, k, l, n] =
-            state k energy component comp,
-            evaluated on sample n from state l
+            sample n from state k
+            evaulated using the energy function l
+            (PyMBAR convention)
     """
 
     K = len(states)
@@ -95,13 +96,13 @@ def compute_energy_decomposed_u_kln(states: list[EnergyDecomposedState]) -> np.n
         assert len(state.batch_u_fns) == n_components
 
     u_kln_by_component = np.zeros((n_components, K, K, n_frames))
-    for l in range(K):
+    for k in range(K):
         # Load the frames into memory, then evaluate all of the components
         # Done to avoid repeatedly reading from disk
-        xs, boxes = np.array(states[l].frames), states[l].boxes
-        for k in range(K):
+        xs, boxes = np.array(states[k].frames), states[k].boxes
+        for l in range(K):
             for comp in range(n_components):
-                u_fxn = states[k].batch_u_fns[comp]
+                u_fxn = states[l].batch_u_fns[comp]
                 u_kln_by_component[comp, k, l] = u_fxn(xs, boxes)
 
     return u_kln_by_component
