@@ -83,7 +83,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
 
 template <typename RealType> NonbondedAllPairs<RealType>::~NonbondedAllPairs() {
 
-    // gpuErrchk(cudaFree(d_atom_idxs_));
+    gpuErrchk(cudaFree(d_atom_idxs_));
 
     gpuErrchk(cudaFree(d_sorted_atom_idxs_));
 
