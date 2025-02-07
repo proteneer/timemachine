@@ -6,7 +6,6 @@ FROM docker.io/nvidia/cuda:12.8.0-devel-ubuntu24.04 AS tm_base_env
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 
-# Copied out of anaconda's dockerfile
 ARG MAKE_VERSION=4.3-*
 ARG GIT_VERSION=1:2.43.0-*
 ARG WGET_VERSION=1.21.4-*
