@@ -232,8 +232,16 @@ def test_barostat_partial_group_idxs():
     ctxt.multiple_steps(barostat_interval * 100)
 
 
-@pytest.mark.memcheck
-def test_barostat_is_deterministic():
+@pytest.mark.parametrize(
+    "box_width, iterations",
+    [
+        pytest.param(3.0, 20, marks=pytest.mark.memcheck),
+        # fyork: This test only fails 50-50 times. It tests a race condition in which the coordinates could be corrupted.
+        # Needs to be a large system to trigger the failure.
+        (10.0, 1000),
+    ],
+)
+def test_barostat_is_deterministic(box_width, iterations):
     """Verify that the barostat results in the same box size shift after a fixed number of steps
     This is important to debugging as well as providing the ability to replicate
     simulations
@@ -251,7 +259,7 @@ def test_barostat_is_deterministic():
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(
-        mol_a, ff, lamb=1.0, minimize_energy=False
+        mol_a, ff, box_width=box_width, lamb=1.0, minimize_energy=False
     )
 
     # get list of molecules for barostat by looking at bond table
@@ -280,7 +288,7 @@ def test_barostat_is_deterministic():
     )
 
     ctxt = custom_ops.Context(coords, v_0, box, integrator.impl(), u_impls, movers=[baro])
-    ctxt.multiple_steps(15)
+    ctxt.multiple_steps(iterations * barostat_interval)
     atm_box = ctxt.get_box()
     # Verify that the volume of the box has changed
     assert compute_box_volume(atm_box) != compute_box_volume(box)
@@ -289,7 +297,7 @@ def test_barostat_is_deterministic():
         coords.shape[0], pressure, temperature, group_indices, barostat_interval, u_impls, seed, True, 0.0
     )
     ctxt = custom_ops.Context(coords, v_0, box, integrator.impl(), u_impls, movers=[baro])
-    ctxt.multiple_steps(15)
+    ctxt.multiple_steps(iterations * barostat_interval)
     # Verify that we get back bitwise reproducible boxes
     assert compute_box_volume(atm_box) == compute_box_volume(ctxt.get_box())
 

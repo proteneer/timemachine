@@ -63,7 +63,7 @@ private:
     int *d_num_accepted_;
 
     __int128 *d_u_buffer_;
-    __int128 *d_u_after_buffer_;
+    __int128 *d_u_proposed_buffer_;
 
     __int128 *d_init_u_;
     __int128 *d_final_u_;
@@ -73,8 +73,8 @@ private:
     RealType *d_length_scale_;
     double *d_volume_scale_;
 
-    double *d_x_after_;
-    double *d_box_after_;
+    double *d_x_proposed_;
+    double *d_box_proposed_;
 
     int *d_atom_idxs_;                // grouped index to atom coords
     int *d_mol_idxs_;                 // grouped index to molecule index
