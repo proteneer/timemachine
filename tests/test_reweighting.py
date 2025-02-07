@@ -139,7 +139,7 @@ def test_mixture_reweighting_1d():
     # TI
     vec_du_dl = vmap(grad(u_fxn, 1), (0, None, None))
     mean_du_dls = np.array([np.mean(vec_du_dl(traj, lam, ref_params)) for (traj, lam) in zip(trajs, lambdas)])
-    f_k_ti = np.array([np.trapz(mean_du_dls[:k], lambdas[:k]) for k in range(n_windows)])
+    f_k_ti = np.array([np.trapezoid(mean_du_dls[:k], lambdas[:k]) for k in range(n_windows)])
     u_mix_ti = interpret_as_mixture_potential(u_kn, f_k_ti, N_k)
 
     # TODO [overkill] : BAR

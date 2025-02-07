@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import astuple, dataclass
-from typing import Any, Generic, Optional, Sequence, TypeVar, cast
+from typing import Any, Generic, Optional, TypeVar, cast
 
 import numpy as np
 from jax import Array

@@ -1,7 +1,6 @@
 # Utility functions to help assign and identify local geometry points
 
 from enum import Enum
-from typing import List
 
 from rdkit import Chem
 from rdkit.Chem import HybridizationType
@@ -52,7 +51,7 @@ def assign_atom_geometry(atom):
         assert 0, "Too many neighbors"
 
 
-def classify_geometry(mol: Chem.Mol) -> List[LocalGeometry]:
+def classify_geometry(mol: Chem.Mol) -> list[LocalGeometry]:
     """
     Identify the local geometry of the molecule. This current uses a heuristic but we
     should really be generating this from gas-phase simulations of the real forcefield.
@@ -66,7 +65,7 @@ def classify_geometry(mol: Chem.Mol) -> List[LocalGeometry]:
 
     Returns
     -------
-    List[LocalGeometry]
+    list[LocalGeometry]
         List of per atom geometries
 
     """

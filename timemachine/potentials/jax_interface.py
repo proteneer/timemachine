@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Tuple
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -24,7 +24,7 @@ def call_bound_impl(impl: custom_ops.BoundPotential, conf: NDArray, box: NDArray
 # Add JAX custom derivative rules
 # https://jax.readthedocs.io/en/latest/notebooks/Custom_derivative_rules_for_Python_code.html#custom-jvps-with-jax-custom-jvp
 @call_unbound_impl.defjvp
-def _(impl: custom_ops.Potential, primals, tangents) -> Tuple[Any, Any]:
+def _(impl: custom_ops.Potential, primals, tangents) -> tuple[Any, Any]:
     x, p, box = primals
     dx, dp, dbox = tangents
 
@@ -47,7 +47,7 @@ def _(impl: custom_ops.Potential, primals, tangents) -> Tuple[Any, Any]:
 
 
 @call_bound_impl.defjvp
-def _(impl: custom_ops.BoundPotential, primals, tangents) -> Tuple[Any, Any]:
+def _(impl: custom_ops.BoundPotential, primals, tangents) -> tuple[Any, Any]:
     x, box = primals
     dx, dbox = tangents
 

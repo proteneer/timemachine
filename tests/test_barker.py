@@ -54,7 +54,7 @@ def test_proposal_normalization(x0, proposal_sig):
     logpdf_grid = np.array([prop.log_density(x0, y) for y in y_grid])
     pdf_grid = np.exp(logpdf_grid)
 
-    Z = np.trapz(pdf_grid, y_grid)
+    Z = np.trapezoid(pdf_grid, y_grid)
 
     assert Z == pytest.approx(1)
 
@@ -99,7 +99,7 @@ def test_accurate_mcmc(threshold=1e-4):
 
     # compare with ref
     y = np.exp(np.array([log_q(x) for x in x_grid]))
-    y_ref = y / np.trapz(y, x_grid)
+    y_ref = y / np.trapezoid(y, x_grid)
 
     histogram_mse = np.mean((y_ref - y_empirical) ** 2)
 
