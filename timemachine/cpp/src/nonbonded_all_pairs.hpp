@@ -54,6 +54,9 @@ private:
 
     const bool disable_hilbert_;
 
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
+
     std::array<k_nonbonded_fn, 8> kernel_ptrs_;
 
     bool needs_sort();
