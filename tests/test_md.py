@@ -1,5 +1,6 @@
 import gc
 import re
+import time
 import weakref
 
 import jax
@@ -815,7 +816,9 @@ def test_setup_context_with_references():
     assert np.all(boxes[-1] == box)
 
     del ctxt
-    gc.collect()
+    for _ in range(5):
+        gc.collect()
+        time.sleep(0.01)
     for ref in reffed_objs:
         assert ref() is None
 
