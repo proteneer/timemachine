@@ -124,7 +124,6 @@ setup(
             "py.typed",
         ],
         "timemachine.datasets": [
-            "**/*.csv",
             "**/*.pdb",
             "**/*.sdf",
         ],

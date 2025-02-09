@@ -2,7 +2,6 @@ import os
 import pickle
 import subprocess
 import sys
-from contextlib import contextmanager
 from glob import glob
 from importlib import resources
 from pathlib import Path
@@ -14,9 +13,8 @@ from common import temporary_working_dir
 from numpy.typing import NDArray as Array
 from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_FF, DEFAULT_KT, KCAL_TO_KJ
+from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
-from timemachine.fe.free_energy import PairBarResult, SimulationResult
 from timemachine.fe.utils import get_mol_name
 
 # All examples are to be tested nightly
@@ -143,150 +141,6 @@ def test_smc_freesolv(smc_free_solv_path):
     # * MAE of ~1.1 kcal/mol: FreeSolv reference calculations
     #   https://www.biorxiv.org/content/10.1101/104281v1.full
     assert mean_abs_err_kcalmol <= 2
-
-
-def get_success_result_path(mol_a_name: str, mol_b_name: str):
-    return f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
-
-
-@contextmanager
-def get_rbfe_edge_list_hif2a_path(seed):
-    with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_data:
-        base_config = dict(
-            n_frames=2,
-            ligands=hif2a_data / "ligands.sdf",
-            forcefield=DEFAULT_FF,
-            protein=hif2a_data / "5tbm_prepared.pdb",
-            n_gpus=1,
-            seed=seed,
-            n_eq_steps=2,
-            n_windows=3,
-        )
-
-        def run(results_csv, temp_dir):
-            output_path = str(Path(temp_dir) / get_success_result_path("*", "*"))
-            assert len(glob(output_path)) == 0
-            config = dict(results_csv=results_csv, **base_config)
-            _ = run_example("rbfe_edge_list.py", get_cli_args(config), cwd=temp_dir)
-            return Path(temp_dir)
-
-        with open(hif2a_data / "results_edges_5ns.csv") as fp:
-            edges_rows = fp.readlines()
-
-        edges_rows_sample = edges_rows[:3]  # keep header and first 2 edges (338 -> 165, 338 -> 215)
-        edges = [("338", "165"), ("338", "215")]
-
-        with temporary_working_dir() as temp_dir:
-            with (Path(temp_dir) / "edges.csv").open("w") as fp:
-                fp.writelines(edges_rows_sample)
-                fp.flush()
-                path = run(fp.name, temp_dir)
-            yield path, base_config, edges
-
-
-DEFAULT_SEED = 2023
-
-
-@pytest.fixture(scope="module")
-def rbfe_edge_list_hif2a_path():
-    with get_rbfe_edge_list_hif2a_path(DEFAULT_SEED) as r:
-        yield r
-
-
-def load_simulation_results(path: Path) -> tuple[SimulationResult, SimulationResult]:
-    with path.open("rb") as fp:
-        results = pickle.load(fp)
-
-    (
-        _,  # mol_a
-        _,  # mol_b
-        _,  # edge_metadata
-        _,  # core,
-        solvent_res,
-        _,  # solvent_top,
-        complex_res,
-        _,  # complex_top,
-    ) = results
-
-    return solvent_res, complex_res
-
-
-def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
-    path, config, edges = rbfe_edge_list_hif2a_path
-    n_windows = config["n_windows"]
-
-    def check_results(results_path):
-        # Just check that results are present and have the expected shape
-        # (we don't do enough sampling here for statistical checks)
-
-        # NOTE: We're mainly interested in checking that simulation frames have been serialized properly; we already
-        # have more exhaustive checks in test_relative_free_energy.py
-
-        assert results_path.exists()
-        solvent_res, complex_res = load_simulation_results(results_path)
-
-        for result in solvent_res, complex_res:
-            L = len(result.final_result.initial_states)
-            assert L == n_windows
-
-            assert isinstance(result, SimulationResult)
-            assert isinstance(result.frames, list)
-            assert len(result.frames) == n_windows  # frames from first and last windows
-            for frames in result.frames:
-                assert len(frames) == config["n_frames"]
-
-            N, _ = result.frames[0][0].shape
-            assert N > 0
-
-            for frames in result.frames:
-                for frame in frames:
-                    assert frame.ndim == 2
-                    assert frame.shape == (N, 3)
-
-    for mol_a_name, mol_b_name in edges:
-        check_results(path / get_success_result_path(mol_a_name, mol_b_name))
-
-
-def assert_simulation_results_equal(r1: SimulationResult, r2: SimulationResult):
-    def assert_pair_bar_results_equal(p1: PairBarResult, p2: PairBarResult):
-        np.testing.assert_array_equal(p1.dGs, p2.dGs)
-        np.testing.assert_array_equal(p1.dG_errs, p2.dG_errs)
-        np.testing.assert_array_equal(p1.dG_err_by_component_by_lambda, p2.dG_err_by_component_by_lambda)
-        np.testing.assert_array_equal(p1.overlaps, p2.overlaps)
-        np.testing.assert_array_equal(p1.overlap_by_component_by_lambda, p2.overlap_by_component_by_lambda)
-        np.testing.assert_array_equal(p1.u_kln_by_component_by_lambda, p2.u_kln_by_component_by_lambda)
-
-    assert_pair_bar_results_equal(r1.final_result, r2.final_result)
-
-    for p1, p2 in zip(r1.intermediate_results, r2.intermediate_results):
-        assert_pair_bar_results_equal(p1, p2)
-
-
-def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
-    path1, _, edges = rbfe_edge_list_hif2a_path
-
-    with get_rbfe_edge_list_hif2a_path(DEFAULT_SEED) as (path2, _, _):
-        with get_rbfe_edge_list_hif2a_path(DEFAULT_SEED + 1) as (path3, _, _):
-            for mol_a_name, mol_b_name in edges:
-
-                def load_results(dir):
-                    path = dir / get_success_result_path(mol_a_name, mol_b_name)
-                    assert path.exists()
-                    return load_simulation_results(path)
-
-                solvent_res_1, complex_res_1 = load_results(path1)
-                solvent_res_2, complex_res_2 = load_results(path2)
-                solvent_res_3, complex_res_3 = load_results(path3)
-
-                # results at path2 should be bitwise equivalent to those at path1
-                assert_simulation_results_equal(solvent_res_1, solvent_res_2)
-                assert_simulation_results_equal(complex_res_1, complex_res_2)
-
-                # results at path3 should differ from those at path1 and path2
-                with pytest.raises(AssertionError):
-                    assert_simulation_results_equal(solvent_res_1, solvent_res_3)
-                with pytest.raises(AssertionError):
-                    assert_simulation_results_equal(complex_res_1, complex_res_3)
 
 
 @pytest.mark.parametrize("insertion_type", ["untargeted"])
