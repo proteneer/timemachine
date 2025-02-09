@@ -16,6 +16,7 @@ from scipy.special import logsumexp
 from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
 from timemachine.fe.utils import get_mol_name
+from timemachine.ff import Forcefield
 
 # All examples are to be tested nightly
 pytestmark = [pytest.mark.nightly]
@@ -215,3 +216,107 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
 
         for key in reference_data.files:
             np.testing.assert_array_equal(test_data[key], reference_data[key])
+
+
+@pytest.mark.parametrize("leg", ["vacuum", "solvent", pytest.param("complex", marks=pytest.mark.nightly)])
+@pytest.mark.parametrize("mol_a, mol_b", [("15", "30")])
+@pytest.mark.parametrize("seed", [2025])
+def test_run_rbfe_legs(leg, mol_a, mol_b, seed):
+    with temporary_working_dir() as temp_dir:
+        with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_dir:
+            config = dict(
+                mol_a=mol_a,
+                mol_b=mol_b,
+                sdf_path=hif2a_dir / "ligands.sdf",
+                pdb_path=hif2a_dir / "5tbm_prepared.pdb",
+                seed=seed,
+                legs=leg,
+                n_eq_steps=5,
+                n_frames=5,
+                n_windows=3,
+            )
+
+            def verify_run(output_dir: Path):
+                assert output_dir.is_dir()
+                assert (output_dir / "md_params.pkl").is_file()
+                assert (output_dir / "atom_mapping.svg").is_file()
+                assert (output_dir / "core.pkl").is_file()
+                assert (output_dir / "ff.py").is_file()
+
+                ff = Forcefield.load_from_file(output_dir / "ff.py")
+                assert ff is not None
+
+                leg_dir = output_dir / leg
+                assert leg_dir.is_dir()
+                assert (leg_dir / "results.npz").is_file()
+                assert (leg_dir / "simulation_result.pkl").is_file()
+                if leg in ["solvent", "complex"]:
+                    assert (leg_dir / "host_config.pkl").is_file()
+                else:
+                    assert not (leg_dir / "host_config.pkl").is_file()
+                assert (leg_dir / "hrex_transition_matrix.png").is_file()
+                assert (leg_dir / "hrex_swap_acceptance_rates_convergence.png").is_file()
+                assert (leg_dir / "hrex_replica_state_distribution_heatmap.png").is_file()
+
+                results = np.load(str(leg_dir / "results.npz"))
+                assert results["pred_dg"].size == 1
+                assert results["pred_dg"].dtype == np.float64
+                assert results["pred_dg_err"].size == 1
+                assert results["pred_dg_err"].dtype == np.float64
+                assert results["n_windows"].size == 1
+                assert results["n_windows"].dtype == np.intp
+                assert 2 <= results["n_windows"] <= config["n_windows"]
+                assert isinstance(results["overlaps"], np.ndarray)
+                assert all(isinstance(overlap, float) for overlap in results["overlaps"])
+
+            config_a = dict(output_dir="a", **config)
+            proc = run_example("run_rbfe_legs.py", get_cli_args(config_a), cwd=temp_dir)
+            assert proc.returncode == 0
+            verify_run(Path(temp_dir) / config_a["output_dir"])
+
+            config_b = dict(output_dir="b", **config)
+            assert config_b["output_dir"] != config_a["output_dir"], "Runs are writing to the same output directory"
+            proc = run_example("run_rbfe_legs.py", get_cli_args(config_b), cwd=temp_dir)
+            assert proc.returncode == 0
+            verify_run(Path(temp_dir) / config_b["output_dir"])
+
+            def verify_simulations_match(ref_dir: Path, comp_dir: Path):
+                with open(ref_dir / "md_params.pkl", "rb") as ifs:
+                    ref_md_params = pickle.load(ifs)
+                with open(comp_dir / "md_params.pkl", "rb") as ifs:
+                    comp_md_params = pickle.load(ifs)
+                assert ref_md_params == comp_md_params, "MD Parameters don't match"
+
+                with open(ref_dir / "core.pkl", "rb") as ifs:
+                    ref_core = pickle.load(ifs)
+                with open(comp_dir / "core.pkl", "rb") as ifs:
+                    comp_core = pickle.load(ifs)
+                assert np.all(ref_core == comp_core), "Atom mappings don't match"
+
+                ref_results = np.load(str(ref_dir / leg / "results.npz"))
+                comp_results = np.load(str(comp_dir / leg / "results.npz"))
+                np.testing.assert_equal(ref_results["pred_dg"], comp_results["pred_dg"])
+                np.testing.assert_equal(ref_results["pred_dg_err"], comp_results["pred_dg_err"])
+                np.testing.assert_array_equal(ref_results["overlaps"], comp_results["overlaps"])
+                np.testing.assert_equal(ref_results["n_windows"], comp_results["n_windows"])
+
+                with open(ref_dir / leg / "simulation_result.pkl", "rb") as ifs:
+                    ref_res = pickle.load(ifs)
+                with open(comp_dir / leg / "simulation_result.pkl", "rb") as ifs:
+                    comp_res = pickle.load(ifs)
+                assert len(ref_res.final_result.initial_states) == ref_results["n_windows"]
+                assert len(ref_res.final_result.initial_states) == len(comp_res.final_result.initial_states)
+
+                for ref_state, comp_state in zip(
+                    ref_res.final_result.initial_states, comp_res.final_result.initial_states
+                ):
+                    np.testing.assert_array_equal(ref_state.x0, comp_state.x0)
+                    np.testing.assert_array_equal(ref_state.v0, comp_state.v0)
+                    np.testing.assert_array_equal(ref_state.box0, comp_state.box0)
+                    np.testing.assert_array_equal(ref_state.ligand_idxs, comp_state.ligand_idxs)
+                    np.testing.assert_array_equal(ref_state.protein_idxs, comp_state.protein_idxs)
+                    assert len(ref_state.potentials) == len(comp_state.potentials)
+                    for ref_pot, comp_pot in zip(ref_state.potentials, comp_state.potentials):
+                        np.testing.assert_array_equal(ref_pot.params, comp_pot.params)
+
+            verify_simulations_match(Path(temp_dir) / config_a["output_dir"], Path(temp_dir) / config_b["output_dir"])
