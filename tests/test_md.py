@@ -816,11 +816,16 @@ def test_setup_context_with_references():
     assert np.all(boxes[-1] == box)
 
     del ctxt
+    success = False
     for _ in range(5):
         gc.collect()
-        time.sleep(0.01)
-    for ref in reffed_objs:
-        assert ref() is None
+        try:
+            for ref in reffed_objs:
+                assert ref() is None
+            success = True
+        except AssertionError:
+            time.sleep(0.01)
+    assert success
 
     # With Barostat
     ctxt, reffed_objs = build_context(10)
