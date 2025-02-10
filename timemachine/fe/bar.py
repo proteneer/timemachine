@@ -10,6 +10,9 @@ from numpy.typing import NDArray
 from pymbar.utils import kln_to_kn
 from scipy.stats import normaltest
 
+DG_KEY = "Delta_f"
+DG_ERR_KEY = "dDelta_f"
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,11 +95,11 @@ def dG_dw(w):
         the gradient of free energy difference with respect to work
 
     """
-    dG, _ = pymbar.BAR(w[0], w[1])
+    bar = pymbar.bar(w[0], w[1])
+    dG = bar[DG_KEY]
     dBAR_dw = jax.grad(BARzero, argnums=(0,))
     dBAR_dA = jax.grad(BARzero, argnums=(1,))
-    dG_dw = -dBAR_dw(w, dG)[0] / dBAR_dA(w, dG)[0]
-    return dG_dw
+    return -dBAR_dw(w, dG)[0] / dBAR_dA(w, dG)[0]
 
 
 def ukln_to_ukn(u_kln: NDArray) -> tuple[NDArray, NDArray]:
@@ -127,14 +130,15 @@ DEFAULT_MAXIMUM_ITERATIONS = 1_000  # pymbar default 10_000
 def df_and_err_from_u_kln(u_kln: NDArray, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS) -> tuple[float, float]:
     """Compute free energy difference and uncertainty given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.MBAR(u_kn, N_k, maximum_iterations=maximum_iterations)
+    mbar = pymbar.mbar.MBAR(u_kn, N_k, maximum_iterations=maximum_iterations)
     try:
-        df, ddf = mbar.getFreeEnergyDifferences()
+        results = mbar.compute_free_energy_differences()
+        df, ddf = results[DG_KEY], results[DG_ERR_KEY]
         return df[0, 1], ddf[0, 1]
     except pymbar.utils.ParameterError:
         # As of pymbar 3.1.0, computation of the covariance matrix can raise an exception on incomplete convergence.
         # In this case, return the unconverged estimate with NaN as uncertainty.
-        df = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0]
+        df = mbar.compute_free_energy_differences(compute_uncertainty=False)[DG_KEY]
         return df[0, 1], np.nan
 
 
@@ -143,8 +147,8 @@ def df_from_u_kln(
 ) -> float:
     """Compute free energy difference given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.MBAR(u_kn, N_k, initial_f_k=initial_f_k, maximum_iterations=maximum_iterations)
-    df = mbar.getFreeEnergyDifferences(compute_uncertainty=False)[0]
+    mbar = pymbar.mbar.MBAR(u_kn, N_k, initial_f_k=initial_f_k, maximum_iterations=maximum_iterations)
+    df = mbar.compute_free_energy_differences(compute_uncertainty=False)[DG_KEY]
     return df[0, 1]
 
 
@@ -287,12 +291,12 @@ def pair_overlap_from_ukln(u_kln: NDArray) -> float:
     Returns
     -------
     pair_overlap: float
-        2 * pymbar.MBAR overlap
+        2 * pymbar.mbar.MBAR overlap
         (normalized to interval [0,1] rather than [0,0.5])
 
     """
     u_kn, N_k = ukln_to_ukn(u_kln)
-    return 2 * pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
+    return 2 * pymbar.mbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
 
 
 def compute_fwd_and_reverse_df_over_time(
