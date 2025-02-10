@@ -165,7 +165,7 @@ def test_df_and_err_from_u_kln_partial_overlap():
 
 
 def test_df_from_u_kln_does_not_raise_on_incomplete_convergence():
-    u_kln = make_partial_overlap_uniform_ukln_example(5.0)
+    u_kln = make_partial_overlap_uniform_ukln_example(10.0)
 
     # pymbar raises an exception on incomplete convergence when computing covariances
     u_kn, N_k = ukln_to_ukn(u_kln)
