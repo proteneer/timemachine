@@ -550,7 +550,7 @@ def test_estimate_free_energy_bar_with_energy_overflow():
     _ = estimate_free_energy_bar(np.array([u_kln]), DEFAULT_TEMP)
 
     u_kln_with_nan = np.array(u_kln)
-    u_kln_with_nan[0, 1, 10] = np.nan
+    u_kln_with_nan[1, 0, 10] = np.nan
 
     # pymbar.MBAR fails with LinAlgError
     with pytest.raises(np.linalg.LinAlgError):
@@ -565,7 +565,7 @@ def test_estimate_free_energy_bar_with_energy_overflow():
     assert np.isfinite(result_with_nan.dG_err)
 
     u_kln_with_inf = np.array(u_kln)
-    u_kln_with_inf[0, 1, 10] = np.inf
+    u_kln_with_inf[1, 0, 10] = np.inf
 
     # should give the same result with inf
     result_with_inf = estimate_free_energy_bar(np.array([u_kln_with_inf]), DEFAULT_TEMP)

@@ -41,7 +41,7 @@ def make_gaussian_ukln_example(
     x_a = rng.normal(mu_a, sigma_a, (n_samples,))
     x_b = rng.normal(mu_b, sigma_b, (n_samples,))
 
-    u_kln = np.array([[u_a(x_a), u_a(x_b)], [u_b(x_a), u_b(x_b)]])
+    u_kln = np.array([[u_a(x_a), u_b(x_a)], [u_a(x_b), u_b(x_b)]])
 
     dlogZ = np.log(sigma_a) - np.log(sigma_b)
 
@@ -69,8 +69,7 @@ def make_partial_overlap_uniform_ukln_example(dlogZ: float, n_samples: int = 100
     assert np.isfinite(u_a(x_a)).all()
     assert np.isfinite(u_b(x_b)).all()
 
-    u_kln = np.array([[u_a(x_a), u_a(x_b)], [u_b(x_a), u_b(x_b)]])
-
+    u_kln = np.array([[u_a(x_a), u_b(x_a)], [u_a(x_b), u_b(x_b)]])
     return u_kln
 
 

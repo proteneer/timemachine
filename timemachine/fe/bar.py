@@ -7,6 +7,7 @@ import numpy as np
 import pymbar
 from jax.scipy.special import logsumexp
 from numpy.typing import NDArray
+from pymbar.utils import kln_to_kn
 from scipy.stats import normaltest
 
 logger = logging.getLogger(__name__)
@@ -101,21 +102,19 @@ def dG_dw(w):
 def ukln_to_ukn(u_kln: NDArray) -> tuple[NDArray, NDArray]:
     """Convert 2-state u_kln matrix to u_kn and N_k, i.e. the inputs expected by pymbar.MBAR.
 
-    NOTE: similar to https://pymbar.readthedocs.io/en/master/utils.html#pymbar.utils.kln_to_kn, but uses the (current)
-    timemachine convention where the first two axes correspond to evaluation state and sampling state respectively.
-
-    TODO: consider switching to pymbar convention?
+    NOTE: similar to https://pymbar.readthedocs.io/en/master/utils.html#pymbar.utils.kln_to_kn,
+    but also return the N_k array for MBAR. This uses the PyMBAR axis convention.
 
     Parameters
     ----------
     u_kln : array (2, 2, N)
         2-state u_kln matrix, where
-        * the first dimension (k) indexes the state for which we evaluate the energy
-        * the second dimension (l) indexes the state from which the configuration was sampled
+        * the first dimension (k) indexes the state from which the configuration was sampled
+        * the second dimension (l) indexes the state for which we evaluate the energy
     """
+    u_kn = kln_to_kn(u_kln)
     k, l, n = u_kln.shape
     assert k == l == 2
-    u_kn = u_kln.reshape(k, -1)
     assert u_kn.shape == (k, l * n)
     N_k = n * np.ones(l)
     return u_kn, N_k
@@ -246,8 +245,8 @@ def works_from_ukln(u_kln: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Extract forward and reverse works from 2-state u_kln matrix"""
     k, l, _ = u_kln.shape
     assert k == l == 2
-    w_fwd = u_kln[1, 0, :] - u_kln[0, 0, :]
-    w_rev = u_kln[0, 1, :] - u_kln[1, 1, :]
+    w_fwd = u_kln[0, 1, :] - u_kln[0, 0, :]
+    w_rev = u_kln[1, 0, :] - u_kln[1, 1, :]
     return w_fwd, w_rev
 
 
@@ -292,11 +291,7 @@ def pair_overlap_from_ukln(u_kln: NDArray) -> float:
         (normalized to interval [0,1] rather than [0,0.5])
 
     """
-    k, l, n = u_kln.shape
-    assert k == l == 2
-    u_kn = u_kln.reshape(k, -1)
-    assert u_kn.shape == (k, l * n)
-    N_k = n * np.ones(l)
+    u_kn, N_k = ukln_to_ukn(u_kln)
     return 2 * pymbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
 
 
