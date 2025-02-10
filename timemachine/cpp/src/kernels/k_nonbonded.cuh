@@ -4,6 +4,7 @@
 #include "../gpu_utils.cuh"
 #include "k_nonbonded_common.cuh"
 #include "kernel_utils.cuh"
+#include <cub/cub.cuh>
 
 namespace timemachine {
 
@@ -111,10 +112,10 @@ void __device__ v_nonbonded_unified(
     const int tile_idx,
     const int N,
     const int NR,
-    const double *__restrict__ coords,    // [N * 3]
-    const double *__restrict__ params,    // [N * PARAMS_PER_ATOM]
+    const double *__restrict__ coords, // [N * 3]
+    const double *__restrict__ params, // [N * PARAMS_PER_ATOM]
     box_cache<RealType> &shared_box,
-    __int128 *__restrict__ energy_buffer, // [blockDim.x]
+    __int128 &energy_accumulator,
     const double beta,
     const double cutoff,
     const unsigned int *__restrict__ row_idxs,
@@ -264,7 +265,7 @@ void __device__ v_nonbonded_unified(
             }
 
             if (COMPUTE_U) {
-                energy_buffer[threadIdx.x] += FLOAT_TO_FIXED_ENERGY<RealType>(u);
+                energy_accumulator += FLOAT_TO_FIXED_ENERGY<RealType>(u);
             }
         }
 
@@ -344,10 +345,7 @@ void __global__ k_nonbonded_unified(
 ) {
     static_assert(THREADS_PER_BLOCK <= 256 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
     __shared__ box_cache<RealType> shared_box;
-    __shared__ __int128 block_energy_buffer[THREADS_PER_BLOCK];
-    if (COMPUTE_U) {
-        block_energy_buffer[threadIdx.x] = 0; // Zero out the energy buffer
-    }
+    __int128 energy_accumulator = 0;
     if (threadIdx.x == 0) {
         shared_box.x = box[0 * 3 + 0];
         shared_box.y = box[1 * 3 + 1];
@@ -391,7 +389,7 @@ void __global__ k_nonbonded_unified(
                 coords,
                 params,
                 shared_box,
-                block_energy_buffer,
+                energy_accumulator,
                 beta,
                 cutoff,
                 row_idxs,
@@ -407,7 +405,7 @@ void __global__ k_nonbonded_unified(
                 coords,
                 params,
                 shared_box,
-                block_energy_buffer,
+                energy_accumulator,
                 beta,
                 cutoff,
                 row_idxs,
@@ -419,13 +417,16 @@ void __global__ k_nonbonded_unified(
         tile_idx += stride;
     }
     if (COMPUTE_U) {
-        // Sync to ensure the shared buffers are populated
-        __syncthreads();
+        using BlockReduce = cub::BlockReduce<__int128, THREADS_PER_BLOCK>;
 
-        block_energy_reduce<THREADS_PER_BLOCK>(block_energy_buffer, threadIdx.x);
+        // Allocate shared memory for BlockReduce
+        __shared__ typename BlockReduce::TempStorage temp_storage;
+
+        // Sum's return value is only valid in thread 0
+        __int128 aggregate = BlockReduce(temp_storage).Sum(energy_accumulator);
 
         if (threadIdx.x == 0) {
-            u_buffer[blockIdx.x] = block_energy_buffer[0];
+            u_buffer[blockIdx.x] = aggregate;
         }
     }
 }
@@ -445,7 +446,12 @@ void __global__ k_compute_nonbonded_target_atom_energies(
     __int128 *__restrict__ output_energies       // [num_target_atoms, gridDim.x]
 ) {
     static_assert(THREADS_PER_BLOCK <= 256 && (THREADS_PER_BLOCK & (THREADS_PER_BLOCK - 1)) == 0);
-    __shared__ __int128 block_energy_buffer[THREADS_PER_BLOCK];
+    __int128 energy_accumulator;
+
+    using BlockReduce = cub::BlockReduce<__int128, THREADS_PER_BLOCK>;
+
+    // Allocate shared memory for BlockReduce
+    __shared__ typename BlockReduce::TempStorage temp_storage;
 
     const RealType bx = box[0 * 3 + 0];
     const RealType by = box[1 * 3 + 1];
@@ -484,7 +490,7 @@ void __global__ k_compute_nonbonded_target_atom_energies(
         // All threads in the threadblock must loop to allow for __syncthreads() and the row accumulation.
         while (atom_j_idx - threadIdx.x < N) {
             // Zero out the energy buffer
-            block_energy_buffer[threadIdx.x] = 0;
+            energy_accumulator = 0;
             // The two atoms are in the same molecule, don't compute the energies
             // requires that the atom indices in each target mol is consecutive
             if (atom_j_idx < N && (atom_j_idx < min_atom_idx || atom_j_idx > max_atom_idx)) {
@@ -532,19 +538,18 @@ void __global__ k_compute_nonbonded_target_atom_energies(
                             1.0, eps_i, eps_j, sig_i, sig_j, inv_dij, inv_d2ij, u, delta_prefactor, sig_grad, eps_grad);
                     }
                     // Store the atom by atom energy
-                    block_energy_buffer[threadIdx.x] = FLOAT_TO_FIXED_ENERGY<RealType>(u);
+                    energy_accumulator = FLOAT_TO_FIXED_ENERGY<RealType>(u);
                 }
             }
-            // Sync to ensure the shared buffers are populated
-            __syncthreads();
 
-            block_energy_reduce<THREADS_PER_BLOCK>(block_energy_buffer, threadIdx.x);
+            // Sum's return value is only valid in thread 0
+            __int128 aggregate = BlockReduce(temp_storage).Sum(energy_accumulator);
+            // Call sync threads to ensure temp storage can be re-used
+            __syncthreads();
 
             if (threadIdx.x == 0) {
-                output_energies[row_idx * gridDim.x + blockIdx.x] += block_energy_buffer[0];
+                output_energies[row_idx * gridDim.x + blockIdx.x] += aggregate;
             }
-            // Sync the threads so threads don't move on and stomp on the block energy buffer
-            __syncthreads();
 
             atom_j_idx += gridDim.x * blockDim.x;
         }
@@ -564,10 +569,15 @@ void __global__ k_accumulate_atom_energies_to_per_mol_energies(
     int mol_idx = blockIdx.x;
 
     static_assert(NUM_BLOCKS <= 256 && (NUM_BLOCKS & (NUM_BLOCKS - 1)) == 0);
-    __shared__ __int128 block_energy_buffer[NUM_BLOCKS];
+    __int128 local_accumulator;
+
+    using BlockReduce = cub::BlockReduce<__int128, NUM_BLOCKS>;
+
+    // Allocate shared memory for BlockReduce
+    __shared__ typename BlockReduce::TempStorage temp_storage;
 
     while (mol_idx < target_mols) {
-        __int128 local_accumulator = 0;
+        local_accumulator = 0;
         const int mol_start = mol_offsets[mol_idx];
         const int mol_end = mol_offsets[mol_idx + 1];
 
@@ -577,12 +587,14 @@ void __global__ k_accumulate_atom_energies_to_per_mol_energies(
 
             idx += blockDim.x;
         }
-        block_energy_buffer[threadIdx.x] = local_accumulator;
+
+        // Sum's return value is only valid in thread 0
+        __int128 aggregate = BlockReduce(temp_storage).Sum(local_accumulator);
+        // Call sync threads to ensure temp storage can be re-used
         __syncthreads();
-        block_energy_reduce<NUM_BLOCKS>(block_energy_buffer, threadIdx.x);
 
         if (threadIdx.x == 0) {
-            per_mol_energies[mol_idx] = block_energy_buffer[0];
+            per_mol_energies[mol_idx] = aggregate;
         }
 
         mol_idx += gridDim.x;

@@ -151,8 +151,8 @@ def plot_overlap_detail_figure(
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
         u_kln = u_kln_by_component.sum(0)
 
-        w_fwd = u_kln[1, 0] - u_kln[0, 0]
-        w_rev = u_kln[0, 1] - u_kln[1, 1]
+        w_fwd = u_kln[0, 1] - u_kln[0, 0]
+        w_rev = u_kln[1, 0] - u_kln[1, 1]
 
         df = beta * dGs[lamb_idx]
         df_err = beta * dG_errs[lamb_idx]
@@ -164,8 +164,8 @@ def plot_overlap_detail_figure(
 
     # [n_lambdas x num_energy_components] plots (relying on energy decomposition)
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
-        w_fwd_by_component = u_kln_by_component[:, 1, 0] - u_kln_by_component[:, 0, 0]
-        w_rev_by_component = u_kln_by_component[:, 0, 1] - u_kln_by_component[:, 1, 1]
+        w_fwd_by_component = u_kln_by_component[:, 0, 1] - u_kln_by_component[:, 0, 0]
+        w_rev_by_component = u_kln_by_component[:, 1, 0] - u_kln_by_component[:, 1, 1]
 
         # loop over bond, angle, torsion, nonbonded terms etc.
         for u_idx in range(num_energy_components):

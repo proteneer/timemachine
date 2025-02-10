@@ -1326,8 +1326,8 @@ def generate_pair_bar_ulkns(
         for j in range(len(unbound_impls)):
             for l in range(2):
                 for k in range(2):
-                    # energies_by_frames_by_params is frames of state l to params of k
-                    u_kln_by_component_by_lambda[i, j, k, l] = energies_by_frames_by_params[states[l]][states[k]][j]
+                    # energies_by_frames_by_params is frames of state k to params of l
+                    u_kln_by_component_by_lambda[i, j, k, l] = energies_by_frames_by_params[states[k]][states[l]][j]
     return u_kln_by_component_by_lambda
 
 
