@@ -8,6 +8,7 @@ import pytest
 
 from timemachine.constants import BOLTZ, DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping, cif_writer, single_topology, utils
+from timemachine.fe.bar import DG_ERR_KEY, DG_KEY
 from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
@@ -78,7 +79,8 @@ def test_hif2a_free_energy_estimates():
             plt.legend()
             plt.savefig(f"lambda_{lambda_idx - 1}_{lambda_idx}.png")
 
-            dG_exact, exact_bar_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
+            bar = pymbar.bar(fwd_delta_u, rev_delta_u)
+            dG_exact, exact_bar_err = bar[DG_KEY], bar[DG_ERR_KEY]
             dG_exact /= beta
             exact_bar_err /= beta
 

@@ -296,7 +296,7 @@ def pair_overlap_from_ukln(u_kln: NDArray) -> float:
 
     """
     u_kn, N_k = ukln_to_ukn(u_kln)
-    return 2 * pymbar.mbar.MBAR(u_kn, N_k).computeOverlap()["matrix"][0, 1]  # type: ignore
+    return 2 * pymbar.mbar.MBAR(u_kn, N_k).compute_overlap()["matrix"][0, 1]  # type: ignore
 
 
 def compute_fwd_and_reverse_df_over_time(

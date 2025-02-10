@@ -555,7 +555,8 @@ def test_estimate_free_energy_bar_with_energy_overflow():
     # pymbar.mbar.MBAR fails with LinAlgError
     with pytest.raises(np.linalg.LinAlgError):
         u_kn, N_k = ukln_to_ukn(u_kln_with_nan)
-        _ = pymbar.mbar.MBAR(u_kn, N_k)
+        mbar = pymbar.mbar.MBAR(u_kn, N_k)
+        mbar.compute_free_energy_differences()
 
     # should return finite results with warning
     with pytest.warns(IndeterminateEnergyWarning, match="NaN"):
