@@ -97,7 +97,7 @@ setup(
         "jaxlib>0.4.1",
         "networkx",
         "numpy",
-        "pymbar>=3.0.6,<4",
+        "pymbar>4.0.2",
         "rdkit",
         "scipy",
         "matplotlib",
