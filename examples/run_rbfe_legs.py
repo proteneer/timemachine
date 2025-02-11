@@ -46,6 +46,7 @@ def run_leg(
     n_windows: int,
     min_overlap: float,
 ):
+    np.random.seed(md_params.seed)
     host_config = None
     if leg_name == "vacuum":
         res = run_vacuum(
@@ -97,12 +98,23 @@ def run_leg(
     # Ensure the output directory exists
     Path(file_client.full_path(leg_name)).mkdir(parents=True, exist_ok=True)
 
-    np.savez(
+    np.savez_compressed(
         file_client.full_path(Path(leg_name) / "results.npz"),
         pred_dg=pred_dg,
         pred_dg_err=pred_dg_err,
         overlaps=res.final_result.overlaps,
         n_windows=len(res.final_result.initial_states),
+    )
+
+    np.savez_compressed(
+        file_client.full_path(Path(leg_name) / "lambda0_traj.npz"),
+        coords=np.array(res.trajectories[0].frames),
+        boxes=np.asarray(res.trajectories[0].boxes),
+    )
+    np.savez_compressed(
+        file_client.full_path(Path(leg_name) / "lambda1_traj.npz"),
+        coords=np.array(res.trajectories[-1].frames),
+        boxes=np.asarray(res.trajectories[-1].boxes),
     )
     file_client.store(Path(leg_name) / "simulation_result.pkl", pickle.dumps(res))
     if host_config is not None:
@@ -169,6 +181,7 @@ def main():
         assert args.pdb_path is not None, "Must provide PDB to run complex leg"
 
     mols_by_name = read_sdf_mols_by_name(args.sdf_path)
+    np.random.seed(args.seed)
 
     mol_a = mols_by_name[args.mol_a]
     mol_b = mols_by_name[args.mol_b]

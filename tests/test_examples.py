@@ -265,6 +265,9 @@ def test_run_rbfe_legs(
                 leg_dir = output_dir / leg
                 assert leg_dir.is_dir()
                 assert (leg_dir / "results.npz").is_file()
+                assert (leg_dir / "lambda0_traj.npz").is_file()
+                assert (leg_dir / "lambda1_traj.npz").is_file()
+
                 assert (leg_dir / "simulation_result.pkl").is_file()
                 if leg in ["solvent", "complex"]:
                     assert (leg_dir / "host_config.pkl").is_file()
@@ -292,6 +295,11 @@ def test_run_rbfe_legs(
                 assert 2 <= results["n_windows"] <= config["n_windows"]
                 assert isinstance(results["overlaps"], np.ndarray)
                 assert all(isinstance(overlap, float) for overlap in results["overlaps"])
+
+                for lamb in [0, 1]:
+                    traj_data = np.load(str(leg_dir / f"lambda{lamb:d}_traj.npz"))
+                    assert len(traj_data["coords"]) == n_frames
+                    assert len(traj_data["boxes"]) == n_frames
 
             config_a = dict(output_dir="a", **config)
             proc = run_example("run_rbfe_legs.py", get_cli_args(config_a), cwd=temp_dir)
@@ -342,5 +350,11 @@ def test_run_rbfe_legs(
                     assert len(ref_state.potentials) == len(comp_state.potentials)
                     for ref_pot, comp_pot in zip(ref_state.potentials, comp_state.potentials):
                         np.testing.assert_array_equal(ref_pot.params, comp_pot.params)
+
+                for lamb in [0, 1]:
+                    ref_traj = np.load(str(ref_dir / leg / f"lambda{lamb}_traj.npz"))
+                    comp_traj = np.load(str(comp_dir / leg / f"lambda{lamb}_traj.npz"))
+                    np.testing.assert_array_equal(ref_traj["coords"], comp_traj["coords"])
+                    np.testing.assert_array_equal(ref_traj["boxes"], comp_traj["boxes"])
 
             verify_simulations_match(Path(temp_dir) / config_a["output_dir"], Path(temp_dir) / config_b["output_dir"])
