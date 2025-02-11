@@ -630,14 +630,14 @@ def setup_end_state(
         missing_bonds = []
         for x in [i, j, k]:
             if (c, x) not in mol_c_bond_idxs_set and (x, c) not in mol_c_bond_idxs_set:
-                missing_bonds.append((c, x))
+                missing_bonds.append((int(c), int(x)))
 
         if len(missing_bonds) == 0:
             all_proper_dummy_chiral_atom_idxs_.append((c, i, j, k))
             all_proper_dummy_chiral_atom_params_.append(p)
         else:
             warnings.warn(
-                f"Chiral Volume {c, i, j, k} has disabled bonds {missing_bonds}, turning off.",
+                f"Chiral Volume {int(c), int(i), int(j), int(k)} has disabled bonds {missing_bonds}, turning off.",
                 ChiralVolumeDisabledWarning,
             )
 
