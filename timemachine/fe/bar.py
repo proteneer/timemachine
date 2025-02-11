@@ -245,7 +245,7 @@ def bar_with_pessimistic_uncertainty(
     return df, ddf
 
 
-def bar(w_F: NDArray, w_R: NDArray, **kwargs) -> tuple[float, float]:
+def bar(w_F: NDArray, w_R: NDArray, **kwargs) -> tuple[float, float | None]:
     """
     Wrapper around `pymbar.bar` to return the free energy and bar uncertainty.
 
@@ -262,10 +262,13 @@ def bar(w_F: NDArray, w_R: NDArray, **kwargs) -> tuple[float, float]:
     best_estimate : float
         BAR(w_F, w_R)
 
-    uncertainty : float
+    uncertainty : float if compute_uncertainty=True (default) else None
     """
-    bar = pymbar.bar(w_F, w_R, **kwargs)
-    return bar[DG_KEY], bar[DG_ERR_KEY]
+    bar_result = pymbar.bar(w_F, w_R, **kwargs)
+    if DG_ERR_KEY in bar_result:
+        return bar_result[DG_KEY], bar_result[DG_ERR_KEY]
+    else:
+        return bar_result[DG_KEY], None
 
 
 def works_from_ukln(u_kln: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
