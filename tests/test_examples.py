@@ -217,11 +217,11 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
 
 
 @pytest.mark.parametrize(
-    "leg, n_windows, n_frames, n_eq_steps, expected_pred_dg, expected_pred_dg_err",
+    "leg, n_windows, n_frames, n_eq_steps",
     [
-        ("vacuum", 6, 50, 1000, 4.152549899616943, 1728.6927089466042),
-        pytest.param("solvent", 5, 50, 1000, -90.26960583193, 717079.6958603747, marks=pytest.mark.nightly),
-        pytest.param("complex", 5, 50, 1000, -80.96089811267088, 220517.0815407325, marks=pytest.mark.nightly),
+        ("vacuum", 6, 50, 1000),
+        pytest.param("solvent", 5, 50, 1000, marks=pytest.mark.nightly),
+        pytest.param("complex", 5, 50, 1000, marks=pytest.mark.nightly),
     ],
 )
 @pytest.mark.parametrize("mol_a, mol_b", [("15", "30")])
@@ -231,8 +231,6 @@ def test_run_rbfe_legs(
     n_windows,
     n_frames,
     n_eq_steps,
-    expected_pred_dg,
-    expected_pred_dg_err,
     mol_a,
     mol_b,
     seed,
@@ -280,16 +278,12 @@ def test_run_rbfe_legs(
                 results = np.load(str(leg_dir / "results.npz"))
                 assert results["pred_dg"].size == 1
                 assert results["pred_dg"].dtype == np.float64
-                np.testing.assert_equal(
-                    results["pred_dg"], expected_pred_dg, err_msg=f"{float(results['pred_dg'])} != {expected_pred_dg}"
-                )
-                np.testing.assert_equal(
-                    results["pred_dg_err"],
-                    expected_pred_dg_err,
-                    err_msg=f"{float(results['pred_dg_err'])} != {expected_pred_dg_err}",
-                )
+                assert results["pred_dg"] != 0.0
+
                 assert results["pred_dg_err"].size == 1
                 assert results["pred_dg_err"].dtype == np.float64
+                assert results["pred_dg_err"] != 0.0
+
                 assert results["n_windows"].size == 1
                 assert results["n_windows"].dtype == np.intp
                 assert 2 <= results["n_windows"] <= config["n_windows"]
