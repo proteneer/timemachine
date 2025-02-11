@@ -245,6 +245,29 @@ def bar_with_pessimistic_uncertainty(
     return df, ddf
 
 
+def bar(w_F: NDArray, w_R: NDArray) -> tuple[float, float]:
+    """
+    Wrapper around `pymbar.bar` to return the free energy and bar uncertainty.
+
+    Parameters
+    ----------
+    w_F: np.ndarray, float, (N,)
+        forward work for N frames
+
+    w_R: np.ndarray, float, (N,)
+        reverse work for N frames
+
+    Returns
+    -------
+    best_estimate : float
+        BAR(w_F, w_R)
+
+    uncertainty : float
+    """
+    bar = pymbar.bar(w_F, w_R)
+    return bar[DG_KEY], bar[DG_ERR_KEY]
+
+
 def works_from_ukln(u_kln: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Extract forward and reverse works from 2-state u_kln matrix"""
     k, l, _ = u_kln.shape

@@ -5,11 +5,11 @@ Assert accurate estimates for free energy differences between 1D Gaussians using
 from dataclasses import dataclass
 
 import numpy as np
+import pymbar
 import pytest
-from pymbar import bar, exp
 from pymbar.mbar import MBAR
 
-from timemachine.fe.bar import DG_KEY
+from timemachine.fe.bar import DG_KEY, bar
 from timemachine.maps.estimators import compute_mapped_reduced_work, compute_mapped_u_kn
 
 pytestmark = [pytest.mark.nocuda]
@@ -80,7 +80,7 @@ def test_one_sided_estimates():
         assert np.std(mapped_w_F) < eps
 
         # ... and estimated_delta_f should be == exact_delta_f
-        estimated_delta_f = exp(mapped_w_F)[DG_KEY]
+        estimated_delta_f = pymbar.exp(mapped_w_F)[DG_KEY]
         exact_delta_f = dst_state.reduced_free_energy - src_state.reduced_free_energy
 
         np.testing.assert_allclose(estimated_delta_f, exact_delta_f)
@@ -106,7 +106,7 @@ def test_two_sided_estimates():
         w_R = compute_mapped_reduced_work(x_b, u_b, u_a, inv_map_fxn)
 
         # estimated_delta_f = bar(w_F, w_R)[0] #  default solver -> BoundsError: Cannot determine bound on free energy
-        estimated_delta_f = bar(w_F, w_R, method="self-consistent-iteration", compute_uncertainty=False)[DG_KEY]
+        estimated_delta_f = bar(w_F, w_R, method="self-consistent-iteration", compute_uncertainty=False)[0]
 
         exact_delta_f = state_b.reduced_free_energy - state_a.reduced_free_energy
 

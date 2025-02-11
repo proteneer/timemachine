@@ -11,6 +11,7 @@ from pymbar.testsystems import ExponentialTestCase
 from timemachine.fe.bar import (
     DG_ERR_KEY,
     DG_KEY,
+    bar,
     bar_with_pessimistic_uncertainty,
     bootstrap_bar,
     compute_fwd_and_reverse_df_over_time,
@@ -122,12 +123,11 @@ def test_df_and_err_from_u_kln_approximates_exact_result(sigma):
 
 @pytest.mark.parametrize("sigma", [0.3, 1.0, 10.0])
 def test_df_and_err_from_u_kln_consistent_with_pymbar_bar(sigma):
-    """Compare the estimator used for 2-state delta fs (currently MBAR) with pymbar.bar as reference."""
+    """Compare the estimator used for 2-state delta fs (currently MBAR) with bar as reference."""
     u_kln, _ = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
     w_F, w_R = works_from_ukln(u_kln)
 
-    bar = pymbar.bar(w_F, w_R)
-    df_ref, df_err_ref = bar[DG_KEY], bar[DG_ERR_KEY]
+    df_ref, df_err_ref = bar(w_F, w_R)
     df, df_err = df_and_err_from_u_kln(u_kln)
 
     assert df == pytest.approx(df_ref, rel=0.05, abs=0.01)
@@ -149,13 +149,11 @@ def test_df_and_err_from_u_kln_partial_overlap():
     assert not np.any(np.isnan(w_R))
 
     # pymbar.bar warns and returns zero for df and uncertainty with default method
-    bar = pymbar.bar(w_F, w_R)
-    df_ref, df_err_ref = bar[DG_KEY], bar[DG_ERR_KEY]
+    df_ref, df_err_ref = bar(w_F, w_R)
     assert (df_ref, df_err_ref) == (0.0, 0.0)
 
     # pymbar.bar returns NaNs with self-consistent iteration method
-    bar = pymbar.bar(w_F, w_R, method="self-consistent-iteration", iterated_solution=False)
-    df_sci, df_err_sci = bar[DG_KEY], bar[DG_ERR_KEY]
+    df_sci, df_err_sci = bar(w_F, w_R, method="self-consistent-iteration", iterated_solution=False)
     assert np.isnan(df_sci)
     assert np.isnan(df_err_sci)
 
