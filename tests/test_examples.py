@@ -18,10 +18,6 @@ from timemachine.datasets import fetch_freesolv
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
 
-# All examples are to be tested nightly
-pytestmark = [pytest.mark.nightly]
-
-
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
 
 
@@ -144,6 +140,7 @@ def test_smc_freesolv(smc_free_solv_path):
     assert mean_abs_err_kcalmol <= 2
 
 
+@pytest.mark.nightly
 @pytest.mark.parametrize("insertion_type", ["untargeted"])
 def test_water_sampling_mc_bulk_water(insertion_type):
     reference_data_path = EXAMPLES_DIR.parent / "tests" / "data" / f"reference_bulk_water_{insertion_type}.npz"
@@ -177,6 +174,7 @@ def test_water_sampling_mc_bulk_water(insertion_type):
             np.testing.assert_array_equal(test_data[key], reference_data[key])
 
 
+@pytest.mark.nightly
 @pytest.mark.parametrize("batch_size", [1, 250, 512, 1000])
 @pytest.mark.parametrize("insertion_type", ["targeted", "untargeted"])
 def test_water_sampling_mc_buckyball(batch_size, insertion_type):
@@ -218,10 +216,27 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
             np.testing.assert_array_equal(test_data[key], reference_data[key])
 
 
-@pytest.mark.parametrize("leg", ["vacuum", "solvent", pytest.param("complex", marks=pytest.mark.nightly)])
+@pytest.mark.parametrize(
+    "leg, n_windows, n_frames, n_eq_steps, expected_pred_dg, expected_pred_dg_err",
+    [
+        ("vacuum", 6, 50, 1000, 4.152549899616943, 1728.6927089466042),
+        pytest.param("solvent", 5, 50, 1000, -90.26960583193, 717079.6958603747, marks=pytest.mark.nightly),
+        pytest.param("complex", 5, 50, 1000, -80.96089811267088, 220517.0815407325, marks=pytest.mark.nightly),
+    ],
+)
 @pytest.mark.parametrize("mol_a, mol_b", [("15", "30")])
 @pytest.mark.parametrize("seed", [2025])
-def test_run_rbfe_legs(leg, mol_a, mol_b, seed):
+def test_run_rbfe_legs(
+    leg,
+    n_windows,
+    n_frames,
+    n_eq_steps,
+    expected_pred_dg,
+    expected_pred_dg_err,
+    mol_a,
+    mol_b,
+    seed,
+):
     with temporary_working_dir() as temp_dir:
         with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_dir:
             config = dict(
@@ -231,9 +246,11 @@ def test_run_rbfe_legs(leg, mol_a, mol_b, seed):
                 pdb_path=hif2a_dir / "5tbm_prepared.pdb",
                 seed=seed,
                 legs=leg,
-                n_eq_steps=5,
-                n_frames=5,
-                n_windows=3,
+                n_eq_steps=n_eq_steps,
+                n_frames=n_frames,
+                n_windows=n_windows,
+                # Use simple charges to avoid os-dependent charge differences
+                forcefield="smirnoff_1_1_0_sc.py",
             )
 
             def verify_run(output_dir: Path):
@@ -243,8 +260,7 @@ def test_run_rbfe_legs(leg, mol_a, mol_b, seed):
                 assert (output_dir / "core.pkl").is_file()
                 assert (output_dir / "ff.py").is_file()
 
-                ff = Forcefield.load_from_file(output_dir / "ff.py")
-                assert ff is not None
+                assert Forcefield.load_from_file(output_dir / "ff.py") is not None
 
                 leg_dir = output_dir / leg
                 assert leg_dir.is_dir()
@@ -261,6 +277,14 @@ def test_run_rbfe_legs(leg, mol_a, mol_b, seed):
                 results = np.load(str(leg_dir / "results.npz"))
                 assert results["pred_dg"].size == 1
                 assert results["pred_dg"].dtype == np.float64
+                np.testing.assert_equal(
+                    results["pred_dg"], expected_pred_dg, err_msg=f"{float(results['pred_dg'])} != {expected_pred_dg}"
+                )
+                np.testing.assert_equal(
+                    results["pred_dg_err"],
+                    expected_pred_dg_err,
+                    err_msg=f"{float(results['pred_dg_err'])} != {expected_pred_dg_err}",
+                )
                 assert results["pred_dg_err"].size == 1
                 assert results["pred_dg_err"].dtype == np.float64
                 assert results["n_windows"].size == 1
