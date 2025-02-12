@@ -219,6 +219,7 @@ def test_infer_node_dgs_w_error_invariant_wrt_edge_order():
 
 edge_diff_prop = "edge_diff"
 edge_stddev_prop = "edge_stddev"
+edge_skip_prop = "skip_for_mle"
 node_val_prop = "node_val"
 node_stddev_prop = "node_stddev"
 ref_node_val_prop = "ref_node_val"
@@ -376,7 +377,7 @@ def test_infer_node_vals_and_errs_networkx_missing_values(nx_graph_with_referenc
 
     idx_to_label = {n: str(n) for n in g.nodes}
     g = nx.relabel_nodes(g, idx_to_label)
-    n1, n2, n3 = np.random.choice(g.nodes, 3, replace=False)
+    n1, n2, n3, n4 = np.random.choice(g.nodes, 4, replace=False)
 
     # define a new node somewhere in the middle of the sorted list of nodes
     # (needed to check that we correctly remove isolated nodes)
@@ -386,9 +387,10 @@ def test_infer_node_vals_and_errs_networkx_missing_values(nx_graph_with_referenc
     g.add_edge(n3, undetermined_label, **{edge_diff_prop: None, edge_stddev_prop: None})
 
     # unlabeled edges between exising nodes should have no effect on result
-    g.add_edge(n1, n2)
+    g.add_edge(n1, n2, **{edge_skip_prop: False})
     g.add_edge(n2, n3, **{edge_diff_prop: None})
     g.add_edge(n1, n3, **{edge_diff_prop: None, edge_stddev_prop: None})
+    g.add_edge(n1, n4, **{edge_skip_prop: True})
 
     # use n_bootstrap=2 to save time, since we don't check errors here
     g_res = infer_node_vals_and_errs_networkx_partial(g, n_bootstrap=2, seed=seed)
