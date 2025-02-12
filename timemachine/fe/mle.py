@@ -115,7 +115,7 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), 
 
     K = np.max(edge_idxs) + 1
     x0 = np.zeros(K)  # maybe initialize smarter, e.g. using random spanning tree?
-    result = minimize(loss, x0, jac=True, tol=0).x
+    result = minimize(loss, x0, jac=True, tol=0, method="L-BFGS-B").x
 
     centered_node_vals = result - result[0]
 
