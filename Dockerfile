@@ -2,7 +2,7 @@
 ARG LIBXRENDER_VERSION=1:0.9.10-*
 ARG LIBXEXT_VERSION=2:1.3.4-*
 
-FROM docker.io/nvidia/cuda:12.8.0-devel-ubuntu24.04 AS tm_base_env
+FROM docker.io/nvidia/cuda:12.5.1-devel-ubuntu24.04 AS tm_base_env
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 
@@ -79,7 +79,7 @@ RUN pip install --no-cache-dir -e . && rm -rf ./build
 
 # Container with only cuda base, half the size of the timemachine_cuda_dev container
 # Need to copy curand/cudart as these are dependencies of the Timemachine GPU code
-FROM docker.io/nvidia/cuda:12.8.0-base-ubuntu24.04 AS timemachine
+FROM docker.io/nvidia/cuda:12.5.1-base-ubuntu24.04 AS timemachine
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
