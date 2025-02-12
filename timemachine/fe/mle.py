@@ -260,7 +260,7 @@ def infer_node_vals_and_errs_networkx(
         the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
     assert isinstance(graph, (nx.DiGraph, nx.MultiDiGraph)), "Graph must be a DiGraph or MultiDiGraph"
-    
+
     def keep_edge(e):
         d = graph.edges[e]
         has_edge_diff = d.get(edge_diff_prop) is not None
