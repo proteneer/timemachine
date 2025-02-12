@@ -195,7 +195,9 @@ def test_pair_overlap_from_ukln():
 
     # non-overlapping
     u_kln, _ = make_gaussian_ukln_example((0, 0.01), (1, 0.01))
+    assert pair_overlap_from_ukln(u_kln) >= 0.0
     assert pair_overlap_from_ukln(u_kln) < 1e-10
+    print(pair_overlap_from_ukln(u_kln))
 
     # overlapping
     u_kln, _ = make_gaussian_ukln_example((0, 0.1), (0.5, 0.2))
