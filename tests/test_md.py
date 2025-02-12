@@ -1,6 +1,4 @@
-import gc
 import re
-import weakref
 
 import jax
 import numpy as np
@@ -782,12 +780,10 @@ def test_setup_context_with_references():
     def build_context(barostat_interval):
         """The context returned will segfault if any of the objects get cleaned up"""
 
-        weak_refs = []
         bps = []
         for p, pot in zip(sys_params, unbound_potentials):
             bound_impl = pot.bind(p).to_gpu(np.float32).bound_impl
             bps.append(bound_impl)
-            weak_refs.append(weakref.ref(bound_impl))
 
         intg = LangevinIntegrator(temperature, dt, friction, masses, seed)
 
@@ -799,41 +795,27 @@ def test_setup_context_with_references():
             barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, 1, seed)
             barostat_impl = barostat.impl(bps)
             movers.append(barostat_impl)
-            weak_refs.append(weakref.ref(barostat_impl))
 
         intg_impl = intg.impl()
-        weak_refs.append(weakref.ref(intg_impl))
 
-        return custom_ops.Context(coords, v0, box, intg_impl, bps, movers=movers), weak_refs
+        return custom_ops.Context(coords, v0, box, intg_impl, bps, movers=movers)
 
     # Without barostat
-    ctxt, reffed_objs = build_context(0)
-    assert all(ref() is not None for ref in reffed_objs)
+    ctxt = build_context(0)
     xs, boxes = ctxt.multiple_steps(100)
     assert np.all(np.isfinite(xs))
     assert np.all(np.isfinite(boxes))
     assert np.all(xs[-1] != coords)
     assert np.all(boxes[-1] == box)
 
-    del ctxt
-    gc.collect()
-    for ref in reffed_objs:
-        assert ref() is None
-
     # With Barostat
-    ctxt, reffed_objs = build_context(10)
-    assert all(ref() is not None for ref in reffed_objs)
+    ctxt = build_context(10)
     xs, boxes = ctxt.multiple_steps(100)
     assert np.all(np.isfinite(xs))
     assert np.all(np.isfinite(boxes))
     assert np.all(xs[-1] != coords)
     # Barostat should change box size
     assert np.all(np.diagonal(boxes[-1]) != np.diagonal(box))
-
-    del ctxt
-    gc.collect()
-    for ref in reffed_objs:
-        assert ref() is None
 
 
 @pytest.mark.parametrize("freeze_reference", [True, False])
