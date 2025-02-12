@@ -249,7 +249,7 @@ def infer_node_vals_and_errs_networkx(
     node_stddev_prop: str
         Node property in which to write inferred standard deviations
     edge_skip_prop: str
-        Edge property 
+        Edge property indicating whether to skip (True) or use (False) the marked edge
     n_bootstrap, seed:
         See documentation for :py:func:`timemachine.fe.mle.infer_node_vals_and_errs`
 
