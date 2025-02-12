@@ -97,7 +97,7 @@ setup(
         "jaxlib>0.4.1",
         "networkx",
         "numpy",
-        "pymbar>=3.0.6,<4",
+        "pymbar>4.0.2",
         "rdkit",
         "scipy",
         "matplotlib",
@@ -112,6 +112,7 @@ setup(
         "test": [
             "pytest",
             "pytest-cov",
+            "pytest-xdist",
             "hilbertcurve==1.0.5",
             "hypothesis[numpy]==6.54.6",
             "psutil==5.9.5",
