@@ -8,7 +8,7 @@ from typing import Callable, Optional, Union, cast
 import numpy as np
 from numpy.typing import NDArray
 from openmm import app
-from pymbar import MBAR
+from pymbar.mbar import MBAR
 from rdkit import Chem
 
 from timemachine.constants import DEFAULT_POSITIONAL_RESTRAINT_K, DEFAULT_PRESSURE, DEFAULT_TEMP
