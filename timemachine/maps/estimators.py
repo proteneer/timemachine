@@ -1,7 +1,7 @@
 """Utilities for computing mapped works or mapped u_kn matrix, incorporating invertible map_fxns"""
 
 import numpy as np
-from pymbar.utils import kln_to_kn  # TODO: should this be "vendored"?
+from pymbar.utils import kln_to_kn
 
 __all__ = ["compute_mapped_reduced_work", "compute_mapped_u_kn"]
 

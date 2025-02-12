@@ -225,6 +225,7 @@ def infer_node_vals_and_errs_networkx(
     ref_node_stddev_prop: str,
     node_val_prop: str = "inferred_dg",
     node_stddev_prop: str = "inferred_dg_stddev",
+    edge_skip_prop: str = "skip_for_mle",
     n_bootstrap: int = 100,
     seed: int = 0,
 ) -> NxDiGraph:
@@ -247,6 +248,8 @@ def infer_node_vals_and_errs_networkx(
         Node property in which to write inferred absolute values
     node_stddev_prop: str
         Node property in which to write inferred standard deviations
+    edge_skip_prop: str
+        Edge property indicating whether to skip (True) or use (False) the marked edge
     n_bootstrap, seed:
         See documentation for :py:func:`timemachine.fe.mle.infer_node_vals_and_errs`
 
@@ -257,10 +260,15 @@ def infer_node_vals_and_errs_networkx(
         the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
     assert isinstance(graph, (nx.DiGraph, nx.MultiDiGraph)), "Graph must be a DiGraph or MultiDiGraph"
-    edges_with_props = [
-        e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
-    ]
-    sg = graph.edge_subgraph(edges_with_props).copy()
+
+    def keep_edge(e):
+        d = graph.edges[e]
+        has_edge_diff = d.get(edge_diff_prop) is not None
+        has_edge_err = d.get(edge_stddev_prop) is not None
+        has_skip_marker = d.get(edge_skip_prop) is True
+        return (has_edge_diff and has_edge_err) and (not has_skip_marker)
+
+    sg = graph.edge_subgraph([e for e in graph.edges if keep_edge(e)]).copy()
 
     if not sg.nodes:
         raise ValueError("Empty graph after removing edges without predictions")

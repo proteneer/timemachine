@@ -11,11 +11,13 @@ config.update("jax_enable_x64", True)
 from functools import partial
 
 import pytest
-from pymbar import BAR, EXP, MBAR
+from pymbar import bar, exp
+from pymbar.mbar import MBAR
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
+from timemachine.fe.bar import DG_KEY
 from timemachine.ff import Forcefield
 from timemachine.maps.estimators import compute_mapped_reduced_work, compute_mapped_u_kn
 from timemachine.maps.terminal_bonds import Interval, TerminalBondMap, TerminalMappableState, interval_map
@@ -135,10 +137,10 @@ def test_on_methane():
 
     assert np.std(mapped_w_R) < 1.0
 
-    estimated_delta_f_forward = EXP(mapped_w_F)[0]
+    estimated_delta_f_forward = exp(mapped_w_F)[DG_KEY]
 
-    estimated_delta_f_reverse = -EXP(mapped_w_R)[0]
-    estimated_delta_f_bar = BAR(mapped_w_F, mapped_w_R)[0]
+    estimated_delta_f_reverse = -exp(mapped_w_R)[DG_KEY]
+    estimated_delta_f_bar = bar(mapped_w_F, mapped_w_R)[DG_KEY]
 
     # also plug into MBAR
     K = 2

@@ -798,7 +798,7 @@ def estimate_free_energy_bar(u_kln_by_component: NDArray, temperature: float) ->
     """
 
     # 1. We represent energies that we aren't able to evaluate (e.g. because of a fixed-point overflow in GPU potential code) with NaNs, but
-    # 2. pymbar.MBAR will fail with LinAlgError if there are NaNs in the input.
+    # 2. pymbar.mbar.MBAR will fail with LinAlgError if there are NaNs in the input.
     #
     # To work around this, we replace any NaNs with np.inf prior to the MBAR calculation.
     #
