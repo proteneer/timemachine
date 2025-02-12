@@ -808,6 +808,7 @@ def test_setup_context_with_references():
 
     # Without barostat
     ctxt, reffed_objs = build_context(0)
+    assert all(ref() is not None for ref in reffed_objs)
     xs, boxes = ctxt.multiple_steps(100)
     assert np.all(np.isfinite(xs))
     assert np.all(np.isfinite(boxes))
@@ -821,6 +822,7 @@ def test_setup_context_with_references():
 
     # With Barostat
     ctxt, reffed_objs = build_context(10)
+    assert all(ref() is not None for ref in reffed_objs)
     xs, boxes = ctxt.multiple_steps(100)
     assert np.all(np.isfinite(xs))
     assert np.all(np.isfinite(boxes))
