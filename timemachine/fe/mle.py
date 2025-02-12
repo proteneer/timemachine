@@ -15,6 +15,7 @@ def make_stddevs_finite(stddevs, min_stddev=1e-3):
     return jnp.maximum(stddevs, min_stddev)
 
 
+@jit
 def gaussian_log_likelihood(
     node_vals,  # [K] float array
     edge_idxs,  # [E, 2] int array, taking values in range(K)
@@ -63,9 +64,12 @@ def _assert_edges_valid(edge_idxs):
     _assert_edges_connected(edge_idxs)
 
 
-def wrap_for_scipy_optimize(f):
+def wrap_for_scipy_optimize(f, apply_jit=True):
     # utility for interfacing with scipy.optimize L-BFGS-B
-    vg = jit(value_and_grad(f))
+    if apply_jit:
+        vg = jit(value_and_grad(f))
+    else:
+        vg = value_and_grad(f)
 
     def wrapped(x):
         v, g = vg(x)
@@ -74,7 +78,7 @@ def wrap_for_scipy_optimize(f):
     return wrapped
 
 
-def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), ref_node_vals=tuple()):
+def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), ref_node_vals=tuple(), initial_guess=None, tol=1e-8, maxiter=1000):
     """
     Given pairwise comparisons involving K states,
     return a length-K vector of underlying absolute values
@@ -109,15 +113,24 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), 
 
     # maximize likelihood of observed edge diffs, up to arbitrary offset
     @wrap_for_scipy_optimize
-    def loss(x):
+    def loss(x1):
         # TODO: incorporate offset here?
+        x = jnp.hstack([jnp.zeros(1), x1])
         return -gaussian_log_likelihood(x, edge_idxs, edge_diffs, edge_stddevs)
 
     K = np.max(edge_idxs) + 1
-    x0 = np.zeros(K)  # maybe initialize smarter, e.g. using random spanning tree?
-    result = minimize(loss, x0, jac=True, tol=0).x
+    if initial_guess is None:
+        x0 = np.zeros(K)  # maybe initialize smarter, e.g. using random spanning tree?
+    else:
+        x0 = np.array(initial_guess)
+        assert x0.shape == (K,)
+    x1 = x0[1:] - x0[0]
+    opt_result = minimize(loss, x1, jac=True, tol=tol, method='L-BFGS-B', options=dict(maxiter=maxiter))
+    print(opt_result)
+    result = opt_result.x
 
-    centered_node_vals = result - result[0]
+    #centered_node_vals = result - result[0]
+    centered_node_vals = np.hstack([np.zeros(1), result])
 
     # ref node vals only used to inform a single additive offset
     offset = np.mean(ref_node_vals - centered_node_vals[ref_node_idxs])
@@ -134,6 +147,7 @@ def _bootstrap_node_vals(
     ref_node_stddevs,
     n_bootstrap=100,
     seed=0,
+    initial_guess=None,
 ):
     """call infer_node_vals multiple times with Gaussian bootstrapped edge_diffs, ref_node_vals"""
 
@@ -144,7 +158,7 @@ def _bootstrap_node_vals(
     rng = np.random.default_rng(seed)
 
     def estimate_node_val_w_offset(edge_vals, node_vals):
-        return infer_node_vals(edge_idxs, edge_vals, edge_stddevs, ref_node_idxs, node_vals)
+        return infer_node_vals(edge_idxs, edge_vals, edge_stddevs, ref_node_idxs, node_vals, initial_guess=initial_guess, tol=1e-3, maxiter=100)
 
     bootstrap_estimates = np.zeros((n_bootstrap, n_nodes))
 
@@ -210,7 +224,7 @@ def infer_node_vals_and_errs(
 
     # empirical stddev
     bootstrap_estimates = _bootstrap_node_vals(
-        edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, n_bootstrap, seed
+        edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs, ref_node_vals, ref_node_stddevs, n_bootstrap, seed, initial_guess=dg
     )
     dg_err = bootstrap_estimates.std(0)
 
