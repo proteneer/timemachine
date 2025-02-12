@@ -322,7 +322,7 @@ def pair_overlap_from_ukln(u_kln: NDArray) -> float:
 
     """
     u_kn, N_k = ukln_to_ukn(u_kln)
-    return max(0, 2 * pymbar.MBAR(u_kn, N_k).compute_overlap()["matrix"][0, 1])  # type: ignore
+    return np.maximum(0, 2 * pymbar.MBAR(u_kn, N_k).compute_overlap()["matrix"][0, 1])  # type: ignore
 
 
 def compute_fwd_and_reverse_df_over_time(

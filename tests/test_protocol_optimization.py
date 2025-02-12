@@ -14,6 +14,7 @@ from timemachine.optimize.protocol import (
     linear_u_kn_interpolant,
     log_weights_from_mixture,
     make_fast_approx_overlap_distance_fxn,
+    make_fast_approx_overlap_fxn,
     rebalance_initial_protocol_by_work_stddev,
 )
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -140,6 +141,16 @@ def summarize_protocol(lambdas, dist_fxn):
     msg += f"\t{neighbor_distances!s}"
     print(msg)
     return neighbor_distances
+
+
+@pytest.mark.nocuda
+def test_make_fast_approx_overlap_fxn():
+    initial_lams = np.array([0, 0.5, 1.0])
+    u_kn = np.array([[0, 0, 0], [0, 0, 0], [0, 0, np.inf]])
+    f_k = np.array([0, 0, 1e27])
+    N_k = np.array([1] * 3)
+    overlap_fxn = make_fast_approx_overlap_fxn(initial_lams, u_kn, f_k, N_k)
+    assert overlap_fxn(0.0, 0.0) == pytest.approx(1.0)
 
 
 @pytest.mark.nocuda
