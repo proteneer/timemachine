@@ -46,6 +46,43 @@ def run_leg(
     n_windows: int,
     min_overlap: float,
 ):
+    """Run an RBFE leg (vacuum, solvent, or complex).
+
+    Will store results using the file_client to a new directory that has the name of the leg being run.
+
+    Stores the following files:
+
+    * results.npz - Predictions, overlaps and the number of windows
+    * lambda*_traj.npz - Store the endstate trajectories
+    * simulation_result.pkl - Pickled copy of the SimulationResult object
+    * host_config.pkl - Pickled HostConfig, if the leg is not vacuum
+    * hrex_transition_matrix.png - PNG of the transition matrix plot
+    * hrex_swap_acceptance_rates_convergence.png - PNG of the HREX swap rate convergence
+    * hrex_replica_state_distribution_heatmap.png - PNG of the HREX replica state distribution heatmap
+
+    Parameters
+    ----------
+    file_client : FileClient
+        File client for storing results of the simulation
+    leg_name : str
+        Name of the leg to run. Can be "vacuum", "solvent", or "complex".
+    mol_a : Chem.Mol
+        First molecule in the system.
+    mol_b : Chem.Mol
+        Second molecule in the system.
+    core : NDArray
+        The atom mapping between the two molecules
+    ff : Forcefield
+        Forcefield
+    pdb_path : str, optional
+        Path to a PDB file if running a "complex" leg. Optional.
+    md_params : MDParams
+        Parameters for the RBFE simulation.
+    n_windows : int
+        Maximum number of windows to generate during bisection.
+    min_overlap : float
+        Minimum overlap used during bisection.
+    """
     np.random.seed(md_params.seed)
     host_config = None
     if leg_name == "vacuum":
@@ -133,7 +170,7 @@ def run_leg(
 
 
 def main():
-    parser = ArgumentParser(description="Generate star map as a JSON file")
+    parser = ArgumentParser(description="Run the RBFE legs for a pair of molecules")
     parser.add_argument("--sdf_path", help="Path to sdf file containing mols", required=True)
     parser.add_argument("--mol_a", help="Name of mol a in sdf_path", required=True)
     parser.add_argument("--mol_b", help="Name of mol b in sdf_path", required=True)
