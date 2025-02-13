@@ -1,4 +1,3 @@
-from importlib import resources
 from time import time
 
 import numpy as np
@@ -24,48 +23,48 @@ from timemachine.utils import path_to_internal_file
     "pdb_path, sdf_path, mol_a_name, mol_b_name, run_one_test",
     [
         pytest.param(
-            resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb"),
-            resources.path("timemachine.testsystems.data", "ligands_40.sdf"),
+            path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb"),
+            path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf"),
             "43",
             "234",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
             "20",
             "43",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
             "41",
             "43",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
             "34",
             "37",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
             "26",
             "37",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb"),
-            resources.path("timemachine.testsystems.data", "ligands_40.sdf"),
+            path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb"),
+            path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf"),
             "43",
             "234",
             True,
