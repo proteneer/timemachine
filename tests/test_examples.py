@@ -15,6 +15,7 @@ from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
+from timemachine.fe.free_energy import assert_deep_eq
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
 
@@ -341,9 +342,7 @@ def test_run_rbfe_legs(
                     np.testing.assert_array_equal(ref_state.box0, comp_state.box0)
                     np.testing.assert_array_equal(ref_state.ligand_idxs, comp_state.ligand_idxs)
                     np.testing.assert_array_equal(ref_state.protein_idxs, comp_state.protein_idxs)
-                    assert len(ref_state.potentials) == len(comp_state.potentials)
-                    for ref_pot, comp_pot in zip(ref_state.potentials, comp_state.potentials):
-                        np.testing.assert_array_equal(ref_pot.params, comp_pot.params)
+                    assert_deep_eq(ref_state.potentials, comp_state.potentials)
 
                 for lamb in [0, 1]:
                     ref_traj = np.load(str(ref_dir / leg / f"lambda{lamb}_traj.npz"))

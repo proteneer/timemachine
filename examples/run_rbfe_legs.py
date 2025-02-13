@@ -30,16 +30,16 @@ from timemachine.fe.rbfe import (
 from timemachine.fe.utils import get_mol_name, plot_atom_mapping_grid, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.md.exchange.utils import get_radius_of_mol_pair
-from timemachine.parallel.client import CUDAPoolClient, FileClient
+from timemachine.parallel.client import AbstractFileClient, CUDAPoolClient, FileClient
 from timemachine.parallel.utils import get_gpu_count
 
 
 def run_leg(
-    file_client: FileClient,
-    leg_name: str,
+    file_client: AbstractFileClient,
     mol_a: Chem.Mol,
     mol_b: Chem.Mol,
     core: NDArray,
+    leg_name: str,
     ff: Forcefield,
     pdb_path: str | None,
     md_params: MDParams,
@@ -64,14 +64,14 @@ def run_leg(
     ----------
     file_client : FileClient
         File client for storing results of the simulation
-    leg_name : str
-        Name of the leg to run. Can be "vacuum", "solvent", or "complex".
     mol_a : Chem.Mol
         First molecule in the system.
     mol_b : Chem.Mol
         Second molecule in the system.
     core : NDArray
         The atom mapping between the two molecules
+    leg_name : str
+        Name of the leg to run. Can be "vacuum", "solvent", or "complex".
     ff : Forcefield
         Forcefield
     pdb_path : str, optional
@@ -272,10 +272,10 @@ def main():
         fut = pool.submit(
             run_leg,
             file_client,
-            leg_name,
             mol_a,
             mol_b,
             core,
+            leg_name,
             ff,
             args.pdb_path,
             md_params,

@@ -253,7 +253,7 @@ class BinaryFutureWrapper:
 
 
 class AbstractFileClient:
-    def store_stream(self, path: str, stream: io.IOBase):
+    def store_stream(self, path: str | Path, stream: io.IOBase):
         """
         Store a stream of binary data to a given path.
 
@@ -268,7 +268,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def store(self, path: str, data: bytes):
+    def store(self, path: str | Path, data: bytes):
         """
         Store the results to the given path.
 
@@ -283,7 +283,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def load(self, path: str) -> bytes:
+    def load(self, path: str | Path) -> bytes:
         """
         Load the results from the given path.
 
@@ -299,7 +299,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def exists(self, path: str) -> bool:
+    def exists(self, path: str | Path) -> bool:
         """
         Parameters
         ----------
@@ -313,7 +313,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def full_path(self, path: str) -> str:
+    def full_path(self, path: str | Path) -> str:
         """
         Parameters
         ----------
@@ -328,7 +328,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def delete(self, path: str):
+    def delete(self, path: str | Path):
         """
         Parameters
         ----------
