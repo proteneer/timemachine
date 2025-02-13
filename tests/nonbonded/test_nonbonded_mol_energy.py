@@ -1,5 +1,3 @@
-from importlib import resources
-
 import numpy as np
 import pytest
 from common import assert_energy_arrays_match
@@ -13,6 +11,7 @@ from timemachine.lib.fixed_point import fixed_to_float
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.exchange.exchange_mover import BDExchangeMove, randomly_rotate_and_translate
+from timemachine.utils import path_to_internal_file
 
 
 @pytest.mark.memcheck
@@ -201,7 +200,7 @@ def test_nonbonded_mol_energy_random_moves(box_size, num_mols, moves, precision,
 def test_nonbonded_mol_energy_matches_exchange_mover_batch_U_in_complex(precision, atol, rtol):
     """Test that computing the per water energies of a system with a complex is equivalent."""
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         complex_host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
 
     conf = complex_host_config.conf

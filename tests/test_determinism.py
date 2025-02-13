@@ -1,5 +1,3 @@
-from importlib import resources
-
 import numpy as np
 import pytest
 from common import fixed_overflowed
@@ -12,6 +10,7 @@ from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.potentials import SummedPotential
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -36,7 +35,7 @@ def test_deterministic_energies(precision, rtol, atol):
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     # build the protein system.
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b])
 
     min_coords = minimizer.fire_minimize_host([mol_a, mol_b], host_config, ff)

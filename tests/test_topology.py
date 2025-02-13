@@ -1,5 +1,4 @@
 from functools import partial
-from importlib import resources
 from typing import no_type_check
 
 import jax.numpy as jnp
@@ -16,11 +15,12 @@ from timemachine.fe.topology import _SCALE_14_LJ, _SCALE_14_Q, BaseTopology, Dua
 from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name, set_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.potentials.nonbonded import combining_rule_epsilon, combining_rule_sigma
+from timemachine.utils import path_to_internal_file
 
 
 @pytest.mark.nocuda
 def test_base_topology_14_exclusions():
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(path_to_ligand)
 
     mol = all_mols[0]
@@ -187,7 +187,7 @@ def host_guest_nonbonded_impl(ctor, precision, rtol, atol, use_tiny_mol):
         u_impl = u.bind(ixn_params).to_gpu(precision=precision).bound_impl
         return u_impl.execute(x0, box)
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols_by_name = read_sdf_mols_by_name(path_to_ligand)
 
     # mol with no intramolecular NB terms and no dihedrals

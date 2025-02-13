@@ -1,4 +1,3 @@
-from importlib import resources
 from time import time
 
 import numpy as np
@@ -17,54 +16,55 @@ from timemachine.md.barostat.utils import compute_box_volume
 from timemachine.md.minimizer import equilibrate_host_barker, make_host_du_dx_fxn
 from timemachine.potentials import NonbondedPairList
 from timemachine.potentials.jax_utils import distance_on_pairs, idxs_within_cutoff
+from timemachine.utils import path_to_internal_file
 
 
 @pytest.mark.parametrize(
     "pdb_path, sdf_path, mol_a_name, mol_b_name, run_one_test",
     [
         pytest.param(
-            resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb"),
-            resources.path("timemachine.testsystems.data", "ligands_40.sdf"),
+            path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb"),
+            path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf"),
             "43",
             "234",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
             "20",
             "43",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
             "41",
             "43",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
             "34",
             "37",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
             "26",
             "37",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb"),
-            resources.path("timemachine.testsystems.data", "ligands_40.sdf"),
+            path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb"),
+            path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf"),
             "43",
             "234",
             True,
@@ -87,7 +87,7 @@ def test_fire_minimize_host_protein(pdb_path, sdf_path, mol_a_name, mol_b_name, 
 
 def test_fire_minimize_host_solvent():
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(path_to_ligand)
     mol_a = all_mols[1]
     mol_b = all_mols[4]
@@ -103,7 +103,7 @@ def test_fire_minimize_host_solvent():
 def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
     ff = Forcefield.load_default()
     mol_a_name, mol_b_name = mol_pair
-    with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as path_to_ligand:
         mols_by_name = read_sdf_mols_by_name(path_to_ligand)
     mol_a = mols_by_name[mol_a_name]
     mol_b = mols_by_name[mol_b_name]
@@ -111,7 +111,7 @@ def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
     if host_name == "solvent":
         host_config = builders.build_water_system(4.0, ff.water_ff, mols=mols)
     else:
-        with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
+        with path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
             host_config = builders.build_protein_system(str(pdb_path), ff.protein_ff, ff.water_ff, mols=mols)
     x_host, x_box = minimizer.pre_equilibrate_host(mols, host_config, ff)
     assert x_host.shape == host_config.conf.shape
@@ -136,12 +136,12 @@ def test_fire_minimize_host_adamantane():
 @pytest.mark.nightly(reason="Currently not used in practice")
 def test_equilibrate_host_barker():
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(path_to_ligand)
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b])
 
     # TODO[requirements-gathering]:
