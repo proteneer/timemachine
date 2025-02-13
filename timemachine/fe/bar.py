@@ -322,7 +322,9 @@ def pair_overlap_from_ukln(u_kln: NDArray) -> float:
 
     """
     u_kn, N_k = ukln_to_ukn(u_kln)
-    return pymbar.mbar.MBAR(u_kn, N_k).compute_overlap()["scalar"]  # type: ignore
+    overlap = 2 * pymbar.MBAR(u_kn, N_k).compute_overlap()["matrix"][0, 1]  # type: ignore
+    overlap = np.clip(overlap, 0.0, 1.0)
+    return overlap
 
 
 def compute_fwd_and_reverse_df_over_time(
