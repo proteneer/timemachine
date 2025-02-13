@@ -192,7 +192,7 @@ class CUDAPoolClient(ProcessPoolClient):
     the number of GPUs.
     """
 
-    def __init__(self, max_workers):
+    def __init__(self, max_workers: int):
         super().__init__(max_workers)
         visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
         if visible_devices:
@@ -253,7 +253,7 @@ class BinaryFutureWrapper:
 
 
 class AbstractFileClient:
-    def store_stream(self, path: str, stream: io.IOBase):
+    def store_stream(self, path: str | Path, stream: io.IOBase):
         """
         Store a stream of binary data to a given path.
 
@@ -268,7 +268,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def store(self, path: str, data: bytes):
+    def store(self, path: str | Path, data: bytes):
         """
         Store the results to the given path.
 
@@ -283,7 +283,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def load(self, path: str) -> bytes:
+    def load(self, path: str | Path) -> bytes:
         """
         Load the results from the given path.
 
@@ -299,7 +299,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def exists(self, path: str) -> bool:
+    def exists(self, path: str | Path) -> bool:
         """
         Parameters
         ----------
@@ -313,7 +313,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def full_path(self, path: str) -> str:
+    def full_path(self, path: str | Path) -> str:
         """
         Parameters
         ----------
@@ -328,7 +328,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def delete(self, path: str):
+    def delete(self, path: str | Path):
         """
         Parameters
         ----------
@@ -342,7 +342,7 @@ class FileClient(AbstractFileClient):
     def __init__(self, base: Optional[Path] = None):
         self.base = base or Path().cwd()
 
-    def store_stream(self, path: str, stream: io.IOBase):
+    def store_stream(self, path: str | Path, stream: io.IOBase):
         full_path = Path(self.full_path(path))
         full_path.parent.mkdir(parents=True, exist_ok=True)
         with open(full_path, "wb") as ofs:
@@ -351,22 +351,22 @@ class FileClient(AbstractFileClient):
                 ofs.write(chunk)
                 chunk = stream.read(io.DEFAULT_BUFFER_SIZE)
 
-    def store(self, path: str, data: bytes):
+    def store(self, path: str | Path, data: bytes):
         full_path = Path(self.full_path(path))
         full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.write_bytes(data)
 
-    def load(self, path: str) -> bytes:
+    def load(self, path: str | Path) -> bytes:
         full_path = Path(self.full_path(path))
         return full_path.read_bytes()
 
-    def exists(self, path: str) -> bool:
+    def exists(self, path: str | Path) -> bool:
         return Path(self.full_path(path)).exists()
 
-    def full_path(self, path: str) -> str:
+    def full_path(self, path: str | Path) -> str:
         return str(Path(self.base, path).absolute())
 
-    def delete(self, path: str):
+    def delete(self, path: str | Path):
         Path(self.full_path(path)).unlink()
 
 
