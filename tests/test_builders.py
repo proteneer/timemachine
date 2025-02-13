@@ -1,4 +1,3 @@
-from importlib import resources
 from tempfile import NamedTemporaryFile
 
 import numpy as np
@@ -12,6 +11,7 @@ from timemachine.md.barostat.utils import compute_box_volume
 from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.md.minimizer import check_force_norm
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 
 def test_build_water_system():
@@ -57,7 +57,7 @@ def test_build_water_system():
 
 @pytest.mark.nocuda
 def test_build_protein_system_returns_correct_water_count():
-    with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as sdf_path:
+    with path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as sdf_path:
         mols = read_sdf(sdf_path)
     # Pick two arbitrary mols
     mol_a = mols[0]
@@ -65,7 +65,7 @@ def test_build_protein_system_returns_correct_water_count():
     last_num_waters = None
     # Verify that even adding different molecules produces the same number of waters in the system
     for mols in (None, [mol_a], [mol_b], [mol_a, mol_b]):
-        with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
+        with path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
             host_config = build_protein_system(str(pdb_path), DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, mols=mols)
             # The builder should not modify the number of atoms in the protein at all
             # Hard coded to the number of protein atoms in the PDB, refer to 6hvi_prepared.pdb for the actual
@@ -78,7 +78,7 @@ def test_build_protein_system_returns_correct_water_count():
 
 @pytest.mark.nocuda
 def test_deserialize_protein_system_1_4_exclusions():
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
         host_pdbfile = str(pdb_path)
     host_config = build_protein_system(host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
 
@@ -110,7 +110,7 @@ def test_deserialize_protein_system_1_4_exclusions():
 def test_build_protein_system_waters_before_protein():
     num_waters = 100
     # Construct a PDB file with the waters before the protein, should raise an exception
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
         host_pdbfile = host_pdb = app.PDBFile(str(pdb_path))
 
     host_ff = app.ForceField(f"{DEFAULT_PROTEIN_FF}.xml", f"{DEFAULT_WATER_FF}.xml")
@@ -135,7 +135,7 @@ def test_build_protein_system():
     rng = np.random.default_rng(2024)
     mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
 
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
         host_pdbfile = str(pdb_path)
     host_config = build_protein_system(host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
     num_host_atoms = host_config.conf.shape[0] - host_config.num_water_atoms

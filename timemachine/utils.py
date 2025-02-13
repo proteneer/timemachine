@@ -1,4 +1,6 @@
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from importlib import resources
 
 
 def batches(n: int, batch_size: int) -> Iterator[int]:
@@ -13,3 +15,9 @@ def batches(n: int, batch_size: int) -> Iterator[int]:
 
 def not_ragged(xss: Sequence[Sequence]) -> bool:
     return all(len(xs) == len(xss[0]) for xs in xss)
+
+
+@contextmanager
+def path_to_internal_file(module: str, file_name: str):
+    with resources.as_file(resources.files(module).joinpath(file_name)) as path:
+        yield path

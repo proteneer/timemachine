@@ -5,7 +5,6 @@ relative binding free energy edge from the HIF2A test system"""
 import time
 from argparse import ArgumentParser
 from dataclasses import dataclass
-from importlib import resources
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -42,6 +41,7 @@ from timemachine.potentials import (
 from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 SECONDS_PER_DAY = 24 * 60 * 60
 
@@ -109,7 +109,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     # build the protein system.
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )
@@ -525,7 +525,7 @@ def benchmark_hif2a(config: BenchmarkConfig):
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     # build the protein system.
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )

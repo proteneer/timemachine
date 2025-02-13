@@ -1,5 +1,4 @@
 from dataclasses import replace
-from importlib import resources
 from typing import Optional
 from unittest.mock import patch
 from warnings import catch_warnings
@@ -32,6 +31,7 @@ from timemachine.fe.rbfe import estimate_relative_free_energy_bisection_hrex
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 DEBUG = False
 
@@ -42,7 +42,7 @@ def get_hif2a_single_topology_leg(host_name: str | None):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     if host_name == "complex":
-        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+        with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
             host_config = builders.build_protein_system(
                 str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )

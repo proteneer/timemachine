@@ -1,6 +1,5 @@
 # construct a relative transformation
 
-from importlib import resources
 
 import numpy as np
 
@@ -10,12 +9,13 @@ from timemachine.fe.rbfe import setup_initial_states
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import get_romol_conf, read_sdf
 from timemachine.ff import Forcefield
+from timemachine.utils import path_to_internal_file
 
 
 def get_hif2a_ligand_pair_single_topology():
     """Return two ligands from hif2a and the manually specified atom mapping"""
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(str(path_to_ligand))
 
     mol_a = all_mols[1]
@@ -61,7 +61,7 @@ def get_hif2a_ligand_pair_single_topology():
 def get_hif2a_ligand_pair_single_topology_chiral_volume():
     """hif2_pair with a chiral CF3 (mol_a) morphed to achiral NH2 (mol_b)"""
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(str(path_to_ligand))
 
     mol_a = all_mols[11]
@@ -79,7 +79,7 @@ def get_hif2a_ligand_pair_single_topology_chiral_volume():
 def get_hif2a_ligand_pair(src_idx, dst_idx):
     """hif2_pair with a chiral CF3 (mol_a) morphed to achiral NH2 (mol_b)"""
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = read_sdf(str(path_to_ligand))
 
     mol_a = all_mols[src_idx]

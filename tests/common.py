@@ -4,7 +4,6 @@ import os
 import unittest
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from importlib import resources
 from tempfile import TemporaryDirectory
 from typing import Optional
 
@@ -24,6 +23,7 @@ from timemachine.md.builders import build_protein_system
 from timemachine.potentials import Nonbonded
 from timemachine.potentials.potential import GpuImplWrapper
 from timemachine.potentials.types import PotentialFxn
+from timemachine.utils import path_to_internal_file
 
 HILBERT_GRID_DIM = 128
 
@@ -446,7 +446,7 @@ def check_split_ixns(
 ):
     ffs = load_split_forcefields()
 
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = build_protein_system(str(path_to_pdb), ffs.ref.protein_ff, ffs.ref.water_ff)
         host_config.box += np.diag([0.1, 0.1, 0.1])
 
