@@ -1,5 +1,3 @@
-from importlib import resources
-
 import numpy as np
 import pytest
 from rdkit import Chem
@@ -18,6 +16,7 @@ from timemachine.fe.utils import get_mol_name, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.potentials.jax_utils import distance_on_pairs
+from timemachine.utils import path_to_internal_file
 
 SAVE_FRAMES = False
 
@@ -116,7 +115,7 @@ def run_edge(mol_a, mol_b, protein_path, n_windows):
 @pytest.mark.nightly(reason="Takes a while to run")
 def test_confgen_hard_edges(src, dst):
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
-    with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
+    with path_to_internal_file("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
         mols_by_name = read_sdf_mols_by_name(ligand_path)
 
     n_windows = 12
@@ -138,7 +137,7 @@ def test_confgen_hard_edges(src, dst):
 def test_confgen_spot_edges(src, dst):
     # spot check so we have something in unit testing.
     protein_path = "timemachine/testsystems/data/hif2a_nowater_min.pdb"
-    with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
+    with path_to_internal_file("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
         mols_by_name = read_sdf_mols_by_name(ligand_path)
 
     n_windows = 4
@@ -160,7 +159,7 @@ def test_min_cutoff_failure(pair, seed, n_windows):
     # The cutoff is so small that any ligand pair should trigger the exception
     min_cutoff = 1e-8
 
-    with resources.path("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
+    with path_to_internal_file("timemachine.datasets.fep_benchmark.hif2a", "ligands.sdf") as ligand_path:
         mols_by_name = read_sdf_mols_by_name(ligand_path)
 
     mol_a = mols_by_name[src]

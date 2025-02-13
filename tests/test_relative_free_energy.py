@@ -1,6 +1,5 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
-from importlib import resources
 from warnings import catch_warnings
 
 import numpy as np
@@ -26,6 +25,7 @@ from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.md.barostat.utils import compute_box_center
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 
 def run_bitwise_reproducibility(mol_a, mol_b, core, forcefield, md_params, estimate_relative_free_energy_fn):
@@ -176,7 +176,7 @@ def test_run_hif2a_test_system(estimate_relative_free_energy_fn):
         hrex_params=HREXParams(),
     )
 
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
         run_triple(
             mol_a,
             mol_b,

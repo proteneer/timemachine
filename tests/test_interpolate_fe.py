@@ -1,5 +1,3 @@
-from importlib import resources
-
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,6 +9,7 @@ from timemachine.fe.bar import bar
 from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.utils import path_to_internal_file
 
 
 @pytest.mark.skip(reason="This is currently too slow to run on CI")
@@ -19,7 +18,7 @@ def test_hif2a_free_energy_estimates():
 
     forcefield = Forcefield.load_default()
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = utils.read_sdf(path_to_ligand)
 
     mol_a = all_mols[1]

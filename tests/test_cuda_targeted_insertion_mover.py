@@ -36,6 +36,7 @@ from timemachine.md.exchange.exchange_mover import (
 from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded
 from timemachine.potentials.potential import get_bound_potential_by_type
+from timemachine.utils import path_to_internal_file
 
 
 def compute_ref_raw_log_prob(
@@ -373,7 +374,7 @@ def test_tibd_exchange_get_set_params(precision):
 
 @pytest.fixture(scope="module")
 def brd4_rbfe_state() -> InitialState:
-    with resources.path("timemachine.datasets.water_exchange", "brd4_pair.sdf") as ligand_path:
+    with path_to_internal_file("timemachine.datasets.water_exchange", "brd4_pair.sdf") as ligand_path:
         mols = read_sdf(ligand_path)
     mol_a = mols[0]
     mol_b = mols[1]
@@ -384,7 +385,7 @@ def brd4_rbfe_state() -> InitialState:
     ff = Forcefield.load_default()
     # BRD4 is a known target that has waters in the binding site, use the structure with the water stripped from
     # the binding pocket
-    with resources.path("timemachine.datasets.water_exchange", "brd4_no_water.pdb") as pdb_path:
+    with path_to_internal_file("timemachine.datasets.water_exchange", "brd4_no_water.pdb") as pdb_path:
         host_config = builders.build_protein_system(str(pdb_path), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b])
         host_config.box += np.diag([0.1, 0.1, 0.1])
 
