@@ -2,6 +2,7 @@ import pickle
 from argparse import ArgumentParser
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 import jax
 
@@ -39,7 +40,7 @@ def run_leg(
     mol_a: Chem.Mol,
     mol_b: Chem.Mol,
     core: NDArray,
-    leg_name: str,
+    leg_name: Literal["complex", "solvent", "vacuum"],
     ff: Forcefield,
     pdb_path: str | None,
     md_params: MDParams,
