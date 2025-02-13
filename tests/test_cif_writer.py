@@ -1,4 +1,3 @@
-from importlib import resources
 from tempfile import NamedTemporaryFile
 
 import numpy as np
@@ -11,6 +10,7 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -92,7 +92,7 @@ def test_cif_writer(n_frames):
         np.testing.assert_allclose(cif.getPositions(asNumpy=True), good_coords, atol=1e-5)
 
     # test complex
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         complex_host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
 
         with NamedTemporaryFile(suffix=".cif") as temp:
