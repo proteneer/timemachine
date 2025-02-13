@@ -1,6 +1,5 @@
 import functools
 import time
-from importlib import resources
 
 import hypothesis.strategies as st
 import jax
@@ -42,6 +41,7 @@ from timemachine.ff import Forcefield
 from timemachine.md import minimizer
 from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.potentials.jax_utils import pairwise_distances
+from timemachine.utils import path_to_internal_file
 
 setup_chiral_dummy_interactions_from_ff = functools.partial(
     setup_dummy_interactions_from_ff,
@@ -417,7 +417,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
 
     seed = 2024
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)
 
     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
@@ -617,7 +617,7 @@ def test_combine_masses_hmr():
 def arbitrary_transformation():
     # NOTE: test system can probably be simplified; we just need
     # any SingleTopology and conformation
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf_mols_by_name(path_to_ligand)
 
     mol_a = mols["206"]
@@ -823,7 +823,7 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
         # Align the mols that the heavy atom has a common position
         Chem.rdMolAlign.AlignMol(mol_a, mol_b, atomMap=[(0, 0)])
     else:
-        with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
             mols = read_sdf_mols_by_name(path_to_ligand)
         mol_a = mols["338"]
         mol_b = mols["43"]
@@ -921,7 +921,7 @@ class SingleTopologyRef(SingleTopology):
 @pytest.mark.parametrize("precision", [np.float64, np.float32])
 @pytest.mark.parametrize("lamb", [0.0, 0.5, 1.0])
 def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf_mols_by_name(path_to_ligand)
     mol_a = mols["338"]
     mol_b = mols["43"]
@@ -929,7 +929,7 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
 
     ff = Forcefield.load_default()
 
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
         host_config.box += np.diag([0.1, 0.1, 0.1])
 
@@ -975,7 +975,7 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
 def test_combine_with_host_split(precision, rtol, atol):
     # test the split P-L and L-W interactions
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf_mols_by_name(path_to_ligand)
     mol_a = mols["338"]
     mol_b = mols["43"]
@@ -1231,7 +1231,7 @@ def test_hif2a_pairs_setup_st():
     """
     Test that we can setup all-pairs single topology objects in hif2a.
     """
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)
 
     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
@@ -1718,7 +1718,7 @@ def assert_symmetric_interpolation(mol_a, mol_b, core):
 
 @pytest.mark.nocuda
 def test_hif2a_end_state_symmetry_unit_test():
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)
 
     mol_a = mols[0]
@@ -1734,7 +1734,7 @@ def test_hif2a_end_state_symmetry_nightly_test():
     Test that end-states are symmetric for a large number of random pairs
     """
     seed = 2029
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)
     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
     np.random.seed(seed)

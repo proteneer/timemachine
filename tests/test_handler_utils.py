@@ -1,5 +1,3 @@
-from importlib import resources
-
 import pytest
 from openmm import app
 from openmm.app.forcefield import ForceField as OMMForceField
@@ -8,6 +6,7 @@ from rdkit import Chem
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
 from timemachine.ff.handlers import utils as handler_utils
 from timemachine.md import builders
+from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -30,7 +29,7 @@ def test_get_query_mol():
 def residue_mol_inputs():
     properties_by_res_name = {}
     for protein_path in ["5dfr_solv_equil.pdb", "hif2a_nowater_min.pdb"]:
-        with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
+        with path_to_internal_file("timemachine.testsystems.data", protein_path) as path_to_pdb:
             host_pdb = app.PDBFile(str(path_to_pdb))
             host_config = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
         ff = OMMForceField(f"{DEFAULT_PROTEIN_FF}.xml", f"{DEFAULT_WATER_FF}.xml")

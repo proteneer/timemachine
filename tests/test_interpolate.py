@@ -1,5 +1,3 @@
-from importlib import resources
-
 import numpy as np
 import pytest
 from rdkit import Chem
@@ -22,6 +20,7 @@ from timemachine.fe.single_topology import (
 )
 from timemachine.fe.utils import get_romol_conf, read_sdf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
+from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -260,7 +259,7 @@ def test_intermediate_states(num_pairs_to_setup=10):
     as the src and dst end-states.
     """
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = read_sdf(path_to_ligand)
 
     pairs = [(mol_a, mol_b) for mol_a in mols for mol_b in mols]
@@ -1017,7 +1016,7 @@ def test_assert_bonds_present_during_chiral_interpolation():
 
 
 def get_pfkfb3_nitrile_to_amide_fwd():
-    with resources.path("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as path:
+    with path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as path:
         mols_by_name = read_sdf_mols_by_name(path)
     mol_a = mols_by_name["24"]
     mol_b = mols_by_name["26"]

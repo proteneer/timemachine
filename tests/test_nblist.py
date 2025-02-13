@@ -1,4 +1,3 @@
-from importlib import resources
 from typing import Optional
 
 import numpy as np
@@ -17,6 +16,7 @@ from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.potentials.jax_utils import delta_r
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 
 @pytest.mark.memcheck
@@ -396,7 +396,7 @@ def setup_hif2a_initial_state(host_name: str):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     if host_name == "complex":
-        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+        with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
             host_config = build_protein_system(
                 str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )
