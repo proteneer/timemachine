@@ -294,7 +294,7 @@ def rebalance_lambda_schedule(
     trajectories: Sequence[Trajectory],
     target_overlap: float,
     xtol: float = 1e-4,
-    initial_mbar_threshold: float = 1e-3
+    initial_mbar_threshold: float = 1e-3,
 ) -> Sequence[InitialState]:
     assert 0.0 < target_overlap <= 1.0
     assert len(initial_states) == len(trajectories)
@@ -305,7 +305,7 @@ def rebalance_lambda_schedule(
 
     u_kn, n_k = compute_u_kn(trajectories, initial_states)
     mbar = MBAR(u_kn, n_k)
-    mbar_scalar_overlap = mbar.compute_overlap()['scalar']
+    mbar_scalar_overlap = mbar.compute_overlap()["scalar"]
     if mbar_scalar_overlap < initial_mbar_threshold:
         msg = f"""
         Skipping 'rebalancing' optimization of initial protocol
@@ -323,7 +323,7 @@ def rebalance_lambda_schedule(
         greedy_prot = greedily_optimize_protocol(
             overlap_dist, target_dist, bisection_xtol=xtol, protocol_interval=(lambda_min, lambda_max)
         )
-        
+
         if len(greedy_prot) > len(initial_lambs):
             warnings.warn("Optimized schedule has more windows than initial schedule, falling back to initial schedule")
             new_schedule = initial_lambs
