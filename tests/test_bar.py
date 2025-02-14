@@ -195,12 +195,19 @@ def test_pair_overlap_from_ukln():
 
     # non-overlapping
     u_kln, _ = make_gaussian_ukln_example((0, 0.01), (1, 0.01))
-    assert pair_overlap_from_ukln(u_kln) >= 0.0
-    assert pair_overlap_from_ukln(u_kln) < 1e-10
+    overlap = pair_overlap_from_ukln(u_kln)
+    assert overlap >= 0.0
+    assert overlap < 1e-10
 
     # overlapping
     u_kln, _ = make_gaussian_ukln_example((0, 0.1), (0.5, 0.2))
     assert pair_overlap_from_ukln(u_kln) > 0.1
+
+    # check overlap compared to PyMBAR default tolerance
+    u_kln, _ = make_gaussian_ukln_example((0, 0.01), (1, 0.01))
+    assert pair_overlap_from_ukln(u_kln) == pytest.approx(
+        pair_overlap_from_ukln(u_kln, maximum_iterations=10_000, relative_tolerance=1e-7)
+    )
 
 
 @pytest.mark.parametrize("frames_per_step", [1, 5, 10])
