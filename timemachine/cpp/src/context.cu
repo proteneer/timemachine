@@ -41,12 +41,16 @@ Context::Context(
 
     // A no-op if running in vacuum or there are no NonbondedAllPairs potentials
     get_nonbonded_all_pair_potentials(bps, nonbonded_pots_);
+
+    // Create stream that doesn't sync with the default stream
+    gpuErrchk(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking));
 };
 
 Context::~Context() {
     gpuErrchk(cudaFree(d_x_t_));
     gpuErrchk(cudaFree(d_v_t_));
     gpuErrchk(cudaFree(d_box_t_));
+    gpuErrchk(cudaStreamDestroy(stream_))
 };
 
 void Context::_verify_coords_and_box(const double *coords_buffer, const double *box_buffer, cudaStream_t stream) {
@@ -126,38 +130,33 @@ void Context::multiple_steps_local(
     }
     this->_ensure_local_md_intialized();
 
-    cudaStream_t stream;
-
-    // Create stream that doesn't sync with the default stream
-    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     try {
 
-        local_md_pots_->setup_from_idxs(d_x_t_, d_box_t_, local_idxs, seed, radius, k, stream);
+        local_md_pots_->setup_from_idxs(d_x_t_, d_box_t_, local_idxs, seed, radius, k, stream_);
 
         unsigned int *d_free_idxs = local_md_pots_->get_free_idxs();
 
         std::vector<std::shared_ptr<BoundPotential>> local_pots = local_md_pots_->get_potentials();
 
-        intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
+        intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream_);
         for (int i = 1; i <= n_steps; i++) {
-            this->_step(local_pots, d_free_idxs, stream);
+            this->_step(local_pots, d_free_idxs, stream_);
             if (i % store_x_interval == 0) {
                 double *box_ptr = h_box + ((i / store_x_interval) - 1) * 3 * 3;
                 double *coord_ptr = h_x + ((i / store_x_interval) - 1) * N_ * 3;
-                gpuErrchk(cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream));
-                gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream));
-                this->_verify_coords_and_box(coord_ptr, box_ptr, stream);
+                gpuErrchk(
+                    cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream_));
+                gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream_));
+                this->_verify_coords_and_box(coord_ptr, box_ptr, stream_);
             }
         }
-        intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
-        local_md_pots_->reset_potentials(stream);
+        intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream_);
+        local_md_pots_->reset_potentials(stream_);
     } catch (...) {
-        gpuErrchk(cudaStreamSynchronize(stream));
-        gpuErrchk(cudaStreamDestroy(stream));
+        gpuErrchk(cudaStreamSynchronize(stream_));
         throw;
     }
-    gpuErrchk(cudaStreamSynchronize(stream));
-    gpuErrchk(cudaStreamDestroy(stream));
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::multiple_steps_local_selection(
@@ -179,38 +178,33 @@ void Context::multiple_steps_local_selection(
 
     this->_ensure_local_md_intialized();
 
-    cudaStream_t stream;
-
-    // Create stream that doesn't sync with the default stream
-    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     try {
 
-        local_md_pots_->setup_from_selection(reference_idx, selection_idxs, radius, k, stream);
+        local_md_pots_->setup_from_selection(reference_idx, selection_idxs, radius, k, stream_);
 
         unsigned int *d_free_idxs = local_md_pots_->get_free_idxs();
 
         std::vector<std::shared_ptr<BoundPotential>> local_pots = local_md_pots_->get_potentials();
 
-        intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
+        intg_->initialize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream_);
         for (int i = 1; i <= n_steps; i++) {
-            this->_step(local_pots, d_free_idxs, stream);
+            this->_step(local_pots, d_free_idxs, stream_);
             if (i % store_x_interval == 0) {
                 double *box_ptr = h_box + ((i / store_x_interval) - 1) * 3 * 3;
                 double *coord_ptr = h_x + ((i / store_x_interval) - 1) * N_ * 3;
-                gpuErrchk(cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream));
-                gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream));
-                this->_verify_coords_and_box(coord_ptr, box_ptr, stream);
+                gpuErrchk(
+                    cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream_));
+                gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream_));
+                this->_verify_coords_and_box(coord_ptr, box_ptr, stream_);
             }
         }
-        intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream);
-        local_md_pots_->reset_potentials(stream);
+        intg_->finalize(local_pots, d_x_t_, d_v_t_, d_box_t_, d_free_idxs, stream_);
+        local_md_pots_->reset_potentials(stream_);
     } catch (...) {
-        gpuErrchk(cudaStreamSynchronize(stream));
-        gpuErrchk(cudaStreamDestroy(stream));
+        gpuErrchk(cudaStreamSynchronize(stream_));
         throw;
     }
-    gpuErrchk(cudaStreamSynchronize(stream));
-    gpuErrchk(cudaStreamDestroy(stream));
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::multiple_steps(const int n_steps, const int n_samples, double *h_x, double *h_box) {
@@ -222,41 +216,36 @@ void Context::multiple_steps(const int n_steps, const int n_samples, double *h_x
         std::cout << "warning:: n_steps modulo store_x_interval does not equal zero" << std::endl;
     }
 
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
-
-    intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
+    intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream_);
     for (int i = 1; i <= n_steps; i++) {
-        this->_step(bps_, nullptr, stream);
+        this->_step(bps_, nullptr, stream_);
 
         if (i % store_x_interval == 0) {
             double *box_ptr = h_box + ((i / store_x_interval) - 1) * 3 * 3;
             double *coord_ptr = h_x + ((i / store_x_interval) - 1) * N_ * 3;
-            gpuErrchk(cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream));
-            gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream));
-            this->_verify_coords_and_box(coord_ptr, box_ptr, stream);
+            gpuErrchk(cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream_));
+            gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream_));
+            this->_verify_coords_and_box(coord_ptr, box_ptr, stream_);
         }
     }
-    intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
+    intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream_);
 
-    gpuErrchk(cudaStreamSynchronize(stream));
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::step() {
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
-    this->_step(bps_, nullptr, stream);
-    gpuErrchk(cudaStreamSynchronize(stream));
+    this->_step(bps_, nullptr, stream_);
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::finalize() {
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
-    intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
-    gpuErrchk(cudaStreamSynchronize(stream));
+    intg_->finalize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream_);
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::initialize() {
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
-    intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream);
-    gpuErrchk(cudaStreamSynchronize(stream));
+    intg_->initialize(bps_, d_x_t_, d_v_t_, d_box_t_, nullptr, stream_);
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::_step(
@@ -279,27 +268,33 @@ void Context::_step(
 int Context::num_atoms() const { return N_; }
 
 void Context::set_x_t(const double *in_buffer) {
-    gpuErrchk(cudaMemcpy(d_x_t_, in_buffer, N_ * 3 * sizeof(*in_buffer), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpyAsync(d_x_t_, in_buffer, N_ * 3 * sizeof(*in_buffer), cudaMemcpyHostToDevice, stream_));
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::set_v_t(const double *in_buffer) {
-    gpuErrchk(cudaMemcpy(d_v_t_, in_buffer, N_ * 3 * sizeof(*in_buffer), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpyAsync(d_v_t_, in_buffer, N_ * 3 * sizeof(*in_buffer), cudaMemcpyHostToDevice, stream_));
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::set_box(const double *in_buffer) {
-    gpuErrchk(cudaMemcpy(d_box_t_, in_buffer, 3 * 3 * sizeof(*in_buffer), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpyAsync(d_box_t_, in_buffer, 3 * 3 * sizeof(*in_buffer), cudaMemcpyHostToDevice, stream_));
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::get_x_t(double *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_x_t_, N_ * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpyAsync(out_buffer, d_x_t_, N_ * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost, stream_));
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::get_v_t(double *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_v_t_, N_ * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpyAsync(out_buffer, d_v_t_, N_ * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost, stream_));
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 void Context::get_box(double *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_box_t_, 3 * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpyAsync(out_buffer, d_box_t_, 3 * 3 * sizeof(*out_buffer), cudaMemcpyDeviceToHost, stream_));
+    gpuErrchk(cudaStreamSynchronize(stream_));
 }
 
 std::shared_ptr<Integrator> Context::get_integrator() const { return intg_; }

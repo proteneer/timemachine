@@ -87,6 +87,8 @@ private:
 
     int step_;
 
+    cudaStream_t stream_;
+
     double *d_x_t_;   // coordinates
     double *d_v_t_;   // velocities
     double *d_box_t_; // box vectors
