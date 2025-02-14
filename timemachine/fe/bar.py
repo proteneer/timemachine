@@ -305,7 +305,9 @@ def df_from_ukln_by_lambda(ukln_by_lambda: NDArray) -> tuple[float, float]:
     return np.sum(win_dfs), np.linalg.norm(win_errs)  # type: ignore
 
 
-def pair_overlap_from_ukln(u_kln: NDArray) -> float:
+def pair_overlap_from_ukln(
+    u_kln: NDArray, maximum_iterations=DEFAULT_MAXIMUM_ITERATIONS, relative_tolerance=DEFAULT_RELATIVE_TOLERANCE
+) -> float:
     """Compute the off-diagonal entry of 2x2 MBAR overlap matrix,
         and normalize to interval [0,1]
 
@@ -322,7 +324,13 @@ def pair_overlap_from_ukln(u_kln: NDArray) -> float:
 
     """
     u_kn, N_k = ukln_to_ukn(u_kln)
-    overlap = 2 * pymbar.MBAR(u_kn, N_k).compute_overlap()["matrix"][0, 1]  # type: ignore
+    overlap = (
+        2
+        * pymbar.MBAR(
+            u_kn, N_k, maximum_iterations=maximum_iterations, relative_tolerance=relative_tolerance
+        ).compute_overlap()["matrix"][0, 1]
+    )  # type: ignore
+
     overlap = np.clip(overlap, 0.0, 1.0)
     return overlap
 
