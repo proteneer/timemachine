@@ -1,6 +1,8 @@
 import gc
 import re
+import time
 import weakref
+from multiprocessing.pool import ThreadPool
 
 import jax
 import numpy as np
@@ -1007,3 +1009,45 @@ def test_unstable_simulation_failure():
         match="simulation unstable: dimensions of coordinates two orders of magnitude larger than max box dimension",
     ):
         ctxt.multiple_steps(steps)
+
+
+@pytest.mark.parametrize("local_md", [False, True])
+@pytest.mark.parametrize("num_threads", [2, 4])
+def test_context_with_threads(num_threads, local_md):
+    mol, _ = get_biphenyl()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+
+    temperature = constants.DEFAULT_TEMP
+    dt = 1.5e-3
+    friction = 0.0
+    seed = 2024
+    n_frames = 100
+    steps_per_frame = 400
+
+    unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
+    v0 = np.zeros_like(coords)
+    ligand_idxs = np.arange(len(coords) - mol.GetNumAtoms(), len(coords), dtype=np.int32)
+
+    ctxts = []
+    for thread_idx in range(num_threads):
+        bps = [pot.bind(p).to_gpu(np.float32).bound_impl for p, pot in zip(sys_params, unbound_potentials)]
+
+        intg = LangevinIntegrator(temperature, dt, friction, masses, seed + thread_idx)
+        ctxt = custom_ops.Context(coords, v0, box, intg.impl(), bps)
+        ctxts.append(ctxt)
+
+    def thread_sampling(ctxt):
+        start_time = time.perf_counter()
+        if local_md:
+            ctxt.multiple_steps_local(
+                steps_per_frame * n_frames, ligand_idxs, seed=seed, store_x_interval=steps_per_frame
+            )
+        else:
+            ctxt.multiple_steps(steps_per_frame * n_frames, store_x_interval=steps_per_frame)
+        return start_time
+
+    with ThreadPool(num_threads) as pool:
+        thread_started_times = pool.map(thread_sampling, ctxts)
+        # Each thread should have start within a tenth of a second of the previous one.
+        # Dependent on the amount of MD run and how long MD takes. As of Sept 2024 MD is taking ~5 seconds
+        assert np.all(np.diff(thread_started_times) < 0.1), "Doesn't seem like GIL is released"

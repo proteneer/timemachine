@@ -363,6 +363,9 @@ void declare_context(py::module &m) {
                 py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
                 py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
+
+                py::gil_scoped_release release; // Release the GIL
+
                 ctxt.multiple_steps(n_steps, n_samples, out_x_buffer.mutable_data(), box_buffer.mutable_data());
                 return res;
             },
@@ -429,6 +432,7 @@ void declare_context(py::module &m) {
                 py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
 
+                py::gil_scoped_release release; // Release the GIL
                 ctxt.multiple_steps_local(
                     n_steps,
                     vec_local_idxs,
@@ -537,6 +541,8 @@ void declare_context(py::module &m) {
                 py::array_t<double, py::array::c_style> out_x_buffer({n_samples, N, D});
                 py::array_t<double, py::array::c_style> box_buffer({n_samples, D, D});
                 auto res = py::make_tuple(out_x_buffer, box_buffer);
+
+                py::gil_scoped_release release; // Release the GIL
 
                 ctxt.multiple_steps_local_selection(
                     n_steps,
@@ -663,6 +669,7 @@ void declare_context(py::module &m) {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({N, D});
+                py::gil_scoped_release release; // Release the GIL
                 ctxt.get_x_t(buffer.mutable_data());
                 return buffer;
             })
@@ -672,6 +679,7 @@ void declare_context(py::module &m) {
                 unsigned int N = ctxt.num_atoms();
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({N, D});
+                py::gil_scoped_release release; // Release the GIL
                 ctxt.get_v_t(buffer.mutable_data());
                 return buffer;
             })
@@ -680,6 +688,7 @@ void declare_context(py::module &m) {
             [](Context &ctxt) -> py::array_t<double, py::array::c_style> {
                 unsigned int D = 3;
                 py::array_t<double, py::array::c_style> buffer({D, D});
+                py::gil_scoped_release release; // Release the GIL
                 ctxt.get_box(buffer.mutable_data());
                 return buffer;
             })
