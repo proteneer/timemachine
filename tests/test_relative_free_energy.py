@@ -425,6 +425,29 @@ def test_rbfe_with_1_window(estimate_relative_free_energy_fn):
         )
 
 
+def test_rbfe_fallback_from_near_zero_overlap():
+    """Should fall back from [bisection, rebalancing] to [bisection] alone
+    (with a UserWarning mentioning "overlap")
+    when output of bisection has insufficient overlap"""
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_default()
+    seed = 2025
+
+    hrex_params = HREXParams(n_frames_bisection=10, optimize_target_overlap=0.999)
+    md_params = MDParams(n_frames=10, n_eq_steps=100, steps_per_frame=100, seed=seed, hrex_params=hrex_params)
+    with pytest.warns(UserWarning, match="unreliable starting point"):
+        estimate_relative_free_energy_bisection_hrex(
+            mol_a,
+            mol_b,
+            core,
+            forcefield,
+            None,
+            md_params=md_params,
+            prefix="low_overlap",
+            n_windows=3,
+        )
+
+
 if __name__ == "__main__":
     # convenience: so we can run this directly from python tests/test_relative_free_energy.py without
     # toggling the pytest marker
