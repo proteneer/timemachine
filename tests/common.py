@@ -26,6 +26,8 @@ from timemachine.potentials.types import PotentialFxn
 from timemachine.utils import path_to_internal_file
 
 HILBERT_GRID_DIM = 128
+# Directory to write files to that will be stored as artifacts in CI.
+ARTIFACT_DIR_NAME = "pytest-artifacts"
 
 
 @contextlib.contextmanager

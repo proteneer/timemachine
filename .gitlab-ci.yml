@@ -60,6 +60,7 @@ nocuda-tests:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nocuda-tests"
     paths:
         - coverage/
+        - pytest-artifacts/
     when: on_success
     expire_in: 1 week
 
@@ -103,6 +104,7 @@ nogpu-tests:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nogpu-tests"
     paths:
         - coverage/
+        - pytest-artifacts/
     when: on_success
     expire_in: 1 week
 
@@ -121,6 +123,7 @@ memory-tests:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-memtests"
     paths:
         - coverage/
+        - pytest-artifacts/
     when: on_success
     expire_in: 1 week
 
@@ -139,6 +142,7 @@ unit-tests:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-tests"
     paths:
         - coverage/
+        - pytest-artifacts/
     when: on_success
     expire_in: 1 week
 
@@ -157,6 +161,7 @@ nightly-tests:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nightly-tests"
     paths:
         - coverage/
+        - pytest-artifacts/
     when: on_success
     expire_in: 1 week
 
@@ -175,6 +180,7 @@ nightly-memcheck-tests:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nightly-memcheck-tests"
     paths:
         - coverage/
+        - pytest-artifacts/
     when: on_success
     expire_in: 1 week
 
@@ -193,6 +199,7 @@ nightly-tests-nocuda:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nocuda-nightly-tests"
     paths:
         - coverage/
+        - pytest-artifacts/
     when: on_success
     expire_in: 1 week
 
@@ -214,5 +221,6 @@ nightly-tests-nogpu:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-nogpu-nightly-tests"
     paths:
         - coverage/
+        - pytest-artifacts/
     when: on_success
     expire_in: 1 week
