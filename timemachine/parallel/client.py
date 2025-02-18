@@ -339,7 +339,7 @@ class AbstractFileClient:
 
 
 class FileClient(AbstractFileClient):
-    def __init__(self, base: Optional[Path] = None):
+    def __init__(self, base: Optional[Path | str] = None):
         self.base = base or Path().cwd()
 
     def store_stream(self, path: str | Path, stream: io.IOBase):
