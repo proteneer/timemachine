@@ -85,7 +85,9 @@ class CIFWriter:
                 old_atom_obj_kv = {}
                 for old_residue in old_topology.residues():
                     chain_obj = old_chain_obj_kv[old_residue.chain]
-                    new_residue = combined_topology.addResidue(name=old_residue.name, chain=chain_obj)
+                    new_residue = combined_topology.addResidue(
+                        name=old_residue.name, id=old_residue.id, chain=chain_obj
+                    )
                     for old_atom in old_residue.atoms():
                         new_atom = combined_topology.addAtom(old_atom.name, old_atom.element, new_residue)
                         assert old_atom not in old_atom_obj_kv
@@ -128,7 +130,7 @@ class CIFWriter:
 
         self.topology = combined_topology
         self.out_handle = open(out_filepath, "w")
-        PDBxFile.writeHeader(self.topology, self.out_handle)
+        PDBxFile.writeHeader(self.topology, self.out_handle, keepIds=True)
         self.topology = self.topology
         self.frame_idx = 0
 
@@ -143,7 +145,7 @@ class CIFWriter:
 
         """
         self.frame_idx += 1
-        PDBxFile.writeModel(self.topology, x, self.out_handle, self.frame_idx)
+        PDBxFile.writeModel(self.topology, x, self.out_handle, self.frame_idx, keepIds=True)
 
     def close(self):
         # Need this final #
