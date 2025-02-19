@@ -141,7 +141,7 @@ class SerialClient(AbstractClient):
 
 
 class ProcessPoolClient(AbstractClient):
-    def __init__(self, max_workers):
+    def __init__(self, max_workers, max_tasks_per_child=None):
         """
         Generic wrapper around ProcessPoolExecutor. Each call to submit()
         will be run on a different worker.  If the number of jobs submitted
@@ -152,13 +152,18 @@ class ProcessPoolClient(AbstractClient):
         ----------
         max_workers: int
             Number of workers to launch via the ProcessPoolExecutor
-
+        max_tasks_per_child: Optional[int]
+            Pass to the ProcessPoolExecutor to reset the process after
+            executing this number of tasks.
         """
         self.max_workers = max_workers
+        self.max_tasks_per_child = max_tasks_per_child
         self._idx = 0
         self._total_idx = 0
         ctxt = multiprocessing.get_context("spawn")
-        self.executor = futures.ProcessPoolExecutor(max_workers=self.max_workers, mp_context=ctxt)
+        self.executor = futures.ProcessPoolExecutor(
+            max_workers=self.max_workers, mp_context=ctxt, max_tasks_per_child=max_tasks_per_child
+        )
 
     def submit(self, task_fn, *args, **kwargs) -> BaseFuture:
         """
@@ -178,11 +183,12 @@ class ProcessPoolClient(AbstractClient):
 
     def __getstate__(self):
         # Only store the max workers in the pickle
-        return (self.max_workers,)
+        return (self.max_workers, self.max_tasks_per_child)
 
     def __setstate__(self, state):
         max_workers = state[0]
-        self.__init__(max_workers)
+        max_tasks_per_child = state[1]
+        self.__init__(max_workers, max_tasks_per_child=max_tasks_per_child)
 
 
 class CUDAPoolClient(ProcessPoolClient):
@@ -192,8 +198,8 @@ class CUDAPoolClient(ProcessPoolClient):
     the number of GPUs.
     """
 
-    def __init__(self, max_workers: int):
-        super().__init__(max_workers)
+    def __init__(self, max_workers: int, max_tasks_per_child=None):
+        super().__init__(max_workers, max_tasks_per_child=max_tasks_per_child)
         visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
         if visible_devices:
             self._gpu_list = [int(i) for i in visible_devices.split(",")]
