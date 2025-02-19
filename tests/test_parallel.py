@@ -207,44 +207,43 @@ def test_batch_list():
     assert batch_list(list(range(10)), None) == [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]]
 
 
-def test_file_client(tmpdir):
-    with tmpdir.as_cwd():
-        fc = client.FileClient("subdir")
-        fc.store("test", b"data")
-        assert fc.exists("test")
-        assert str(fc.full_path("test")) == str(Path(tmpdir, "subdir", "test"))
-        assert fc.load("test") == b"data"
+def test_file_client(tmp_path):
+    fc = client.FileClient(tmp_path / "subdir")
+    fc.store("test", b"data")
+    assert fc.exists("test")
+    assert str(fc.full_path("test")) == str(Path(tmp_path, "subdir", "test"))
+    assert fc.load("test") == b"data"
 
-        fc.store_stream("test_copy", io.BytesIO(fc.load("test")))
-        assert fc.exists("test_copy")
-        assert str(fc.full_path("test_copy")) == str(Path(tmpdir, "subdir", "test_copy"))
-        assert fc.load("test") == fc.load("test_copy")
-        fc.delete("test_copy")
-        assert not fc.exists("test_copy")
+    fc.store_stream("test_copy", io.BytesIO(fc.load("test")))
+    assert fc.exists("test_copy")
+    assert str(fc.full_path("test_copy")) == str(Path(tmp_path, "subdir", "test_copy"))
+    assert fc.load("test") == fc.load("test_copy")
+    fc.delete("test_copy")
+    assert not fc.exists("test_copy")
 
-        large_obj = b"a" * (io.DEFAULT_BUFFER_SIZE * 10)
-        fc.store_stream("larger_than_stream", io.BytesIO(large_obj))
-        assert fc.load("larger_than_stream") == large_obj
-        fc.delete("larger_than_stream")
-        assert not fc.exists("larger_than_stream")
+    large_obj = b"a" * (io.DEFAULT_BUFFER_SIZE * 10)
+    fc.store_stream("larger_than_stream", io.BytesIO(large_obj))
+    assert fc.load("larger_than_stream") == large_obj
+    fc.delete("larger_than_stream")
+    assert not fc.exists("larger_than_stream")
 
 
-def test_save_results(tmpdir):
-    with tmpdir.as_cwd():
-        tmpdir.mkdir("remote")
-        rfc = client.FileClient("remote")
-        rfc.store("test", b"data")
-        rfc.store("test2", b"data")
+def test_save_results(tmp_path):
+    remote_dir = tmp_path / "remote"
+    remote_dir.mkdir()
+    rfc = client.FileClient(remote_dir)
+    rfc.store("test", b"data")
+    rfc.store("test2", b"data")
 
-        tmpdir.mkdir("local")
-        lfc = client.FileClient("local")
+    local_dir = tmp_path / "local"
+    lfc = client.FileClient(local_dir)
 
-        result_paths = ["test", "test2"]
-        client.save_results(result_paths, lfc, rfc)
+    result_paths = ["test", "test2"]
+    client.save_results(result_paths, lfc, rfc)
 
-        for result_path in result_paths:
-            assert lfc.exists(result_path)
-            assert Path("local", result_path).exists()
+    for result_path in result_paths:
+        assert lfc.exists(result_path)
+        assert Path(local_dir, result_path).exists()
 
 
 def test_iterate_completed_futures():
