@@ -2,7 +2,7 @@ from tempfile import NamedTemporaryFile
 
 import numpy as np
 import pytest
-from openmm.app import PDBxFile
+from openmm.app import PDBFile, PDBxFile
 
 from timemachine.fe.cif_writer import CIFWriter, convert_single_topology_mols
 from timemachine.fe.single_topology import SingleTopology
@@ -107,3 +107,21 @@ def test_cif_writer(n_frames):
             assert cif.getNumFrames() == n_frames
             assert cif.getPositions(asNumpy=True).shape == good_coords.shape
             np.testing.assert_allclose(cif.getPositions(asNumpy=True), good_coords)
+
+
+def test_cif_writer_maintains_residue_ids():
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        pdb = PDBFile(str(path_to_pdb))
+        pdb_topo = pdb.getTopology()
+        with NamedTemporaryFile(suffix=".cif") as temp:
+            writer = CIFWriter([pdb_topo], temp.name)
+            writer.write_frame(pdb.getPositions(asNumpy=True))
+            writer.close()
+            cif = PDBxFile(temp.name)
+            assert cif.getNumFrames() == 1
+            np.testing.assert_allclose(cif.getPositions(asNumpy=True), pdb.getPositions(asNumpy=True))
+            cif_topo = cif.getTopology()
+            for res_a, res_b in zip(cif_topo.residues(), pdb_topo.residues()):
+                assert res_a.id == res_b.id
+                assert res_a.chain.index == res_b.chain.index
+                assert res_a.name == res_b.name
