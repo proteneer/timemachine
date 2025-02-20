@@ -41,7 +41,7 @@ from timemachine.ff import Forcefield
 from timemachine.md import minimizer
 from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.potentials.jax_utils import pairwise_distances
-from timemachine.utils import path_to_internal_file
+from timemachine.utils import invert_permutation, path_to_internal_file
 
 setup_chiral_dummy_interactions_from_ff = functools.partial(
     setup_dummy_interactions_from_ff,
@@ -1569,8 +1569,8 @@ def permute_atom_indices(mol_a, mol_b, core, seed):
 
     # RenumberAtoms takes inverse permutations
     # e.g. [3, 2, 0, 1] means atom 3 in the original mol will be atom 0 in the new one
-    inv_perm_a = np.argsort(perm_a)
-    inv_perm_b = np.argsort(perm_b)
+    inv_perm_a = invert_permutation(perm_a)
+    inv_perm_b = invert_permutation(perm_b)
     mol_a = Chem.RenumberAtoms(mol_a, inv_perm_a.tolist())
     mol_b = Chem.RenumberAtoms(mol_b, inv_perm_b.tolist())
 

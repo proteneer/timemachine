@@ -8,8 +8,6 @@ import jax.numpy as jnp
 import numpy as np
 import pymbar
 import pytest
-from hypothesis import given, seed
-from hypothesis.strategies import integers
 from jax import grad, jacfwd, jacrev, value_and_grad
 from scipy.optimize import check_grad, minimize
 
@@ -28,7 +26,6 @@ from timemachine.fe.free_energy import (
     Trajectory,
     WaterSamplingParams,
     assert_potentials_compatible,
-    batches,
     compute_potential_matrix,
     estimate_free_energy_bar,
     get_water_sampler_params,
@@ -56,7 +53,7 @@ from timemachine.potentials import (
 )
 from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
-from timemachine.utils import path_to_internal_file
+from timemachine.utils import invert_permutation, path_to_internal_file
 
 
 def assert_shapes_consistent(U, coords, sys_params, box):
@@ -297,23 +294,6 @@ def test_sample_max_buffer_frames_with_local_md(
     traj = sample(solvent_hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames)
     assert isinstance(traj.frames, StoredArrays)
     assert len(traj.frames) == n_frames
-
-
-@pytest.mark.nocuda
-@given(integers(min_value=1))
-@seed(2023)
-def test_batches_of_nothing(batch_size):
-    assert list(batches(0, batch_size)) == []
-
-
-@pytest.mark.nocuda
-@given(integers(min_value=1, max_value=1000), integers(min_value=1))
-@seed(2023)
-def test_batches(n, batch_size):
-    assert sum(batches(n, batch_size)) == n
-    assert all(batch == batch_size for batch in list(batches(n, batch_size))[:-1])
-    *_, last = batches(n, batch_size)
-    assert 0 < last <= batch_size
 
 
 @pytest.fixture(scope="module")
@@ -609,7 +589,7 @@ def test_compute_potential_matrix(hif2a_ligand_pair_single_topology, n_states: i
     verify_and_sanitize_potential_matrix(U_test, hrex.replica_idx_by_state)
 
     state_idx = np.arange(n_states)
-    state_idx_by_replica = np.argsort(replica_idx_by_state)
+    state_idx_by_replica = invert_permutation(replica_idx_by_state)
     is_computed = (
         np.full((n_states, n_states), True)
         if max_delta_states is None

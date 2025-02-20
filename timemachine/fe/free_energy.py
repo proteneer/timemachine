@@ -46,7 +46,7 @@ from timemachine.potentials import (
     make_summed_potential,
 )
 from timemachine.potentials.potential import get_bound_potential_by_type
-from timemachine.utils import batches
+from timemachine.utils import batches, invert_permutation
 
 WATER_SAMPLER_MOVERS = (
     custom_ops.TIBDExchangeMove_f32,
@@ -330,8 +330,9 @@ class HREXSimulationResult(SimulationResult):
             ]
         )
 
-        replica_idx_by_iter_by_state = np.asarray(self.hrex_diagnostics.replica_idx_by_state_by_iter).T
-        state_idx_by_iter_by_replica = np.argsort(replica_idx_by_iter_by_state, axis=0)
+        replica_idx_by_state_by_iter = np.asarray(self.hrex_diagnostics.replica_idx_by_state_by_iter)
+        state_idx_by_replica_by_iter = jax.vmap(invert_permutation)(replica_idx_by_state_by_iter)
+        state_idx_by_iter_by_replica = state_idx_by_replica_by_iter.T
 
         # (replicas, frames, atoms, 3)
         trajs_by_replica = np.take_along_axis(trajs_by_state, state_idx_by_iter_by_replica[:, :, None, None], axis=0)
@@ -1133,7 +1134,7 @@ def compute_potential_matrix(
 
     def compute_sparse(k: int):
         n_states = len(hrex.replicas)
-        state_idx = np.argsort(hrex.replica_idx_by_state)
+        state_idx = invert_permutation(hrex.replica_idx_by_state)
         neighbor_state_idxs = state_idx[:, None] + np.arange(-k, k + 1)[None, :]
         valid_idxs: tuple = np.nonzero((0 <= neighbor_state_idxs) & (neighbor_state_idxs < n_states))
         coords_batch_idxs = valid_idxs[0].astype(np.uint32)

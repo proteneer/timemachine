@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 from scipy.stats import entropy
 
 from timemachine.md.moves import MixtureOfMoves, MonteCarloMove
-from timemachine.utils import batches, not_ragged
+from timemachine.utils import batches, invert_permutation, not_ragged
 
 Replica = TypeVar("Replica")
 Samples = TypeVar("Samples")
@@ -347,7 +347,7 @@ def get_samples_by_iter_by_replica(
     assert not_ragged(replica_idx_by_state_by_iter)
 
     samples_by_replica_by_iter = [
-        [samples_by_state[state_idx] for state_idx in np.argsort(replica_idx_by_state)]
+        [samples_by_state[state_idx] for state_idx in invert_permutation(replica_idx_by_state)]
         for samples_by_state, replica_idx_by_state in zip(samples_by_state_by_iter, replica_idx_by_state_by_iter)
     ]
 
