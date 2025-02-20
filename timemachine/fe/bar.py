@@ -130,7 +130,9 @@ DEFAULT_MAXIMUM_ITERATIONS = 1_000  # pymbar default 10_000
 def df_and_err_from_u_kln(u_kln: NDArray, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS) -> tuple[float, float]:
     """Compute free energy difference and uncertainty given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.mbar.MBAR(u_kn, N_k, maximum_iterations=maximum_iterations)
+    mbar = pymbar.mbar.MBAR(
+        u_kn, N_k, maximum_iterations=maximum_iterations, relative_tolerance=DEFAULT_RELATIVE_TOLERANCE
+    )
     try:
         results = mbar.compute_free_energy_differences()
         df, ddf = results[DG_KEY], results[DG_ERR_KEY]
@@ -147,7 +149,13 @@ def df_from_u_kln(
 ) -> float:
     """Compute free energy difference given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.mbar.MBAR(u_kn, N_k, initial_f_k=initial_f_k, maximum_iterations=maximum_iterations)
+    mbar = pymbar.mbar.MBAR(
+        u_kn,
+        N_k,
+        initial_f_k=initial_f_k,
+        maximum_iterations=maximum_iterations,
+        relative_tolerance=DEFAULT_RELATIVE_TOLERANCE,
+    )
     df = mbar.compute_free_energy_differences(compute_uncertainty=False)[DG_KEY]
     return df[0, 1]
 
