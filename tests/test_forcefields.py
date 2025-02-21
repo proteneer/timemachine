@@ -19,6 +19,12 @@ from timemachine.md import builders
 pytestmark = [pytest.mark.nocuda]
 
 
+def test_empty_ff():
+    # should not throw exception
+    ff = Forcefield.from_handlers([])
+    ff.serialize()
+
+
 def test_serialization_of_ffs():
     for path in glob("timemachine/ff/params/smirnoff_*.py"):
         handlers, protein_ff, water_ff = deserialize_handlers(open(path).read())
