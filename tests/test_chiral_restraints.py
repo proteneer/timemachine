@@ -31,6 +31,7 @@ from timemachine.potentials.chiral_restraints import (
     pyramidal_volume,
     torsion_volume,
 )
+from timemachine.utils import path_to_internal_file
 
 
 @pytest.mark.nocuda
@@ -665,7 +666,8 @@ $$$$""",
 def make_chiral_flip_pair(well_aligned=True):
     # mol_a, mol_b : substituted chiral cyclobutyl
     # with 2 different alignments of mol_b w.r.t. mol_a
-    mol_dict = utils.read_sdf_mols_by_name("tests/data/1243_chiral_ring_confs.sdf")
+    with path_to_internal_file("timemachine.testsystems.data", "1243_chiral_ring_confs.sdf") as path_to_sdf:
+        mol_dict = utils.read_sdf_mols_by_name(path_to_sdf)
     mol_a = mol_dict["A"]
     mol_b_0 = mol_dict["B_0"]
     mol_b_1 = mol_dict["B_1"]

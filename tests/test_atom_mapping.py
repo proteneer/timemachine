@@ -2,7 +2,7 @@ import copy
 import pickle
 import time
 from functools import partial
-from pathlib import Path
+from importlib import resources
 
 import numpy as np
 import pytest
@@ -431,14 +431,13 @@ def test_all_pairs(dataset):
             cores = [core.tolist() for core in all_cores]
             cores_by_pair[mol_a_name, mol_b_name] = cores
 
-    ref_pickle_path = Path(f"tests/data/all_pairs_atom_mappings_{key}.pkl")
+    with resources.open_binary("timemachine.testsystems.data", f"all_pairs_atom_mappings_{key}.pkl") as ref_pickle:
+        ref_cores_by_pair = pickle.load(ref_pickle)
 
     # Uncomment to update test reference
+    # ref_pickle_path = Path(f"timemachine/testsystems/data/")
     # with Path(ref_pickle_path).open("wb") as fp:
     #     ref_cores_by_pair = pickle.dump(cores_by_pair, fp)
-
-    with Path(ref_pickle_path).open("rb") as fp:
-        ref_cores_by_pair = pickle.load(fp)
 
     assert cores_by_pair == ref_cores_by_pair
 

@@ -10,6 +10,7 @@ from timemachine.fe.model_utils import image_frame, image_molecule
 from timemachine.ff import Forcefield
 from timemachine.md.barostat.utils import get_group_indices
 from timemachine.potentials import bonded, nonbonded
+from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -134,7 +135,8 @@ def test_image_frame_energy_invariance():
 
 
 def test_image_molecules():
-    all_mols = utils.read_sdf("tests/data/benzene_fluorinated.sdf")
+    with path_to_internal_file("timemachine.testsystems.data", "benzene_fluorinated.sdf") as path_to_sdf:
+        all_mols = utils.read_sdf(path_to_sdf)
     mol = all_mols[0]
     mol_coords = utils.get_romol_conf(mol)
 
