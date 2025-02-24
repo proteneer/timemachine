@@ -353,7 +353,7 @@ def rebalance_lambda_schedule(
 
     if not (min(new_schedule) == lambda_min) and (max(new_schedule) == lambda_max):
         msg = f"optimized interval {(min(new_schedule), max(new_schedule))} != {(lambda_min, lambda_max)}"
-        raise(RuntimeError(msg))
+        raise RuntimeError(msg)
     return initial_states
 
 
