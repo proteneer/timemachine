@@ -2,7 +2,6 @@ import copy
 import pickle
 import time
 from functools import partial
-from importlib import resources
 
 import numpy as np
 import pytest
@@ -20,6 +19,7 @@ from timemachine.fe.utils import (
     set_mol_name,
     set_romol_conf,
 )
+from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -437,8 +437,9 @@ def test_all_pairs(dataset):
     # with Path(ref_pickle_path).open("wb") as fp:
     #     pickle.dump(cores_by_pair, fp)
 
-    with resources.open_binary("timemachine.testsystems.data", f"all_pairs_atom_mappings_{key}.pkl") as ref_pickle:
-        ref_cores_by_pair = pickle.load(ref_pickle)
+    with path_to_internal_file("timemachine.testsystems.data", f"all_pairs_atom_mappings_{key}.pkl") as path_to_pkl:
+        with open(path_to_pkl, "rb") as ref_pickle:
+            ref_cores_by_pair = pickle.load(ref_pickle)
 
     assert cores_by_pair == ref_cores_by_pair
 
