@@ -350,6 +350,9 @@ def rebalance_lambda_schedule(
             f"Optimized schedule has {len(new_schedule)} windows compared to {len(initial_lambs)} windows initially, target overlap {target_overlap}"
         )
     initial_states = [setup_initial_state_fn(lamb) for lamb in new_schedule]
+
+    if not (min(new_schedule) == lambda_min) and (max(new_schedule) == lambda_max):
+        raise(RuntimeError(f"optimized interval {(min(new_schedule), max(new_schedule))} != {(lambda_min, lambda_max)}"))
     return initial_states
 
 
