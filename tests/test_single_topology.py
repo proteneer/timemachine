@@ -20,7 +20,7 @@ from timemachine.constants import (
     NBParamIdx,
 )
 from timemachine.fe import atom_mapping, single_topology
-from timemachine.fe.dummy import MultipleAnchorWarning, canonicalize_bond
+from timemachine.fe.dummy import MultipleBondAnchorWarning, canonicalize_bond
 from timemachine.fe.interpolate import align_nonbonded_idxs_and_params, linear_interpolation
 from timemachine.fe.single_topology import (
     AtomMapMixin,
@@ -330,7 +330,7 @@ def test_find_dummy_groups_and_multiple_anchors():
 
     core_pairs = np.array([[1, 1], [2, 2]])
 
-    with pytest.warns(MultipleAnchorWarning):
+    with pytest.warns(MultipleBondAnchorWarning):
         dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
         assert dgs == {1: (2, {0})} or dgs == {2: (1, {0})}
 
@@ -353,7 +353,7 @@ def test_find_dummy_groups_and_multiple_anchors():
     core_a = [0, 1, 2, 3]
     core_b = [2, 1, 4, 3]
 
-    with pytest.warns(MultipleAnchorWarning):
+    with pytest.warns(MultipleBondAnchorWarning):
         dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b)
         assert dgs == {1: (2, {0})}
 
