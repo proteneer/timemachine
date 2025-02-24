@@ -243,7 +243,7 @@ class Forcefield:
                 err_msg="Split ligand-solvent LJ interactions are no longer supported",
             )
 
-        if q_handle_intra is None:
+        if q_handle_intra is None and q_handle is not None:
             # Copy the forcefield parameters to the intramolecular term if not
             # already handled.
             if isinstance(q_handle, nonbonded.AM1BCCCCCHandler):
