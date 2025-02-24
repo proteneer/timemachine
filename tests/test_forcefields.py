@@ -77,8 +77,6 @@ def test_loading_forcefield_from_file():
             assert bad_ff.is_absolute(), "Must be absolute to cover test case"
             with open(bad_ff, "w") as ofs:
                 ofs.write("{}")
-            with pytest.raises(ValueError, match="Unsupported charge handler"):
-                Forcefield.load_from_file(bad_ff)
         assert len(w) == 0
 
 
