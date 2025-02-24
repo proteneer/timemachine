@@ -2,13 +2,14 @@
 ARG LIBXRENDER_VERSION=1:0.9.10-*
 ARG LIBXEXT_VERSION=2:1.3.4-*
 
-FROM docker.io/nvidia/cuda:12.6.3-devel-ubuntu24.04 AS tm_base_env
+FROM docker.io/nvidia/cuda:12.4.1-devel-ubuntu20.04 AS tm_base_env
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 
-ARG MAKE_VERSION=4.3-*
-ARG GIT_VERSION=1:2.43.0-*
-ARG WGET_VERSION=1.21.4-*
+# Copied out of anaconda's dockerfile
+ARG MAKE_VERSION=4.2.1-1.2
+ARG GIT_VERSION=1:2.25.1-*
+ARG WGET_VERSION=1.20.3-*
 RUN (apt-get update || true)  && apt-get install --no-install-recommends -y \
     wget=${WGET_VERSION} git=${GIT_VERSION} make=${MAKE_VERSION} libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
     && apt-get clean \
@@ -16,9 +17,9 @@ RUN (apt-get update || true)  && apt-get install --no-install-recommends -y \
 
 ARG MINIFORGE_NAME=Miniforge3
 ARG MINIFORGE_VERSION=24.11.2-0
-RUN wget --quiet https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/${MINIFORGE_NAME}-${MINIFORGE_VERSION}-Linux-$(uname -m).sh -O ~/miniforge.sh && \
-    /bin/bash ~/miniforge.sh -b -p /opt/conda && \
-    rm ~/miniforge.sh && \
+RUN wget --quiet https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/${MINIFORGE_NAME}-${MINIFORGE_VERSION}-Linux-$(uname -m).sh -O ~/miniconda.sh && \
+    /bin/bash ~/miniconda.sh -b -p /opt/conda && \
+    rm ~/miniconda.sh && \
     ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
 
@@ -79,7 +80,7 @@ RUN pip install --no-cache-dir -e . && rm -rf ./build
 
 # Container with only cuda base, half the size of the timemachine_cuda_dev container
 # Need to copy curand/cudart as these are dependencies of the Timemachine GPU code
-FROM docker.io/nvidia/cuda:12.6.3-base-ubuntu24.04 AS timemachine
+FROM docker.io/nvidia/cuda:12.4.1-base-ubuntu20.04 AS timemachine
 ARG LIBXRENDER_VERSION
 ARG LIBXEXT_VERSION
 RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxrender1=${LIBXRENDER_VERSION} libxext-dev=${LIBXEXT_VERSION} \
