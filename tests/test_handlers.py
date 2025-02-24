@@ -14,13 +14,13 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, ONE_4PI_EPS0
-from timemachine.datasets import fetch_freesolv
 from timemachine.fe import topology, utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers import utils as h_utils
 from timemachine.md import builders
+from timemachine.testsystems import fetch_freesolv
 from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.nocuda]

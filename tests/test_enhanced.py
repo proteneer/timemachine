@@ -1,7 +1,7 @@
 import pytest
 
-from timemachine.datasets import fetch_freesolv
 from timemachine.md.enhanced import identify_rotatable_bonds
+from timemachine.testsystems import fetch_freesolv
 
 pytestmark = [pytest.mark.nocuda]
 

@@ -14,10 +14,10 @@ from numpy.typing import NDArray as Array
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
-from timemachine.datasets import fetch_freesolv
 from timemachine.fe.free_energy import assert_deep_eq
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
+from timemachine.testsystems import fetch_freesolv
 from timemachine.utils import path_to_internal_file
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
