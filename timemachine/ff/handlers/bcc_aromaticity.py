@@ -4,7 +4,7 @@
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional, Set, Type, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 T = TypeVar("T")
 OEMol = Any
@@ -25,15 +25,15 @@ class InvalidSmirksError(RechargeException):
             The SMIRKS pattern which could not be parsed.
         """
 
-        super(InvalidSmirksError, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.smirks = smirks
 
 
 def call_openeye(
     oe_callable: Callable[[T], bool],
     *args: T,
-    exception_type: Type[BaseException] = RuntimeError,
-    exception_kwargs: Optional[Dict[str, Any]] = None,
+    exception_type: type[BaseException] = RuntimeError,
+    exception_kwargs: Optional[dict[str, Any]] = None,
 ):
     """Wraps a call to an OpenEye function, either capturing the output in an
     exception if the function does not complete successfully, or redirecting it
@@ -78,7 +78,7 @@ def call_openeye(
         logging.debug(output_string)
 
 
-def match_smirks(smirks: str, oe_molecule: OEMol, unique: bool = False) -> List[Dict[int, int]]:
+def match_smirks(smirks: str, oe_molecule: OEMol, unique: bool = False) -> list[dict[int, int]]:
     """Attempt to find the indices (optionally unique) of all atoms which
     match a particular SMIRKS pattern.
     Parameters
@@ -127,7 +127,7 @@ class AromaticityModel:
     a specified aromatic model."""
 
     @classmethod
-    def _set_aromatic(cls, ring_matches: List[Dict[int, int]], oe_molecule: OEMol):
+    def _set_aromatic(cls, ring_matches: list[dict[int, int]], oe_molecule: OEMol):
         """Flag all specified ring atoms and all ring bonds between those atoms
         as being aromatic.
 
@@ -212,7 +212,7 @@ class AromaticityModel:
         )
 
         previous_case_2_atoms = None
-        case_2_atoms: Set[int] = set()
+        case_2_atoms: set[int] = set()
 
         while previous_case_2_atoms != case_2_atoms:
             case_2_matches = match_smirks(case_2_smirks, oe_molecule, unique=True)
@@ -240,7 +240,7 @@ class AromaticityModel:
         )
 
         previous_case_3_atoms = None
-        case_3_atoms: Set[int] = set()
+        case_3_atoms: set[int] = set()
 
         while previous_case_3_atoms != case_3_atoms:
             case_3_matches = match_smirks(case_3_smirks, oe_molecule, unique=True)

@@ -4,7 +4,7 @@ from numpy.random import rand, randint, randn, seed
 seed(2021)
 
 from functools import partial
-from typing import Any, Callable, Tuple
+from typing import Any, Callable
 
 import pytest
 from jax import jit, value_and_grad, vmap
@@ -43,7 +43,7 @@ Beta = float
 Cutoff = float
 Energy = float
 
-NonbondedArgs = Tuple[Conf, Params, Box, ExclusionIdxs, ScaleFactors, Beta, Cutoff]
+NonbondedArgs = tuple[Conf, Params, Box, ExclusionIdxs, ScaleFactors, Beta, Cutoff]
 NonbondedFxn = Callable[[Conf, Params, Box, ExclusionIdxs, ScaleFactors, Beta, Cutoff], Energy]
 
 pytestmark = [pytest.mark.nocuda]

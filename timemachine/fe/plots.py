@@ -1,6 +1,7 @@
 import io
 import warnings
-from typing import Callable, Sequence, Tuple, cast
+from collections.abc import Sequence
+from typing import Callable, cast
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -150,8 +151,8 @@ def plot_overlap_detail_figure(
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
         u_kln = u_kln_by_component.sum(0)
 
-        w_fwd = u_kln[1, 0] - u_kln[0, 0]
-        w_rev = u_kln[0, 1] - u_kln[1, 1]
+        w_fwd = u_kln[0, 1] - u_kln[0, 0]
+        w_rev = u_kln[1, 0] - u_kln[1, 1]
 
         df = beta * dGs[lamb_idx]
         df_err = beta * dG_errs[lamb_idx]
@@ -163,8 +164,8 @@ def plot_overlap_detail_figure(
 
     # [n_lambdas x num_energy_components] plots (relying on energy decomposition)
     for lamb_idx, u_kln_by_component in enumerate(u_kln_by_component_by_lambda):
-        w_fwd_by_component = u_kln_by_component[:, 1, 0] - u_kln_by_component[:, 0, 0]
-        w_rev_by_component = u_kln_by_component[:, 0, 1] - u_kln_by_component[:, 1, 1]
+        w_fwd_by_component = u_kln_by_component[:, 0, 1] - u_kln_by_component[:, 0, 0]
+        w_rev_by_component = u_kln_by_component[:, 1, 0] - u_kln_by_component[:, 1, 1]
 
         # loop over bond, angle, torsion, nonbonded terms etc.
         for u_idx in range(num_energy_components):
@@ -325,7 +326,7 @@ def plot_fwd_reverse_predictions(
     plt.tight_layout()
 
 
-def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[float, float] = (13, 10), prefix: str = ""):
+def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: tuple[float, float] = (13, 10), prefix: str = ""):
     """Plot matrix of chiral restraint energies as a heatmap.
 
     For use with the outputs of timemachine.fe.chiral_utils.make_chiral_flip_heatmaps.
@@ -349,7 +350,7 @@ def plot_chiral_restraint_energies(chiral_energies: NDArray, figsize: Tuple[floa
 
 def plot_hrex_transition_matrix(
     transition_probability: NDArray,
-    figsize: Tuple[float, float] = (13, 10),
+    figsize: tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
     format_annotation: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}",
     format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}%",
@@ -406,7 +407,7 @@ def plot_hrex_swap_acceptance_rates_convergence(cumulative_swap_acceptance_rates
 def plot_hrex_replica_state_distribution_heatmap(
     cumulative_replica_state_counts: NDArray,
     lambdas: Sequence[float],
-    figsize: Tuple[float, float] = (13, 10),
+    figsize: tuple[float, float] = (13, 10),
     annotate_threshold: int = DEFAULT_HEATMAP_ANNOTATE_THRESHOLD,
     format_annotation: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}",
     format_cbar_tick: Callable[[float], str] = lambda x: f"{100.0 * x:.2g}%",

@@ -4,9 +4,8 @@ from argparse import ArgumentParser
 from collections import defaultdict
 from dataclasses import replace
 from functools import partial
-from importlib import resources
 from itertools import product
-from typing import Callable, Optional, Tuple, TypeVar
+from typing import Callable, Optional, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,11 +32,12 @@ from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 A = TypeVar("A")
 
 
-def run_with_timing(f: Callable[[], A]) -> Tuple[A, float]:
+def run_with_timing(f: Callable[[], A]) -> tuple[A, float]:
     start_time = time.perf_counter_ns()
     result = f()
     elapsed_ns = time.perf_counter_ns() - start_time
@@ -58,7 +58,7 @@ def hif2a_single_topology_leg(request):
     return setup_hif2a_single_topology_leg(host_name, n_windows, (0.0, 0.2))
 
 
-def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpoints: Tuple[float, float]):
+def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpoints: tuple[float, float]):
     forcefield = Forcefield.load_default()
     host_config: Optional[HostConfig] = None
     assert len(lambda_endpoints) == 2
@@ -66,7 +66,7 @@ def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpo
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     if host_name == "complex":
-        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+        with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
             host_config = builders.build_protein_system(
                 str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )
@@ -113,7 +113,7 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
         run = partial(run_sims_sequential, initial_states, md_params, temperature=temperature)
     elif mode == "bisection":
         # Bisection is expected to use a slightly different initial schedule to reduce
-        # amount of minimization. The additional logic it to emulate estimate_relative_free_energy_bisection
+        # the amount of minimization. Benchmark intends to emulate estimate_relative_free_energy_bisection
         lambda_grid = bisection_lambda_schedule(
             n_windows, lambda_interval=(initial_states[0].lamb, initial_states[-1].lamb)
         )
@@ -142,8 +142,8 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
         )
 
         make_optimized_initial_state = lambda lamb: optimize_initial_state_fn(make_initial_state_fn(lamb))
-        # Bisection is a bit different since it has to generate new windows, but still good to benchmark
-        # as it is done upfront before HREX in practice
+        # Bisection is a bit different, since it has to generate new windows. The lambda schedule from bisection
+        # is used as the schedule for HREX in practice, making it important to benchmark.
         run = partial(
             run_sims_bisection,
             [initial_states[0].lamb, initial_states[-1].lamb],

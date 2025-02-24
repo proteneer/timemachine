@@ -5,8 +5,7 @@ relative binding free energy edge from the HIF2A test system"""
 import time
 from argparse import ArgumentParser
 from dataclasses import dataclass
-from importlib import resources
-from typing import List, Optional
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -42,6 +41,7 @@ from timemachine.potentials import (
 from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 SECONDS_PER_DAY = 24 * 60 * 60
 
@@ -60,7 +60,7 @@ class BenchmarkConfig:
         assert self.num_equil_batches >= 1
 
 
-def plot_batch_times(steps_per_batch: int, dt: float, batch_times: List[float], box_volumes: List[float], label: str):
+def plot_batch_times(steps_per_batch: int, dt: float, batch_times: list[float], box_volumes: list[float], label: str):
     """
     Plot and save a figure of the batches of benchmarks run.
 
@@ -109,7 +109,7 @@ def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barosta
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     # build the protein system.
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )
@@ -198,7 +198,7 @@ def benchmark(
     x0: NDArray,
     v0: NDArray,
     box: NDArray,
-    bound_potentials: List[BoundPotential],
+    bound_potentials: list[BoundPotential],
     dt: float = 1.5e-3,
     barostat_interval: int = 0,
 ):
@@ -362,7 +362,7 @@ def benchmark_local(
     x0: NDArray,
     v0: NDArray,
     box: NDArray,
-    bound_potentials: List[BoundPotential],
+    bound_potentials: list[BoundPotential],
     ligand_idxs: NDArray,
     dt: float = 1.5e-3,
 ):
@@ -525,7 +525,7 @@ def benchmark_hif2a(config: BenchmarkConfig):
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     # build the protein system.
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )

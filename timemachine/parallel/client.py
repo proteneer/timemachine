@@ -3,9 +3,10 @@ import multiprocessing
 import os
 import pickle
 from abc import ABC, abstractmethod
+from collections.abc import Iterator, Sequence
 from concurrent import futures
 from pathlib import Path
-from typing import Any, Iterator, List, Optional, Sequence
+from typing import Any, Optional
 from uuid import uuid4
 
 from timemachine.parallel.utils import get_gpu_count
@@ -84,7 +85,7 @@ class AbstractClient:
 
 
 class _MockFuture(BaseFuture):
-    __slots__ = ("val", "_id")
+    __slots__ = ("_id", "val")
 
     def __init__(self, val):
         self.val = val
@@ -191,7 +192,7 @@ class CUDAPoolClient(ProcessPoolClient):
     the number of GPUs.
     """
 
-    def __init__(self, max_workers):
+    def __init__(self, max_workers: int):
         super().__init__(max_workers)
         visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
         if visible_devices:
@@ -252,7 +253,7 @@ class BinaryFutureWrapper:
 
 
 class AbstractFileClient:
-    def store_stream(self, path: str, stream: io.IOBase):
+    def store_stream(self, path: str | Path, stream: io.IOBase):
         """
         Store a stream of binary data to a given path.
 
@@ -267,7 +268,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def store(self, path: str, data: bytes):
+    def store(self, path: str | Path, data: bytes):
         """
         Store the results to the given path.
 
@@ -282,7 +283,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def load(self, path: str) -> bytes:
+    def load(self, path: str | Path) -> bytes:
         """
         Load the results from the given path.
 
@@ -298,7 +299,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def exists(self, path: str) -> bool:
+    def exists(self, path: str | Path) -> bool:
         """
         Parameters
         ----------
@@ -312,7 +313,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def full_path(self, path: str) -> str:
+    def full_path(self, path: str | Path) -> str:
         """
         Parameters
         ----------
@@ -327,7 +328,7 @@ class AbstractFileClient:
         """
         raise NotImplementedError()
 
-    def delete(self, path: str):
+    def delete(self, path: str | Path):
         """
         Parameters
         ----------
@@ -338,10 +339,10 @@ class AbstractFileClient:
 
 
 class FileClient(AbstractFileClient):
-    def __init__(self, base: Optional[Path] = None):
+    def __init__(self, base: Optional[Path | str] = None):
         self.base = base or Path().cwd()
 
-    def store_stream(self, path: str, stream: io.IOBase):
+    def store_stream(self, path: str | Path, stream: io.IOBase):
         full_path = Path(self.full_path(path))
         full_path.parent.mkdir(parents=True, exist_ok=True)
         with open(full_path, "wb") as ofs:
@@ -350,26 +351,26 @@ class FileClient(AbstractFileClient):
                 ofs.write(chunk)
                 chunk = stream.read(io.DEFAULT_BUFFER_SIZE)
 
-    def store(self, path: str, data: bytes):
+    def store(self, path: str | Path, data: bytes):
         full_path = Path(self.full_path(path))
         full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.write_bytes(data)
 
-    def load(self, path: str) -> bytes:
+    def load(self, path: str | Path) -> bytes:
         full_path = Path(self.full_path(path))
         return full_path.read_bytes()
 
-    def exists(self, path: str) -> bool:
+    def exists(self, path: str | Path) -> bool:
         return Path(self.full_path(path)).exists()
 
-    def full_path(self, path: str) -> str:
+    def full_path(self, path: str | Path) -> str:
         return str(Path(self.base, path).absolute())
 
-    def delete(self, path: str):
+    def delete(self, path: str | Path):
         Path(self.full_path(path)).unlink()
 
 
-def save_results(result_paths: List[str], local_file_client: FileClient, remote_file_client: AbstractFileClient):
+def save_results(result_paths: list[str], local_file_client: FileClient, remote_file_client: AbstractFileClient):
     """
     Load the results from `remote_file_client`, which may be remote and
     store them on the local file system using `local_file_client`.

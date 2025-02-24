@@ -1,5 +1,6 @@
+from collections.abc import Iterable
 from functools import partial
-from typing import Any, Callable, Iterable, Set, Tuple
+from typing import Any, Callable
 
 import jax.numpy as jnp
 
@@ -22,7 +23,7 @@ def align_idxs_and_params(
     key: Callable[[Idxs, Params], Key] = lambda idxs, _: idxs,
     get_idxs: Callable[[Key], Idxs] = lambda key: key,
     validate_idxs: Callable[[Idxs], None] = lambda _: None,
-) -> Set[Tuple[Idxs, Params, Params]]:
+) -> set[tuple[Idxs, Params, Params]]:
     """
     Given two input parameter sets (idxs, params), aligns by the
     specified key to produce two output parameter sets, where the

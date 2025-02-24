@@ -6,6 +6,7 @@ from jax import numpy as jnp
 
 from timemachine.constants import BOLTZ
 from timemachine.datasets import fetch_freesolv
+from timemachine.fe.bar import DG_KEY
 from timemachine.fe.reweighting import (
     construct_endpoint_reweighting_estimator,
     construct_mixture_reweighting_estimator,
@@ -132,14 +133,14 @@ def test_mixture_reweighting_1d():
     # various approximations to f_k at ref_params
 
     # MBAR
-    mbar = pymbar.MBAR(u_kn, N_k=N_k)
+    mbar = pymbar.mbar.MBAR(u_kn, N_k=N_k)
     f_k_mbar = mbar.f_k
     u_mix_mbar = interpret_as_mixture_potential(u_kn, f_k_mbar, N_k)
 
     # TI
     vec_du_dl = vmap(grad(u_fxn, 1), (0, None, None))
     mean_du_dls = np.array([np.mean(vec_du_dl(traj, lam, ref_params)) for (traj, lam) in zip(trajs, lambdas)])
-    f_k_ti = np.array([np.trapz(mean_du_dls[:k], lambdas[:k]) for k in range(n_windows)])
+    f_k_ti = np.array([np.trapezoid(mean_du_dls[:k], lambdas[:k]) for k in range(n_windows)])
     u_mix_ti = interpret_as_mixture_potential(u_kn, f_k_ti, N_k)
 
     # TODO [overkill] : BAR
@@ -289,7 +290,7 @@ def test_mixture_reweighting_ahfe():
 
 
 def test_one_sided_exp():
-    """assert consistency with pymbar.EXP on random instances + instances containing +inf work"""
+    """assert consistency with pymbar.exp on random instances + instances containing +inf work"""
 
     np.random.seed(2022)
     num_instances = 100
@@ -304,14 +305,14 @@ def test_one_sided_exp():
         reduced_works = np.random.randn(num_works) * stddev + mean
 
         # compare estimates
-        pymbar_estimate, _ = pymbar.EXP(reduced_works)
+        pymbar_estimate = pymbar.exp(reduced_works)[DG_KEY]
         tm_estimate = one_sided_exp(reduced_works)
 
         assert np.isclose(tm_estimate, pymbar_estimate)
 
     # also check +inf
     reduced_works = jnp.array([+np.inf, 0])
-    assert np.isclose(one_sided_exp(reduced_works), pymbar.EXP(reduced_works)[0])
+    assert np.isclose(one_sided_exp(reduced_works), pymbar.exp(reduced_works)[DG_KEY])
 
 
 def test_interpret_as_mixture_potential():

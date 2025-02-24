@@ -219,6 +219,7 @@ def test_infer_node_dgs_w_error_invariant_wrt_edge_order():
 
 edge_diff_prop = "edge_diff"
 edge_stddev_prop = "edge_stddev"
+edge_skip_prop = "skip_for_mle"
 node_val_prop = "node_val"
 node_stddev_prop = "node_stddev"
 ref_node_val_prop = "ref_node_val"
@@ -376,7 +377,7 @@ def test_infer_node_vals_and_errs_networkx_missing_values(nx_graph_with_referenc
 
     idx_to_label = {n: str(n) for n in g.nodes}
     g = nx.relabel_nodes(g, idx_to_label)
-    n1, n2, n3 = np.random.choice(g.nodes, 3, replace=False)
+    n1, n2, n3, n4 = np.random.choice(g.nodes, 4, replace=False)
 
     # define a new node somewhere in the middle of the sorted list of nodes
     # (needed to check that we correctly remove isolated nodes)
@@ -386,9 +387,10 @@ def test_infer_node_vals_and_errs_networkx_missing_values(nx_graph_with_referenc
     g.add_edge(n3, undetermined_label, **{edge_diff_prop: None, edge_stddev_prop: None})
 
     # unlabeled edges between exising nodes should have no effect on result
-    g.add_edge(n1, n2)
+    g.add_edge(n1, n2, **{edge_skip_prop: False})
     g.add_edge(n2, n3, **{edge_diff_prop: None})
     g.add_edge(n1, n3, **{edge_diff_prop: None, edge_stddev_prop: None})
+    g.add_edge(n1, n4, **{edge_skip_prop: True})
 
     # use n_bootstrap=2 to save time, since we don't check errors here
     g_res = infer_node_vals_and_errs_networkx_partial(g, n_bootstrap=2, seed=seed)
@@ -467,3 +469,58 @@ def test_infer_node_vals_and_errs_incorrect_sizes():
         ref_node_vals,
         ref_node_stddevs,
     )
+
+
+def instance_to_nx(instance):
+    node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = instance
+    g = nx.DiGraph()
+    for i in range(len(edge_idxs)):
+        e = tuple(edge_idxs[i])
+        d = dict()
+        d["edge_diff"] = obs_edge_diffs[i]
+        d["edge_stddev"] = edge_stddevs[i]
+        g.add_edge(*e, **d)
+    return g
+
+
+def compare_inferred_and_ref_dgs(inferred_dgs: dict, node_vals, mse_thresh=1e-5):
+    """assert inferred_dgs agree with node_vals (ignoring an additive offset)"""
+    nodes = sorted(inferred_dgs.keys())
+    ref_node = nodes[0]
+    x = []
+    y = []
+    for n in inferred_dgs:
+        x.append(inferred_dgs[n] - inferred_dgs[ref_node])
+        y.append(node_vals[n] - node_vals[ref_node])
+    mse = np.mean((np.array(y) - np.array(x)) ** 2)
+    assert mse < mse_thresh, f"{mse} >= {mse_thresh}"
+
+
+def test_disconnection():
+    """infer dgs on largest connected component of disconnected random trees"""
+    np.random.seed(0)
+    for i in range(5):
+        # generate random spanning tree, remove one random edge
+        K = np.random.randint(10, 100)
+        g = nx.random_tree(K, seed=hash(K * i))
+        edges = list(g.edges)
+        random_edge = edges[np.random.randint(len(edges))]
+        g.remove_edge(*random_edge)
+        size_of_largest_component = max([len(c) for c in nx.connected_components(g)])
+        assert K > size_of_largest_component > (K - 1) / 2
+
+        # convert to digraph with appropriate edge labels
+        instance = generate_instance(g, 1e-3)
+        test_g = instance_to_nx(instance)
+        node_vals, edge_idxs, obs_edge_diffs, edge_stddevs = instance
+
+        # infer results
+        labeled_graph = infer_node_vals_and_errs_networkx(
+            test_g, "edge_diff", "edge_stddev", "ref", "ref_stddev", n_bootstrap=1
+        )
+        assert labeled_graph.number_of_nodes() == size_of_largest_component
+
+        # assert inferred dgs match ref dgs, up to an additive offset
+        inferred_dgs = nx.get_node_attributes(labeled_graph, "inferred_dg")
+        assert len(inferred_dgs) == size_of_largest_component
+        compare_inferred_and_ref_dgs(inferred_dgs, node_vals)

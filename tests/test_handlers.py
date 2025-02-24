@@ -3,7 +3,6 @@ import functools
 import pickle
 from collections import defaultdict
 from copy import deepcopy
-from importlib import resources
 
 import jax
 import jax.numpy as jnp
@@ -22,6 +21,7 @@ from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers import utils as h_utils
 from timemachine.md import builders
+from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -745,7 +745,7 @@ def test_am1_differences():
                 a = am1_params[atom_idx]
                 b = bcc_params[atom_idx]
                 c = ccc_params[atom_idx]
-                print("{:6.2f}".format(a), "{:6.2f}".format(c), "{:6.2f}".format(b), atom.GetSymbol(), end="")
+                print(f"{a:6.2f}", f"{c:6.2f}", f"{b:6.2f}", atom.GetSymbol(), end="")
                 if np.abs(b - c) > 0.1:
                     print(" *")
                 else:
@@ -755,7 +755,7 @@ def test_am1_differences():
 
 
 def test_am1elf10_conformer_independence():
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = utils.read_sdf(path_to_ligand)
 
     # Pick a subset of molecules with chiral centers
@@ -783,7 +783,7 @@ def test_am1elf10_conformer_independence():
 def test_trans_carboxlic_acid():
     # Test fallback to turn off hydrogen sampling if charge generation failed
     # due to trans-COOH
-    with resources.path("timemachine.testsystems.data", "mobley_820789.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "mobley_820789.sdf") as path_to_ligand:
         mols = utils.read_sdf(path_to_ligand)
     mol = mols[0]
     rdmolops.AssignStereochemistryFrom3D(mol, confId=0, replaceExistingTags=True)
@@ -797,7 +797,7 @@ def test_trans_carboxlic_acid():
 
 def test_freesolv_failures():
     # Test failures for 3 cases in freesolv in openeye toolkits 2022.2.2
-    with resources.path("timemachine.testsystems.data", "freesolv_omega_failures.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "freesolv_omega_failures.sdf") as path_to_ligand:
         mols = utils.read_sdf(path_to_ligand)
 
     for mol in mols:
@@ -811,7 +811,7 @@ def test_compute_or_load_oe_charges():
 
     # get some molecules
     cache_key = nonbonded.AM1ELF10_CHARGE_CACHE
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = utils.read_sdf(path_to_ligand)
 
     mols = mols[:5]  # truncate so that whole test is ~ 10 seconds
@@ -885,7 +885,7 @@ def test_charging_compounds_with_non_zero_charge():
 
 
 def test_precomputed_charge_handler():
-    with resources.path("timemachine.datasets.water_exchange", "bb_centered_espaloma.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.datasets.water_exchange", "bb_centered_espaloma.sdf") as path_to_ligand:
         mol = utils.read_sdf(path_to_ligand)[0]
 
     pch = nonbonded.PrecomputedChargeHandler([], [], None)
@@ -1005,7 +1005,7 @@ def test_compute_or_load_bond_smirks_matches():
     # get some molecules
     match_cache_key = nonbonded.BOND_SMIRK_MATCH_CACHE
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = utils.read_sdf(path_to_ligand)
 
     # get some bond smirks
@@ -1165,7 +1165,7 @@ def test_symmetric_am1ccc():
 
 
 def test_nn_handler():
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = utils.read_sdf(path_to_ligand)
 
     mol = all_mols[0]
@@ -1270,7 +1270,7 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries, is_nn, env_nn_a
     Test that we can compute BCCs to generate per atom charge offsets and that they can be differentiated
     """
     protein_path, expected_symmetries = protein_path_and_symmetries
-    with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", protein_path) as path_to_pdb:
         host_pdb = app.PDBFile(str(path_to_pdb))
         topology = host_pdb.topology
 
@@ -1319,7 +1319,7 @@ def test_environment_bcc_full_protein(protein_path, is_nn, env_nn_args):
     """
     Test that we can compute BCCs to generate per atom charge offsets and that they can be differentiated
     """
-    with resources.path("timemachine.testsystems.data", protein_path) as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", protein_path) as path_to_pdb:
         host_pdb = app.PDBFile(str(path_to_pdb))
         host_config = builders.build_protein_system(host_pdb, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF)
 
@@ -1355,7 +1355,7 @@ def test_environment_bcc_full_protein(protein_path, is_nn, env_nn_args):
     else:
         partial_cc = nonbonded.EnvironmentBCCPartialHandler(patterns, params, None)
 
-    pbcc2 = partial_cc.get_env_handle(topology, ff)
+    pbcc2 = partial_cc.get_env_handle(host_config.omm_topology, ff)
     np.testing.assert_array_equal(pbcc.parameterize(params), pbcc2.parameterize(params))
 
     def loss_fn2(bcc_params):

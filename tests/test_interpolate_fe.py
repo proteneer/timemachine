@@ -1,16 +1,15 @@
-from importlib import resources
-
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
-import pymbar
 import pytest
 
 from timemachine.constants import BOLTZ, DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping, cif_writer, single_topology, utils
+from timemachine.fe.bar import bar
 from timemachine.fe.system import simulate_system
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
+from timemachine.utils import path_to_internal_file
 
 
 @pytest.mark.skip(reason="This is currently too slow to run on CI")
@@ -19,7 +18,7 @@ def test_hif2a_free_energy_estimates():
 
     forcefield = Forcefield.load_default()
 
-    with resources.path("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = utils.read_sdf(path_to_ligand)
 
     mol_a = all_mols[1]
@@ -78,7 +77,7 @@ def test_hif2a_free_energy_estimates():
             plt.legend()
             plt.savefig(f"lambda_{lambda_idx - 1}_{lambda_idx}.png")
 
-            dG_exact, exact_bar_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
+            dG_exact, exact_bar_err = bar(fwd_delta_u, rev_delta_u)
             dG_exact /= beta
             exact_bar_err /= beta
 

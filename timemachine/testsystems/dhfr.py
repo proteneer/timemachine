@@ -1,14 +1,13 @@
-from importlib import resources
-
 import numpy as np
 from openmm import app
 
 from timemachine.ff.handlers import openmm_deserializer
 from timemachine.md.builders import strip_units
+from timemachine.utils import path_to_internal_file
 
 
 def setup_dhfr():
-    with resources.path("timemachine.testsystems.data", "5dfr_solv_equil.pdb") as pdb_path:
+    with path_to_internal_file("timemachine.testsystems.data", "5dfr_solv_equil.pdb") as pdb_path:
         host_pdb = app.PDBFile(str(pdb_path))
 
     protein_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
@@ -25,7 +24,7 @@ def setup_dhfr():
 
 
 def get_dhfr_system():
-    with resources.path("timemachine.testsystems.data", "5dfr_solv_equil.pdb") as pdb_path:
+    with path_to_internal_file("timemachine.testsystems.data", "5dfr_solv_equil.pdb") as pdb_path:
         host_pdb = app.PDBFile(str(pdb_path))
 
     protein_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")

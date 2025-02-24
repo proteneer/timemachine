@@ -61,8 +61,8 @@ class CMakeBuild(build_ext):
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
 
-        subprocess.check_call(["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp)
-        subprocess.check_call(["cmake", "--build", "."] + build_args, cwd=self.build_temp)
+        subprocess.check_call(["cmake", ext.sourcedir, *cmake_args], cwd=self.build_temp)
+        subprocess.check_call(["cmake", "--build", ".", *build_args], cwd=self.build_temp)
 
 
 here = pathlib.Path(__file__).parent.resolve()
@@ -97,7 +97,7 @@ setup(
         "jaxlib>0.4.1",
         "networkx",
         "numpy",
-        "pymbar>=3.0.6,<4",
+        "pymbar>4.0.2",
         "rdkit",
         "scipy",
         "matplotlib",
@@ -112,6 +112,7 @@ setup(
         "test": [
             "pytest",
             "pytest-cov",
+            "pytest-xdist",
             "hilbertcurve==1.0.5",
             "hypothesis[numpy]==6.54.6",
             "psutil==5.9.5",
@@ -124,7 +125,6 @@ setup(
             "py.typed",
         ],
         "timemachine.datasets": [
-            "**/*.csv",
             "**/*.pdb",
             "**/*.sdf",
         ],

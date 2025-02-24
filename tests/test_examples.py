@@ -2,11 +2,10 @@ import os
 import pickle
 import subprocess
 import sys
-from contextlib import contextmanager
 from glob import glob
 from importlib import resources
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -14,20 +13,17 @@ from common import temporary_working_dir
 from numpy.typing import NDArray as Array
 from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_FF, DEFAULT_KT, KCAL_TO_KJ
+from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
-from timemachine.fe.free_energy import PairBarResult, SimulationResult
+from timemachine.fe.free_energy import assert_deep_eq
 from timemachine.fe.utils import get_mol_name
-
-# All examples are to be tested nightly
-pytestmark = [pytest.mark.nightly]
-
+from timemachine.ff import Forcefield
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
 
 
 def run_example(
-    example_name: str, cli_args: List[str], env: Optional[Dict[str, str]] = None, cwd: Optional[str] = None
+    example_name: str, cli_args: list[str], env: Optional[dict[str, str]] = None, cwd: Optional[str] = None
 ) -> subprocess.CompletedProcess:
     """
     Runs an example script
@@ -65,7 +61,7 @@ def run_example(
     return proc
 
 
-def get_cli_args(config: Dict) -> List[str]:
+def get_cli_args(config: dict) -> list[str]:
     return [(f"--{key}={val}" if val is not None else f"--{key}") for (key, val) in config.items()]
 
 
@@ -81,7 +77,7 @@ def smc_free_solv_path():
         yield temp_dir
 
 
-def get_smc_free_solv_results(result_path: str) -> Tuple[Array, Array]:
+def get_smc_free_solv_results(result_path: str) -> tuple[Array, Array]:
     # return the dG_preds, dG_expts for the given free solv run
     experimental_dGs = {get_mol_name(mol): float(mol.GetProp("dG")) for mol in fetch_freesolv()}
 
@@ -145,150 +141,7 @@ def test_smc_freesolv(smc_free_solv_path):
     assert mean_abs_err_kcalmol <= 2
 
 
-def get_success_result_path(mol_a_name: str, mol_b_name: str):
-    return f"success_rbfe_result_{mol_a_name}_{mol_b_name}.pkl"
-
-
-@contextmanager
-def get_rbfe_edge_list_hif2a_path(seed):
-    with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_data:
-        base_config = dict(
-            n_frames=2,
-            ligands=hif2a_data / "ligands.sdf",
-            forcefield=DEFAULT_FF,
-            protein=hif2a_data / "5tbm_prepared.pdb",
-            n_gpus=1,
-            seed=seed,
-            n_eq_steps=2,
-            n_windows=3,
-        )
-
-        def run(results_csv, temp_dir):
-            output_path = str(Path(temp_dir) / get_success_result_path("*", "*"))
-            assert len(glob(output_path)) == 0
-            config = dict(results_csv=results_csv, **base_config)
-            _ = run_example("rbfe_edge_list.py", get_cli_args(config), cwd=temp_dir)
-            return Path(temp_dir)
-
-        with open(hif2a_data / "results_edges_5ns.csv", "r") as fp:
-            edges_rows = fp.readlines()
-
-        edges_rows_sample = edges_rows[:3]  # keep header and first 2 edges (338 -> 165, 338 -> 215)
-        edges = [("338", "165"), ("338", "215")]
-
-        with temporary_working_dir() as temp_dir:
-            with (Path(temp_dir) / "edges.csv").open("w") as fp:
-                fp.writelines(edges_rows_sample)
-                fp.flush()
-                path = run(fp.name, temp_dir)
-            yield path, base_config, edges
-
-
-DEFAULT_SEED = 2023
-
-
-@pytest.fixture(scope="module")
-def rbfe_edge_list_hif2a_path():
-    with get_rbfe_edge_list_hif2a_path(DEFAULT_SEED) as r:
-        yield r
-
-
-def load_simulation_results(path: Path) -> Tuple[SimulationResult, SimulationResult]:
-    with path.open("rb") as fp:
-        results = pickle.load(fp)
-
-    (
-        _,  # mol_a
-        _,  # mol_b
-        _,  # edge_metadata
-        _,  # core,
-        solvent_res,
-        _,  # solvent_top,
-        complex_res,
-        _,  # complex_top,
-    ) = results
-
-    return solvent_res, complex_res
-
-
-def test_rbfe_edge_list_hif2a(rbfe_edge_list_hif2a_path):
-    path, config, edges = rbfe_edge_list_hif2a_path
-    n_windows = config["n_windows"]
-
-    def check_results(results_path):
-        # Just check that results are present and have the expected shape
-        # (we don't do enough sampling here for statistical checks)
-
-        # NOTE: We're mainly interested in checking that simulation frames have been serialized properly; we already
-        # have more exhaustive checks in test_relative_free_energy.py
-
-        assert results_path.exists()
-        solvent_res, complex_res = load_simulation_results(results_path)
-
-        for result in solvent_res, complex_res:
-            L = len(result.final_result.initial_states)
-            assert L == n_windows
-
-            assert isinstance(result, SimulationResult)
-            assert isinstance(result.frames, list)
-            assert len(result.frames) == n_windows  # frames from first and last windows
-            for frames in result.frames:
-                assert len(frames) == config["n_frames"]
-
-            N, _ = result.frames[0][0].shape
-            assert N > 0
-
-            for frames in result.frames:
-                for frame in frames:
-                    assert frame.ndim == 2
-                    assert frame.shape == (N, 3)
-
-    for mol_a_name, mol_b_name in edges:
-        check_results(path / get_success_result_path(mol_a_name, mol_b_name))
-
-
-def assert_simulation_results_equal(r1: SimulationResult, r2: SimulationResult):
-    def assert_pair_bar_results_equal(p1: PairBarResult, p2: PairBarResult):
-        np.testing.assert_array_equal(p1.dGs, p2.dGs)
-        np.testing.assert_array_equal(p1.dG_errs, p2.dG_errs)
-        np.testing.assert_array_equal(p1.dG_err_by_component_by_lambda, p2.dG_err_by_component_by_lambda)
-        np.testing.assert_array_equal(p1.overlaps, p2.overlaps)
-        np.testing.assert_array_equal(p1.overlap_by_component_by_lambda, p2.overlap_by_component_by_lambda)
-        np.testing.assert_array_equal(p1.u_kln_by_component_by_lambda, p2.u_kln_by_component_by_lambda)
-
-    assert_pair_bar_results_equal(r1.final_result, r2.final_result)
-
-    for p1, p2 in zip(r1.intermediate_results, r2.intermediate_results):
-        assert_pair_bar_results_equal(p1, p2)
-
-
-def test_rbfe_edge_list_reproducible(rbfe_edge_list_hif2a_path):
-    path1, _, edges = rbfe_edge_list_hif2a_path
-
-    with get_rbfe_edge_list_hif2a_path(DEFAULT_SEED) as (path2, _, _):
-        with get_rbfe_edge_list_hif2a_path(DEFAULT_SEED + 1) as (path3, _, _):
-            for mol_a_name, mol_b_name in edges:
-
-                def load_results(dir):
-                    path = dir / get_success_result_path(mol_a_name, mol_b_name)
-                    assert path.exists()
-                    return load_simulation_results(path)
-
-                solvent_res_1, complex_res_1 = load_results(path1)
-                solvent_res_2, complex_res_2 = load_results(path2)
-                solvent_res_3, complex_res_3 = load_results(path3)
-
-                # results at path2 should be bitwise equivalent to those at path1
-                assert_simulation_results_equal(solvent_res_1, solvent_res_2)
-                assert_simulation_results_equal(complex_res_1, complex_res_2)
-
-                # results at path3 should differ from those at path1 and path2
-                with pytest.raises(AssertionError):
-                    assert_simulation_results_equal(solvent_res_1, solvent_res_3)
-                with pytest.raises(AssertionError):
-                    assert_simulation_results_equal(complex_res_1, complex_res_3)
-
-
+@pytest.mark.nightly
 @pytest.mark.parametrize("insertion_type", ["untargeted"])
 def test_water_sampling_mc_bulk_water(insertion_type):
     reference_data_path = EXAMPLES_DIR.parent / "tests" / "data" / f"reference_bulk_water_{insertion_type}.npz"
@@ -322,6 +175,7 @@ def test_water_sampling_mc_bulk_water(insertion_type):
             np.testing.assert_array_equal(test_data[key], reference_data[key])
 
 
+@pytest.mark.nightly
 @pytest.mark.parametrize("batch_size", [1, 250, 512, 1000])
 @pytest.mark.parametrize("insertion_type", ["targeted", "untargeted"])
 def test_water_sampling_mc_buckyball(batch_size, insertion_type):
@@ -361,3 +215,139 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
 
         for key in reference_data.files:
             np.testing.assert_array_equal(test_data[key], reference_data[key])
+
+
+@pytest.mark.parametrize(
+    "leg, n_windows, n_frames, n_eq_steps",
+    [
+        ("vacuum", 6, 50, 1000),
+        pytest.param("solvent", 5, 50, 1000, marks=pytest.mark.nightly),
+        pytest.param("complex", 5, 50, 1000, marks=pytest.mark.nightly),
+    ],
+)
+@pytest.mark.parametrize("mol_a, mol_b", [("15", "30")])
+@pytest.mark.parametrize("seed", [2025])
+def test_run_rbfe_legs(
+    leg,
+    n_windows,
+    n_frames,
+    n_eq_steps,
+    mol_a,
+    mol_b,
+    seed,
+):
+    with temporary_working_dir() as temp_dir:
+        with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_dir:
+            config = dict(
+                mol_a=mol_a,
+                mol_b=mol_b,
+                sdf_path=hif2a_dir / "ligands.sdf",
+                pdb_path=hif2a_dir / "5tbm_prepared.pdb",
+                seed=seed,
+                legs=leg,
+                n_eq_steps=n_eq_steps,
+                n_frames=n_frames,
+                n_windows=n_windows,
+                # Use simple charges to avoid os-dependent charge differences
+                forcefield="smirnoff_1_1_0_sc.py",
+            )
+
+            def verify_run(output_dir: Path):
+                assert output_dir.is_dir()
+                assert (output_dir / "md_params.pkl").is_file()
+                assert (output_dir / "atom_mapping.svg").is_file()
+                assert (output_dir / "core.pkl").is_file()
+                assert (output_dir / "ff.py").is_file()
+
+                assert Forcefield.load_from_file(output_dir / "ff.py") is not None
+
+                leg_dir = output_dir / leg
+                assert leg_dir.is_dir()
+                assert (leg_dir / "results.npz").is_file()
+                assert (leg_dir / "lambda0_traj.npz").is_file()
+                assert (leg_dir / "lambda1_traj.npz").is_file()
+
+                assert (leg_dir / "simulation_result.pkl").is_file()
+                if leg in ["solvent", "complex"]:
+                    assert (leg_dir / "host_config.pkl").is_file()
+                else:
+                    assert not (leg_dir / "host_config.pkl").is_file()
+                assert (leg_dir / "hrex_transition_matrix.png").is_file()
+                assert (leg_dir / "hrex_swap_acceptance_rates_convergence.png").is_file()
+                assert (leg_dir / "hrex_replica_state_distribution_heatmap.png").is_file()
+
+                results = np.load(str(leg_dir / "results.npz"))
+                assert results["pred_dg"].size == 1
+                assert results["pred_dg"].dtype == np.float64
+                assert results["pred_dg"] != 0.0
+
+                assert results["pred_dg_err"].size == 1
+                assert results["pred_dg_err"].dtype == np.float64
+                assert results["pred_dg_err"] != 0.0
+
+                assert results["n_windows"].size == 1
+                assert results["n_windows"].dtype == np.intp
+                assert 2 <= results["n_windows"] <= config["n_windows"]
+                assert isinstance(results["overlaps"], np.ndarray)
+                assert all(isinstance(overlap, float) for overlap in results["overlaps"])
+
+                for lamb in [0, 1]:
+                    traj_data = np.load(str(leg_dir / f"lambda{lamb:d}_traj.npz"))
+                    assert len(traj_data["coords"]) == n_frames
+                    assert len(traj_data["boxes"]) == n_frames
+
+            config_a = dict(output_dir="a", **config)
+            proc = run_example("run_rbfe_legs.py", get_cli_args(config_a), cwd=temp_dir)
+            assert proc.returncode == 0
+            verify_run(Path(temp_dir) / config_a["output_dir"])
+
+            config_b = dict(output_dir="b", **config)
+            assert config_b["output_dir"] != config_a["output_dir"], "Runs are writing to the same output directory"
+            proc = run_example("run_rbfe_legs.py", get_cli_args(config_b), cwd=temp_dir)
+            assert proc.returncode == 0
+            verify_run(Path(temp_dir) / config_b["output_dir"])
+
+            def verify_simulations_match(ref_dir: Path, comp_dir: Path):
+                with open(ref_dir / "md_params.pkl", "rb") as ifs:
+                    ref_md_params = pickle.load(ifs)
+                with open(comp_dir / "md_params.pkl", "rb") as ifs:
+                    comp_md_params = pickle.load(ifs)
+                assert ref_md_params == comp_md_params, "MD Parameters don't match"
+
+                with open(ref_dir / "core.pkl", "rb") as ifs:
+                    ref_core = pickle.load(ifs)
+                with open(comp_dir / "core.pkl", "rb") as ifs:
+                    comp_core = pickle.load(ifs)
+                assert np.all(ref_core == comp_core), "Atom mappings don't match"
+
+                ref_results = np.load(str(ref_dir / leg / "results.npz"))
+                comp_results = np.load(str(comp_dir / leg / "results.npz"))
+                np.testing.assert_equal(ref_results["pred_dg"], comp_results["pred_dg"])
+                np.testing.assert_equal(ref_results["pred_dg_err"], comp_results["pred_dg_err"])
+                np.testing.assert_array_equal(ref_results["overlaps"], comp_results["overlaps"])
+                np.testing.assert_equal(ref_results["n_windows"], comp_results["n_windows"])
+
+                with open(ref_dir / leg / "simulation_result.pkl", "rb") as ifs:
+                    ref_res = pickle.load(ifs)
+                with open(comp_dir / leg / "simulation_result.pkl", "rb") as ifs:
+                    comp_res = pickle.load(ifs)
+                assert len(ref_res.final_result.initial_states) == ref_results["n_windows"]
+                assert len(ref_res.final_result.initial_states) == len(comp_res.final_result.initial_states)
+
+                for ref_state, comp_state in zip(
+                    ref_res.final_result.initial_states, comp_res.final_result.initial_states
+                ):
+                    np.testing.assert_array_equal(ref_state.x0, comp_state.x0)
+                    np.testing.assert_array_equal(ref_state.v0, comp_state.v0)
+                    np.testing.assert_array_equal(ref_state.box0, comp_state.box0)
+                    np.testing.assert_array_equal(ref_state.ligand_idxs, comp_state.ligand_idxs)
+                    np.testing.assert_array_equal(ref_state.protein_idxs, comp_state.protein_idxs)
+                    assert_deep_eq(ref_state.potentials, comp_state.potentials)
+
+                for lamb in [0, 1]:
+                    ref_traj = np.load(str(ref_dir / leg / f"lambda{lamb}_traj.npz"))
+                    comp_traj = np.load(str(comp_dir / leg / f"lambda{lamb}_traj.npz"))
+                    np.testing.assert_array_equal(ref_traj["coords"], comp_traj["coords"])
+                    np.testing.assert_array_equal(ref_traj["boxes"], comp_traj["boxes"])
+
+            verify_simulations_match(Path(temp_dir) / config_a["output_dir"], Path(temp_dir) / config_b["output_dir"])

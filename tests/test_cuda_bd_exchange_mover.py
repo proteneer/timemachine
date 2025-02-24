@@ -1,6 +1,4 @@
 from dataclasses import replace
-from importlib import resources
-from typing import List
 
 import numpy as np
 import pytest
@@ -23,10 +21,11 @@ from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import HarmonicBond, Nonbonded
 from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 
 def verify_bias_deletion_moves(
-    mol_groups: List,
+    mol_groups: list,
     bdem,
     ref_bdem: RefBDExchangeMove,
     conf: NDArray,
@@ -743,7 +742,7 @@ def test_compute_incremental_log_weights(batch_size, samples, box_size, precisio
 def hif2a_complex():
     seed = 2023
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
     host_config.box += np.diag([0.1, 0.1, 0.1])
     bond_list = get_bond_list(host_config.host_system.bond.potential)
@@ -858,7 +857,7 @@ def test_moves_with_complex(
 def hif2a_rbfe_state() -> InitialState:
     seed = 2023
     ff = Forcefield.load_default()
-    with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
     host_config.box += np.diag([0.1, 0.1, 0.1])
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()

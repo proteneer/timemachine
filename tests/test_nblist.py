@@ -1,5 +1,4 @@
-from importlib import resources
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -17,6 +16,7 @@ from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.potentials.jax_utils import delta_r
 from timemachine.testsystems.dhfr import setup_dhfr
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 
 @pytest.mark.memcheck
@@ -25,7 +25,7 @@ def test_empty_neighborlist():
         custom_ops.Neighborlist_f32(0)
 
 
-def reference_block_bounds(coords: NDArray, box: NDArray, block_size: int) -> Tuple[NDArray, NDArray]:
+def reference_block_bounds(coords: NDArray, box: NDArray, block_size: int) -> tuple[NDArray, NDArray]:
     # Make a copy to avoid modify the coordinates that end up used later by the Neighborlist
     coords = coords.copy()
     N = coords.shape[0]
@@ -114,7 +114,7 @@ def get_water_coords(D, sort=False):
     return x
 
 
-def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> List[List[int]]:
+def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> list[list[int]]:
     # compute the sparsity of the tile
     ref_ixn_list: list[list[int]] = []
     N = coords.shape[0]
@@ -141,7 +141,7 @@ def build_reference_ixn_list(coords: NDArray, box: NDArray, cutoff: float) -> Li
 
 def build_reference_ixn_list_with_subset(
     coords: NDArray, box: NDArray, cutoff: float, row_idxs: NDArray
-) -> List[List[int]]:
+) -> list[list[int]]:
     N = coords.shape[0]
     block_size = 32
     identity_idxs = np.arange(N)
@@ -396,7 +396,7 @@ def setup_hif2a_initial_state(host_name: str):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     if host_name == "complex":
-        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+        with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
             host_config = build_protein_system(
                 str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )

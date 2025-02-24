@@ -8,11 +8,14 @@ namespace timemachine {
 template <typename RealType> class ChiralBondRestraint : public Potential {
 
 private:
+    const int R_;
+
     int *d_idxs_;
     int *d_signs_;
     __int128 *d_u_buffer_;
 
-    const int R_;
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
 
 public:
     ChiralBondRestraint(

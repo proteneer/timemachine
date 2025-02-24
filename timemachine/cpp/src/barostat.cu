@@ -1,10 +1,10 @@
 #include "barostat.hpp"
 #include "constants.hpp"
-#include "energy_accumulation.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "math_utils.cuh"
 #include "mol_utils.hpp"
+#include <cub/cub.cuh>
 #include <stdio.h>
 #include <variant>
 
@@ -28,7 +28,7 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     const double initial_volume_scale_factor)
     : Mover(interval), N_(N), adaptive_scaling_enabled_(adaptive_scaling_enabled), bps_(bps),
       pressure_(static_cast<RealType>(pressure)), temperature_(static_cast<RealType>(temperature)), seed_(seed),
-      group_idxs_(group_idxs), num_grouped_atoms_(0), runner_() {
+      group_idxs_(group_idxs), num_grouped_atoms_(0), sum_storage_bytes_(0), runner_() {
 
     // Trigger check that interval is valid
     this->set_interval(interval_);
@@ -54,10 +54,10 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     cudaSafeMalloc(&d_rand_, RANDOM_BATCH_SIZE * 2 * sizeof(*d_rand_));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed_));
 
-    cudaSafeMalloc(&d_x_after_, N_ * 3 * sizeof(*d_x_after_));
-    cudaSafeMalloc(&d_box_after_, 3 * 3 * sizeof(*d_box_after_));
+    cudaSafeMalloc(&d_x_proposed_, N_ * 3 * sizeof(*d_x_proposed_));
+    cudaSafeMalloc(&d_box_proposed_, 3 * 3 * sizeof(*d_box_proposed_));
     cudaSafeMalloc(&d_u_buffer_, bps_.size() * sizeof(*d_u_buffer_));
-    cudaSafeMalloc(&d_u_after_buffer_, bps_.size() * sizeof(*d_u_after_buffer_));
+    cudaSafeMalloc(&d_u_proposed_buffer_, bps_.size() * sizeof(*d_u_proposed_buffer_));
 
     cudaSafeMalloc(&d_init_u_, 1 * sizeof(*d_init_u_));
     cudaSafeMalloc(&d_final_u_, 1 * sizeof(*d_final_u_));
@@ -79,6 +79,10 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
     cudaSafeMalloc(&d_atom_idxs_, num_grouped_atoms_ * sizeof(*d_atom_idxs_));
     cudaSafeMalloc(&d_mol_idxs_, num_grouped_atoms_ * sizeof(*d_mol_idxs_));
 
+    gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, bps_.size()));
+
+    gpuErrchk(cudaMalloc(&d_sum_temp_storage_, sum_storage_bytes_));
+
     gpuErrchk(cudaMemcpy(
         d_atom_idxs_,
         &flattened_groups[0][0],
@@ -99,13 +103,13 @@ MonteCarloBarostat<RealType>::MonteCarloBarostat(
 };
 
 template <typename RealType> MonteCarloBarostat<RealType>::~MonteCarloBarostat() {
-    gpuErrchk(cudaFree(d_x_after_));
+    gpuErrchk(cudaFree(d_x_proposed_));
     gpuErrchk(cudaFree(d_centroids_));
     gpuErrchk(cudaFree(d_atom_idxs_));
     gpuErrchk(cudaFree(d_mol_idxs_));
     gpuErrchk(cudaFree(d_mol_offsets_));
-    gpuErrchk(cudaFree(d_box_after_));
-    gpuErrchk(cudaFree(d_u_after_buffer_));
+    gpuErrchk(cudaFree(d_box_proposed_));
+    gpuErrchk(cudaFree(d_u_proposed_buffer_));
     gpuErrchk(cudaFree(d_u_buffer_));
     gpuErrchk(cudaFree(d_init_u_));
     gpuErrchk(cudaFree(d_final_u_));
@@ -116,6 +120,7 @@ template <typename RealType> MonteCarloBarostat<RealType>::~MonteCarloBarostat()
     gpuErrchk(cudaFree(d_volume_delta_));
     gpuErrchk(cudaFree(d_num_accepted_));
     gpuErrchk(cudaFree(d_num_attempted_));
+    gpuErrchk(cudaFree(d_sum_temp_storage_));
     curandErrchk(curandDestroyGenerator(cr_rng_));
 };
 
@@ -174,12 +179,19 @@ void MonteCarloBarostat<RealType>::move(
     gpuErrchk(cudaMemsetAsync(d_centroids_, 0, num_molecules * 3 * sizeof(*d_centroids_), stream));
 
     k_setup_barostat_move<RealType><<<1, 1, 0, stream>>>(
-        adaptive_scaling_enabled_, d_rand_ + random_offset, d_box, d_volume_delta_, d_volume_scale_, d_length_scale_);
+        adaptive_scaling_enabled_,
+        d_rand_ + random_offset,
+        d_box,
+        d_volume_delta_,
+        d_volume_scale_,
+        d_length_scale_,
+        d_volume_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Create duplicates of the coords/box that we can modify
-    gpuErrchk(cudaMemcpyAsync(d_x_after_, d_x, N_ * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-    gpuErrchk(cudaMemcpyAsync(d_box_after_, d_box, 3 * 3 * sizeof(*d_box_after_), cudaMemcpyDeviceToDevice, stream));
+    gpuErrchk(cudaMemcpyAsync(d_x_proposed_, d_x, N_ * 3 * sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
+    gpuErrchk(
+        cudaMemcpyAsync(d_box_proposed_, d_box, 3 * 3 * sizeof(*d_box_proposed_), cudaMemcpyDeviceToDevice, stream));
 
     const int tpb = DEFAULT_THREADS_PER_BLOCK;
     // TBD: For larger systems (20k >) may be better to reduce the number of blocks, rather than
@@ -188,16 +200,16 @@ void MonteCarloBarostat<RealType>::move(
     const int blocks = ceil_divide(num_grouped_atoms_, tpb);
 
     k_find_group_centroids<RealType>
-        <<<blocks, tpb, 0, stream>>>(num_grouped_atoms_, d_x_after_, d_atom_idxs_, d_mol_idxs_, d_centroids_);
+        <<<blocks, tpb, 0, stream>>>(num_grouped_atoms_, d_x_proposed_, d_atom_idxs_, d_mol_idxs_, d_centroids_);
     gpuErrchk(cudaPeekAtLastError());
 
     // Scale centroids
     k_rescale_positions<RealType><<<blocks, tpb, 0, stream>>>(
         num_grouped_atoms_,
-        d_x_after_,
+        d_x_proposed_,
         d_length_scale_,
         d_box,
-        d_box_after_, // Box will be rescaled by length_scale
+        d_box_proposed_, // Box will be rescaled by length_scale
         d_atom_idxs_,
         d_mol_idxs_,
         d_mol_offsets_,
@@ -205,10 +217,13 @@ void MonteCarloBarostat<RealType>::move(
     gpuErrchk(cudaPeekAtLastError());
 
     runner_.execute_potentials(bps_, N_, d_x, d_box, nullptr, nullptr, d_u_buffer_, stream);
-    accumulate_energy(bps_.size(), d_u_buffer_, d_init_u_, stream);
+    gpuErrchk(
+        cub::DeviceReduce::Sum(d_sum_temp_storage_, sum_storage_bytes_, d_u_buffer_, d_init_u_, bps_.size(), stream));
 
-    runner_.execute_potentials(bps_, N_, d_x_after_, d_box_after_, nullptr, nullptr, d_u_after_buffer_, stream);
-    accumulate_energy(bps_.size(), d_u_after_buffer_, d_final_u_, stream);
+    runner_.execute_potentials(
+        bps_, N_, d_x_proposed_, d_box_proposed_, nullptr, nullptr, d_u_proposed_buffer_, stream);
+    gpuErrchk(cub::DeviceReduce::Sum(
+        d_sum_temp_storage_, sum_storage_bytes_, d_u_proposed_buffer_, d_final_u_, bps_.size(), stream));
 
     double pressure = pressure_ * AVOGADRO * 1e-25;
     const double kT = BOLTZ * temperature_;
@@ -220,14 +235,15 @@ void MonteCarloBarostat<RealType>::move(
         kT,
         pressure,
         d_rand_ + random_offset,
+        d_volume_,
         d_volume_delta_,
         d_volume_scale_,
         d_init_u_,
         d_final_u_,
         d_box,
-        d_box_after_,
+        d_box_proposed_,
         d_x,
-        d_x_after_,
+        d_x_proposed_,
         d_num_accepted_,
         d_num_attempted_);
     gpuErrchk(cudaPeekAtLastError());

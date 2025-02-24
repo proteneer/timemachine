@@ -10,22 +10,24 @@ namespace timemachine {
 template <typename RealType>
 void __global__ k_setup_gumbel_max_trick(
     const int N,
-    const RealType *__restrict__ log_weights,
-    const RealType *__restrict__ gumbel_noise,
-    RealType *__restrict__ prepared_gumbel) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const RealType *__restrict__ log_weights,  // [N]
+    const RealType *__restrict__ gumbel_noise, // [N]
+    RealType *__restrict__ prepared_gumbel     // [N]
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (idx >= N) {
-        return;
+    while (idx < N) {
+
+        const RealType log_weight = log_weights[idx];
+        // -inf is alright since that is log(0.0), +inf is not
+        assert(!isnan(log_weight));
+        assert(log_weight != INFINITY);
+
+        const RealType gumbel_rand = -log(-log(gumbel_noise[idx]));
+
+        prepared_gumbel[idx] = log_weight + gumbel_rand;
+        idx += gridDim.x * blockDim.x;
     }
-
-    const RealType log_weight = log_weights[idx];
-    // -inf is alright since that is log(0.0), +inf is not
-    assert(!isnan(log_weight) && log_weight != INFINITY);
-
-    const RealType gumbel_rand = -log(-log(gumbel_noise[idx]));
-
-    prepared_gumbel[idx] = log_weight + gumbel_rand;
 }
 
 template void __global__ k_setup_gumbel_max_trick<float>(
@@ -71,7 +73,8 @@ void __global__ k_setup_gumbel_max_trick_with_offset(
     while (idx < N) {
         const RealType log_weight = log_weights[idx];
         // -inf is alright since that is log(0.0), +inf is not
-        assert(!isnan(log_weight) && log_weight != INFINITY);
+        assert(!isnan(log_weight));
+        assert(log_weight != INFINITY);
 
         const RealType gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
 
@@ -187,7 +190,8 @@ void __global__ k_setup_gumbel_max_trick_targeted_insertion(
     while (idx < N) {
         const RealType log_weight = log_weights[segment_start + idx];
         // -inf is alright since that is log(0.0), +inf is not
-        assert(!isnan(log_weight) && log_weight != INFINITY);
+        assert(!isnan(log_weight));
+        assert(log_weight != INFINITY);
 
         const RealType gumbel_rand = -log(-log(gumbel_noise[gumbel_offset + idx]));
 

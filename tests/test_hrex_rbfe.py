@@ -1,5 +1,4 @@
 from dataclasses import replace
-from importlib import resources
 from typing import Optional
 from unittest.mock import patch
 from warnings import catch_warnings
@@ -12,6 +11,7 @@ import pytest
 from psutil import Process
 from scipy import stats
 
+from timemachine.fe.energy_decomposition import EnergyDecomposedState, compute_energy_decomposed_u_kln, get_batch_u_fns
 from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
@@ -19,6 +19,7 @@ from timemachine.fe.free_energy import (
     MDParams,
     RESTParams,
     WaterSamplingParams,
+    estimate_free_energy_bar,
     sample_with_context_iter,
 )
 from timemachine.fe.plots import (
@@ -30,6 +31,7 @@ from timemachine.fe.rbfe import estimate_relative_free_energy_bisection_hrex
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
+from timemachine.utils import path_to_internal_file
 
 DEBUG = False
 
@@ -40,7 +42,7 @@ def get_hif2a_single_topology_leg(host_name: str | None):
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     if host_name == "complex":
-        with resources.path("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
+        with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
             host_config = builders.build_protein_system(
                 str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )
@@ -220,6 +222,30 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed, max_bisection_windows,
     assert result.hrex_plots.transition_matrix_png
     assert result.hrex_plots.swap_acceptance_rates_convergence_png
     assert result.hrex_plots.replica_state_distribution_heatmap_png
+
+    # Verify that the Bar results match to the reference implementation
+    samples = result.trajectories
+    initial_states = result.final_result.initial_states
+    unbound_impls = [p.potential.to_gpu(np.float32).unbound_impl for p in initial_states[0].potentials]
+    temperature = initial_states[0].integrator.temperature
+    comp_bar_results = result.final_result.bar_results
+    # Compute the reference bar results
+    assert len(samples) == len(samples)
+    energy_decomp_states = []
+    for state, traj in zip(initial_states, samples):
+        batch_u_fns = get_batch_u_fns(unbound_impls, [p.params for p in state.potentials], temperature)
+        energy_decomp_states.append(EnergyDecomposedState(traj.frames, traj.boxes, batch_u_fns))
+
+    ref_bar_results = []
+    for state_a, state_b in zip(energy_decomp_states, energy_decomp_states[1:]):
+        u_kln_by_component = compute_energy_decomposed_u_kln([state_a, state_b])
+        ref_bar_results.append(estimate_free_energy_bar(u_kln_by_component, temperature))
+    for ref_res, comp_res in zip(ref_bar_results, comp_bar_results):
+        assert ref_res.overlap == comp_res.overlap
+        np.testing.assert_array_equal(ref_res.dG_err_by_component, comp_res.dG_err_by_component)
+        np.testing.assert_array_equal(ref_res.overlap_by_component, comp_res.overlap_by_component)
+        np.testing.assert_array_equal(ref_res.dG_err_by_component, comp_res.dG_err_by_component)
+        np.testing.assert_array_equal(ref_res.u_kln_by_component, comp_res.u_kln_by_component)
 
 
 def plot_hrex_rbfe_hif2a(result: HREXSimulationResult):

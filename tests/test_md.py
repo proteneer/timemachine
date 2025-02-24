@@ -983,7 +983,7 @@ def test_unstable_simulation_failure():
     dt = 1.5e-3
     friction = 1.0
     seed = 2024
-    steps = 1000
+    steps = 10
 
     unbound_potentials, sys_params, masses, coords, box = get_solvent_phase_system(mol, ff, 0.0, minimize_energy=False)
     v0 = np.zeros_like(coords)

@@ -1,6 +1,5 @@
 from functools import partial
 from pathlib import Path
-from typing import Tuple
 from unittest.mock import patch
 
 import numpy as np
@@ -10,6 +9,9 @@ from numpy.typing import NDArray
 from pymbar.testsystems import ExponentialTestCase
 
 from timemachine.fe.bar import (
+    DG_ERR_KEY,
+    DG_KEY,
+    bar,
     bar_with_pessimistic_uncertainty,
     bootstrap_bar,
     compute_fwd_and_reverse_df_over_time,
@@ -24,8 +26,8 @@ pytestmark = [pytest.mark.nocuda]
 
 
 def make_gaussian_ukln_example(
-    params_a: Tuple[float, float], params_b: Tuple[float, float], seed: int = 0, n_samples: int = 2000
-) -> Tuple[NDArray, float]:
+    params_a: tuple[float, float], params_b: tuple[float, float], seed: int = 0, n_samples: int = 2000
+) -> tuple[NDArray, float]:
     """Generate 2-state u_kln matrix for a pair of normal distributions."""
 
     def u(mu, sigma, x):
@@ -42,7 +44,7 @@ def make_gaussian_ukln_example(
     x_a = rng.normal(mu_a, sigma_a, (n_samples,))
     x_b = rng.normal(mu_b, sigma_b, (n_samples,))
 
-    u_kln = np.array([[u_a(x_a), u_a(x_b)], [u_b(x_a), u_b(x_b)]])
+    u_kln = np.array([[u_a(x_a), u_b(x_a)], [u_a(x_b), u_b(x_b)]])
 
     dlogZ = np.log(sigma_a) - np.log(sigma_b)
 
@@ -70,8 +72,7 @@ def make_partial_overlap_uniform_ukln_example(dlogZ: float, n_samples: int = 100
     assert np.isfinite(u_a(x_a)).all()
     assert np.isfinite(u_b(x_b)).all()
 
-    u_kln = np.array([[u_a(x_a), u_a(x_b)], [u_b(x_a), u_b(x_b)]])
-
+    u_kln = np.array([[u_a(x_a), u_b(x_a)], [u_a(x_b), u_b(x_b)]])
     return u_kln
 
 
@@ -122,11 +123,11 @@ def test_df_and_err_from_u_kln_approximates_exact_result(sigma):
 
 @pytest.mark.parametrize("sigma", [0.3, 1.0, 10.0])
 def test_df_and_err_from_u_kln_consistent_with_pymbar_bar(sigma):
-    """Compare the estimator used for 2-state delta fs (currently MBAR) with pymbar.BAR as reference."""
+    """Compare the estimator used for 2-state delta fs (currently MBAR) with bar as reference."""
     u_kln, _ = make_gaussian_ukln_example((0.0, 1.0), (1.0, sigma))
     w_F, w_R = works_from_ukln(u_kln)
 
-    df_ref, df_err_ref = pymbar.BAR(w_F, w_R)
+    df_ref, df_err_ref = bar(w_F, w_R)
     df, df_err = df_and_err_from_u_kln(u_kln)
 
     assert df == pytest.approx(df_ref, rel=0.05, abs=0.01)
@@ -147,11 +148,12 @@ def test_df_and_err_from_u_kln_partial_overlap():
     assert not np.any(np.isnan(w_F))
     assert not np.any(np.isnan(w_R))
 
-    # pymbar.BAR warns and returns zero for df and uncertainty with default method
-    assert pymbar.BAR(w_F, w_R) == (0.0, 0.0)
+    # pymbar.bar warns and returns zero for df and uncertainty with default method
+    df_ref, df_err_ref = bar(w_F, w_R)
+    assert (df_ref, df_err_ref) == (0.0, 0.0)
 
-    # pymbar.BAR returns NaNs with self-consistent iteration method
-    df_sci, df_err_sci = pymbar.BAR(w_F, w_R, method="self-consistent-iteration")
+    # pymbar.bar returns NaNs with self-consistent iteration method
+    df_sci, df_err_sci = bar(w_F, w_R, method="self-consistent-iteration", iterated_solution=False)
     assert np.isnan(df_sci)
     assert np.isnan(df_err_sci)
 
@@ -161,16 +163,16 @@ def test_df_and_err_from_u_kln_partial_overlap():
 
 
 def test_df_from_u_kln_does_not_raise_on_incomplete_convergence():
-    u_kln = make_partial_overlap_uniform_ukln_example(5.0)
+    u_kln = make_partial_overlap_uniform_ukln_example(10.0)
 
     # pymbar raises an exception on incomplete convergence when computing covariances
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.MBAR(u_kn, N_k, maximum_iterations=1)
+    mbar = pymbar.mbar.MBAR(u_kn, N_k, maximum_iterations=1)
     with pytest.raises(pymbar.utils.ParameterError):
-        _ = mbar.getFreeEnergyDifferences()
+        _ = mbar.compute_free_energy_differences()
 
     # no exception if we don't compute uncertainty
-    _ = mbar.getFreeEnergyDifferences(compute_uncertainty=False)
+    _ = mbar.compute_free_energy_differences(compute_uncertainty=False)
 
     # df_from_u_kln, df_and_err_from_u_kln wrappers do not raise exceptions
     df = df_from_u_kln(u_kln, maximum_iterations=1)
@@ -193,11 +195,19 @@ def test_pair_overlap_from_ukln():
 
     # non-overlapping
     u_kln, _ = make_gaussian_ukln_example((0, 0.01), (1, 0.01))
-    assert pair_overlap_from_ukln(u_kln) < 1e-10
+    overlap = pair_overlap_from_ukln(u_kln)
+    assert overlap >= 0.0
+    assert overlap < 1e-10
 
     # overlapping
     u_kln, _ = make_gaussian_ukln_example((0, 0.1), (0.5, 0.2))
     assert pair_overlap_from_ukln(u_kln) > 0.1
+
+    # check overlap compared to PyMBAR default tolerance
+    u_kln, _ = make_gaussian_ukln_example((0, 0.01), (1, 0.01))
+    assert pair_overlap_from_ukln(u_kln) == pytest.approx(
+        pair_overlap_from_ukln(u_kln, maximum_iterations=10_000, relative_tolerance=1e-7)
+    )
 
 
 @pytest.mark.parametrize("frames_per_step", [1, 5, 10])
@@ -251,11 +261,11 @@ def test_bootstrap_bar_and_regular_bar_match():
     assert boot_df_err == df_err
 
 
-@patch("timemachine.fe.bar.pymbar.MBAR.getFreeEnergyDifferences")
+@patch("timemachine.fe.bar.pymbar.mbar.MBAR.compute_free_energy_differences")
 def test_nan_bar_error(mock_energy_diff):
     df = np.zeros(shape=(1, 2))
     df_err = np.ones(shape=(1, 2)) * np.nan
-    mock_energy_diff.return_value = (df, df_err)
+    mock_energy_diff.return_value = {DG_KEY: df, DG_ERR_KEY: df_err}
     dummy_ukln = np.ones(shape=(2, 2, 100))
     _, boot_df_err = bar_with_pessimistic_uncertainty(dummy_ukln)
     assert boot_df_err == 0.0

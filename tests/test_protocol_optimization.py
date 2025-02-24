@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-from pymbar import MBAR
+from pymbar.mbar import MBAR
 from pymbar.testsystems import HarmonicOscillatorsTestCase
 from scipy.special import logsumexp
 
@@ -126,8 +126,7 @@ def simulate_protocol(lambdas_k, n_samples_per_window=100, seed=None):
         testsystem = HarmonicOscillatorsTestCase(O_k, K_k)
         N_k = [n_samples_per_window] * len(O_k)
         xs, u_kn, N_k, s_n = testsystem.sample(N_k, seed=seed)
-    mbar = MBAR(u_kn, N_k)
-    return mbar
+    return MBAR(u_kn, N_k)
 
 
 def summarize_protocol(lambdas, dist_fxn):
@@ -138,7 +137,7 @@ def summarize_protocol(lambdas, dist_fxn):
     neighbor_distances = np.array(neighbor_distances)
     min_dist, max_dist = np.min(neighbor_distances), np.max(neighbor_distances)
     msg = f"\t# states = {K}, min(d(i,i+1)) = {min_dist:.3f}, max(d(i,i+1)) = {max_dist:.3f}"
-    msg += f"\t{str(neighbor_distances)}"
+    msg += f"\t{neighbor_distances!s}"
     print(msg)
     return neighbor_distances
 

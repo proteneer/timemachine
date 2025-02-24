@@ -115,7 +115,7 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), 
 
     K = np.max(edge_idxs) + 1
     x0 = np.zeros(K)  # maybe initialize smarter, e.g. using random spanning tree?
-    result = minimize(loss, x0, jac=True, tol=0).x
+    result = minimize(loss, x0, jac=True, tol=0, method="L-BFGS-B").x
 
     centered_node_vals = result - result[0]
 
@@ -225,6 +225,7 @@ def infer_node_vals_and_errs_networkx(
     ref_node_stddev_prop: str,
     node_val_prop: str = "inferred_dg",
     node_stddev_prop: str = "inferred_dg_stddev",
+    edge_skip_prop: str = "skip_for_mle",
     n_bootstrap: int = 100,
     seed: int = 0,
 ) -> NxDiGraph:
@@ -247,6 +248,8 @@ def infer_node_vals_and_errs_networkx(
         Node property in which to write inferred absolute values
     node_stddev_prop: str
         Node property in which to write inferred standard deviations
+    edge_skip_prop: str
+        Edge property indicating whether to skip (True) or use (False) the marked edge
     n_bootstrap, seed:
         See documentation for :py:func:`timemachine.fe.mle.infer_node_vals_and_errs`
 
@@ -257,13 +260,31 @@ def infer_node_vals_and_errs_networkx(
         the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
     assert isinstance(graph, (nx.DiGraph, nx.MultiDiGraph)), "Graph must be a DiGraph or MultiDiGraph"
-    edges_with_props = [
-        e for e, d in graph.edges.items() if d.get(edge_diff_prop) is not None and d.get(edge_stddev_prop) is not None
-    ]
-    sg = graph.edge_subgraph(edges_with_props).copy()
+
+    def keep_edge(e):
+        d = graph.edges[e]
+        has_edge_diff = d.get(edge_diff_prop) is not None
+        has_edge_err = d.get(edge_stddev_prop) is not None
+        has_skip_marker = d.get(edge_skip_prop) is True
+        return (has_edge_diff and has_edge_err) and (not has_skip_marker)
+
+    sg = graph.edge_subgraph([e for e in graph.edges if keep_edge(e)]).copy()
 
     if not sg.nodes:
         raise ValueError("Empty graph after removing edges without predictions")
+
+    # extract largest connected component
+    connected_components = list(nx.connected_components(sg.to_undirected()))
+
+    def _sort_key(component):
+        """break ties using # expt. refs in case more than one component has the same size"""
+        size = len(component)
+        num_expt_refs = sum(sg.nodes[c].get(ref_node_val_prop) is not None for c in component)
+        name = max(component)  # last resort: node names are unique
+        return (size, num_expt_refs, name)
+
+    largest_connected_component = max(connected_components, key=_sort_key)
+    sg = sg.subgraph(largest_connected_component)
 
     # Relabel the nodes with integers {1..n_nodes}
     node_to_idx = {n: idx for idx, n in enumerate(sorted(sg.nodes))}

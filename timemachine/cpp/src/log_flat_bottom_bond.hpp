@@ -8,11 +8,14 @@ namespace timemachine {
 template <typename RealType> class LogFlatBottomBond : public Potential {
 
 private:
+    int B_; // TBD make this constant
+    const double beta_;
+
     int *d_bond_idxs_;
     __int128 *d_u_buffer_;
 
-    int B_;
-    double beta_;
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
 
 public:
     int num_bonds() const { return B_; }

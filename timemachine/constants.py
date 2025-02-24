@@ -1,5 +1,5 @@
 from enum import IntEnum
-from typing import Any, Dict
+from typing import Any
 
 # physical constants
 BOLTZMANN = 1.380658e-23  # J/kelvin
@@ -36,7 +36,7 @@ DEFAULT_POSITIONAL_RESTRAINT_K = 4000.0
 MAX_FORCE_NORM = 20_000.0  # used to check norms in the gradient computations
 
 # atom mapping parameters
-DEFAULT_ATOM_MAPPING_KWARGS: Dict[str, Any] = {
+DEFAULT_ATOM_MAPPING_KWARGS: dict[str, Any] = {
     "ring_cutoff": 0.12,
     "chain_cutoff": 0.2,
     "max_visits": 1_000_000,

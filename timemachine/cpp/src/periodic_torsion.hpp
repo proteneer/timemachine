@@ -8,10 +8,13 @@ namespace timemachine {
 template <typename RealType> class PeriodicTorsion : public Potential {
 
 private:
+    const int T_;
+
     int *d_torsion_idxs_;
     __int128 *d_u_buffer_;
 
-    const int T_;
+    size_t sum_storage_bytes_;
+    void *d_sum_temp_storage_;
 
 public:
     int num_torsions() const { return T_; }
