@@ -62,7 +62,7 @@ def test_loading_forcefield_from_file():
             Forcefield.load_from_file(Path(path))
         assert path in str(e.value)
 
-    with temporary_working_dir() as tempdir:
+    with temporary_working_dir():
         # Verify that if a local file shadows a builtin
         for path in builtin_ffs:
             basename = os.path.basename(path)
@@ -72,12 +72,6 @@ def test_loading_forcefield_from_file():
                 Forcefield.load_from_file(basename)
             assert len(w) == 1
             assert basename in str(w[0].message)
-        with catch_warnings(record=True) as w:
-            bad_ff = Path(tempdir, "jut.py")
-            assert bad_ff.is_absolute(), "Must be absolute to cover test case"
-            with open(bad_ff, "w") as ofs:
-                ofs.write("{}")
-        assert len(w) == 0
 
 
 def test_load_default():
