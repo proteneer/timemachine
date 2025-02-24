@@ -7,14 +7,18 @@ from typing import Optional, TypeVar
 import networkx as nx
 
 
-class MultipleAnchorWarning(UserWarning):
+class MultipleBondAnchorWarning(UserWarning):
+    pass
+
+
+class ZeroBondAnchorWarning(UserWarning):
     pass
 
 
 def generate_dummy_group_assignments(
-    bond_graph: nx.Graph, core_atoms: Collection[int]
+    bond_graph: nx.Graph, core_atoms: Collection[int], assert_single_connected_component: bool = True
 ) -> Iterator[dict[int, frozenset[int]]]:
-    """Returns an iterator over dummy group assignments (i.e., candidate partitionings of dummy atoms with each
+    """Returns an iterator over all possible dummy group assignments (i.e., candidate partitionings of dummy atoms with each
     partition assigned a bond anchor atom) for a given molecule (represented as a bond graph) and set of core atoms.
 
     A dummy group is a set of dummy atoms that are inserted or deleted in alchemical free energy calculations. The
@@ -64,7 +68,9 @@ def generate_dummy_group_assignments(
        latter might be desirable for efficiency but is more complicated to implement).
     """
     assert len(set(core_atoms)) == len(core_atoms)
-    assert len(list(nx.connected_components(bond_graph))) == 1
+
+    if assert_single_connected_component:
+        assert len(list(nx.connected_components(bond_graph))) == 1
 
     core_atoms_ = frozenset(core_atoms)
     dummy_atoms = frozenset(bond_graph.nodes()) - core_atoms_
@@ -72,10 +78,16 @@ def generate_dummy_group_assignments(
 
     def get_bond_anchors(dummy_group):
         bond_anchors = {n for dummy_atom in dummy_group for n in bond_graph.neighbors(dummy_atom) if n in core_atoms}
-        if len(bond_anchors) > 1:
+        if len(bond_anchors) == 0:
+            warnings.warn(
+                f"No bond anchors found for dummy group: {dummy_group}",
+                ZeroBondAnchorWarning,
+            )
+            bond_anchors = set([None])
+        elif len(bond_anchors) > 1:
             warnings.warn(
                 f"Multiple bond anchors {bond_anchors} found for dummy group: {dummy_group}",
-                MultipleAnchorWarning,
+                MultipleBondAnchorWarning,
             )
         return bond_anchors
 
@@ -138,11 +150,16 @@ def generate_anchored_dummy_group_assignments(
         each element is a mapping from bond anchor atom to the pair (angle anchor atom, dummy group)
     """
 
+    assert len(core_atoms_a) == len(core_atoms_b)
+
     core_bonds_c = get_core_bonds(bond_graph_a.edges(), bond_graph_b.edges(), core_atoms_a, core_atoms_b)
     c_to_b = {c: b for c, b in enumerate(core_atoms_b)}
     core_bonds_b = frozenset(translate_bonds(core_bonds_c, c_to_b))
 
     def get_angle_anchors(bond_anchor):
+        if bond_anchor is None:
+            return [None]
+
         valid_angle_anchors = [
             angle_anchor
             for angle_anchor in [n for n in bond_graph_b.neighbors(bond_anchor) if n in core_atoms_b]

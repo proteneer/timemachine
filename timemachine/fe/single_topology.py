@@ -144,7 +144,7 @@ def setup_dummy_bond_and_chiral_interactions(
     root_anchor_atom: int,
     core_atoms: NDArray,
 ):
-    assert root_anchor_atom in core_atoms
+    assert root_anchor_atom is None or root_anchor_atom in core_atoms
 
     dummy_group_arr = np.array(list(dummy_group))
 
@@ -286,7 +286,7 @@ def setup_dummy_interactions(
     (bonded_idxs, bonded_params)
         Returns bonds, angles, and improper idxs and parameters.
     """
-    assert root_anchor_atom in core_atoms
+    assert root_anchor_atom is None or root_anchor_atom in core_atoms
 
     dummy_angle_idxs = []
     dummy_angle_params = []
@@ -663,9 +663,8 @@ def setup_end_state(
     )
 
     num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
-    assert get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1, (
-        "hybrid molecule has multiple connected components"
-    )
+    if get_num_connected_components(num_atoms, bond_potential.potential.idxs) > 1:
+        warnings.warn("Hybrid molecule has multiple connected components")
 
     return GuestSystem(
         bond=bond_potential,
