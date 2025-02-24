@@ -885,7 +885,7 @@ def test_charging_compounds_with_non_zero_charge():
 
 
 def test_precomputed_charge_handler():
-    with path_to_internal_file("timemachine.datasets.water_exchange", "bb_centered_espaloma.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.water_exchange", "bb_centered_espaloma.sdf") as path_to_ligand:
         mol = utils.read_sdf(path_to_ligand)[0]
 
     pch = nonbonded.PrecomputedChargeHandler([], [], None)

@@ -145,7 +145,7 @@ def test_smc_freesolv(smc_free_solv_path):
 @pytest.mark.nightly
 @pytest.mark.parametrize("insertion_type", ["untargeted"])
 def test_water_sampling_mc_bulk_water(insertion_type):
-    with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
+    with resources.as_file(resources.files("timemachine.testsystems.water_exchange")) as water_exchange:
         config = dict(
             out_cif="bulk.cif",
             water_pdb=water_exchange / "bb_0_waters.pdb",
@@ -185,7 +185,7 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
     # 2) Different insertion_types produces different final frames, but bitwise identical to a reference final frame.
 
     # setup cli kwargs for the run_example_script
-    with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
+    with resources.as_file(resources.files("timemachine.testsystems.water_exchange")) as water_exchange:
         config = dict(
             out_cif="bulk.cif",
             water_pdb=water_exchange / "bb_6_waters.pdb",
@@ -237,7 +237,7 @@ def test_run_rbfe_legs(
     seed,
 ):
     with temporary_working_dir() as temp_dir:
-        with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_dir:
+        with resources.as_file(resources.files("timemachine.testsystems.fep_benchmark.hif2a")) as hif2a_dir:
             config = dict(
                 mol_a=mol_a,
                 mol_b=mol_b,

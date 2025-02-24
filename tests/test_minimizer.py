@@ -31,32 +31,32 @@ from timemachine.utils import path_to_internal_file
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "ligands.sdf"),
             "20",
             "43",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "ligands.sdf"),
             "41",
             "43",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "ligands.sdf"),
             "34",
             "37",
             False,
             marks=pytest.mark.nightly(reason="slow"),
         ),
         pytest.param(
-            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
-            path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf"),
+            path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "6hvi_prepared.pdb"),
+            path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "ligands.sdf"),
             "26",
             "37",
             False,
@@ -103,7 +103,7 @@ def test_fire_minimize_host_solvent():
 def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
     ff = Forcefield.load_default()
     mol_a_name, mol_b_name = mol_pair
-    with path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "ligands.sdf") as path_to_ligand:
         mols_by_name = read_sdf_mols_by_name(path_to_ligand)
     mol_a = mols_by_name[mol_a_name]
     mol_b = mols_by_name[mol_b_name]
@@ -111,7 +111,7 @@ def test_pre_equilibrate_host_pfkfb3(host_name, mol_pair):
     if host_name == "solvent":
         host_config = builders.build_water_system(4.0, ff.water_ff, mols=mols)
     else:
-        with path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
+        with path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
             host_config = builders.build_protein_system(str(pdb_path), ff.protein_ff, ff.water_ff, mols=mols)
     x_host, x_box = minimizer.pre_equilibrate_host(mols, host_config, ff)
     assert x_host.shape == host_config.conf.shape

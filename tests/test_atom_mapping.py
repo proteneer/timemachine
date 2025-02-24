@@ -24,8 +24,8 @@ from timemachine.fe.utils import (
 pytestmark = [pytest.mark.nocuda]
 
 datasets = {
-    "hif2a": "timemachine/datasets/fep_benchmark/hif2a/ligands.sdf",
-    "eg5": "timemachine/datasets/fep_benchmark/eg5/ligands.sdf",
+    "hif2a": "timemachine/testsystems/fep_benchmark/hif2a/ligands.sdf",
+    "eg5": "timemachine/testsystems/fep_benchmark/eg5/ligands.sdf",
 }
 
 
