@@ -232,7 +232,8 @@ class GradientTest(unittest.TestCase):
         return x
 
     def get_water_coords(self, D, sort=False):
-        x = np.load("tests/data/water.npy").astype(np.float32).astype(np.float64)
+        with path_to_internal_file("timemachine.testsystems.data", "water.npy") as path_to_npz:
+            x = np.load(path_to_npz).astype(np.float32).astype(np.float64)
         x = x[:, :D]
 
         # x = (x).astype(np.float64)

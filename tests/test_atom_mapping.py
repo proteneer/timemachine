@@ -431,13 +431,14 @@ def test_all_pairs(dataset):
             cores = [core.tolist() for core in all_cores]
             cores_by_pair[mol_a_name, mol_b_name] = cores
 
+    # Uncomment to update test reference
+    # from pathlib import Path
+    # ref_pickle_path = f"timemachine/testsystems/data/all_pairs_atom_mappings_{key}.pkl"
+    # with Path(ref_pickle_path).open("wb") as fp:
+    #     pickle.dump(cores_by_pair, fp)
+
     with resources.open_binary("timemachine.testsystems.data", f"all_pairs_atom_mappings_{key}.pkl") as ref_pickle:
         ref_cores_by_pair = pickle.load(ref_pickle)
-
-    # Uncomment to update test reference
-    # ref_pickle_path = Path(f"timemachine/testsystems/data/")
-    # with Path(ref_pickle_path).open("wb") as fp:
-    #     ref_cores_by_pair = pickle.dump(cores_by_pair, fp)
 
     assert cores_by_pair == ref_cores_by_pair
 

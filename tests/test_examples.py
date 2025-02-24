@@ -18,6 +18,7 @@ from timemachine.datasets import fetch_freesolv
 from timemachine.fe.free_energy import assert_deep_eq
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
+from timemachine.utils import path_to_internal_file
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
 
@@ -144,8 +145,6 @@ def test_smc_freesolv(smc_free_solv_path):
 @pytest.mark.nightly
 @pytest.mark.parametrize("insertion_type", ["untargeted"])
 def test_water_sampling_mc_bulk_water(insertion_type):
-    with resources.open_binary("timemachine.testsystems.data", f"reference_bulk_water_{insertion_type}.npz") as ref_npz:
-        reference_data = np.load(ref_npz)
     with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
         config = dict(
             out_cif="bulk.cif",
@@ -157,8 +156,11 @@ def test_water_sampling_mc_bulk_water(insertion_type):
             insertion_type=insertion_type,
             use_hmr=1,
             save_last_frame="comp_frame.npz",
-            # save_last_frame=f"timemachine/testsystems/data/reference_bulk_water_{insertion_type}.npz", # uncomment me to manually update the data folders.
+            # save_last_frame=Path(f"timemachine/testsystems/data/reference_bulk_water_{insertion_type}.npz").absolute(), # uncomment me to manually update the data folders.
         )
+
+    with path_to_internal_file("timemachine.testsystems.data", f"reference_bulk_water_{insertion_type}.npz") as ref_npz:
+        reference_data = np.load(ref_npz)
 
     with temporary_working_dir() as temp_dir:
         # expect running this script to write summary_result_result_{mol_name}_*.pkl files
@@ -182,9 +184,6 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
     # 1) Different batch_sizes produces identical final frames
     # 2) Different insertion_types produces different final frames, but bitwise identical to a reference final frame.
 
-    with resources.open_binary("timemachine.testsystems.data", f"reference_6_water_{insertion_type}.npz") as ref_npz:
-        reference_data = np.load(ref_npz)
-
     # setup cli kwargs for the run_example_script
     with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
         config = dict(
@@ -199,8 +198,11 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
             use_hmr=1,
             batch_size=batch_size,
             save_last_frame="comp_frame.npz",
-            # save_last_frame=f"timemachine/testsystems/data/reference_6_water_{insertion_type}.npz", # uncomment me to manually update the data folders.
+            # save_last_frame=Path(f"timemachine/testsystems/data/reference_6_water_{insertion_type}.npz").absolute(), # uncomment me to manually update the data folders.
         )
+
+    with path_to_internal_file("timemachine.testsystems.data", f"reference_6_water_{insertion_type}.npz") as ref_npz:
+        reference_data = np.load(ref_npz)
 
     with temporary_working_dir() as temp_dir:
         proc = run_example("water_sampling_mc.py", get_cli_args(config), cwd=temp_dir)

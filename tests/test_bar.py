@@ -1,5 +1,4 @@
 from functools import partial
-from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -23,6 +22,7 @@ from timemachine.fe.bar import (
     ukln_to_ukn,
     works_from_ukln,
 )
+from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -256,8 +256,8 @@ def test_bootstrap_bar_and_regular_bar_match():
     since the MBAR estimate is always zero. Checks that `bar_with_pessimistic_uncertainty` returns the (non-zero) error
     from the MBAR estimate computed on all samples in these cases.
     """
-    test_ukln = Path(__file__).parent / "data" / "zero_overlap_ukln.npz"
-    u_kln = np.load(open(test_ukln, "rb"))["u_kln"]
+    with path_to_internal_file("timemachine.testsystems.data", "zero_overlap_ukln.npz") as path_to_npz:
+        u_kln = np.load(path_to_npz)["u_kln"]
 
     # The overlap should be closer to zero
     overlap = pair_overlap_from_ukln(u_kln)
