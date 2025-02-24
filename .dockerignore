@@ -35,7 +35,6 @@ oe_license.txt
 
 # Files from tests
 *.svg
-*.pkl
 *.png
 
 # nsys files
