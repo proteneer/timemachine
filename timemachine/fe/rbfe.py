@@ -332,11 +332,11 @@ def rebalance_lambda_schedule(
             return np.array(lambdas)
 
         if lambda_min < 0.5:
-            greedy_prot_left = optimize(lambda_min, 0.5)
+            greedy_prot_left = optimize(lambda_min, min(0.5, lambda_max))
         else:
             greedy_prot_left = np.array([])
         if lambda_max > 0.5:
-            greedy_prot_right = optimize(0.5, lambda_max)
+            greedy_prot_right = optimize(max(0.5, lambda_min), lambda_max)
         else:
             greedy_prot_right = np.array([])
         new_schedule = np.hstack([np.array(greedy_prot_left), np.array(greedy_prot_right)])
