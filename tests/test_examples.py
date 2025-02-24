@@ -248,17 +248,23 @@ def test_run_rbfe_legs(
     mol_b,
     seed,
 ):
-    # Can generate hashes from CI artifacts
-    endstate_hashes = {
+    # To update the leg result hashes, refer to the hashes generated from CI runs.
+    # The CI jobs produce an artifact for the results stored at ARTIFACT_DIR_NAME
+    # which can be used to investigate the results that generated the hashes.
+    # Hashes are of results.npz, lambda0_traj.npz and lambda1_traj.npz respectively.
+    leg_results_hashes = {
         "vacuum": (
+            "81fe2a16aa7eb89e6a05e1d4e162d24b57e4c0c3effe07f6ff548ca32618d8e6",
             "81fe2a16aa7eb89e6a05e1d4e162d24b57e4c0c3effe07f6ff548ca32618d8e6",
             "9c05f938850f0a0f85643e76f6201e8519f9d1c5ceefdd380b677f394f0b35f1",
         ),
         "solvent": (
             "6d8b39f723727d556b47e0907e89f1afe9843cae0b2e6107a745d1c29f9a3c8d",
+            "6d8b39f723727d556b47e0907e89f1afe9843cae0b2e6107a745d1c29f9a3c8d",
             "d6ecd7973f6f2c9d70f9652364e6b926f5551dcca6be0514bda3f0cd3524ccd0",
         ),
         "complex": (
+            "b3c18188bd8fe2475152b5c1c8b9d81799037f8c33685db5834943a140cc2988",
             "b3c18188bd8fe2475152b5c1c8b9d81799037f8c33685db5834943a140cc2988",
             "931c428e50c47c2a5442f2fa027d9a4acaf140339db34e2972d8ec6d4f00b40b",
         ),
@@ -323,20 +329,19 @@ def test_run_rbfe_legs(
                 assert len(traj_data["coords"]) == n_frames
                 assert len(traj_data["boxes"]) == n_frames
 
-        def verify_endstate_hashes(output_dir: Path):
+        def verify_leg_results_hashes(output_dir: Path):
             leg_dir = output_dir / leg
+            results_hash = hash_file(leg_dir / "results.npz")
             endstate_0_hash = hash_file(leg_dir / "lambda0_traj.npz")
             endstate_1_hash = hash_file(leg_dir / "lambda1_traj.npz")
-            assert endstate_0_hash == endstate_hashes[leg][0] and endstate_1_hash == endstate_hashes[leg][1], (
-                f"{endstate_0_hash} != {endstate_hashes[leg][0]} and/or {endstate_1_hash} != {endstate_hashes[leg][1]}"
-            )
+            assert (results_hash, endstate_0_hash, endstate_1_hash) == leg_results_hashes[leg]
 
         config_a = config.copy()
         config_a["output_dir"] = config["output_dir"] + "_a"
         proc = run_example("run_rbfe_legs.py", get_cli_args(config_a))
         assert proc.returncode == 0
         verify_run(Path(config_a["output_dir"]))
-        verify_endstate_hashes(Path(config_a["output_dir"]))
+        verify_leg_results_hashes(Path(config_a["output_dir"]))
 
         config_b = config.copy()
         config_b["output_dir"] = config["output_dir"] + "_b"
