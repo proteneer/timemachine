@@ -304,37 +304,45 @@ def rebalance_lambda_schedule(
     lambda_min = min(initial_lambs)
     lambda_max = max(initial_lambs)
 
-    u_kn, n_k = compute_u_kn(trajectories, initial_states)
-    mbar = MBAR(u_kn, n_k, maximum_iterations=DEFAULT_MAXIMUM_ITERATIONS, relative_tolerance=DEFAULT_RELATIVE_TOLERANCE)
-    # note: len(initial_states) >= 2 in general, so this is not equivalent to 2 * overlap_matrix[0][1]
-    mbar_scalar_overlap = mbar.compute_overlap()["scalar"]
-    if mbar_scalar_overlap < initial_mbar_threshold:
-        msg = f"""
-        Skipping 'rebalancing' optimization of initial protocol
-            because MBAR(initial_protocol) is an unreliable starting point
-            (with overlap {mbar_scalar_overlap} < {initial_mbar_threshold})
-        """
-        warnings.warn(msg)
+    try:
+        u_kn, n_k = compute_u_kn(trajectories, initial_states)
+        mbar = MBAR(u_kn, n_k, maximum_iterations=DEFAULT_MAXIMUM_ITERATIONS, relative_tolerance=DEFAULT_RELATIVE_TOLERANCE)
+        # note: len(initial_states) >= 2 in general, so this is not equivalent to 2 * overlap_matrix[0][1]
+        mbar_scalar_overlap = mbar.compute_overlap()["scalar"]
 
         new_schedule = initial_lambs
-    else:
-        f_k = mbar.f_k
+    
+        if mbar_scalar_overlap < initial_mbar_threshold:
+            msg = f"""
+            Skipping 'rebalancing' optimization of initial protocol
+                because MBAR(initial_protocol) is an unreliable starting point
+                (with overlap {mbar_scalar_overlap} < {initial_mbar_threshold})
+            """
+            warnings.warn(msg)
 
-        overlap_dist = make_fast_approx_overlap_distance_fxn(initial_lambs, u_kn, f_k, n_k)
-        target_dist = 1.0 - target_overlap
-
-        greedy_prot = greedily_optimize_protocol(
-            overlap_dist, target_dist, bisection_xtol=xtol, protocol_interval=(lambda_min, lambda_max)
-        )
-
-        if len(greedy_prot) > len(initial_lambs):
-            warnings.warn("Optimized schedule has more windows than initial schedule, falling back to initial schedule")
             new_schedule = initial_lambs
         else:
-            new_schedule = np.asarray(greedy_prot)
-            print(
-                f"Optimized schedule has {len(new_schedule)} windows compared to {len(initial_lambs)} windows initially, target overlap {target_overlap}"
+            f_k = mbar.f_k
+
+            overlap_dist = make_fast_approx_overlap_distance_fxn(initial_lambs, u_kn, f_k, n_k)
+            target_dist = 1.0 - target_overlap
+
+            greedy_prot = greedily_optimize_protocol(
+                overlap_dist, target_dist, bisection_xtol=xtol, protocol_interval=(lambda_min, lambda_max)
             )
+
+            if len(greedy_prot) > len(initial_lambs):
+                warnings.warn("Optimized schedule has more windows than initial schedule, falling back to initial schedule")
+                new_schedule = initial_lambs
+            else:
+                new_schedule = np.asarray(greedy_prot)
+                print(
+                    f"Optimized schedule has {len(new_schedule)} windows compared to {len(initial_lambs)} windows initially, target overlap {target_overlap}"
+                )
+    except RuntimeError as e:
+        warnings.warn(f"something went wrong in rebalancing: {e}")
+        warnings.warn(f"falling back to initial schedule: {[round(l, 3) for l in initial_lambs]}")
+        new_schedule = initial_lambs
 
     return [setup_initial_state_fn(lamb) for lamb in new_schedule]
 
