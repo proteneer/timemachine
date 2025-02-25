@@ -20,4 +20,9 @@ def not_ragged(xss: Sequence[Sequence]) -> bool:
 @contextmanager
 def path_to_internal_file(module: str, file_name: str):
     with resources.as_file(resources.files(module).joinpath(file_name)) as path:
+        import os
+        from pathlib import Path
+
+        print("DEBUG_PATH", module, file_name, path, os.getcwd(), list(Path(".").rglob(file_name)))
+
         yield path
