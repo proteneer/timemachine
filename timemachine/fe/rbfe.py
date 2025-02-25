@@ -315,7 +315,7 @@ def rebalance_lambda_schedule(
         mbar_scalar_overlap = mbar.compute_overlap()["scalar"]
 
         new_schedule = initial_lambs
-    
+
         if mbar_scalar_overlap < initial_mbar_threshold:
             msg = f"""
             Skipping 'rebalancing' optimization of initial protocol
