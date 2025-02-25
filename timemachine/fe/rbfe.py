@@ -306,6 +306,7 @@ def rebalance_lambda_schedule(
 
     u_kn, n_k = compute_u_kn(trajectories, initial_states)
     mbar = MBAR(u_kn, n_k, maximum_iterations=DEFAULT_MAXIMUM_ITERATIONS, relative_tolerance=DEFAULT_RELATIVE_TOLERANCE)
+    return u_kn, n_k
     # note: len(initial_states) >= 2 in general, so this is not equivalent to 2 * overlap_matrix[0][1]
     mbar_scalar_overlap = mbar.compute_overlap()["scalar"]
     if mbar_scalar_overlap < initial_mbar_threshold:
@@ -893,6 +894,9 @@ def estimate_relative_free_energy_bisection_hrex_impl(
             initial_states_hrex = rebalance_lambda_schedule(
                 initial_states, get_initial_state, trajectories_by_state, md_params.hrex_params.optimize_target_overlap
             )
+            with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
+                pickle.dump((initial_states_hrex, initial_states, trajectories_by_state, md_params), fh)
+            raise ValueError("DEBUG")
         else:
             initial_states_hrex = [get_initial_state(s.lamb) for s in initial_states]
 
