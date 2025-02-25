@@ -306,7 +306,11 @@ def rebalance_lambda_schedule(
 
     try:
         u_kn, n_k = compute_u_kn(trajectories, initial_states)
-        mbar = MBAR(u_kn, n_k, maximum_iterations=DEFAULT_MAXIMUM_ITERATIONS, relative_tolerance=DEFAULT_RELATIVE_TOLERANCE)
+        mbar_kwargs = dict(
+            maximum_iterations=DEFAULT_MAXIMUM_ITERATIONS,
+            relative_tolerance=DEFAULT_RELATIVE_TOLERANCE,
+        )
+        mbar = MBAR(u_kn, n_k, **mbar_kwargs)
         # note: len(initial_states) >= 2 in general, so this is not equivalent to 2 * overlap_matrix[0][1]
         mbar_scalar_overlap = mbar.compute_overlap()["scalar"]
 
@@ -332,7 +336,12 @@ def rebalance_lambda_schedule(
             )
 
             if len(greedy_prot) > len(initial_lambs):
-                warnings.warn("Optimized schedule has more windows than initial schedule, falling back to initial schedule")
+                msg = f"""
+                Optimized schedule has more windows than initial schedule,
+                {len(greedy_prot)} > {len(initial_lambs)},
+                falling back to initial schedule
+                """
+                warnings.warn(msg)
                 new_schedule = initial_lambs
             else:
                 new_schedule = np.asarray(greedy_prot)
