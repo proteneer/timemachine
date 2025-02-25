@@ -14,7 +14,7 @@ from common import ARTIFACT_DIR_NAME, temporary_working_dir
 from numpy.typing import NDArray as Array
 from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
+from timemachine.constants import DEFAULT_FF, DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
 from timemachine.fe.free_energy import assert_deep_eq
 from timemachine.fe.utils import get_mol_name
@@ -280,8 +280,7 @@ def test_run_rbfe_legs(
             n_eq_steps=n_eq_steps,
             n_frames=n_frames,
             n_windows=n_windows,
-            # Use simple charges to avoid os-dependent charge differences
-            forcefield="smirnoff_1_1_0_sc.py",
+            forcefield=DEFAULT_FF,
             output_dir=f"{ARTIFACT_DIR_NAME}/rbfe_{mol_a}_{mol_b}_{leg}_{seed}",
         )
 
