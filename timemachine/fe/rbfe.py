@@ -768,7 +768,7 @@ def estimate_relative_free_energy_bisection(
             initial_lambdas,
             make_bisection_state,
             md_params,
-            n_bisections=n_windows - 2,
+            n_bisections=n_windows - len(initial_lambdas),
             temperature=temperature,
             min_overlap=min_overlap,
         )
@@ -776,8 +776,9 @@ def estimate_relative_free_energy_bisection(
         final_result = results[-1]
 
         plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
+        expected_num_trajs = len(results) + len(initial_lambdas) - 1
 
-        assert len(trajectories) == len(results) + 1
+        assert len(trajectories) == expected_num_trajs, f"{len(trajectories)} != {expected_num_trajs}"
 
         return SimulationResult(
             final_result,
