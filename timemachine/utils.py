@@ -24,6 +24,8 @@ def path_to_internal_file(module: str, file_name: str):
         import os
         from pathlib import Path
 
-        warn(f"DEBUG_PATH: {module} {file_name} {path} {os.getcwd()} {list(Path('.').rglob(file_name))}")
+        warn(
+            f"DEBUG_PATH: module: {module} fname: {file_name} path: {path} exists: {Path(path).exists()} cwd: {os.getcwd()} list: {list(Path('.').rglob(file_name))}"
+        )
 
         yield path
