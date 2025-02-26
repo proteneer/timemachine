@@ -822,7 +822,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
     assert n_windows >= 2
 
     assert md_params.hrex_params is not None, "hrex_params must be set to use HREX"
-    try:
+    if True:
         # First phase: bisection to determine lambda spacing
         md_params_bisection = replace(md_params, n_frames=md_params.hrex_params.n_frames_bisection)
 
@@ -895,7 +895,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
                 initial_states, get_initial_state, trajectories_by_state, md_params.hrex_params.optimize_target_overlap
             )
             with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
-                pickle.dump((u_kn, n_k, initial_states, md_params), fh)
+                pickle.dump((u_kn, n_k, initial_states, trajectories_by_state, md_params), fh)
             raise ValueError("DEBUG")
         else:
             initial_states_hrex = [get_initial_state(s.lamb) for s in initial_states]
@@ -927,11 +927,6 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         return HREXSimulationResult(
             pair_bar_result, plots, trajectories_by_state, md_params, results, diagnostics, hrex_plots
         )
-
-    except Exception as err:
-        with open(f"failed_rbfe_result_{combined_prefix}.pkl", "wb") as fh:
-            pickle.dump((md_params, err), fh)
-        raise err
 
 
 def estimate_relative_free_energy_bisection_hrex(
