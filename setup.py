@@ -130,6 +130,7 @@ setup(
         ],
         "timemachine.testsystems": [
             "**/*.pdb",
+            "**/*.npz",
             "**/*.sdf",
         ],
         "timemachine.cpp": [
