@@ -6,6 +6,7 @@ from pymbar.mbar import MBAR
 from pymbar.testsystems import HarmonicOscillatorsTestCase
 from scipy.special import logsumexp
 
+from timemachine.fe.bar import DEFAULT_SOLVER_PROTOCOL
 from timemachine.fe.rbfe import estimate_relative_free_energy_bisection
 from timemachine.ff import Forcefield
 from timemachine.optimize.protocol import (
@@ -126,7 +127,7 @@ def simulate_protocol(lambdas_k, n_samples_per_window=100, seed=None):
         testsystem = HarmonicOscillatorsTestCase(O_k, K_k)
         N_k = [n_samples_per_window] * len(O_k)
         xs, u_kn, N_k, s_n = testsystem.sample(N_k, seed=seed)
-    return MBAR(u_kn, N_k)
+    return MBAR(u_kn, N_k, solver_protocol=DEFAULT_SOLVER_PROTOCOL)
 
 
 def summarize_protocol(lambdas, dist_fxn):
@@ -163,7 +164,7 @@ def test_overlap_rebalancing_on_gaussian():
 
         # get samples, estimate free energies
         _, u_kn, N_k, _ = test_case.sample(N_k=[100] * initial_num_states)
-        mbar = MBAR(u_kn, N_k)
+        mbar = MBAR(u_kn, N_k, solver_protocol=DEFAULT_SOLVER_PROTOCOL)
         f_k = mbar.f_k
 
     # make a fast d(lam_i, lam_j) fxn
@@ -219,7 +220,7 @@ def test_greedy_overlap_on_st_vacuum():
     lambdas = np.array([s.lamb for s in bisection_result.final_result.initial_states])
 
     # make approx overlap distance fxn
-    f_k = MBAR(u_kn, N_k).f_k
+    f_k = MBAR(u_kn, N_k, solver_protocol=DEFAULT_SOLVER_PROTOCOL).f_k
     overlap_dist = make_fast_approx_overlap_distance_fxn(lambdas, u_kn, f_k, N_k)
 
     # call protocol optimization, with various target values for neighbor overlap

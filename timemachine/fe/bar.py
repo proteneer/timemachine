@@ -125,13 +125,18 @@ def ukln_to_ukn(u_kln: NDArray) -> tuple[NDArray, NDArray]:
 
 DEFAULT_RELATIVE_TOLERANCE = 1e-6  # pymbar default 1e-7
 DEFAULT_MAXIMUM_ITERATIONS = 1_000  # pymbar default 10_000
+DEFAULT_SOLVER_PROTOCOL = "robust"  # more stable in certain cases
 
 
 def df_and_err_from_u_kln(u_kln: NDArray, maximum_iterations: int = DEFAULT_MAXIMUM_ITERATIONS) -> tuple[float, float]:
     """Compute free energy difference and uncertainty given a 2-state u_kln matrix."""
     u_kn, N_k = ukln_to_ukn(u_kln)
     mbar = pymbar.mbar.MBAR(
-        u_kn, N_k, maximum_iterations=maximum_iterations, relative_tolerance=DEFAULT_RELATIVE_TOLERANCE
+        u_kn,
+        N_k,
+        maximum_iterations=maximum_iterations,
+        relative_tolerance=DEFAULT_RELATIVE_TOLERANCE,
+        solver_protocol=DEFAULT_SOLVER_PROTOCOL,
     )
     try:
         results = mbar.compute_free_energy_differences()
@@ -155,6 +160,7 @@ def df_from_u_kln(
         initial_f_k=initial_f_k,
         maximum_iterations=maximum_iterations,
         relative_tolerance=DEFAULT_RELATIVE_TOLERANCE,
+        solver_protocol=DEFAULT_SOLVER_PROTOCOL,
     )
     df = mbar.compute_free_energy_differences(compute_uncertainty=False)[DG_KEY]
     return df[0, 1]
@@ -335,7 +341,11 @@ def pair_overlap_from_ukln(
     overlap = (
         2
         * pymbar.MBAR(
-            u_kn, N_k, maximum_iterations=maximum_iterations, relative_tolerance=relative_tolerance
+            u_kn,
+            N_k,
+            maximum_iterations=maximum_iterations,
+            relative_tolerance=relative_tolerance,
+            solver_protocol=DEFAULT_SOLVER_PROTOCOL,
         ).compute_overlap()["matrix"][0, 1]
     )  # type: ignore
 
