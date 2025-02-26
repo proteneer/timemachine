@@ -254,17 +254,17 @@ def test_run_rbfe_legs(
     # Hashes are of results.npz, lambda0_traj.npz and lambda1_traj.npz respectively.
     leg_results_hashes = {
         "vacuum": (
-            "438baa7efaf19e1c8e2986f573e20593c48317650c48de129262a12d149d2d17",
+            "e71c2c30a18ea154f4eb6c6fb544aeadb0e9dda91c592115cd3eb6f40947df42",
             "c74ba1b503532af7fe83be82090cca82c33f5fa72744e74613dcaad9d978283a",
             "59ca76d1c5d43925ae6b163667c4b3e60f6c765ce10ad85d4f1d14c7d7854933",
         ),
         "solvent": (
-            "3a7edd9d3aed109c7478baa4fac16fd65959a4cbf878307e91cedb697435584d",
+            "e0ea86b104aeee1f1940e954b85df4f28150cc9561a3b932468d339479c3cf75",
             "4bc121e901f0719ae6fc01b84443ecf48738d28b581d5fc881a486e361406e7a",
             "53b75a556b5f63c90af108144bac5bace681bed581f1332b4e5fa3da8ac659a6",
         ),
         "complex": (
-            "c5e91675d7b396fa19429a20b70ec69a90b8f8ded4399bc5b15c6ae62a8579fa",
+            "59d62aa748f483aba93e83645c2e3512dd14ad9e9a8333fcce7053f4a9779892",
             "3e2fbf623b2c89eb4833a7812df00b3108cc977f97fef7ac68bdec40ef1b5fb2",
             "4ca200408ac0525bf89d992df0e75caeb2265aaaef577942d12cb456c1078cd2",
         ),
