@@ -1,6 +1,7 @@
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from importlib import resources
+from warnings import warn
 
 
 def batches(n: int, batch_size: int) -> Iterator[int]:
@@ -23,6 +24,6 @@ def path_to_internal_file(module: str, file_name: str):
         import os
         from pathlib import Path
 
-        print("DEBUG_PATH", module, file_name, path, os.getcwd(), list(Path(".").rglob(file_name)))
+        warn(f"DEBUG_PATH: {module} {file_name} {path} {os.getcwd()} {list(Path('.').rglob(file_name))}")
 
         yield path
