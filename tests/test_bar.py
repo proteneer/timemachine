@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 from pymbar.testsystems import ExponentialTestCase
 
 from timemachine.fe.bar import (
+    DEFAULT_SOLVER_PROTOCOL,
     DG_ERR_KEY,
     DG_KEY,
     bar,
@@ -167,7 +168,7 @@ def test_df_from_u_kln_does_not_raise_on_incomplete_convergence():
 
     # pymbar raises an exception on incomplete convergence when computing covariances
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.mbar.MBAR(u_kn, N_k, maximum_iterations=1, solver_protocol="robust")
+    mbar = pymbar.mbar.MBAR(u_kn, N_k, maximum_iterations=1, solver_protocol=DEFAULT_SOLVER_PROTOCOL)
     with pytest.raises(pymbar.utils.ParameterError):
         _ = mbar.compute_free_energy_differences()
 
