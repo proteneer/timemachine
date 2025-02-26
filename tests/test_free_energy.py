@@ -15,7 +15,7 @@ from scipy.optimize import check_grad, minimize
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe import free_energy, topology, utils
-from timemachine.fe.bar import ukln_to_ukn
+from timemachine.fe.bar import DEFAULT_SOLVER_PROTOCOL, ukln_to_ukn
 from timemachine.fe.free_energy import (
     BarResult,
     HostConfig,
@@ -555,7 +555,7 @@ def test_estimate_free_energy_bar_with_energy_overflow():
     # pymbar.mbar.MBAR fails with LinAlgError
     with pytest.raises(np.linalg.LinAlgError):
         u_kn, N_k = ukln_to_ukn(u_kln_with_nan)
-        mbar = pymbar.mbar.MBAR(u_kn, N_k, solver_protocol="robust")
+        mbar = pymbar.mbar.MBAR(u_kn, N_k, solver_protocol=DEFAULT_SOLVER_PROTOCOL)
         mbar.compute_free_energy_differences()
 
     # should return finite results with warning
