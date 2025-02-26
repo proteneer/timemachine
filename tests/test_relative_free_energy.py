@@ -459,15 +459,12 @@ def test_rebalance_lambda_schedule(mock_compute_u_kn):
 
     mock_compute_u_kn.return_value = (u_kn, N_k)
 
-    final_lambdas = []
-
     def initial_state_fxn(lamb: float):
-        final_lambdas.append(lamb)
-        return
+        return lamb
 
     initial_states = [Mock(lamb=lamb) for lamb in initial_lambdas]
     trajectories = [None for _ in range(len(initial_states))]
-    rebalance_lambda_schedule(initial_states, initial_state_fxn, trajectories, 2 / 3)
+    final_lambdas = rebalance_lambda_schedule(initial_states, initial_state_fxn, trajectories, 2 / 3)
     assert len(final_lambdas) > 35
     assert len(final_lambdas) < len(initial_lambdas)
     assert np.max(np.diff(final_lambdas)) < 0.05
