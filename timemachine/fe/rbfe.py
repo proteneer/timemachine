@@ -13,7 +13,7 @@ from rdkit import Chem
 
 from timemachine.constants import DEFAULT_POSITIONAL_RESTRAINT_K, DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe import model_utils
-from timemachine.fe.bar import DEFAULT_MAXIMUM_ITERATIONS, DEFAULT_RELATIVE_TOLERANCE
+from timemachine.fe.bar import DEFAULT_MAXIMUM_ITERATIONS, DEFAULT_RELATIVE_TOLERANCE, DEFAULT_SOLVER_PROTOCOL
 from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
@@ -305,7 +305,13 @@ def rebalance_lambda_schedule(
     lambda_max = max(initial_lambs)
 
     u_kn, n_k = compute_u_kn(trajectories, initial_states)
-    mbar = MBAR(u_kn, n_k, maximum_iterations=DEFAULT_MAXIMUM_ITERATIONS, relative_tolerance=DEFAULT_RELATIVE_TOLERANCE)
+    mbar = MBAR(
+        u_kn,
+        n_k,
+        maximum_iterations=DEFAULT_MAXIMUM_ITERATIONS,
+        relative_tolerance=DEFAULT_RELATIVE_TOLERANCE,
+        solver_protocol=DEFAULT_SOLVER_PROTOCOL,
+    )
     # note: len(initial_states) >= 2 in general, so this is not equivalent to 2 * overlap_matrix[0][1]
     mbar_scalar_overlap = mbar.compute_overlap()["scalar"]
     if mbar_scalar_overlap < initial_mbar_threshold:

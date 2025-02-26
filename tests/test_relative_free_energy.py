@@ -1,5 +1,6 @@
 # test that we can run relative free energy simulations in complex and in solvent
 # this doesn't test for accuracy, just that everything mechanically runs.
+from unittest.mock import Mock, patch
 from warnings import catch_warnings
 
 import numpy as np
@@ -18,6 +19,7 @@ from timemachine.fe.rbfe import (
     estimate_relative_free_energy,
     estimate_relative_free_energy_bisection,
     estimate_relative_free_energy_bisection_hrex,
+    rebalance_lambda_schedule,
     run_solvent,
     run_vacuum,
 )
@@ -446,6 +448,26 @@ def test_rbfe_fallback_from_near_zero_overlap():
             prefix="low_overlap",
             n_windows=3,
         )
+
+
+@patch("timemachine.fe.rbfe.compute_u_kn")
+def test_rebalance_lambda_schedule(mock_compute_u_kn):
+    # has some issues with default PyMBAR settings
+    with path_to_internal_file("timemachine.testsystems.data", "u_kn_unstable.npz") as path_to_npz:
+        npz = np.load(path_to_npz)
+        u_kn, N_k, initial_lambdas = npz["u_kn"], npz["N_k"], npz["initial_lambdas"]
+
+    mock_compute_u_kn.return_value = (u_kn, N_k)
+
+    def initial_state_fxn(lamb: float):
+        return lamb
+
+    initial_states = [Mock(lamb=lamb) for lamb in initial_lambdas]
+    trajectories = [None for _ in range(len(initial_states))]
+    final_lambdas = rebalance_lambda_schedule(initial_states, initial_state_fxn, trajectories, 2 / 3)
+    assert len(final_lambdas) > 35
+    assert len(final_lambdas) < len(initial_lambdas)
+    assert np.max(np.diff(final_lambdas)) < 0.05
 
 
 if __name__ == "__main__":

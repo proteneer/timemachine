@@ -9,7 +9,7 @@ import pymbar
 import pytest
 from pymbar.mbar import MBAR
 
-from timemachine.fe.bar import DG_KEY, bar
+from timemachine.fe.bar import DEFAULT_SOLVER_PROTOCOL, DG_KEY, bar
 from timemachine.maps.estimators import compute_mapped_reduced_work, compute_mapped_u_kn
 
 pytestmark = [pytest.mark.nocuda]
@@ -133,7 +133,7 @@ def test_multistate_estimates():
 
     # compute MBAR estimate
     u_kn = compute_mapped_u_kn(samples, u_fxns, map_fxns)
-    mbar = MBAR(u_kn, N_k)
+    mbar = MBAR(u_kn, N_k, solver_protocol=DEFAULT_SOLVER_PROTOCOL)
 
     exact_f_k = np.array([state.reduced_free_energy for state in states])
     exact_f_k -= exact_f_k[0]
