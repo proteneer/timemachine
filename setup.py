@@ -129,6 +129,8 @@ setup(
             "**/*.npz",
             "**/*.sdf",
             "**/*.pkl",
+            "**/*.npz",
+            "**/*.npy",
         ],
         "timemachine.cpp": [
             "**/*.h",
