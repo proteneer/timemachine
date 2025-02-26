@@ -1,7 +1,6 @@
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from importlib import resources
-from warnings import warn
 
 
 def batches(n: int, batch_size: int) -> Iterator[int]:
@@ -21,11 +20,4 @@ def not_ragged(xss: Sequence[Sequence]) -> bool:
 @contextmanager
 def path_to_internal_file(module: str, file_name: str):
     with resources.as_file(resources.files(module).joinpath(file_name)) as path:
-        import os
-        from pathlib import Path
-
-        warn(
-            f"DEBUG_PATH: module: {module} fname: {file_name} path: {path} exists: {Path(path).exists()} cwd: {os.getcwd()} list: {list(Path('.').rglob(file_name))}"
-        )
-
         yield path
