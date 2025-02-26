@@ -167,7 +167,7 @@ def test_df_from_u_kln_does_not_raise_on_incomplete_convergence():
 
     # pymbar raises an exception on incomplete convergence when computing covariances
     u_kn, N_k = ukln_to_ukn(u_kln)
-    mbar = pymbar.mbar.MBAR(u_kn, N_k, maximum_iterations=1)
+    mbar = pymbar.mbar.MBAR(u_kn, N_k, maximum_iterations=1, solver_protocol="robust")
     with pytest.raises(pymbar.utils.ParameterError):
         _ = mbar.compute_free_energy_differences()
 

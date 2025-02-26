@@ -17,7 +17,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import BOLTZ, DEFAULT_TEMP
-from timemachine.fe.bar import DG_KEY
+from timemachine.fe.bar import DEFAULT_SOLVER_PROTOCOL, DG_KEY
 from timemachine.ff import Forcefield
 from timemachine.maps.estimators import compute_mapped_reduced_work, compute_mapped_u_kn
 from timemachine.maps.terminal_bonds import Interval, TerminalBondMap, TerminalMappableState, interval_map
@@ -164,7 +164,7 @@ def test_on_methane():
 
     u_kn = compute_mapped_u_kn(samples, u_fxns, map_fxns)
 
-    mbar = MBAR(u_kn, N_k)
+    mbar = MBAR(u_kn, N_k, solver_protocol=DEFAULT_SOLVER_PROTOCOL)
     estimated_delta_f_mbar = mbar.f_k[1]
 
     estimates = np.array(
