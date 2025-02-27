@@ -1,3 +1,4 @@
+import functools
 from typing import Optional
 
 import numpy as np
@@ -7,12 +8,13 @@ from scipy.special import logsumexp
 
 from timemachine.fe.reweighting import one_sided_exp
 from timemachine.md.smc import (
-    ASMCMaxIterError,
     Resampler,
-    adaptive_sequential_monte_carlo,
+    SMCMaxIterError,
+    adaptive_find_next_lambda,
     conditional_effective_sample_size,
     conditional_multinomial_resample,
     effective_sample_size,
+    fixed_find_next_lambda,
     get_endstate_samples_from_smc_result,
     identity_resample,
     multinomial_resample,
@@ -175,10 +177,20 @@ def test_conditional_effective_sample_size():
         assert cess > ess
 
 
-@pytest.mark.parametrize("resampling_fxn", [identity_resample, multinomial_resample, conditional_multinomial_resample])
 @pytest.mark.parametrize(
-    "test_adaptive_smc, cess_factor, max_iteration_test",
-    [(True, 0.5, False), (True, 0.5, True), (True, 1.1, False), (False, None, False)],
+    "test_adaptive_smc, cess_factor, max_iteration_test, resampling_fxn",
+    [
+        (True, 0.5, False, stratified_resample),
+        (True, 0.5, True, identity_resample),
+        (True, 1.1, False, identity_resample),
+        (True, 1.1, False, multinomial_resample),
+        (True, 1.1, False, conditional_multinomial_resample),
+        (True, 1.1, False, stratified_resample),
+        (False, None, False, identity_resample),
+        (False, None, False, multinomial_resample),
+        (False, None, False, conditional_multinomial_resample),
+        (False, None, False, stratified_resample),
+    ],
 )
 def test_sequential_monte_carlo(
     max_iteration_test: bool, cess_factor: Optional[float], test_adaptive_smc: bool, resampling_fxn: Resampler
@@ -234,34 +246,37 @@ def test_sequential_monte_carlo(
         # apply ASMC
         assert cess_factor is not None
         cess_target = len(samples) * cess_factor  # arbitray value results in ~5 windows
+        find_next_lambda = functools.partial(adaptive_find_next_lambda, log_prob=log_prob, cess_target=cess_target)
         if cess_target > len(samples):
             with pytest.raises(AssertionError, match="too large"):
-                result_dict = adaptive_sequential_monte_carlo(
+                result_dict = sequential_monte_carlo(
                     samples,
                     propagate,
                     log_prob,
                     resampling_fxn,
-                    cess_target=cess_target,
+                    find_next_lambda,
                 )
             return
         elif max_iteration_test:
-            with pytest.raises(ASMCMaxIterError, match="maximum number of iterations"):
-                result_dict = adaptive_sequential_monte_carlo(
+            find_next_lambda = functools.partial(
+                adaptive_find_next_lambda, log_prob=log_prob, cess_target=cess_target, max_iterations=1
+            )
+            with pytest.raises(SMCMaxIterError, match="maximum number of iterations"):
+                result_dict = sequential_monte_carlo(
                     samples,
                     propagate,
                     log_prob,
                     resampling_fxn,
-                    cess_target=cess_target,
-                    max_iterations=1,
+                    find_next_lambda,
                 )
             return
         else:
-            result_dict = adaptive_sequential_monte_carlo(
+            result_dict = sequential_monte_carlo(
                 samples,
                 propagate,
                 log_prob,
                 resampling_fxn,
-                cess_target=cess_target,
+                find_next_lambda,
             )
 
         # ASMC returns the lambdas that were used
@@ -272,7 +287,9 @@ def test_sequential_monte_carlo(
         # apply SMC
         n_windows = 100
         lambdas = np.linspace(0, 1, n_windows)
-        result_dict = sequential_monte_carlo(samples, lambdas, propagate, log_prob, resampling_fxn)
+
+        find_next_lambda = functools.partial(fixed_find_next_lambda, log_prob=log_prob, lambdas=lambdas)
+        result_dict = sequential_monte_carlo(samples, propagate, log_prob, resampling_fxn, find_next_lambda)
 
     # compute running delta_f estimates
     log_weights_traj = result_dict["log_weights_traj"]
