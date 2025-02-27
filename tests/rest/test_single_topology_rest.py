@@ -21,7 +21,7 @@ from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.potentials import PeriodicTorsion
 
-with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_data:
+with resources.as_file(resources.files("timemachine.testsystems.fep_benchmark.hif2a")) as hif2a_data:
     hif2a_ligands = read_sdf_mols_by_name(hif2a_data / "ligands.sdf")
 
 hif2a_ligand_pairs = [

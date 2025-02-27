@@ -20,7 +20,7 @@ def fetch_freesolv(n_mols: Optional[int] = None, exclude_mols: Optional[set[str]
         Exclude molecules in the given set.
 
     """
-    with path_to_internal_file("timemachine.datasets.freesolv", "freesolv.sdf") as freesolv_path:
+    with path_to_internal_file("timemachine.testsystems.freesolv", "freesolv.sdf") as freesolv_path:
         mols = read_sdf(str(freesolv_path))
 
     # filter and truncate

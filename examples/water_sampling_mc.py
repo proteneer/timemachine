@@ -283,14 +283,14 @@ if __name__ == "__main__":
     # example invocation:
 
     # start with 0 waters, with hmr, using espaloma charges, 10k mc steps, 10k md steps, targeted insertion:
-    # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_espaloma.sdf --out_cif traj_0_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
+    # python -u examples/water_sampling_mc.py --water_pdb timemachine/testsystems/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/testsystems/water_exchange/bb_centered_espaloma.sdf --out_cif traj_0_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
 
     # start with 6 waters, with hmr, using espaloma charges, 10k mc steps, 10k md steps, targeted insertion:
-    # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_6_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_espaloma.sdf --out_cif traj_6_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
+    # python -u examples/water_sampling_mc.py --water_pdb timemachine/testsystems/water_exchange/bb_6_waters.pdb --ligand_sdf timemachine/testsystems/water_exchange/bb_centered_espaloma.sdf --out_cif traj_6_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
 
     # start with 0 waters, with hmr, using zero charges, 10k mc steps, 10k md steps, targeted insertion:
-    # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_neutral.sdf --out_cif traj_0_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
+    # python -u examples/water_sampling_mc.py --water_pdb timemachine/testsystems/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/testsystems/water_exchange/bb_centered_neutral.sdf --out_cif traj_0_waters.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type targeted --use_hmr 1
 
     # running in bulk, 10k mc steps, 10k md steps, untargeted insertion
-    # python -u examples/water_sampling_mc.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --out_cif bulk.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type untargeted --use_hmr 1
+    # python -u examples/water_sampling_mc.py --water_pdb timemachine/testsystems/water_exchange/bb_0_waters.pdb --out_cif bulk.cif --md_steps_per_batch 10000 --mc_steps_per_batch 10000 --insertion_type untargeted --use_hmr 1
     test_exchange()

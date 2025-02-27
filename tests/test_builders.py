@@ -57,7 +57,7 @@ def test_build_water_system():
 
 @pytest.mark.nocuda
 def test_build_protein_system_returns_correct_water_count():
-    with path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as sdf_path:
+    with path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "ligands.sdf") as sdf_path:
         mols = read_sdf(sdf_path)
     # Pick two arbitrary mols
     mol_a = mols[0]
@@ -65,7 +65,7 @@ def test_build_protein_system_returns_correct_water_count():
     last_num_waters = None
     # Verify that even adding different molecules produces the same number of waters in the system
     for mols in (None, [mol_a], [mol_b], [mol_a, mol_b]):
-        with path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
+        with path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
             host_config = build_protein_system(str(pdb_path), DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, mols=mols)
             # The builder should not modify the number of atoms in the protein at all
             # Hard coded to the number of protein atoms in the PDB, refer to 6hvi_prepared.pdb for the actual

@@ -124,10 +124,6 @@ setup(
         "timemachine": [
             "py.typed",
         ],
-        "timemachine.datasets": [
-            "**/*.pdb",
-            "**/*.sdf",
-        ],
         "timemachine.testsystems": [
             "**/*.pdb",
             "**/*.npz",

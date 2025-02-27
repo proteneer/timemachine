@@ -1016,7 +1016,7 @@ def test_assert_bonds_present_during_chiral_interpolation():
 
 
 def get_pfkfb3_nitrile_to_amide_fwd():
-    with path_to_internal_file("timemachine.datasets.fep_benchmark.pfkfb3", "ligands.sdf") as path:
+    with path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "ligands.sdf") as path:
         mols_by_name = read_sdf_mols_by_name(path)
     mol_a = mols_by_name["24"]
     mol_b = mols_by_name["26"]
