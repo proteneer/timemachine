@@ -5,7 +5,6 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.datasets import fetch_freesolv
 from timemachine.fe import chiral_utils, utils
 from timemachine.fe.chiral_utils import (
     ChiralCheckMode,
@@ -19,6 +18,7 @@ from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.md.minimizer import replace_conformer_with_minimized
 from timemachine.potentials.chiral_restraints import U_chiral_atom_batch, U_chiral_bond_batch
+from timemachine.testsystems import fetch_freesolv
 
 pytestmark = [pytest.mark.nocuda]
 

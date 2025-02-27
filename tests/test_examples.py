@@ -14,10 +14,10 @@ from numpy.typing import NDArray as Array
 from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
-from timemachine.datasets import fetch_freesolv
 from timemachine.fe.free_energy import assert_deep_eq
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
+from timemachine.testsystems import fetch_freesolv
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
 
@@ -147,7 +147,7 @@ def test_water_sampling_mc_bulk_water(insertion_type):
     reference_data_path = EXAMPLES_DIR.parent / "tests" / "data" / f"reference_bulk_water_{insertion_type}.npz"
     assert reference_data_path.is_file()
     reference_data = np.load(reference_data_path)
-    with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
+    with resources.as_file(resources.files("timemachine.testsystems.water_exchange")) as water_exchange:
         config = dict(
             out_cif="bulk.cif",
             water_pdb=water_exchange / "bb_0_waters.pdb",
@@ -188,7 +188,7 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
     reference_data = np.load(reference_data_path)
 
     # setup cli kwargs for the run_example_script
-    with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
+    with resources.as_file(resources.files("timemachine.testsystems.water_exchange")) as water_exchange:
         config = dict(
             out_cif="bulk.cif",
             water_pdb=water_exchange / "bb_6_waters.pdb",
@@ -237,7 +237,7 @@ def test_run_rbfe_legs(
     seed,
 ):
     with temporary_working_dir() as temp_dir:
-        with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_dir:
+        with resources.as_file(resources.files("timemachine.testsystems.fep_benchmark.hif2a")) as hif2a_dir:
             config = dict(
                 mol_a=mol_a,
                 mol_b=mol_b,
