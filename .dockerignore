@@ -16,6 +16,7 @@
 Dockerfile
 .dockerignore
 .gitlab-ci.yml
+pytest-artifacts/
 
 # Git Files
 **/.git*
