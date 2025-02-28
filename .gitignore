@@ -12,6 +12,7 @@ dist/
 *.egg-info/
 .coverage*
 .hypothesis/
+pytest-artifacts/
 
 # Nsys profiling files
 *.sqlite

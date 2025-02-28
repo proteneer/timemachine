@@ -1,3 +1,4 @@
+import hashlib
 import os
 import pickle
 import subprocess
@@ -9,17 +10,28 @@ from typing import Optional
 
 import numpy as np
 import pytest
-from common import temporary_working_dir
+from common import ARTIFACT_DIR_NAME, temporary_working_dir
 from numpy.typing import NDArray as Array
 from scipy.special import logsumexp
 
-from timemachine.constants import DEFAULT_KT, KCAL_TO_KJ
+from timemachine.constants import DEFAULT_FF, DEFAULT_KT, KCAL_TO_KJ
 from timemachine.datasets import fetch_freesolv
 from timemachine.fe.free_energy import assert_deep_eq
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
+
+
+def hash_file(path: Path, chunk_size: int = 2048) -> str:
+    assert path.is_file(), f"{path!s} doesn't exist"
+    m = hashlib.sha256()
+    with open(path, "rb") as ifs:
+        chunk = ifs.read(chunk_size)
+        while len(chunk) > 0:
+            m.update(chunk)
+            chunk = ifs.read(chunk_size)
+    return m.hexdigest()
 
 
 def run_example(
@@ -236,118 +248,146 @@ def test_run_rbfe_legs(
     mol_b,
     seed,
 ):
-    with temporary_working_dir() as temp_dir:
-        with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_dir:
-            config = dict(
-                mol_a=mol_a,
-                mol_b=mol_b,
-                sdf_path=hif2a_dir / "ligands.sdf",
-                pdb_path=hif2a_dir / "5tbm_prepared.pdb",
-                seed=seed,
-                legs=leg,
-                n_eq_steps=n_eq_steps,
-                n_frames=n_frames,
-                n_windows=n_windows,
-                # Use simple charges to avoid os-dependent charge differences
-                forcefield="smirnoff_1_1_0_sc.py",
-            )
+    # To update the leg result hashes, refer to the hashes generated from CI runs.
+    # The CI jobs produce an artifact for the results stored at ARTIFACT_DIR_NAME
+    # which can be used to investigate the results that generated the hashes.
+    # Hashes are of results.npz, lambda0_traj.npz and lambda1_traj.npz respectively.
+    leg_results_hashes = {
+        "vacuum": (
+            "e71c2c30a18ea154f4eb6c6fb544aeadb0e9dda91c592115cd3eb6f40947df42",
+            "c74ba1b503532af7fe83be82090cca82c33f5fa72744e74613dcaad9d978283a",
+            "59ca76d1c5d43925ae6b163667c4b3e60f6c765ce10ad85d4f1d14c7d7854933",
+        ),
+        "solvent": (
+            "e0ea86b104aeee1f1940e954b85df4f28150cc9561a3b932468d339479c3cf75",
+            "4bc121e901f0719ae6fc01b84443ecf48738d28b581d5fc881a486e361406e7a",
+            "53b75a556b5f63c90af108144bac5bace681bed581f1332b4e5fa3da8ac659a6",
+        ),
+        "complex": (
+            "59d62aa748f483aba93e83645c2e3512dd14ad9e9a8333fcce7053f4a9779892",
+            "3e2fbf623b2c89eb4833a7812df00b3108cc977f97fef7ac68bdec40ef1b5fb2",
+            "4ca200408ac0525bf89d992df0e75caeb2265aaaef577942d12cb456c1078cd2",
+        ),
+    }
+    with resources.as_file(resources.files("timemachine.datasets.fep_benchmark.hif2a")) as hif2a_dir:
+        config = dict(
+            mol_a=mol_a,
+            mol_b=mol_b,
+            sdf_path=hif2a_dir / "ligands.sdf",
+            pdb_path=hif2a_dir / "5tbm_prepared.pdb",
+            seed=seed,
+            legs=leg,
+            n_eq_steps=n_eq_steps,
+            n_frames=n_frames,
+            n_windows=n_windows,
+            forcefield=DEFAULT_FF,
+            output_dir=f"{ARTIFACT_DIR_NAME}/rbfe_{mol_a}_{mol_b}_{leg}_{seed}",
+        )
 
-            def verify_run(output_dir: Path):
-                assert output_dir.is_dir()
-                assert (output_dir / "md_params.pkl").is_file()
-                assert (output_dir / "atom_mapping.svg").is_file()
-                assert (output_dir / "core.pkl").is_file()
-                assert (output_dir / "ff.py").is_file()
+        def verify_run(output_dir: Path):
+            assert output_dir.is_dir()
+            assert (output_dir / "md_params.pkl").is_file()
+            assert (output_dir / "atom_mapping.svg").is_file()
+            assert (output_dir / "core.pkl").is_file()
+            assert (output_dir / "ff.py").is_file()
 
-                assert Forcefield.load_from_file(output_dir / "ff.py") is not None
+            assert Forcefield.load_from_file(output_dir / "ff.py") is not None
 
-                leg_dir = output_dir / leg
-                assert leg_dir.is_dir()
-                assert (leg_dir / "results.npz").is_file()
-                assert (leg_dir / "lambda0_traj.npz").is_file()
-                assert (leg_dir / "lambda1_traj.npz").is_file()
+            leg_dir = output_dir / leg
+            assert leg_dir.is_dir()
+            assert (leg_dir / "results.npz").is_file()
+            assert (leg_dir / "lambda0_traj.npz").is_file()
+            assert (leg_dir / "lambda1_traj.npz").is_file()
 
-                assert (leg_dir / "simulation_result.pkl").is_file()
-                if leg in ["solvent", "complex"]:
-                    assert (leg_dir / "host_config.pkl").is_file()
-                else:
-                    assert not (leg_dir / "host_config.pkl").is_file()
-                assert (leg_dir / "hrex_transition_matrix.png").is_file()
-                assert (leg_dir / "hrex_swap_acceptance_rates_convergence.png").is_file()
-                assert (leg_dir / "hrex_replica_state_distribution_heatmap.png").is_file()
+            assert (leg_dir / "simulation_result.pkl").is_file()
+            if leg in ["solvent", "complex"]:
+                assert (leg_dir / "host_config.pkl").is_file()
+            else:
+                assert not (leg_dir / "host_config.pkl").is_file()
+            assert (leg_dir / "hrex_transition_matrix.png").is_file()
+            assert (leg_dir / "hrex_swap_acceptance_rates_convergence.png").is_file()
+            assert (leg_dir / "hrex_replica_state_distribution_heatmap.png").is_file()
 
-                results = np.load(str(leg_dir / "results.npz"))
-                assert results["pred_dg"].size == 1
-                assert results["pred_dg"].dtype == np.float64
-                assert results["pred_dg"] != 0.0
+            results = np.load(str(leg_dir / "results.npz"))
+            assert results["pred_dg"].size == 1
+            assert results["pred_dg"].dtype == np.float64
+            assert results["pred_dg"] != 0.0
 
-                assert results["pred_dg_err"].size == 1
-                assert results["pred_dg_err"].dtype == np.float64
-                assert results["pred_dg_err"] != 0.0
+            assert results["pred_dg_err"].size == 1
+            assert results["pred_dg_err"].dtype == np.float64
+            assert results["pred_dg_err"] != 0.0
 
-                assert results["n_windows"].size == 1
-                assert results["n_windows"].dtype == np.intp
-                assert 2 <= results["n_windows"] <= config["n_windows"]
-                assert isinstance(results["overlaps"], np.ndarray)
-                assert all(isinstance(overlap, float) for overlap in results["overlaps"])
+            assert results["n_windows"].size == 1
+            assert results["n_windows"].dtype == np.intp
+            assert 2 <= results["n_windows"] <= config["n_windows"]
+            assert isinstance(results["overlaps"], np.ndarray)
+            assert all(isinstance(overlap, float) for overlap in results["overlaps"])
 
-                for lamb in [0, 1]:
-                    traj_data = np.load(str(leg_dir / f"lambda{lamb:d}_traj.npz"))
-                    assert len(traj_data["coords"]) == n_frames
-                    assert len(traj_data["boxes"]) == n_frames
+            for lamb in [0, 1]:
+                traj_data = np.load(str(leg_dir / f"lambda{lamb:d}_traj.npz"))
+                assert len(traj_data["coords"]) == n_frames
+                assert len(traj_data["boxes"]) == n_frames
 
-            config_a = dict(output_dir="a", **config)
-            proc = run_example("run_rbfe_legs.py", get_cli_args(config_a), cwd=temp_dir)
-            assert proc.returncode == 0
-            verify_run(Path(temp_dir) / config_a["output_dir"])
+        def verify_leg_results_hashes(output_dir: Path):
+            leg_dir = output_dir / leg
+            results_hash = hash_file(leg_dir / "results.npz")
+            endstate_0_hash = hash_file(leg_dir / "lambda0_traj.npz")
+            endstate_1_hash = hash_file(leg_dir / "lambda1_traj.npz")
+            assert (results_hash, endstate_0_hash, endstate_1_hash) == leg_results_hashes[leg]
 
-            config_b = dict(output_dir="b", **config)
-            assert config_b["output_dir"] != config_a["output_dir"], "Runs are writing to the same output directory"
-            proc = run_example("run_rbfe_legs.py", get_cli_args(config_b), cwd=temp_dir)
-            assert proc.returncode == 0
-            verify_run(Path(temp_dir) / config_b["output_dir"])
+        config_a = config.copy()
+        config_a["output_dir"] = config["output_dir"] + "_a"
+        proc = run_example("run_rbfe_legs.py", get_cli_args(config_a))
+        assert proc.returncode == 0
+        verify_run(Path(config_a["output_dir"]))
+        verify_leg_results_hashes(Path(config_a["output_dir"]))
 
-            def verify_simulations_match(ref_dir: Path, comp_dir: Path):
-                with open(ref_dir / "md_params.pkl", "rb") as ifs:
-                    ref_md_params = pickle.load(ifs)
-                with open(comp_dir / "md_params.pkl", "rb") as ifs:
-                    comp_md_params = pickle.load(ifs)
-                assert ref_md_params == comp_md_params, "MD Parameters don't match"
+        config_b = config.copy()
+        config_b["output_dir"] = config["output_dir"] + "_b"
+        assert config_b["output_dir"] != config_a["output_dir"], "Runs are writing to the same output directory"
+        proc = run_example("run_rbfe_legs.py", get_cli_args(config_b))
+        assert proc.returncode == 0
+        verify_run(Path(config_b["output_dir"]))
 
-                with open(ref_dir / "core.pkl", "rb") as ifs:
-                    ref_core = pickle.load(ifs)
-                with open(comp_dir / "core.pkl", "rb") as ifs:
-                    comp_core = pickle.load(ifs)
-                assert np.all(ref_core == comp_core), "Atom mappings don't match"
+        def verify_simulations_match(ref_dir: Path, comp_dir: Path):
+            with open(ref_dir / "md_params.pkl", "rb") as ifs:
+                ref_md_params = pickle.load(ifs)
+            with open(comp_dir / "md_params.pkl", "rb") as ifs:
+                comp_md_params = pickle.load(ifs)
+            assert ref_md_params == comp_md_params, "MD Parameters don't match"
 
-                ref_results = np.load(str(ref_dir / leg / "results.npz"))
-                comp_results = np.load(str(comp_dir / leg / "results.npz"))
-                np.testing.assert_equal(ref_results["pred_dg"], comp_results["pred_dg"])
-                np.testing.assert_equal(ref_results["pred_dg_err"], comp_results["pred_dg_err"])
-                np.testing.assert_array_equal(ref_results["overlaps"], comp_results["overlaps"])
-                np.testing.assert_equal(ref_results["n_windows"], comp_results["n_windows"])
+            with open(ref_dir / "core.pkl", "rb") as ifs:
+                ref_core = pickle.load(ifs)
+            with open(comp_dir / "core.pkl", "rb") as ifs:
+                comp_core = pickle.load(ifs)
+            assert np.all(ref_core == comp_core), "Atom mappings don't match"
 
-                with open(ref_dir / leg / "simulation_result.pkl", "rb") as ifs:
-                    ref_res = pickle.load(ifs)
-                with open(comp_dir / leg / "simulation_result.pkl", "rb") as ifs:
-                    comp_res = pickle.load(ifs)
-                assert len(ref_res.final_result.initial_states) == ref_results["n_windows"]
-                assert len(ref_res.final_result.initial_states) == len(comp_res.final_result.initial_states)
+            ref_results = np.load(str(ref_dir / leg / "results.npz"))
+            comp_results = np.load(str(comp_dir / leg / "results.npz"))
+            np.testing.assert_equal(ref_results["pred_dg"], comp_results["pred_dg"])
+            np.testing.assert_equal(ref_results["pred_dg_err"], comp_results["pred_dg_err"])
+            np.testing.assert_array_equal(ref_results["overlaps"], comp_results["overlaps"])
+            np.testing.assert_equal(ref_results["n_windows"], comp_results["n_windows"])
 
-                for ref_state, comp_state in zip(
-                    ref_res.final_result.initial_states, comp_res.final_result.initial_states
-                ):
-                    np.testing.assert_array_equal(ref_state.x0, comp_state.x0)
-                    np.testing.assert_array_equal(ref_state.v0, comp_state.v0)
-                    np.testing.assert_array_equal(ref_state.box0, comp_state.box0)
-                    np.testing.assert_array_equal(ref_state.ligand_idxs, comp_state.ligand_idxs)
-                    np.testing.assert_array_equal(ref_state.protein_idxs, comp_state.protein_idxs)
-                    assert_deep_eq(ref_state.potentials, comp_state.potentials)
+            with open(ref_dir / leg / "simulation_result.pkl", "rb") as ifs:
+                ref_res = pickle.load(ifs)
+            with open(comp_dir / leg / "simulation_result.pkl", "rb") as ifs:
+                comp_res = pickle.load(ifs)
+            assert len(ref_res.final_result.initial_states) == ref_results["n_windows"]
+            assert len(ref_res.final_result.initial_states) == len(comp_res.final_result.initial_states)
 
-                for lamb in [0, 1]:
-                    ref_traj = np.load(str(ref_dir / leg / f"lambda{lamb}_traj.npz"))
-                    comp_traj = np.load(str(comp_dir / leg / f"lambda{lamb}_traj.npz"))
-                    np.testing.assert_array_equal(ref_traj["coords"], comp_traj["coords"])
-                    np.testing.assert_array_equal(ref_traj["boxes"], comp_traj["boxes"])
+            for ref_state, comp_state in zip(ref_res.final_result.initial_states, comp_res.final_result.initial_states):
+                np.testing.assert_array_equal(ref_state.x0, comp_state.x0)
+                np.testing.assert_array_equal(ref_state.v0, comp_state.v0)
+                np.testing.assert_array_equal(ref_state.box0, comp_state.box0)
+                np.testing.assert_array_equal(ref_state.ligand_idxs, comp_state.ligand_idxs)
+                np.testing.assert_array_equal(ref_state.protein_idxs, comp_state.protein_idxs)
+                assert_deep_eq(ref_state.potentials, comp_state.potentials)
 
-            verify_simulations_match(Path(temp_dir) / config_a["output_dir"], Path(temp_dir) / config_b["output_dir"])
+            for lamb in [0, 1]:
+                ref_traj = np.load(str(ref_dir / leg / f"lambda{lamb}_traj.npz"))
+                comp_traj = np.load(str(comp_dir / leg / f"lambda{lamb}_traj.npz"))
+                np.testing.assert_array_equal(ref_traj["coords"], comp_traj["coords"])
+                np.testing.assert_array_equal(ref_traj["boxes"], comp_traj["boxes"])
+
+        verify_simulations_match(Path(config_a["output_dir"]), Path(config_b["output_dir"]))
