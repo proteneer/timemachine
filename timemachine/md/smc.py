@@ -44,6 +44,7 @@ def sequential_monte_carlo(
     resample: Resampler,
     find_next_lambda: FindNextLambda,
     store_intermediate_traj=True,
+    max_num_lambdas=1000,
 ) -> ResultDict:
     """Implementation of Adaptive Sequential Monte Carlo (SMC).
        This will adaptively interpolate between lambda=0 and lambda=1,
@@ -64,6 +65,10 @@ def sequential_monte_carlo(
     store_intermediate_traj:
         Set to True (default) to store intermediate trajectories.
         Can be set to False to reduce memory requirements.
+    max_num_lambdas:
+        Maximum number of lambdas to use. If exceeded, will throw an
+        `SMCMaxIterError` exception.
+
     Returns
     -------
     trajs_dict
@@ -79,11 +84,6 @@ def sequential_monte_carlo(
         "lambdas_traj"
             [K] array of adaptive lambdas
 
-    References
-    ----------
-    * [Zhou, Johansen, Aston, 2016]
-        Towards Automatic Model Comparison: An Adaptive Sequential Monte Carlo Approach
-        https://arxiv.org/pdf/1303.3123 (Algorithm #4)
     """
     n = len(samples)
 
@@ -112,7 +112,7 @@ def sequential_monte_carlo(
     lam_target: Lambda = 1.0
     current_iteration: Iteration = 0
 
-    while True:
+    for _ in range(max_num_lambdas):
         lam_target, incremental_log_weights = find_next_lambda(
             sample_traj[-1], lam_initial, current_iteration, norm_log_weights
         )
@@ -139,6 +139,8 @@ def sequential_monte_carlo(
         lam_initial = lam_target
         lam_target = 1.0
         current_iteration += 1
+    else:
+        raise SMCMaxIterError(f"SMC exceeded maximum number of iterations {max_num_lambdas}.")
 
     # final result: a collection of samples, with associated log weights
     incremental_log_weights_traj.append(incremental_log_weights)
@@ -167,6 +169,13 @@ def fixed_find_next_lambda(
 ) -> tuple[Lambda, LogWeights]:
     """
     Implementation of Sequential Monte Carlo (SMC) using a fixed lambda schedule.
+
+    References
+    ----------
+    * Arnaud Doucet's annotated bibliography of SMC
+        https://www.stats.ox.ac.uk/~doucet/smc_resources.html
+    * [Dai, Heng, Jacob, Whiteley, 2020] An invitation to sequential Monte Carlo samplers
+        https://arxiv.org/abs/2007.11936
     """
     assert lambdas[-1] == 1.0, "final lambda must be 1.0"
     lam_target = lambdas[current_iteration + 1]
@@ -195,7 +204,7 @@ def adaptive_find_next_lambda(
     samples: [N,] list
     current_lambda: float
         Current lambda value.
-    current_iteration: float
+    current_iteration: int
         Current iteration value.
     log_prob: function
         [exp(-u(x, lam, first: bool)) for x in xs]
