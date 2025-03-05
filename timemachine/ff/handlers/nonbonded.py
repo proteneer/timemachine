@@ -575,6 +575,13 @@ class NNHandler(SerializableMixIn):
         return final_charges
 
 
+class ScaleOffsetHandler(SerializableMixIn):
+    def __init__(self, params):
+        self.smirks = []
+        self.params = np.array(params, dtype=np.float64)
+        self.props = None
+
+
 class AM1BCCHandler(SerializableMixIn):
     """The AM1BCCHandler generates charges for molecules using OpenEye's AM1BCCELF10[1] protocol. Note that
     if a single conformer molecular is passed to this handler, the charges appear equivalent with AM1BCC.

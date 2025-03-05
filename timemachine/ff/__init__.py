@@ -79,6 +79,7 @@ class Forcefield:
             nonbonded.EnvironmentNNPartialHandler,
         ]
     ]
+    scale_offset_handle: Optional[nonbonded.ScaleOffsetHandler]
 
     protein_ff: str
     water_ff: str
@@ -143,6 +144,7 @@ class Forcefield:
             lj_handle=ff.lj_handle,
             lj_handle_intra=ff.lj_handle_intra,
             env_bcc_handle=None,
+            scale_offset_handle=None,
             protein_ff=ff.protein_ff,
             water_ff=ff.water_ff,
         )
@@ -165,6 +167,7 @@ class Forcefield:
         q_handle_intra = None
         q_handle_solv = None
         env_bcc_handle = None
+        scale_offset_handle = None
 
         for handle in ff_handlers:
             if isinstance(
@@ -173,6 +176,9 @@ class Forcefield:
             ):
                 assert env_bcc_handle is None
                 env_bcc_handle = handle
+            elif isinstance(handle, nonbonded.ScaleOffsetHandler):
+                assert scale_offset_handle is None
+                scale_offset_handle = handle
             elif isinstance(handle, bonded.HarmonicBondHandler):
                 assert hb_handle is None
                 hb_handle = handle
@@ -280,6 +286,7 @@ class Forcefield:
             lj_handle,
             lj_handle_intra,
             env_bcc_handle,
+            scale_offset_handle,
             protein_ff,
             water_ff,
         )
@@ -296,6 +303,7 @@ class Forcefield:
             self.lj_handle,
             self.lj_handle_intra,
             self.env_bcc_handle,
+            self.scale_offset_handle,
         ]
 
     def get_params(self) -> ForcefieldParams:

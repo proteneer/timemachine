@@ -1196,6 +1196,13 @@ def test_nn_handler():
     print("jit grad", jax.jit(grad_fn)(params))  # also a few seconds
 
 
+def test_scale_offsets_handler():
+    scale_offset = np.array([[0, 1], [2, 3], [4, 5]])
+    handle = nonbonded.ScaleOffsetHandler(scale_offset)
+    np.testing.assert_array_equal(handle.params, scale_offset)
+    assert handle.params.shape == (3, 2)
+
+
 def test_harmonic_bonds_complete():
     """On a test molecule containing [oxygen] ~ [halogen] bonds,
     assert that a ValueError is raised."""
