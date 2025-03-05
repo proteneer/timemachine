@@ -186,5 +186,5 @@ if __name__ == "__main__":
     # example invocation:
 
     # start with 0 waters, using espaloma charges, with hmr, for 2000 frames
-    # python -u examples/water_sampling_hrex.py --water_pdb timemachine/datasets/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/datasets/water_exchange/bb_centered_espaloma.sdf --n_frames 2000 --use_hmr 1
+    # python -u examples/water_sampling_hrex.py --water_pdb timemachine/testsystems/water_exchange/bb_0_waters.pdb --ligand_sdf timemachine/testsystems/water_exchange/bb_centered_espaloma.sdf --n_frames 2000 --use_hmr 1
     test_hrex()

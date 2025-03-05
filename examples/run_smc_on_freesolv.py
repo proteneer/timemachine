@@ -7,13 +7,13 @@ from rdkit import Chem
 from scipy.special import logsumexp
 
 from timemachine.constants import BOLTZ, DEFAULT_FF, KCAL_TO_KJ
-from timemachine.datasets import fetch_freesolv
 from timemachine.fe.absolute_hydration import set_up_ahfe_system_for_smc
 from timemachine.fe.utils import get_mol_name
 from timemachine.ff import Forcefield
 from timemachine.md.smc import get_endstate_samples_from_smc_result, sequential_monte_carlo
 from timemachine.parallel.client import AbstractFileClient, CUDAPoolClient, FileClient, save_results
 from timemachine.parallel.utils import batch_list, get_gpu_count
+from timemachine.testsystems import fetch_freesolv
 
 temperature = 300
 
