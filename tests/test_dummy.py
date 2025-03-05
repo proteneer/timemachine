@@ -1,7 +1,11 @@
 import pytest
 from rdkit import Chem
 
-from timemachine.fe.dummy import generate_dummy_group_assignments
+from timemachine.fe.dummy import (
+    ZeroBondAnchorWarning,
+    generate_anchored_dummy_group_assignments,
+    generate_dummy_group_assignments,
+)
 from timemachine.graph_utils import convert_to_nx
 
 # These tests check the various utilities used to turn off interactions
@@ -92,4 +96,61 @@ def test_generate_dummy_group_assignments():
 def test_generate_dummy_group_assignments_empty_core():
     g = convert_to_nx(Chem.MolFromSmiles("OC1COO1"))
     core = []
-    assert list(generate_dummy_group_assignments(g, core)) == []
+
+    with pytest.warns(ZeroBondAnchorWarning):
+        dgas = list(generate_dummy_group_assignments(g, core))
+
+    assert equivalent_assignment(dgas, [{None: {0, 1, 2, 3, 4}}])
+
+
+def test_generate_dummy_group_assignments_full_core():
+    g = convert_to_nx(Chem.MolFromSmiles("OC1COO1"))
+    core = [0, 1, 2, 3, 4]
+    dgas = list(generate_dummy_group_assignments(g, core))
+    assert equivalent_assignment(dgas, [{}])
+
+
+def test_generate_angle_anchor_dummy_group_assignments():
+    # Test that if we break a core-core bond, we only have one valid
+    # choice of the angle anchor
+    #
+    #      O0          O0
+    #      |           |
+    #      C1          C1
+    #     / \           \
+    #    O4  C2  ->  O4  C2
+    #     \ /         \ /
+    #      O3          O3
+    g_a = convert_to_nx(Chem.MolFromSmiles("OC1COO1"))
+    g_b = convert_to_nx(Chem.MolFromSmiles("OCCOO"))
+    core_a = [1, 2, 3, 4]
+    core_b = [1, 2, 3, 4]
+
+    dgas = list(generate_dummy_group_assignments(g_a, core_a))
+    expected_dga = {1: {0}}
+
+    assert equivalent_assignment(dgas, [expected_dga])
+
+    # forward direction
+    anchored_dummy_group_assignments = generate_anchored_dummy_group_assignments(expected_dga, g_a, g_b, core_a, core_b)
+
+    anchored_dummy_group_assignments = list(anchored_dummy_group_assignments)
+    assert len(anchored_dummy_group_assignments) == 1
+    assert anchored_dummy_group_assignments[0] == {1: (2, frozenset({0}))}
+
+    # reverse direction
+    anchored_dummy_group_assignments = generate_anchored_dummy_group_assignments(expected_dga, g_b, g_a, core_b, core_a)
+
+    anchored_dummy_group_assignments = list(anchored_dummy_group_assignments)
+    assert len(anchored_dummy_group_assignments) == 1
+    assert anchored_dummy_group_assignments[0] == {1: (2, frozenset({0}))}
+
+    # Test that providing an empty core results in None values for both the bond anchor
+    # and the angle anchor
+    anchored_dummy_group_assignments = generate_anchored_dummy_group_assignments(
+        {None: {0, 1, 2, 3, 4}}, g_a, g_b, core_a, core_b
+    )
+
+    anchored_dummy_group_assignments = list(anchored_dummy_group_assignments)
+
+    assert anchored_dummy_group_assignments == [{None: (None, frozenset({0, 1, 2, 3, 4}))}]
