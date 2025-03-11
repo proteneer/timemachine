@@ -1962,13 +1962,7 @@ class SingleTopology(AtomMapMixin):
         combined_angle_idxs = np.concatenate(
             [host_system.angle.potential.idxs, guest_system.angle.potential.idxs + num_host_atoms]
         )
-        host_angle_params = jnp.hstack(
-            [
-                host_system.angle.params,
-                np.zeros((host_system.angle.params.shape[0], 1)),  # stable angle epsilon = 0
-            ]
-        )
-        combined_angle_params = jnp.concatenate([host_angle_params, guest_system.angle.params])
+        combined_angle_params = jnp.concatenate([host_system.angle.params, guest_system.angle.params])
         combined_angle = HarmonicAngle(combined_angle_idxs).bind(combined_angle_params)
 
         # print(host_system.proper.potential.idxs.shape, guest_system.proper.potential.idxs.shape)
