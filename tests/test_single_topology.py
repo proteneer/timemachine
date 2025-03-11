@@ -773,7 +773,7 @@ def test_combine_achiral_ligand_with_host():
         set(type(bp.potential) for bp in combined_system.get_U_fns())
         == {
             potentials.HarmonicBond,
-            potentials.HarmonicAngleStable,
+            potentials.HarmonicAngle,
             potentials.PeriodicTorsion,
             potentials.NonbondedPairListPrecomputed,
             potentials.Nonbonded,
@@ -801,7 +801,7 @@ def test_combine_chiral_ligand_with_host():
     )
     assert set(type(bp.potential) for bp in combined_system.get_U_fns()) == {
         potentials.HarmonicBond,
-        potentials.HarmonicAngleStable,
+        potentials.HarmonicAngle,
         potentials.PeriodicTorsion,
         potentials.NonbondedPairListPrecomputed,
         potentials.Nonbonded,

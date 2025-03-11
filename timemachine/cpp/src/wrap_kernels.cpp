@@ -19,7 +19,6 @@
 #include "fixed_point.hpp"
 #include "flat_bottom_bond.hpp"
 #include "harmonic_angle.hpp"
-#include "harmonic_angle_stable.hpp"
 #include "harmonic_bond.hpp"
 #include "langevin_integrator.hpp"
 #include "local_md_utils.hpp"
@@ -1408,20 +1407,6 @@ template <typename RealType> void declare_harmonic_angle(py::module &m, const ch
             py::arg("angle_idxs"));
 }
 
-template <typename RealType> void declare_harmonic_angle_stable(py::module &m, const char *typestr) {
-
-    using Class = HarmonicAngleStable<RealType>;
-    std::string pyclass_name = std::string("HarmonicAngleStable_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, Potential>(
-        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(
-            py::init([](const py::array_t<int, py::array::c_style> &angle_idxs) {
-                std::vector<int> vec_angle_idxs = py_array_to_vector(angle_idxs);
-                return new HarmonicAngleStable<RealType>(vec_angle_idxs);
-            }),
-            py::arg("angle_idxs"));
-}
-
 template <typename RealType> void declare_centroid_restraint(py::module &m, const char *typestr) {
 
     using Class = CentroidRestraint<RealType>;
@@ -2197,9 +2182,6 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_harmonic_angle<double>(m, "f64");
     declare_harmonic_angle<float>(m, "f32");
-
-    declare_harmonic_angle_stable<double>(m, "f64");
-    declare_harmonic_angle_stable<float>(m, "f32");
 
     declare_periodic_torsion<double>(m, "f64");
     declare_periodic_torsion<float>(m, "f32");

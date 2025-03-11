@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 
 from timemachine.lib import custom_ops
 
-from . import bonded, bonded_stable, chiral_restraints, jax_interface, nonbonded, summed
+from . import bonded, chiral_restraints, jax_interface, nonbonded, summed
 from .potential import BoundGpuImplWrapper, BoundPotential, GpuImplWrapper, Potential, Precision
 from .types import Box, Conf, Params
 
@@ -28,14 +28,6 @@ class HarmonicAngle(Potential):
 
     def __call__(self, conf: Conf, params: Params, box: Optional[Box]) -> float | Array:
         return bonded.harmonic_angle(conf, params, box, self.idxs)
-
-
-@dataclass
-class HarmonicAngleStable(Potential):
-    idxs: NDArray[np.int32]
-
-    def __call__(self, conf: Conf, params: Params, _: Optional[Box]) -> float | Array:
-        return bonded_stable.harmonic_angle_stable(conf, params, self.idxs)
 
 
 @dataclass

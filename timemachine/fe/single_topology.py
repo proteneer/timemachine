@@ -34,7 +34,7 @@ from timemachine.potentials import (
     BoundPotential,
     ChiralAtomRestraint,
     ChiralBondRestraint,
-    HarmonicAngleStable,
+    HarmonicAngle,
     HarmonicBond,
     Nonbonded,
     NonbondedInteractionGroup,
@@ -486,7 +486,7 @@ def setup_end_state(
         all_dummy_improper_params_.extend(all_params[2])
 
     all_dummy_angle_idxs = np.array(all_dummy_angle_idxs_, np.int32).reshape(-1, 3)
-    all_dummy_angle_params = np.array(all_dummy_angle_params_, np.float64).reshape(-1, 2)
+    all_dummy_angle_params = np.array(all_dummy_angle_params_, np.float64).reshape(-1, 3)
 
     all_dummy_improper_idxs = np.array(all_dummy_improper_idxs_, np.int32).reshape(-1, 4)
     all_dummy_improper_params = np.array(all_dummy_improper_params_, np.float64).reshape(-1, 3)
@@ -543,8 +543,7 @@ def setup_end_state(
     # canonicalize angles
     mol_c_angle_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_angle_idxs], dtype=np.int32)
     # Set the stable angle epsilon values to zero
-    mol_c_stable_angle_params = np.hstack([mol_c_angle_params, np.zeros((len(mol_c_angle_params), 1))])
-    angle_potential = HarmonicAngleStable(mol_c_angle_idxs_canon).bind(mol_c_stable_angle_params)
+    angle_potential = HarmonicAngle(mol_c_angle_idxs_canon).bind(mol_c_angle_params)
 
     # dummy atoms do not have any nonbonded interactions, so we simply turn them off
     mol_c_nbpl_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_a_nbpl_idxs], dtype=np.int32)
@@ -1047,12 +1046,12 @@ def assert_torsions_defined_over_non_linear_angles(system: GuestSystem | HostGue
     """
     linear_angles = set()
 
-    for idxs, angle_params in zip(system.angle.potential.idxs, system.angle.params):
+    for (i, j, k), angle_params in zip(system.angle.potential.idxs, system.angle.params):
         angle_k, angle_a0 = angle_params[0], angle_params[1]
 
         if angle_k > 0:
             if abs(angle_a0 - np.pi) < 0.174533:  # 10 degrees, arbitrary but conservative threshold
-                linear_angles.add(tuple(idxs))
+                linear_angles.add(tuple((i, j, k)))
 
     for (i, j, k, l), (proper_k, _, _) in zip(system.proper.potential.idxs, system.proper.params):
         if proper_k > 0:
@@ -1970,7 +1969,7 @@ class SingleTopology(AtomMapMixin):
             ]
         )
         combined_angle_params = jnp.concatenate([host_angle_params, guest_system.angle.params])
-        combined_angle = HarmonicAngleStable(combined_angle_idxs).bind(combined_angle_params)
+        combined_angle = HarmonicAngle(combined_angle_idxs).bind(combined_angle_params)
 
         # print(host_system.proper.potential.idxs.shape, guest_system.proper.potential.idxs.shape)
         combined_proper_idxs = np.concatenate(

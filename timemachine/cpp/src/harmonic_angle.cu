@@ -28,7 +28,6 @@ HarmonicAngle<RealType>::HarmonicAngle(const std::vector<int> &angle_idxs // [A,
 
     cudaSafeMalloc(&d_angle_idxs_, A_ * 3 * sizeof(*d_angle_idxs_));
     gpuErrchk(cudaMemcpy(d_angle_idxs_, &angle_idxs[0], A_ * 3 * sizeof(*d_angle_idxs_), cudaMemcpyHostToDevice));
-
     cudaSafeMalloc(&d_u_buffer_, A_ * sizeof(*d_u_buffer_));
 
     gpuErrchk(cub::DeviceReduce::Sum(nullptr, sum_storage_bytes_, d_u_buffer_, d_u_buffer_, A_));
@@ -59,12 +58,12 @@ void HarmonicAngle<RealType>::execute_device(
 
     if (A_ > 0) {
 
-        if (P != A_ * 2) {
+        if (P != A_ * 3) {
             throw std::runtime_error(
-                "HarmonicAngle::execute_device(): expected P == 2*A_, got P=" + std::to_string(P) +
-                ", 2*A_=" + std::to_string(2 * A_));
+                "HarmonicAngle::execute_device(): expected P == 3*A_, got P=" + std::to_string(P) +
+                ", 3*A_=" + std::to_string(3 * A_));
         }
-        k_harmonic_angle<RealType><<<blocks, tpb, 0, stream>>>(
+        k_harmonic_angle_stable<RealType><<<blocks, tpb, 0, stream>>>(
             A_, d_x, d_p, d_angle_idxs_, d_du_dx, d_du_dp, d_u == nullptr ? nullptr : d_u_buffer_);
         gpuErrchk(cudaPeekAtLastError());
 
