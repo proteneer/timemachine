@@ -719,6 +719,52 @@ def sample_with_context_iter(
         yield steps_func(n_frames * md_params.steps_per_frame)
 
 
+def sample_with_context_iter_parallel(
+    ctxts: list[Context],
+    md_params: list[MDParams],
+    temperature: float,
+    ligand_idxs: NDArray,
+    batch_size: int,
+    workers: int = 2,
+) -> Iterator[tuple[NDArray, NDArray, NDArray]]:
+    """Sample a single frame from a list of contexts and MDParams in parallel using threads.
+
+
+    Parameters
+    ----------
+    ctxts: list of Contexts
+        Can contain any number of contexts
+
+    md_params: list of MDParams
+        MD parameters
+
+    temperature: float
+        The temperature, in kelvin, used when running Local MD moves
+
+    ligand_idxs: np.ndarray
+        Array representing the indices of atoms that make up the ligand, determines the atoms considered as the center
+        of local MD.
+
+    workers: int
+        The number of workers to parallelize the sampling with. Will never use more than len(ctxts) workers
+
+    Returns
+    -------
+    Iterator of 3-tuples
+        Iterator of coords, boxes, final_velocities from each context. Only collects a single 3-tuple from each context
+    """
+    assert len(ctxts) == len(md_params), "Number of contexts and params must match"
+    # Don't use more threads than there are contexts
+    n_threads = min(len(ctxts), workers)
+
+    def sample_first_frame(args: tuple[Context, MDParams]) -> tuple[NDArray, NDArray, NDArray]:
+        ctxt, params = args
+        return next(sample_with_context_iter(ctxt, params, temperature, ligand_idxs, batch_size))
+
+    with ThreadPool(n_threads) as pool:
+        yield from pool.imap(sample_first_frame, zip(ctxts, md_params))
+
+
 def sample_with_context(
     ctxt: Context, md_params: MDParams, temperature: float, ligand_idxs: NDArray, max_buffer_frames: int
 ) -> Trajectory:
@@ -1394,9 +1440,6 @@ def run_sims_hrex(
 
     # Set up overall potential and context using the first state.
     params_by_state = np.array([get_flattened_params(initial_state) for initial_state in initial_states])
-    water_params_by_state: Optional[NDArray] = None
-    if md_params.water_sampling_params is not None:
-        water_params_by_state = np.array([get_water_sampler_params(initial_state) for initial_state in initial_states])
 
     # Each state gets its own context to ensure deterministic results
     state_ctxts = [get_context(state, md_params=md_params) for state in initial_states]
@@ -1432,128 +1475,108 @@ def run_sims_hrex(
         n_threads = os.cpu_count()
     assert isinstance(n_threads, int)
 
-    # Don't use more threads than there are states
-    n_threads = min(len(initial_states), n_threads)
+    begin_loop_time = time.perf_counter()
+    last_update_time = begin_loop_time
 
-    with ThreadPool(n_threads) as pool:
-        begin_loop_time = time.perf_counter()
-        last_update_time = begin_loop_time
+    def get_final_barostat_volume_scale_factor(ctxt) -> float | None:
+        barostat = ctxt.get_barostat()
+        final_barostat_volume_scale_factor = barostat.get_volume_scale_factor() if barostat is not None else None
+        return final_barostat_volume_scale_factor
 
-        for current_frame in range(md_params.n_frames):
+    for current_frame in range(md_params.n_frames):
+        # Setup the context objects
+        state_params = []
+        for state_idx, xvb in hrex.state_replica_pairs:
+            ctxt = state_ctxts[state_idx]
+            ctxt.set_x_t(xvb.coords)
+            ctxt.set_v_t(xvb.velocities)
+            ctxt.set_box(xvb.box)
 
-            def sample_replica(
-                xvb: CoordsVelBox, state_idx: StateIdx
-            ) -> tuple[NDArray, NDArray, NDArray, Optional[float]]:
-                ctxt = state_ctxts[state_idx]
-                ctxt.set_x_t(xvb.coords)
-                ctxt.set_v_t(xvb.velocities)
-                ctxt.set_box(xvb.box)
-                ctxt.get_potentials()[0].set_params(params_by_state[state_idx])
-                current_step = current_frame * md_params.steps_per_frame
-                for mover in ctxt.get_movers():
-                    if isinstance(mover, WATER_SAMPLER_MOVERS):
-                        assert water_params_by_state is not None
-                        mover.set_params(water_params_by_state[state_idx])
-                    mover.set_step(current_step)
-
-                md_params_replica = replace(
-                    md_params,
-                    n_frames=1,
-                    # Do equilibration on the first frame, otherwise skip
-                    n_eq_steps=md_params.n_eq_steps if current_frame == 0 else 0,
-                    seed=state_idx + current_frame,
-                )
-
-                assert md_params_replica.n_frames == 1
-                # Get the next set of frames from the iterator, which will be the only value returned
-                frame, box, final_velos = next(
-                    sample_with_context_iter(ctxt, md_params_replica, temperature, ligand_idxs, batch_size=1)
-                )
-                assert frame.shape[0] == 1
-
-                barostat = ctxt.get_barostat()
-                final_barostat_volume_scale_factor = (
-                    barostat.get_volume_scale_factor() if barostat is not None else None
-                )
-
-                return frame[-1], box[-1], final_velos, final_barostat_volume_scale_factor
-
-            replica_samples_by_state = pool.starmap(
-                sample_replica, [(replica, state_idx) for state_idx, replica in hrex.state_replica_pairs]
+            md_params_replica = replace(
+                md_params,
+                n_frames=1,
+                # Do equilibration on the first frame, otherwise skip
+                n_eq_steps=md_params.n_eq_steps if current_frame == 0 else 0,
+                seed=state_idx + current_frame,
             )
-            # print([(i, state_idx) for i, (state_idx, _) in enumerate(hrex.state_replica_pairs)])
+            assert md_params_replica.n_frames == 1
+            state_params.append(md_params)
 
-            def get_state_samples(
-                xvb: CoordsVelBox, state_idx: StateIdx
-            ) -> tuple[NDArray, NDArray, NDArray, Optional[float]]:
-                return replica_samples_by_state[state_idx]
+        replica_samples_by_state = list(
+            sample_with_context_iter_parallel(state_ctxts, state_params, temperature, ligand_idxs, 1, n_threads)
+        )
+        barostat_factors = [get_final_barostat_volume_scale_factor(ctxt) for ctxt in state_ctxts]
 
-            def replica_from_samples(last_sample: tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
-                frame, box, velos, _ = last_sample
-                return CoordsVelBox(frame, velos, box)
+        def get_state_samples(
+            xvb: CoordsVelBox, state_idx: StateIdx
+        ) -> tuple[NDArray, NDArray, NDArray, Optional[float]]:
+            coords, boxes, final_velos = replica_samples_by_state[state_idx]
+            return coords[-1], boxes[-1], final_velos, barostat_factors[state_idx]
 
-            hrex, samples_by_state_iter = hrex.sample_replicas(get_state_samples, replica_from_samples)
-            U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
-            log_q_kl = -U_kl / (BOLTZ * temperature)
+        def replica_from_samples(last_sample: tuple[NDArray, NDArray, NDArray, Optional[float]]) -> CoordsVelBox:
+            frame, box, velos, _ = last_sample
+            return CoordsVelBox(frame, velos, box)
 
-            replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
+        hrex, samples_by_state_iter = hrex.sample_replicas(get_state_samples, replica_from_samples)
+        U_kl = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
+        log_q_kl = -U_kl / (BOLTZ * temperature)
 
-            hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
-                neighbor_pairs,
-                log_q_kl,
-                n_swap_attempts_per_iter,
-                md_params.seed + current_frame + 1,  # NOTE: "+ 1" is for bitwise compatibility with previous version
+        replica_idx_by_state_by_iter.append(hrex.replica_idx_by_state)
+
+        hrex, fraction_accepted_by_pair = hrex.attempt_neighbor_swaps_fast(
+            neighbor_pairs,
+            log_q_kl,
+            n_swap_attempts_per_iter,
+            md_params.seed + current_frame + 1,  # NOTE: "+ 1" is for bitwise compatibility with previous version
+        )
+
+        if len(initial_states) == 2:
+            fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
+
+        for samples, (xs, boxes, velos, final_barostat_volume_scale_factor) in zip(
+            samples_by_state, samples_by_state_iter
+        ):
+            samples.frames.extend([xs])
+            samples.boxes.extend([boxes])
+            samples.final_velocities = velos
+            samples.final_barostat_volume_scale_factor = final_barostat_volume_scale_factor
+
+        fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
+
+        if print_diagnostics_interval and (current_frame + 1) % print_diagnostics_interval == 0:
+            current_time = time.perf_counter()
+
+            def get_swap_acceptance_rates(fraction_accepted_by_pair):
+                return [
+                    n_accepted / n_proposed if n_proposed else np.nan
+                    for n_accepted, n_proposed in fraction_accepted_by_pair
+                ]
+
+            instantaneous_swap_acceptance_rates = get_swap_acceptance_rates(fraction_accepted_by_pair)
+            average_swap_acceptance_rates = get_swap_acceptance_rates(np.sum(fraction_accepted_by_pair_by_iter, axis=0))
+
+            wall_time_per_frame_current = (current_time - last_update_time) / print_diagnostics_interval
+            wall_time_per_frame_average = (current_time - begin_loop_time) / (current_frame + 1)
+            estimated_wall_time_remaining = wall_time_per_frame_average * (md_params.n_frames - (current_frame + 1))
+
+            def format_rate(r):
+                return f"{r * 100.0:5.1f}%"
+
+            def format_rates(rs):
+                return " | ".join(format_rate(r) for r in rs)
+
+            print("Frame", current_frame + 1)
+            print(
+                f"{estimated_wall_time_remaining:.1f} s remaining at "
+                f"{wall_time_per_frame_average:.2f} s/frame "
+                f"({wall_time_per_frame_current:.2f} s/frame since last message)"
             )
+            print("HREX acceptance rates, current :", format_rates(instantaneous_swap_acceptance_rates))
+            print("HREX acceptance rates, average :", format_rates(average_swap_acceptance_rates))
+            print("HREX replica permutation       :", hrex.replica_idx_by_state)
+            print()
 
-            if len(initial_states) == 2:
-                fraction_accepted_by_pair = fraction_accepted_by_pair[1:]  # remove stats for identity move
-
-            for samples, (xs, boxes, velos, final_barostat_volume_scale_factor) in zip(
-                samples_by_state, samples_by_state_iter
-            ):
-                samples.frames.extend([xs])
-                samples.boxes.extend([boxes])
-                samples.final_velocities = velos
-                samples.final_barostat_volume_scale_factor = final_barostat_volume_scale_factor
-
-            fraction_accepted_by_pair_by_iter.append(fraction_accepted_by_pair)
-
-            if print_diagnostics_interval and (current_frame + 1) % print_diagnostics_interval == 0:
-                current_time = time.perf_counter()
-
-                def get_swap_acceptance_rates(fraction_accepted_by_pair):
-                    return [
-                        n_accepted / n_proposed if n_proposed else np.nan
-                        for n_accepted, n_proposed in fraction_accepted_by_pair
-                    ]
-
-                instantaneous_swap_acceptance_rates = get_swap_acceptance_rates(fraction_accepted_by_pair)
-                average_swap_acceptance_rates = get_swap_acceptance_rates(
-                    np.sum(fraction_accepted_by_pair_by_iter, axis=0)
-                )
-
-                wall_time_per_frame_current = (current_time - last_update_time) / print_diagnostics_interval
-                wall_time_per_frame_average = (current_time - begin_loop_time) / (current_frame + 1)
-                estimated_wall_time_remaining = wall_time_per_frame_average * (md_params.n_frames - (current_frame + 1))
-
-                def format_rate(r):
-                    return f"{r * 100.0:5.1f}%"
-
-                def format_rates(rs):
-                    return " | ".join(format_rate(r) for r in rs)
-
-                print("Frame", current_frame + 1)
-                print(
-                    f"{estimated_wall_time_remaining:.1f} s remaining at "
-                    f"{wall_time_per_frame_average:.2f} s/frame "
-                    f"({wall_time_per_frame_current:.2f} s/frame since last message)"
-                )
-                print("HREX acceptance rates, current :", format_rates(instantaneous_swap_acceptance_rates))
-                print("HREX acceptance rates, average :", format_rates(average_swap_acceptance_rates))
-                print("HREX replica permutation       :", hrex.replica_idx_by_state)
-                print()
-
-                last_update_time = current_time
+            last_update_time = current_time
 
     # Use the unbound potentials associated with the summed potential once to compute the u_kln
     # Avoids repeated creation of underlying GPU potentials

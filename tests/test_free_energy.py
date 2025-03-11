@@ -1,3 +1,4 @@
+import time
 from copy import deepcopy
 from dataclasses import replace
 from functools import partial
@@ -31,10 +32,13 @@ from timemachine.fe.free_energy import (
     batches,
     compute_potential_matrix,
     estimate_free_energy_bar,
+    get_context,
     get_water_sampler_params,
     make_pair_bar_plots,
     run_sims_bisection,
     sample,
+    sample_with_context_iter,
+    sample_with_context_iter_parallel,
     trajectories_by_replica_to_by_state,
     verify_and_sanitize_potential_matrix,
 )
@@ -297,6 +301,57 @@ def test_sample_max_buffer_frames_with_local_md(
     traj = sample(solvent_hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames)
     assert isinstance(traj.frames, StoredArrays)
     assert len(traj.frames) == n_frames
+
+
+@pytest.mark.parametrize("local_steps", [0, 100])
+@pytest.mark.parametrize("num_threads", [2, 4])
+def test_sample_with_context_iter_parallel(
+    solvent_hif2a_ligand_pair_single_topology_lam0_state, local_steps, num_threads
+):
+    n_frames = 1
+    steps_per_frame = 400
+    n_eq_steps = 0
+    seed = 2025
+    md_params = MDParams(n_frames, n_eq_steps, steps_per_frame, seed, local_steps=local_steps)
+
+    # Construct a new context, computing values in parallel should be identical
+    ref_context = get_context(solvent_hif2a_ligand_pair_single_topology_lam0_state, md_params)
+    ref_start = time.perf_counter()
+    ref_result = next(
+        sample_with_context_iter(
+            ref_context,
+            md_params,
+            solvent_hif2a_ligand_pair_single_topology_lam0_state.integrator.temperature,
+            solvent_hif2a_ligand_pair_single_topology_lam0_state.ligand_idxs,
+            1,
+            1,
+        )
+    )
+    ref_time = time.perf_counter() - ref_start
+
+    ctxts = [get_context(solvent_hif2a_ligand_pair_single_topology_lam0_state, md_params) for _ in range(num_threads)]
+
+    comp_start = time.perf_counter()
+    results = list(
+        sample_with_context_iter_parallel(
+            ctxts,
+            md_params,
+            solvent_hif2a_ligand_pair_single_topology_lam0_state.integrator.temperature,
+            solvent_hif2a_ligand_pair_single_topology_lam0_state.ligand_idxs,
+            1,
+            num_threads,
+        )
+    )
+    comp_time = time.perf_counter() - comp_start
+
+    print("Reference took", ref_time, "Comp took", comp_time / num_threads)
+    assert len(results) == num_threads
+
+    ref_coords, ref_box, ref_velos = ref_result
+    for coords, box, velos in results:
+        np.testing.assert_array_equal(ref_coords, coords)
+        np.testing.assert_array_equal(ref_box, box)
+        np.testing.assert_array_equal(ref_velos, velos)
 
 
 @pytest.mark.nocuda
