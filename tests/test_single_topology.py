@@ -1,5 +1,6 @@
 import functools
 import time
+from dataclasses import replace
 
 import hypothesis.strategies as st
 import jax
@@ -966,6 +967,35 @@ def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
     )
     np.testing.assert_array_equal(ref_du_dx, split_du_dx)
     np.testing.assert_equal(ref_u, split_u)
+
+
+@pytest.mark.nocuda
+def test_combine_with_host_no_torsions_in_host():
+    ff = Forcefield.load_default()
+
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf_mols_by_name(path_to_ligand)
+    mol_a = mols["338"]
+    mol_b = mols["43"]
+    core = _get_core_by_mcs(mol_a, mol_b)
+
+    lamb = 1.0
+
+    st = SingleTopology(mol_a, mol_b, core, ff)
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        host_config = build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b])
+        # Apply empty torsions in the host
+        host_system = replace(
+            host_config.host_system,
+            improper=potentials.BoundPotential(
+                potentials.PeriodicTorsion(np.zeros((0, 2), dtype=np.int32)), np.zeros((0, 2))
+            ),
+            proper=potentials.BoundPotential(
+                potentials.PeriodicTorsion(np.zeros((0, 2), dtype=np.int32)), np.zeros((0, 2))
+            ),
+        )
+        combined = st.combine_with_host(host_system, lamb, host_config.num_water_atoms, ff, host_config.omm_topology)
+        assert combined is not None
 
 
 @pytest.mark.parametrize(

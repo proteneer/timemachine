@@ -1949,42 +1949,56 @@ class SingleTopology(AtomMapMixin):
         guest_system.chiral_atom.potential.idxs = guest_chiral_atom_idxs
         guest_chiral_bond_idxs = np.array(guest_system.chiral_bond.potential.idxs, dtype=np.int32) + num_host_atoms
         guest_system.chiral_bond.potential.idxs = guest_chiral_bond_idxs
+
+        def prune_empty_arrays(arrays):
+            return [arr for arr in arrays if arr.size > 0]
+
         guest_nonbonded_idxs = (
             np.array(guest_system.nonbonded_pair_list.potential.idxs, dtype=np.int32) + num_host_atoms
         )
         guest_system.nonbonded_pair_list.potential.idxs = guest_nonbonded_idxs
 
         combined_bond_idxs = np.concatenate(
-            [host_system.bond.potential.idxs, guest_system.bond.potential.idxs + num_host_atoms]
+            prune_empty_arrays([host_system.bond.potential.idxs, guest_system.bond.potential.idxs + num_host_atoms])
         )
-        combined_bond_params = jnp.concatenate([host_system.bond.params, guest_system.bond.params])
+        combined_bond_params = jnp.concatenate(prune_empty_arrays([host_system.bond.params, guest_system.bond.params]))
         combined_bond = HarmonicBond(combined_bond_idxs).bind(combined_bond_params)
 
         combined_angle_idxs = np.concatenate(
             [host_system.angle.potential.idxs, guest_system.angle.potential.idxs + num_host_atoms]
         )
         host_angle_params = jnp.hstack(
-            [
-                host_system.angle.params,
-                np.zeros((host_system.angle.params.shape[0], 1)),  # stable angle epsilon = 0
-            ]
+            prune_empty_arrays(
+                [
+                    host_system.angle.params,
+                    np.zeros((host_system.angle.params.shape[0], 1)),  # stable angle epsilon = 0
+                ]
+            )
         )
-        combined_angle_params = jnp.concatenate([host_angle_params, guest_system.angle.params])
+        combined_angle_params = jnp.concatenate(prune_empty_arrays([host_angle_params, guest_system.angle.params]))
         combined_angle = HarmonicAngleStable(combined_angle_idxs).bind(combined_angle_params)
 
         # print(host_system.proper.potential.idxs.shape, guest_system.proper.potential.idxs.shape)
         combined_proper_idxs = np.concatenate(
-            [host_system.proper.potential.idxs, guest_system.proper.potential.idxs + num_host_atoms]
+            prune_empty_arrays(
+                [host_system.proper.potential.idxs, guest_system.proper.potential.idxs + num_host_atoms]
+            ),
         )
 
         # print(host_system.proper.params.shape, guest_system.proper.params.shape)
-        combined_proper_params = jnp.concatenate([host_system.proper.params, guest_system.proper.params])
+        combined_proper_params = jnp.concatenate(
+            prune_empty_arrays([host_system.proper.params, guest_system.proper.params])
+        )
         combined_proper = PeriodicTorsion(combined_proper_idxs).bind(combined_proper_params)
 
         combined_improper_idxs = np.concatenate(
-            [host_system.improper.potential.idxs, guest_system.improper.potential.idxs + num_host_atoms]
+            prune_empty_arrays(
+                [host_system.improper.potential.idxs, guest_system.improper.potential.idxs + num_host_atoms]
+            )
         )
-        combined_improper_params = jnp.concatenate([host_system.improper.params, guest_system.improper.params])
+        combined_improper_params = jnp.concatenate(
+            prune_empty_arrays([host_system.improper.params, guest_system.improper.params])
+        )
         combined_improper = PeriodicTorsion(combined_improper_idxs).bind(combined_improper_params)
 
         host_nonbonded_all_pairs = self._parameterize_host_nonbonded(host_system.nonbonded_all_pairs)
