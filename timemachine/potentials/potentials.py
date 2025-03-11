@@ -30,6 +30,22 @@ class HarmonicAngle(Potential):
         return bonded.harmonic_angle(conf, params, box, self.idxs)
 
 
+import warnings
+
+
+class HarmonicAngleStable(HarmonicAngle):
+    def __init__(self, *args, **kwargs):
+        warnings.warn("HarmonicAngleStable is deprecated and will be removed in a future release.", DeprecationWarning)
+        super().__init__(*args, **kwargs)
+
+    def __setstate__(self, state):
+        warnings.warn("HarmonicAngleStable is deprecated and will be removed in a future release.", DeprecationWarning)
+        self.__dict__ = state  # ugly
+
+    def __getstate__(self):
+        raise NotImplementedError("HarmonicAngleStable is deprecated. Serialization is disabled.")
+
+
 @dataclass
 class CentroidRestraint(Potential):
     group_a_idxs: NDArray[np.int32]

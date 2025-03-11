@@ -6,6 +6,7 @@ from .potentials import (
     FanoutSummedPotential,
     FlatBottomBond,
     HarmonicAngle,
+    HarmonicAngleStable,  # deprecated
     HarmonicBond,
     LogFlatBottomBond,
     Nonbonded,
@@ -29,6 +30,7 @@ __all__ = [
     "FlatBottomBond",
     "GpuImplWrapper",
     "HarmonicAngle",
+    "HarmonicAngleStable",
     "HarmonicBond",
     "LogFlatBottomBond",
     "Nonbonded",

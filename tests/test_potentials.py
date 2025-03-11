@@ -1,4 +1,7 @@
 import itertools
+import pickle
+import tempfile
+from pathlib import Path
 
 import jax
 import numpy as np
@@ -6,7 +9,13 @@ import pytest
 from common import GradientTest
 
 from timemachine.lib import custom_ops
-from timemachine.potentials import BoundPotential, FanoutSummedPotential, HarmonicBond, SummedPotential
+from timemachine.potentials import (
+    BoundPotential,
+    FanoutSummedPotential,
+    HarmonicAngleStable,
+    HarmonicBond,
+    SummedPotential,
+)
 
 pytestmark = [pytest.mark.memcheck]
 
@@ -639,3 +648,22 @@ def test_execute_batch_sparse(
             np.testing.assert_array_equal(u, ref_u)
         else:
             assert u is None
+
+
+def test_pickle_deprecated_harmonic_angle_stable():
+    # Test deprecation behavior of the old HarmonicAngleStable class.
+    # 1) This class is no longer serializable, users should convert instances to the HarmonicAngle class instead.
+    # 2) Unpickling will raise a DeprecationWarning
+    # 3) Initialization will raise a DeprecationWarning
+    with open(Path(__file__).parent / "data" / "old_harmonic_angle_stable.pkl", "rb") as ifs:
+        with pytest.warns(DeprecationWarning):
+            initial_state, _ = pickle.load(ifs)
+            assert isinstance(initial_state.potentials[1].potential, HarmonicAngleStable)
+
+    idxs = np.array([[0, 1, 2]], dtype=np.int32)
+
+    with pytest.warns(DeprecationWarning):
+        potential = HarmonicAngleStable(idxs)
+        with tempfile.NamedTemporaryFile() as tmp_file:
+            with pytest.raises(NotImplementedError):
+                pickle.dump(potential, tmp_file)
