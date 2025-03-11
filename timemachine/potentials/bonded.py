@@ -82,6 +82,9 @@ def harmonic_bond(conf, params, box, bond_idxs):
 def kahan_angle(ci, cj, ck, eps):
     """
     Compute the angle given three points, i,j,k, as defined by the vector j->i, j->k
+
+    Note: eps is a small value used to stabilize computation when either r_ji or r_jk goes to zero.
+    See: https://github.com/proteneer/timemachine/pull/935
     """
     rji = jnp.hstack([ci - cj, jnp.expand_dims(eps, axis=-1)])
     rjk = jnp.hstack([ck - cj, jnp.expand_dims(eps, axis=-1)])
