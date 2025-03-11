@@ -1954,7 +1954,7 @@ class SingleTopology(AtomMapMixin):
             """Can only concatenate arrays that are greater than zero or the same size (all zero size). This
             function either removes the empty arrays, or returns all of the empty arrays"""
             sizes = np.array([arr.size for arr in arrays])
-            if all(sizes > 0) or all(sizes == 0):
+            if np.all(sizes > 0) or np.all(sizes == 0):
                 return arrays
             return [arr for arr in arrays if arr.size > 0]
 
