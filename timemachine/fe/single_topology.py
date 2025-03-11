@@ -1044,14 +1044,14 @@ def assert_torsions_defined_over_non_linear_angles(system: GuestSystem | HostGue
     """
     Assert that torsions are never defined over angle terms with an equilibrium value close to 180.
     """
-    linear_angles = set()
+    linear_angles: set[tuple] = set()
 
     for (i, j, k), angle_params in zip(system.angle.potential.idxs, system.angle.params):
         angle_k, angle_a0 = angle_params[0], angle_params[1]
 
         if angle_k > 0:
             if abs(angle_a0 - np.pi) < 0.174533:  # 10 degrees, arbitrary but conservative threshold
-                linear_angles.add(tuple((i, j, k)))
+                linear_angles.add((i, j, k))
 
     for (i, j, k, l), (proper_k, _, _) in zip(system.proper.potential.idxs, system.proper.params):
         if proper_k > 0:
