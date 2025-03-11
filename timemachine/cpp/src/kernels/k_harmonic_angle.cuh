@@ -59,8 +59,8 @@ void __global__ k_harmonic_angle(
 
     // second pass, compute the hi/lo values
     for (int d = 0; d < 4; d++) {
-        RealType vji = rji[d]; // coords[i_idx * 4 + d] - coords[j_idx * 4 + d];
-        RealType vjk = rjk[d]; // coords[k_idx * 4 + d] - coords[j_idx * 4 + d];
+        RealType vji = rji[d];
+        RealType vjk = rjk[d];
         // rsub/radds are used to maintain bitwise reversibility wrt i and k
         RealType a = rsub_rn(njk * vji, nji * vjk);
         RealType b = radd_rn(njk * vji, nji * vjk);
