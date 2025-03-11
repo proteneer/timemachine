@@ -33,7 +33,7 @@ from timemachine.ff import Forcefield, ForcefieldParams
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.lib.custom_ops import Context
 from timemachine.md.barostat.utils import compute_box_center, get_bond_list, get_group_indices
-from timemachine.md.exchange.exchange_mover import get_water_idxs
+from timemachine.md.exchange.exchange_mover import WaterSamplingDiagnostics, get_water_idxs
 from timemachine.md.hrex import HREX, HREXDiagnostics, ReplicaIdx, StateIdx, get_swap_attempts_per_iter_heuristic
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import (
@@ -307,6 +307,7 @@ class SimulationResult:
 class HREXSimulationResult(SimulationResult):
     hrex_diagnostics: HREXDiagnostics
     hrex_plots: HREXPlots
+    water_sampling_diagnostics: WaterSamplingDiagnostics | None = None
 
     def extract_trajectories_by_replica(self, atom_idxs: NDArray) -> NDArray:
         """Returns an array of shape (n_replicas, n_frames, len(atom_idxs), 3) of trajectories for each replica
@@ -1373,7 +1374,7 @@ def run_sims_hrex(
     md_params: MDParams,
     n_swap_attempts_per_iter: Optional[int] = None,
     print_diagnostics_interval: Optional[int] = 10,
-) -> tuple[PairBarResult, list[Trajectory], HREXDiagnostics]:
+) -> tuple[PairBarResult, list[Trajectory], HREXDiagnostics, WaterSamplingDiagnostics | None]:
     r"""Sample from a sequence of states using nearest-neighbor Hamiltonian Replica EXchange (HREX).
 
     See documentation for :py:func:`timemachine.md.hrex.run_hrex` for details of the algorithm and implementation.
@@ -1449,6 +1450,7 @@ def run_sims_hrex(
 
     samples_by_state: list[Trajectory] = [Trajectory.empty() for _ in initial_states]
     replica_idx_by_state_by_iter: list[list[ReplicaIdx]] = []
+    water_sampler_proposals: list[list[tuple[int, int]]] = []
     fraction_accepted_by_pair_by_iter: list[list[tuple[int, int]]] = []
 
     if (
@@ -1461,6 +1463,7 @@ def run_sims_hrex(
     last_update_time = begin_loop_time
 
     for current_frame in range(md_params.n_frames):
+        per_state_water_sampling = [(0, 0) for _ in range(len(initial_states))]
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> tuple[NDArray, NDArray, NDArray, Optional[float]]:
             context.set_x_t(xvb.coords)
@@ -1472,10 +1475,14 @@ def run_sims_hrex(
 
             current_step = current_frame * md_params.steps_per_frame
             # Setup the MC movers of the Context
+            starting_water_acceptances = 0
+            starting_water_proposals = 0
             for mover in context.get_movers():
                 if md_params.water_sampling_params is not None and isinstance(mover, WATER_SAMPLER_MOVERS):
                     assert water_params_by_state is not None
                     mover.set_params(water_params_by_state[state_idx])
+                    starting_water_proposals = mover.n_proposed()
+                    starting_water_acceptances = mover.n_accepted()
                 # Set the step so that all windows have the movers be called the same number of times.
                 mover.set_step(current_step)
 
@@ -1494,6 +1501,13 @@ def run_sims_hrex(
             )
             assert frame.shape[0] == 1
 
+            if md_params.water_sampling_params is not None:
+                for mover in context.get_movers():
+                    if isinstance(mover, WATER_SAMPLER_MOVERS):
+                        final_water_proposals = mover.n_proposed() - starting_water_proposals
+                        final_water_acceptances = mover.n_accepted() - starting_water_acceptances
+                        per_state_water_sampling[state_idx] = final_water_acceptances, final_water_proposals
+
             final_barostat_volume_scale_factor = barostat.get_volume_scale_factor() if barostat is not None else None
 
             return frame[-1], box[-1], final_velos, final_barostat_volume_scale_factor
@@ -1503,6 +1517,7 @@ def run_sims_hrex(
             return CoordsVelBox(frame, velos, box)
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
+        water_sampler_proposals.append(per_state_water_sampling)
         U_kl_raw = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
         U_kl = verify_and_sanitize_potential_matrix(U_kl_raw, hrex.replica_idx_by_state)
         log_q_kl = -U_kl / (BOLTZ * temperature)
@@ -1577,6 +1592,11 @@ def run_sims_hrex(
         estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in neighbor_ulkns_by_component
     ]
 
-    diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
+    hrex_diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
+    ws_diagnostics: WaterSamplingDiagnostics | None = None
+    if md_params.water_sampling_params is not None:
+        ws_diagnostics = WaterSamplingDiagnostics(
+            np.array(water_sampler_proposals, dtype=np.int32), replica_idx_by_state_by_iter=replica_idx_by_state_by_iter
+        )
 
-    return PairBarResult(list(initial_states), pair_bar_results), samples_by_state, diagnostics
+    return PairBarResult(list(initial_states), pair_bar_results), samples_by_state, hrex_diagnostics, ws_diagnostics

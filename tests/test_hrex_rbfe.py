@@ -179,6 +179,25 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed, max_bisection_windows,
     assert isinstance(result.hrex_diagnostics.relaxation_time, float)
     assert result.hrex_diagnostics.normalized_kl_divergence >= 0.0
 
+    if host_name == "complex" and md_params.water_sampling_params is not None:
+        assert result.water_sampling_diagnostics.proposals_by_state_by_iter.shape == (
+            md_params.n_frames,
+            final_windows,
+            2,
+        )
+        proposals_per_frame = (
+            md_params.steps_per_frame // md_params.water_sampling_params.interval
+        ) * md_params.water_sampling_params.n_proposals
+        assert np.all(result.water_sampling_diagnostics.proposals_by_state_by_iter[:, :, 1] == proposals_per_frame)
+        assert np.all(result.water_sampling_diagnostics.proposals_by_state_by_iter[:, :, 0] >= 0)
+        assert result.water_sampling_diagnostics.cumulative_proposals_by_state.shape == (final_windows, 2)
+        assert result.water_sampling_diagnostics.proposals_by_replica_by_iter.shape == (
+            md_params.n_frames,
+            final_windows,
+            2,
+        )
+    else:
+        assert result.water_sampling_diagnostics is None
     assert len(result.hrex_diagnostics.replica_idx_by_state_by_iter) == md_params.n_frames
     assert all(
         len(replica_idx_by_state) == final_windows

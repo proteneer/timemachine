@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Optional
 
 import jax
@@ -9,6 +10,7 @@ from scipy.stats import special_ortho_group
 
 from timemachine.constants import BOLTZ
 from timemachine.md import moves
+from timemachine.md.hrex import ReplicaIdx
 from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import nonbonded
 
@@ -49,6 +51,28 @@ def translate_coordinates(coords, new_loc):
     centroid = np.mean(coords, axis=0, keepdims=True)
     centered_coords = coords - centroid
     return centered_coords + new_loc
+
+
+@dataclass(frozen=True)
+class WaterSamplingDiagnostics:
+    proposals_by_state_by_iter: NDArray
+    replica_idx_by_state_by_iter: list[list[ReplicaIdx]] | None = None
+
+    @property
+    def proposals_by_replica_by_iter(self) -> NDArray[np.int32]:
+        if self.replica_idx_by_state_by_iter is None:
+            raise ValueError("Diagnostics didn't come from HREX, can't convert to proposals by replica")
+        # (replicas, iteration, 2)
+        water_sampling_proposals_by_replica_by_iter = []
+        for replica_idx_by_state, proposals_iter in zip(
+            self.replica_idx_by_state_by_iter, self.proposals_by_state_by_iter
+        ):
+            water_sampling_proposals_by_replica_by_iter.append(proposals_iter[replica_idx_by_state])
+        return np.array(water_sampling_proposals_by_replica_by_iter, dtype=np.int32)
+
+    @property
+    def cumulative_proposals_by_state(self) -> NDArray[np.int32]:
+        return np.sum(self.proposals_by_state_by_iter, axis=0)
 
 
 class BDExchangeMove(moves.MonteCarloMove):

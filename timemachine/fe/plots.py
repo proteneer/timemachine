@@ -711,3 +711,14 @@ def plot_dummy_a_interpolation_schedule(st, n_windows=48):
 
 def plot_dummy_b_interpolation_schedule(st, n_windows=48):
     plot_interpolation_schedule(st, st.any_idxs_belong_to_dummy_b, "Dummy Group B Interpolation Schedule", n_windows)
+
+
+def plot_water_proposals_by_state(lambdas: Sequence[float], proposals_by_state: NDArray[np.int32], prefix: str = ""):
+    assert proposals_by_state.shape == (len(lambdas), 2)
+    # Determine total number of proposals
+    proposals_per_state = proposals_by_state[0][1]
+    plt.title(f"{prefix} Water Sampling Proposals\n{proposals_per_state} Total Proposals Per State")
+    plt.plot(lambdas, proposals_by_state[:, 0], marker="x")
+    plt.xlabel(r"$\lambda$")
+    plt.ylabel("Acceptances")
+    plt.tight_layout()
