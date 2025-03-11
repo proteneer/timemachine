@@ -37,7 +37,7 @@ def get_bond_list(harmonic_bond_potential: HarmonicBond) -> list[tuple[int, int]
     return bond_list
 
 
-def get_group_indices(bond_list: list[tuple[int, int]], num_atoms: int) -> list[NDArray]:
+def get_group_indices(bond_list: list[tuple[int, int]], num_atoms: int) -> list[NDArray[np.int32]]:
     """Connected components of bond graph"""
 
     topology = nx.Graph(bond_list)

@@ -553,6 +553,7 @@ def test_get_group_indices():
 
     bond_idxs = [[1, 0], [1, 2], [5, 6]]
     test_idxs = get_group_indices(bond_idxs, num_atoms=7)
+    assert all(group.dtype == np.int32 for group in test_idxs)
 
     ref_idxs = [(0, 1, 2), (5, 6), (3,), (4,)]
     assert_group_idxs_are_equal(ref_idxs, test_idxs)
@@ -562,11 +563,13 @@ def test_get_group_indices():
     assert_group_idxs_are_equal(ref_idxs, test_idxs)
 
     test_idxs = get_group_indices([], num_atoms=0)
+    assert all(group.dtype == np.int32 for group in test_idxs)
     ref_idxs = []
     assert_group_idxs_are_equal(ref_idxs, test_idxs)
 
     # slightly larger connected group
     test_idxs = get_group_indices([[0, 1], [1, 3], [3, 2]], num_atoms=5)
+    assert all(group.dtype == np.int32 for group in test_idxs)
     ref_idxs = [(0, 1, 2, 3), (4,)]
     assert_group_idxs_are_equal(ref_idxs, test_idxs)
 
