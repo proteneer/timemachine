@@ -23,7 +23,7 @@ def generate_system(n_particles, n_angles, seed):
 @pytest.mark.parametrize("n_angles", [25])
 @pytest.mark.parametrize("precision,rtol", [(np.float32, 2e-5), (np.float64, 1e-9)])
 @pytest.mark.parametrize("seed", [2022])
-def test_harmonic_angle_stable(n_particles, n_angles, precision, rtol, seed):
+def test_harmonic_angle(n_particles, n_angles, precision, rtol, seed):
     """Validate HarmonicAngle reference on random triples of particles"""
 
     box = np.eye(3) * 100  # note: ignored
@@ -38,7 +38,7 @@ def test_harmonic_angle_stable(n_particles, n_angles, precision, rtol, seed):
 @pytest.mark.parametrize("n_angles", [25])
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
 @pytest.mark.parametrize("seed", [2022])
-def test_harmonic_angle_stable_bitwise_symmetric(n_particles, n_angles, precision, seed):
+def test_harmonic_angle_bitwise_symmetric(n_particles, n_angles, precision, seed):
     "Test bitwise equality when angles are transformed like (i, j, k) -> (k, j, i)"
 
     angle_idxs, coords, params = generate_system(n_particles, n_angles, seed)
@@ -80,7 +80,7 @@ def test_harmonic_angle_finite_force_with_vanishing_bond_length(potential, param
 
 
 @pytest.mark.nocuda
-def test_harmonic_angle_stable_jax():
+def test_harmonic_angle_jax():
     "Check that forces do not blow up when a bond has length close to zero"
 
     angle_idxs = np.array([(0, 1, 2)])
