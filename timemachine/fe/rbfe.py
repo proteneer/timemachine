@@ -906,6 +906,7 @@ def estimate_relative_free_energy_bisection_hrex_impl(
         pair_bar_result, trajectories_by_state, diagnostics = run_sims_hrex(
             initial_states_hrex,
             replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
+            n_threads=2 if initial_states[0].barostat is not None else 4,
         )
 
         plots = make_pair_bar_plots(pair_bar_result, temperature, combined_prefix)
