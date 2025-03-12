@@ -80,7 +80,7 @@ $$$$""",
     xs, _ = ctxt.multiple_steps(n_steps=100_000, store_x_interval=1000)
     angles = []
     for x in xs:
-        angles.append(kahan_angle(x[0], x[1], x[2]))
+        angles.append(kahan_angle(x[0], x[1], x[2], 0.0))
 
     assert np.mean(angles) > 3.0
     assert np.amax(np.abs(xs)) < 15.0  # no coordinates blew-up

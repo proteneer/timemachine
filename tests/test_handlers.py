@@ -263,14 +263,14 @@ def test_harmonic_angle():
     mol = Chem.AddHs(Chem.MolFromSmiles("O"))
     angle_params, angle_idxs = hah.parameterize(mol)
     assert angle_idxs.shape == (1, 3)
-    assert angle_params.shape == (1, 2)
+    assert angle_params.shape == (1, 3)
 
     # Check molecule with no angles
     hah = bonded.HarmonicAngleHandler(smirks, params, props)
     mol = Chem.MolFromSmiles("O=O")
     angle_params, angle_idxs = hah.parameterize(mol)
     assert angle_idxs.shape == (0, 3)
-    assert angle_params.shape == (0, 2)
+    assert angle_params.shape == (0, 3)
 
 
 def test_proper_torsion():

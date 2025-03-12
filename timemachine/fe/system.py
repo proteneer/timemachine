@@ -1,7 +1,6 @@
 import multiprocessing
 from abc import ABC
 from dataclasses import dataclass, fields
-from typing import Generic, TypeVar, Union
 
 import jax
 import numpy as np
@@ -13,7 +12,6 @@ from timemachine.potentials import (
     ChiralAtomRestraint,
     ChiralBondRestraint,
     HarmonicAngle,
-    HarmonicAngleStable,
     HarmonicBond,
     Nonbonded,
     NonbondedInteractionGroup,
@@ -83,9 +81,6 @@ def simulate_system(U_fn, x0, num_samples=20000, steps_per_batch=500, num_worker
     return frames
 
 
-_HarmonicAngle = TypeVar("_HarmonicAngle", bound=Union[HarmonicAngle, HarmonicAngleStable])
-
-
 @dataclass
 class AbstractSystem(ABC):
     def get_U_fn(self):
@@ -112,21 +107,21 @@ class AbstractSystem(ABC):
         return potentials
 
 
-@dataclass  # mcwitt: Generic can be removed in python 3.12
-class HostSystem(Generic[_HarmonicAngle], AbstractSystem):
+@dataclass
+class HostSystem(AbstractSystem):
     # utility system container
     bond: BoundPotential[HarmonicBond]
-    angle: BoundPotential[_HarmonicAngle]
+    angle: BoundPotential[HarmonicAngle]
     proper: BoundPotential[PeriodicTorsion]
     improper: BoundPotential[PeriodicTorsion]
     nonbonded_all_pairs: BoundPotential[Nonbonded]
 
 
-@dataclass  # mcwitt: Generic can be removed in python 3.12
-class GuestSystem(Generic[_HarmonicAngle], AbstractSystem):
+@dataclass
+class GuestSystem(AbstractSystem):
     # utility system container
     bond: BoundPotential[HarmonicBond]
-    angle: BoundPotential[_HarmonicAngle]
+    angle: BoundPotential[HarmonicAngle]
     proper: BoundPotential[PeriodicTorsion]
     improper: BoundPotential[PeriodicTorsion]
     chiral_atom: BoundPotential[ChiralAtomRestraint]
@@ -134,11 +129,11 @@ class GuestSystem(Generic[_HarmonicAngle], AbstractSystem):
     nonbonded_pair_list: BoundPotential[NonbondedPairListPrecomputed]
 
 
-@dataclass  # mcwitt: Generic can be removed in python 3.12
-class HostGuestSystem(Generic[_HarmonicAngle], AbstractSystem):
+@dataclass
+class HostGuestSystem(AbstractSystem):
     # utility system container
     bond: BoundPotential[HarmonicBond]
-    angle: BoundPotential[_HarmonicAngle]
+    angle: BoundPotential[HarmonicAngle]
     proper: BoundPotential[PeriodicTorsion]
     improper: BoundPotential[PeriodicTorsion]
     chiral_atom: BoundPotential[ChiralAtomRestraint]

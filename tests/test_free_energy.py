@@ -398,7 +398,7 @@ def test_plot_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
     assert mock_fig.call_args is not None
     expected_potentials = {
         "HarmonicBond",
-        "HarmonicAngleStable",
+        "HarmonicAngle",
         "PeriodicTorsion",
         "NonbondedPairListPrecomputed",
         "ChiralAtomRestraint",

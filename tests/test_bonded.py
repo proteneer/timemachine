@@ -269,14 +269,15 @@ class TestBonded(GradientTest):
         for _ in range(25):
             x = self.get_random_coords(n_particles, dim)
             atom_idxs = np.arange(n_particles)
-            params = np.random.rand(n_angles, 2).astype(np.float64)
+            params = np.random.rand(n_angles, 3).astype(np.float64)
+            params[:, -1] = 0
             angle_idxs = []
             for _ in range(n_angles):
                 angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
             angle_idxs = np.array(angle_idxs, dtype=np.int32) if n_angles else np.zeros((0, 3), dtype=np.int32)
             box = np.eye(3) * 100
             test_u = harmonic_angle(x, params, box, angle_idxs)
-            ref_u = original_harmonic_angle(x, params, box, angle_idxs)
+            ref_u = original_harmonic_angle(x, params[:, :2], box, angle_idxs)
             np.testing.assert_almost_equal(test_u, ref_u)
 
     def test_harmonic_angle(self, n_particles=64, n_angles=25, dim=3):
@@ -286,7 +287,8 @@ class TestBonded(GradientTest):
         x = self.get_random_coords(n_particles, dim)
 
         atom_idxs = np.arange(n_particles)
-        params = np.random.rand(n_angles, 2).astype(np.float64)
+        params = np.random.rand(n_angles, 3).astype(np.float64)
+        params[:, 2] = 0  # zero out epsilons
         angle_idxs = []
         for _ in range(n_angles):
             angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))

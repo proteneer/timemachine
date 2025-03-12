@@ -106,6 +106,10 @@ class HarmonicAngleHandler(ReversibleBondHandler):
         if len(mol_params) == 0:
             mol_params = params[:0]  # empty slice with same dtype, other dimensions
             angle_idxs = np.zeros((0, 3), dtype=np.int32)
+
+        # append with zeros for epsilons
+        mol_params = np.c_[mol_params, np.zeros(len(mol_params))]
+
         return mol_params, angle_idxs
 
 

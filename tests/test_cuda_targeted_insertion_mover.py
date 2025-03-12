@@ -1035,6 +1035,7 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
 
 @pytest.mark.memcheck
 def test_targeted_insertion_invalid_sample_bug():
+    # Tests a rare out-of-boundary access encountered during the rewind logic of the batched TIBD mover.
     with open(Path(__file__).parent / "data" / "water_sampling_bug.pkl", "rb") as ifs:
         state, md_params = pickle.load(ifs)
 
