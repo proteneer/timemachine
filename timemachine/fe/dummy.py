@@ -17,7 +17,7 @@ class ZeroBondAnchorWarning(UserWarning):
 
 def generate_dummy_group_assignments(
     bond_graph: nx.Graph, core_atoms: Collection[int], assert_single_connected_component: bool = True
-) -> Iterator[dict[int, frozenset[int]]]:
+) -> Iterator[dict[Optional[int], frozenset[int]]]:
     """Returns an iterator over all possible dummy group assignments (i.e., candidate partitionings of dummy atoms with each
     partition assigned a bond anchor atom) for a given molecule (represented as a bond graph) and set of core atoms.
 
@@ -102,12 +102,12 @@ def generate_dummy_group_assignments(
 
 
 def generate_anchored_dummy_group_assignments(
-    dummy_groups: dict[int, frozenset[int]],
+    dummy_groups: dict[Optional[int], frozenset[int]],
     bond_graph_a: nx.Graph,
     bond_graph_b: nx.Graph,
     core_atoms_a: Sequence[int],
     core_atoms_b: Sequence[int],
-) -> Iterator[dict[int, tuple[Optional[int], frozenset[int]]]]:
+) -> Iterator[dict[Optional[int], tuple[Optional[int], frozenset[int]]]]:
     """Returns an iterator over candidate anchored dummy group assignments.
 
     By convention, dummy atoms are added to A to transform it into a supergraph of B. Indices in the dummy_groups
@@ -134,7 +134,7 @@ def generate_anchored_dummy_group_assignments(
 
     Parameters
     ----------
-    dummy_groups: dict[int, frozenset[int]]
+    dummy_groups: dict[Optional[int], frozenset[int]]
         Mapping from anchor atom to atoms in the associated dummy group. Indices refer to atoms in B.
 
     bond_graph_a, bond_graph_b: nx.Graph
