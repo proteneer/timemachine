@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 
 from timemachine.lib import custom_ops
 
-from . import bonded, bonded_stable, chiral_restraints, jax_interface, nonbonded, summed
+from . import bonded, chiral_restraints, jax_interface, nonbonded, summed
 from .potential import BoundGpuImplWrapper, BoundPotential, GpuImplWrapper, Potential, Precision
 from .types import Box, Conf, Params
 
@@ -30,12 +30,20 @@ class HarmonicAngle(Potential):
         return bonded.harmonic_angle(conf, params, box, self.idxs)
 
 
-@dataclass
-class HarmonicAngleStable(Potential):
-    idxs: NDArray[np.int32]
+import warnings
 
-    def __call__(self, conf: Conf, params: Params, _: Optional[Box]) -> float | Array:
-        return bonded_stable.harmonic_angle_stable(conf, params, self.idxs)
+
+class HarmonicAngleStable(HarmonicAngle):
+    def __init__(self, *args, **kwargs):
+        warnings.warn("HarmonicAngleStable is deprecated and will be removed in a future release.", DeprecationWarning)
+        super().__init__(*args, **kwargs)
+
+    def __setstate__(self, state):
+        warnings.warn("HarmonicAngleStable is deprecated and will be removed in a future release.", DeprecationWarning)
+        self.__dict__ = state  # ugly
+
+    def __getstate__(self):
+        raise NotImplementedError("HarmonicAngleStable is deprecated. Serialization is disabled.")
 
 
 @dataclass

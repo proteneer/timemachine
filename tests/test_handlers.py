@@ -14,13 +14,13 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops
 
 from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, ONE_4PI_EPS0
-from timemachine.datasets import fetch_freesolv
 from timemachine.fe import topology, utils
 from timemachine.ff import Forcefield
 from timemachine.ff.charges import AM1CCC_CHARGES
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers import utils as h_utils
 from timemachine.md import builders
+from timemachine.testsystems import fetch_freesolv
 from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.nocuda]
@@ -263,14 +263,14 @@ def test_harmonic_angle():
     mol = Chem.AddHs(Chem.MolFromSmiles("O"))
     angle_params, angle_idxs = hah.parameterize(mol)
     assert angle_idxs.shape == (1, 3)
-    assert angle_params.shape == (1, 2)
+    assert angle_params.shape == (1, 3)
 
     # Check molecule with no angles
     hah = bonded.HarmonicAngleHandler(smirks, params, props)
     mol = Chem.MolFromSmiles("O=O")
     angle_params, angle_idxs = hah.parameterize(mol)
     assert angle_idxs.shape == (0, 3)
-    assert angle_params.shape == (0, 2)
+    assert angle_params.shape == (0, 3)
 
 
 def test_proper_torsion():
@@ -885,7 +885,7 @@ def test_charging_compounds_with_non_zero_charge():
 
 
 def test_precomputed_charge_handler():
-    with path_to_internal_file("timemachine.datasets.water_exchange", "bb_centered_espaloma.sdf") as path_to_ligand:
+    with path_to_internal_file("timemachine.testsystems.water_exchange", "bb_centered_espaloma.sdf") as path_to_ligand:
         mol = utils.read_sdf(path_to_ligand)[0]
 
     pch = nonbonded.PrecomputedChargeHandler([], [], None)

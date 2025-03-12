@@ -19,127 +19,32 @@ Array = NDArray
 IndexArray = Array
 LogWeights = Array
 First = bool
+Iteration = int
 
 BatchPropagator = Callable[[Samples, Lambda], Samples]
-BatchLogProb = Callable[[Samples, Lambda], LogWeights]
-BatchLogProbASMC = Callable[[Samples, Lambda, First], LogWeights]
+BatchLogProb = Callable[[Samples, Lambda, First], LogWeights]
+FindNextLambda = Callable[[Samples, Lambda, Iteration, LogWeights], tuple[Lambda, LogWeights]]
 
 Resampler = Callable[[LogWeights], tuple[IndexArray, LogWeights]]
 ResultDict = dict[str, Any]
 
 
-def sequential_monte_carlo(
-    samples: Samples,
-    lambdas: Array,
-    propagate: BatchPropagator,
-    log_prob: BatchLogProb,
-    resample: Resampler,
-) -> ResultDict:
-    """barebones implementation of Sequential Monte Carlo (SMC)
-
-    Parameters
-    ----------
-    samples: [N,] list
-    lambdas: [K,] array
-    propagate: function
-        [move(x, lam) for x in xs]
-        for example, move(x, lam) might mean "run 100 steps of all-atom MD targeting exp(-u(., lam)), initialized at x"
-    log_prob: function
-        [exp(-u(x, lam)) for x in xs]
-    resample: function
-        (optionally) perform resampling given an array of log weights
-
-    Returns
-    -------
-    trajs_dict
-        "sample_traj"
-            [K-1, N] list of snapshots
-        "incremental_log_weights_traj"
-            [K-1, N] array of incremental log weights
-        "ancestry_traj"
-            [K-1, N] array of ancestor idxs
-        "log_weights_traj"
-            [K, N] array of accumulated log weights
-
-    References
-    ----------
-    * Arnaud Doucet's annotated bibliography of SMC
-        https://www.stats.ox.ac.uk/~doucet/smc_resources.html
-    * [Dai, Heng, Jacob, Whiteley, 2020] An invitation to sequential Monte Carlo samplers
-        https://arxiv.org/abs/2007.11936
-
-    See Also
-    --------
-    * get_endstate_samples_from_smc_result
+class SMCMaxIterError(Exception):
     """
-    n = len(samples)
-    log_weights: NDArray[np.float64] = np.zeros(n, dtype=np.float64)
-
-    # store
-    sample_traj = [samples]
-    ancestry_traj = [np.arange(n)]
-    log_weights_traj = [np.array(log_weights)]
-    incremental_log_weights_traj = []  # note: redundant but convenient
-
-    def accumulate_results(samples, indices, log_weights, incremental_log_weights):
-        sample_traj.append(samples)
-        ancestry_traj.append(indices)
-        log_weights_traj.append(np.array(log_weights))
-        incremental_log_weights_traj.append(np.array(incremental_log_weights))
-
-    # Note: loop bounds [1:-1] intentional:
-    #   these steps are the only ones that contribute to the SMC result,
-    #   and some care is needed to extract endstate samples at t=0, t=T-1
-    #   See also
-    #   * discussion at https://github.com/proteneer/timemachine/pull/718#discussion_r854276326
-    #   * helper function get_endstate_samples_from_smc_result
-    for lam_initial, lam_target in zip(lambdas[:-2], lambdas[1:-1]):
-        # update log weights
-        incremental_log_weights = log_prob(sample_traj[-1], lam_target) - log_prob(sample_traj[-1], lam_initial)
-        log_weights += incremental_log_weights
-
-        # resample
-        indices, log_weights = resample(log_weights)
-        resampled = [sample_traj[-1][i] for i in indices]
-
-        # propagate
-        samples = propagate(resampled, lam_target)
-
-        # log
-        accumulate_results(samples, indices, log_weights, incremental_log_weights)
-
-    # final result: a collection of samples, with associated log weights
-    incremental_log_weights = log_prob(samples, lambdas[-1]) - log_prob(samples, lambdas[-2])
-    incremental_log_weights_traj.append(incremental_log_weights)
-    log_weights_traj.append(np.array(log_weights + incremental_log_weights))
-
-    # cast everything (except samples list) to arrays
-    trajs_dict = dict(
-        traj=sample_traj,
-        log_weights_traj=np.array(log_weights_traj),
-        ancestry_traj=np.array(ancestry_traj),
-        incremental_log_weights_traj=np.array(incremental_log_weights_traj),
-    )
-    return trajs_dict
-
-
-class ASMCMaxIterError(Exception):
-    """
-    Exception when ASMC exceeds the maximum number of iters.
+    Exception when SMC exceeds the maximum number of iters.
     """
 
     pass
 
 
-def adaptive_sequential_monte_carlo(
+def sequential_monte_carlo(
     samples: Samples,
     propagate: BatchPropagator,
-    log_prob: BatchLogProbASMC,
+    log_prob: BatchLogProb,
     resample: Resampler,
-    cess_target: float,
-    epsilon=1e-2,
+    find_next_lambda: FindNextLambda,
     store_intermediate_traj=True,
-    max_iterations=100,
+    max_num_lambdas=1000,
 ) -> ResultDict:
     """Implementation of Adaptive Sequential Monte Carlo (SMC).
        This will adaptively interpolate between lambda=0 and lambda=1,
@@ -153,10 +58,160 @@ def adaptive_sequential_monte_carlo(
         for example, move(x, lam) might mean "run 100 steps of all-atom MD targeting exp(-u(., lam)), initialized at x"
     log_prob: function
         [exp(-u(x, lam, first: bool)) for x in xs]
-        first is set to True for the first iteration of each binary search.
+        first is set to True for the start of each SMC iteration.
         This may be used to improve performance by caching prefactors.
     resample: function
         (optionally) perform resampling given an array of log weights
+    store_intermediate_traj:
+        Set to True (default) to store intermediate trajectories.
+        Can be set to False to reduce memory requirements.
+    max_num_lambdas:
+        Maximum number of lambdas to use. If exceeded, will throw an
+        `SMCMaxIterError` exception.
+
+    Returns
+    -------
+    trajs_dict
+        "traj"
+            [K-1, N] list of snapshots only if `store_intermediate_traj` = True.
+            [1, N] list of snapshots if `store_intermediate_traj` = False.
+        "incremental_log_weights_traj"
+            [K-1, N] array of incremental log weights
+        "ancestry_traj"
+            [K-1, N] array of ancestor idxs
+        "log_weights_traj"
+            [K, N] array of accumulated log weights
+        "lambdas_traj"
+            [K] array of adaptive lambdas
+
+    """
+    n = len(samples)
+
+    log_weights: LogWeights = np.zeros(n)
+    norm_log_weights: LogWeights = log_weights - logsumexp(log_weights)
+
+    # store
+    sample_traj = [samples]
+    ancestry_traj = [np.arange(n)]
+    log_weights_traj = [np.array(log_weights)]
+    incremental_log_weights_traj = []  # note: redundant but convenient
+    lambdas_traj = [0.0]
+
+    def accumulate_results(samples, indices, log_weights, incremental_log_weights, lam_target):
+        if store_intermediate_traj:
+            sample_traj.append(samples)
+        else:
+            # only store one intermediate set of samples to reduce memory usage
+            sample_traj[0] = samples
+        ancestry_traj.append(indices)
+        log_weights_traj.append(np.array(log_weights))
+        incremental_log_weights_traj.append(np.array(incremental_log_weights))
+        lambdas_traj.append(lam_target)
+
+    lam_initial: Lambda = 0.0
+    lam_target: Lambda = 1.0
+    current_iteration: Iteration = 0
+
+    for _ in range(max_num_lambdas):
+        lam_target, incremental_log_weights = find_next_lambda(
+            sample_traj[-1], lam_initial, current_iteration, norm_log_weights
+        )
+
+        # Stop when lam_target == 1.0
+        #   See
+        #   * discussion at https://github.com/proteneer/timemachine/pull/718#discussion_r854276326
+        #   * helper function get_endstate_samples_from_smc_result
+        if lam_target == 1.0:
+            break
+
+        # resample
+        indices, log_weights = resample(log_weights + incremental_log_weights)
+        norm_log_weights = log_weights - logsumexp(log_weights)
+        resampled = [sample_traj[-1][i] for i in indices]
+
+        # propagate
+        samples = propagate(resampled, lam_target)
+
+        # log
+        accumulate_results(samples, indices, log_weights, incremental_log_weights, lam_target)
+
+        # update target
+        lam_initial = lam_target
+        lam_target = 1.0
+        current_iteration += 1
+    else:
+        raise SMCMaxIterError(f"SMC exceeded maximum number of iterations {max_num_lambdas}.")
+
+    # final result: a collection of samples, with associated log weights
+    incremental_log_weights_traj.append(incremental_log_weights)
+    log_weights_traj.append(np.array(log_weights + incremental_log_weights))
+    lambdas_traj.append(lam_target)
+
+    # cast everything (except samples list) to arrays
+    trajs_dict = dict(
+        traj=sample_traj,
+        log_weights_traj=np.array(log_weights_traj),
+        ancestry_traj=np.array(ancestry_traj),
+        incremental_log_weights_traj=np.array(incremental_log_weights_traj),
+        lambdas_traj=np.array(lambdas_traj),
+    )
+
+    return trajs_dict
+
+
+def fixed_find_next_lambda(
+    samples: Samples,
+    current_lambda: float,
+    current_iteration: int,
+    norm_log_weights: Array,
+    log_prob: BatchLogProb,
+    lambdas: Array,
+) -> tuple[Lambda, LogWeights]:
+    """
+    Implementation of Sequential Monte Carlo (SMC) using a fixed lambda schedule.
+
+    References
+    ----------
+    * Arnaud Doucet's annotated bibliography of SMC
+        https://www.stats.ox.ac.uk/~doucet/smc_resources.html
+    * [Dai, Heng, Jacob, Whiteley, 2020] An invitation to sequential Monte Carlo samplers
+        https://arxiv.org/abs/2007.11936
+    """
+    assert lambdas[-1] == 1.0, "final lambda must be 1.0"
+    lam_target = lambdas[current_iteration + 1]
+    incremental_log_weights = log_prob(samples, lam_target, True) - log_prob(samples, current_lambda, True)
+    return lam_target, incremental_log_weights
+
+
+def adaptive_find_next_lambda(
+    samples: Samples,
+    current_lambda: float,
+    current_iteration: int,
+    norm_log_weights: Array,
+    log_prob: BatchLogProb,
+    cess_target: float = 0.2,
+    epsilon=1e-2,
+    max_iterations=100,
+    final_lambda=1.0,
+) -> tuple[Lambda, LogWeights]:
+    """
+    Implementation of Adaptive Sequential Monte Carlo (SMC).
+    This will adaptively interpolate between lambda=0 and lambda=1,
+    starting at lambda=0.
+
+    Parameters
+    ----------
+    samples: [N,] list
+    current_lambda: float
+        Current lambda value.
+    current_iteration: int
+        Current iteration value.
+    log_prob: function
+        [exp(-u(x, lam, first: bool)) for x in xs]
+        first is set to True for the first iteration of each binary search.
+        This may be used to improve performance by caching prefactors.
+    norm_log_weights: [N,]
+        Normalized log weights from the previous iteration.
     cess_target: float
         Target CESS (see `conditional_effective_sample_size`). Intermediate lambdas
         will be sampled keeping the CESS between successive windows at approximately
@@ -167,7 +222,7 @@ def adaptive_sequential_monte_carlo(
         Set to True (default) to store intermediate trajectories.
     max_iterations:
         Set to the maximum number of iterations. If exceeded, will throw an
-        `ASMCMaxIterError` exception.
+        `SMCMaxIterError` exception.
     Returns
     -------
     trajs_dict
@@ -195,91 +250,32 @@ def adaptive_sequential_monte_carlo(
     assert cess_target > 1, f"cess_target is too small: {cess_target} <= 1"
     assert cess_target < n, f"cess_target is too large: {cess_target} >= {n}"
 
-    log_weights = np.zeros(n)
-    norm_log_weights = log_weights - logsumexp(log_weights)
+    # binary search for lambda that gives cess ~= cess_target
+    cur_log_prob = log_prob(samples, current_lambda, True)
 
-    # store
-    sample_traj = [samples]
-    ancestry_traj = [np.arange(n)]
-    log_weights_traj = [np.array(log_weights)]
-    incremental_log_weights_traj = []  # note: redundant but convenient
-    lambdas_traj = [0.0]
+    # Used to pass incremental_log_weights out of the closure
+    incremental_log_weights_closure = [None]
 
-    def accumulate_results(samples, indices, log_weights, incremental_log_weights, lam_target):
-        if store_intermediate_traj:
-            sample_traj.append(samples)
-        else:
-            # only store one intermediate set of samples to reduce memory usage
-            sample_traj[0] = samples
-        ancestry_traj.append(indices)
-        log_weights_traj.append(np.array(log_weights))
-        incremental_log_weights_traj.append(np.array(incremental_log_weights))
-        lambdas_traj.append(lam_target)
+    def f_opt(lam: float) -> float:
+        incremental_log_weights_closure[0] = log_prob(samples, lam, False) - cur_log_prob
+        cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights_closure[0])
+        return cess - cess_target
 
-    lam_initial = 0.0
-    lam_target = 1.0  # adapted
+    lam_target: Lambda = final_lambda
+    try:
+        lam_target = root_scalar(f_opt, bracket=(current_lambda, lam_target), method="bisect", xtol=epsilon).root
+    except ValueError:
+        # no root, just run at the final lambda
+        lam_target = final_lambda
+        incremental_log_weights_closure[0] = log_prob(samples, final_lambda, False) - cur_log_prob
 
-    # Main ASMC loop
-    for _ in range(max_iterations):
-        # binary search for lambda that gives cess ~= cess_target
-        cur_log_prob = log_prob(sample_traj[-1], lam_initial, True)
+    assert incremental_log_weights_closure[0] is not None
+    incremental_log_weights: LogWeights = incremental_log_weights_closure[0]
 
-        # Used to pass incremental_log_weights out of the closure
-        incremental_log_weights_closure = [None]
+    if current_iteration == max_iterations:
+        raise SMCMaxIterError(f"SMC exceeded maximum number of iterations {max_iterations}.")
 
-        def f_opt(lam: float) -> float:
-            incremental_log_weights_closure[0] = log_prob(sample_traj[-1], lam, False) - cur_log_prob
-            cess = conditional_effective_sample_size(norm_log_weights, incremental_log_weights_closure[0])
-            return cess - cess_target
-
-        try:
-            lam_target = root_scalar(f_opt, bracket=(lam_initial, lam_target), method="bisect", xtol=epsilon).root
-        except ValueError:
-            # no root, just run at the final lambda
-            pass
-
-        incremental_log_weights = incremental_log_weights_closure[0]
-        assert incremental_log_weights is not None
-
-        # Stop when lam_target == 1.0
-        #   See
-        #   * discussion at https://github.com/proteneer/timemachine/pull/718#discussion_r854276326
-        #   * helper function get_endstate_samples_from_smc_result
-        if lam_target == 1.0:
-            break
-
-        # resample
-        indices, log_weights = resample(log_weights + incremental_log_weights)
-        norm_log_weights = log_weights - logsumexp(log_weights)
-        resampled = [sample_traj[-1][i] for i in indices]
-
-        # propagate
-        samples = propagate(resampled, lam_target)
-
-        # log
-        accumulate_results(samples, indices, log_weights, incremental_log_weights, lam_target)
-
-        # update target
-        lam_initial = lam_target
-        lam_target = 1.0
-    else:
-        raise ASMCMaxIterError(f"ASMC exceeded maximum number of iterations {max_iterations}.")
-
-    # final result: a collection of samples, with associated log weights
-    incremental_log_weights_traj.append(incremental_log_weights)
-    log_weights_traj.append(np.array(log_weights + incremental_log_weights))
-    lambdas_traj.append(lam_target)
-
-    # cast everything (except samples list) to arrays
-    trajs_dict = dict(
-        traj=sample_traj,
-        log_weights_traj=np.array(log_weights_traj),
-        ancestry_traj=np.array(ancestry_traj),
-        incremental_log_weights_traj=np.array(incremental_log_weights_traj),
-        lambdas_traj=np.array(lambdas_traj),
-    )
-
-    return trajs_dict
+    return lam_target, incremental_log_weights
 
 
 def identity_resample(log_weights):

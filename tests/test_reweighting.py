@@ -5,8 +5,7 @@ from jax import grad, jit, value_and_grad, vmap
 from jax import numpy as jnp
 
 from timemachine.constants import BOLTZ
-from timemachine.datasets import fetch_freesolv
-from timemachine.fe.bar import DG_KEY
+from timemachine.fe.bar import DEFAULT_SOLVER_PROTOCOL, DG_KEY
 from timemachine.fe.reweighting import (
     construct_endpoint_reweighting_estimator,
     construct_mixture_reweighting_estimator,
@@ -16,6 +15,7 @@ from timemachine.fe.reweighting import (
 from timemachine.ff import Forcefield
 from timemachine.md.enhanced import get_solvent_phase_system
 from timemachine.potentials import SummedPotential
+from timemachine.testsystems import fetch_freesolv
 from timemachine.testsystems.gaussian1d import make_gaussian_testsystem
 
 pytestmark = [pytest.mark.nocuda]
@@ -133,7 +133,7 @@ def test_mixture_reweighting_1d():
     # various approximations to f_k at ref_params
 
     # MBAR
-    mbar = pymbar.mbar.MBAR(u_kn, N_k=N_k)
+    mbar = pymbar.mbar.MBAR(u_kn, N_k=N_k, solver_protocol=DEFAULT_SOLVER_PROTOCOL)
     f_k_mbar = mbar.f_k
     u_mix_mbar = interpret_as_mixture_potential(u_kn, f_k_mbar, N_k)
 

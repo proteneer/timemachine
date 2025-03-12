@@ -374,7 +374,7 @@ def test_tibd_exchange_get_set_params(precision):
 
 @pytest.fixture(scope="module")
 def brd4_rbfe_state() -> InitialState:
-    with path_to_internal_file("timemachine.datasets.water_exchange", "brd4_pair.sdf") as ligand_path:
+    with path_to_internal_file("timemachine.testsystems.water_exchange", "brd4_pair.sdf") as ligand_path:
         mols = read_sdf(ligand_path)
     mol_a = mols[0]
     mol_b = mols[1]
@@ -385,7 +385,7 @@ def brd4_rbfe_state() -> InitialState:
     ff = Forcefield.load_default()
     # BRD4 is a known target that has waters in the binding site, use the structure with the water stripped from
     # the binding pocket
-    with path_to_internal_file("timemachine.datasets.water_exchange", "brd4_no_water.pdb") as pdb_path:
+    with path_to_internal_file("timemachine.testsystems.water_exchange", "brd4_no_water.pdb") as pdb_path:
         host_config = builders.build_protein_system(str(pdb_path), ff.protein_ff, ff.water_ff, mols=[mol_a, mol_b])
         host_config.box += np.diag([0.1, 0.1, 0.1])
 
@@ -424,7 +424,7 @@ def test_targeted_insertion_buckyball_edge_cases(
     Tests the edge cases where there is either only one or two waters moving in and out of a buckyball.
     """
     ff = Forcefield.load_precomputed_default()
-    with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
+    with resources.as_file(resources.files("timemachine.testsystems.water_exchange")) as water_exchange:
         host_pdb = water_exchange / "bb_0_waters.pdb"
         mols = read_sdf(water_exchange / "bb_centered_espaloma.sdf")
         assert len(mols) == 1
@@ -647,7 +647,7 @@ def test_targeted_insertion_buckyball_determinism(radius, proposals_per_move, ba
     Tests a single water and two waters being moved into an empty buckyball.
     """
     ff = Forcefield.load_precomputed_default()
-    with resources.as_file(resources.files("timemachine.datasets.water_exchange")) as water_exchange:
+    with resources.as_file(resources.files("timemachine.testsystems.water_exchange")) as water_exchange:
         host_pdb = water_exchange / "bb_0_waters.pdb"
         mols = read_sdf(water_exchange / "bb_centered_espaloma.sdf")
         assert len(mols) == 1
@@ -1035,6 +1035,7 @@ def test_targeted_moves_with_complex_and_ligand_in_brd4(
 
 @pytest.mark.memcheck
 def test_targeted_insertion_invalid_sample_bug():
+    # Tests a rare out-of-boundary access encountered during the rewind logic of the batched TIBD mover.
     with open(Path(__file__).parent / "data" / "water_sampling_bug.pkl", "rb") as ifs:
         state, md_params = pickle.load(ifs)
 

@@ -185,7 +185,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> tuple[list[potential
                 k = value(k)
 
                 angle_idxs_.append([src_idx, mid_idx, dst_idx])
-                angle_params_.append((k, angle))
+                angle_params_.append((k, angle, 0.0))  # 0.0 is for epsilon
 
             angle_idxs = np.array(angle_idxs_, dtype=np.int32)
             angle_params = np.array(angle_params_, dtype=np.float64)
