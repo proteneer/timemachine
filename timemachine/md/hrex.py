@@ -360,6 +360,7 @@ def get_samples_by_iter_by_replica(
 class HREXDiagnostics:
     replica_idx_by_state_by_iter: list[list[ReplicaIdx]]
     fraction_accepted_by_pair_by_iter: list[list[tuple[int, int]]]
+    water_sampling_proposals_by_state_by_iter: NDArray | None = None
 
     @property
     def cumulative_swap_acceptance_rates(self) -> NDArray:
@@ -381,6 +382,11 @@ class HREXDiagnostics:
     @property
     def normalized_kl_divergence(self) -> float:
         return get_normalized_kl_divergence(self.replica_idx_by_state_by_iter)
+
+    @property
+    def cumulative_water_sampling_proposals(self):
+        assert self.water_sampling_proposals_by_state_by_iter is not None
+        return np.sum(self.water_sampling_proposals_by_state_by_iter, axis=0)
 
 
 def get_swap_attempts_per_iter_heuristic(n_states: int) -> int:

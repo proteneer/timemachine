@@ -1425,7 +1425,6 @@ def run_sims_hrex(
     last_update_time = begin_loop_time
 
     for current_frame in range(md_params.n_frames):
-
         per_state_water_sampling = [(0, 0) for _ in range(len(initial_states))]
 
         def sample_replica(xvb: CoordsVelBox, state_idx: StateIdx) -> tuple[NDArray, NDArray, NDArray, Optional[float]]:
@@ -1464,14 +1463,12 @@ def run_sims_hrex(
             )
             assert frame.shape[0] == 1
 
-            final_water_proposals = 0
-            final_water_acceptances = 0
             if md_params.water_sampling_params is not None:
                 for mover in context.get_movers():
                     if isinstance(mover, WATER_SAMPLER_MOVERS):
                         final_water_proposals = mover.n_proposed() - starting_water_proposals
                         final_water_acceptances = mover.n_accepted() - starting_water_acceptances
-                per_state_water_sampling[state_idx] = final_water_acceptances, final_water_proposals
+                        per_state_water_sampling[state_idx] = final_water_acceptances, final_water_proposals
 
             final_barostat_volume_scale_factor = barostat.get_volume_scale_factor() if barostat is not None else None
 
@@ -1482,7 +1479,6 @@ def run_sims_hrex(
             return CoordsVelBox(frame, velos, box)
 
         hrex, samples_by_state_iter = hrex.sample_replicas(sample_replica, replica_from_samples)
-        print(per_state_water_sampling)
         water_sampler_proposals.append(per_state_water_sampling)
         U_kl_raw = compute_potential_matrix(potential, hrex, params_by_state, md_params.hrex_params.max_delta_states)
         U_kl = verify_and_sanitize_potential_matrix(U_kl_raw, hrex.replica_idx_by_state)
@@ -1558,6 +1554,10 @@ def run_sims_hrex(
         estimate_free_energy_bar(u_kln_by_component, temperature) for u_kln_by_component in neighbor_ulkns_by_component
     ]
 
-    diagnostics = HREXDiagnostics(replica_idx_by_state_by_iter, fraction_accepted_by_pair_by_iter)
+    diagnostics = HREXDiagnostics(
+        replica_idx_by_state_by_iter,
+        fraction_accepted_by_pair_by_iter,
+        np.array(water_sampler_proposals) if md_params.water_sampling_params is not None else None,
+    )
 
     return PairBarResult(list(initial_states), pair_bar_results), samples_by_state, diagnostics
