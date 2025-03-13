@@ -434,7 +434,6 @@ def test_get_water_sampler_params(num_windows, max_temperature_scale):
         water_sampler_nb_params = get_water_sampler_params(state)
         bound_nb_pot = get_bound_potential_by_type(state.potentials, Nonbonded)
         nb_pot = bound_nb_pot.potential
-        # TBD: Make _get_guest_params return the RESTful parameters
         system = st.combine_with_host(
             solvent_host.system, lamb, solvent_host.num_water_atoms, st.ff, solvent_host.omm_topology
         )
