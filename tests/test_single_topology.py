@@ -20,7 +20,7 @@ from timemachine.constants import (
     NBParamIdx,
 )
 from timemachine.fe import atom_mapping, single_topology
-from timemachine.fe.dummy import MultipleAnchorWarning, canonicalize_bond
+from timemachine.fe.dummy import MultipleBondAnchorWarning, canonicalize_bond
 from timemachine.fe.interpolate import align_nonbonded_idxs_and_params, linear_interpolation
 from timemachine.fe.single_topology import (
     AtomMapMixin,
@@ -36,6 +36,7 @@ from timemachine.fe.single_topology import (
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import minimize_scipy, simulate_system
+from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, read_sdf_mols_by_name, set_mol_name
 from timemachine.ff import Forcefield
 from timemachine.md import minimizer
@@ -330,7 +331,7 @@ def test_find_dummy_groups_and_multiple_anchors():
 
     core_pairs = np.array([[1, 1], [2, 2]])
 
-    with pytest.warns(MultipleAnchorWarning):
+    with pytest.warns(MultipleBondAnchorWarning):
         dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
         assert dgs == {1: (2, {0})} or dgs == {2: (1, {0})}
 
@@ -353,7 +354,7 @@ def test_find_dummy_groups_and_multiple_anchors():
     core_a = [0, 1, 2, 3]
     core_b = [2, 1, 4, 3]
 
-    with pytest.warns(MultipleAnchorWarning):
+    with pytest.warns(MultipleBondAnchorWarning):
         dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b)
         assert dgs == {1: (2, {0})}
 
@@ -1743,3 +1744,48 @@ def test_hif2a_end_state_symmetry_nightly_test():
         print("testing", mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
         core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
         assert_symmetric_interpolation(mol_a, mol_b, core)
+
+
+def test_empty_core():
+    # test that an empty core results in an end-state with identical energies and forces to independent molecules
+    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
+        mols = read_sdf(path_to_ligand)
+
+    mol_a = mols[0]
+    mol_b = mols[1]
+
+    x_a = get_romol_conf(mol_a)
+    x_b = get_romol_conf(mol_b)
+    core = np.zeros((0, 2))
+
+    ff = Forcefield.load_default()
+    st = SingleTopology(mol_a, mol_b, core, ff)
+    lhs = st.setup_intermediate_state(0.0)
+    rhs = st.setup_intermediate_state(1.0)
+
+    x_0 = st.combine_confs(x_a, x_b, 0.0)
+    x_1 = st.combine_confs(x_a, x_b, 1.0)
+
+    np.testing.assert_array_equal(x_0, x_1)
+
+    # lhs and rhs do not have identical total energies since dummy molecule is in a softened state
+    lhs_U_fn = lhs.get_U_fn()
+    rhs_U_fn = rhs.get_U_fn()
+
+    assert lhs_U_fn(x_0) != rhs_U_fn(x_0)
+
+    # however, the bond, angle, improper energies should be bitwise identical
+    assert lhs.bond(x_0, None) == rhs.bond(x_0, None)
+    assert lhs.angle(x_0, None) == rhs.angle(x_0, None)
+    assert lhs.improper(x_0, None) == rhs.improper(x_0, None)
+
+    # we should also be consistent with vanilla base topologies
+    bt_a = BaseTopology(mol_a, ff)
+    bt_b = BaseTopology(mol_b, ff)
+
+    ref_a = bt_a.setup_end_state()
+    ref_b = bt_b.setup_end_state()
+
+    np.testing.assert_almost_equal(lhs.bond(x_0, None), ref_a.bond(x_a, None) + ref_b.bond(x_b, None))
+    np.testing.assert_almost_equal(lhs.angle(x_0, None), ref_a.angle(x_a, None) + ref_b.angle(x_b, None))
+    np.testing.assert_almost_equal(lhs.improper(x_0, None), ref_a.improper(x_a, None) + ref_b.improper(x_b, None))
