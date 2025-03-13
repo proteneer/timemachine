@@ -67,4 +67,10 @@ void FanoutSummedPotential::du_dp_fixed_to_float(
     }
 }
 
+void FanoutSummedPotential::reset() {
+    for (auto pot : potentials_) {
+        pot.reset();
+    }
+};
+
 } // namespace timemachine

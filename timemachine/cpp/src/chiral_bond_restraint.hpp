@@ -35,6 +35,8 @@ public:
         unsigned long long *d_du_dp,
         __int128 *d_u,               // buffered
         cudaStream_t stream) override;
+
+    virtual void reset() override {};
 };
 
 } // namespace timemachine

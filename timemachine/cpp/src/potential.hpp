@@ -95,6 +95,9 @@ public:
         __int128 *h_u,
         cudaStream_t stream) = 0;
 
+    // reset clears any state that the potential may have.
+    virtual void reset() = 0;
+
     virtual void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float);
 };
 

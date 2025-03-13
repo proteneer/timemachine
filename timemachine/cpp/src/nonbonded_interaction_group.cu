@@ -14,8 +14,6 @@
 
 #include "k_nonbonded.cuh"
 
-static const int STEPS_PER_SORT = 200;
-
 namespace timemachine {
 
 template <typename RealType>
@@ -44,8 +42,8 @@ NonbondedInteractionGroup<RealType>::NonbondedInteractionGroup(
                     &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 1, 0>,
                     &k_nonbonded_unified<RealType, NONBONDED_KERNEL_THREADS_PER_BLOCK, 1, 1, 1>}),
 
-      beta_(beta), cutoff_(cutoff), steps_since_last_sort_(0), nblist_(N_), nblist_padding_(nblist_padding),
-      hilbert_sort_(nullptr), disable_hilbert_(disable_hilbert_sort) {
+      beta_(beta), cutoff_(cutoff), steps_since_last_sort_(0), steps_per_sort_(200), nblist_(N_),
+      nblist_padding_(nblist_padding), hilbert_sort_(nullptr), disable_hilbert_(disable_hilbert_sort) {
 
     this->validate_idxs(N_, row_atom_idxs, col_atom_idxs, false);
 
@@ -106,7 +104,7 @@ template <typename RealType> NonbondedInteractionGroup<RealType>::~NonbondedInte
 };
 
 template <typename RealType> bool NonbondedInteractionGroup<RealType>::needs_sort() {
-    return steps_since_last_sort_ % STEPS_PER_SORT == 0;
+    return steps_since_last_sort_ % steps_per_sort_ == 0;
 }
 
 template <typename RealType>
@@ -378,6 +376,20 @@ void NonbondedInteractionGroup<RealType>::validate_idxs(
             throw std::runtime_error("row and col indices must be disjoint");
         }
     }
+}
+
+template <typename RealType> void NonbondedInteractionGroup<RealType>::set_calls_per_sort(const int num_calls) {
+    if (num_calls <= 0) {
+        throw std::runtime_error("num_calls must be greater than 0");
+    }
+    this->steps_per_sort_ = num_calls;
+}
+
+template <typename RealType> int NonbondedInteractionGroup<RealType>::get_calls_per_sort() { return steps_per_sort_; }
+
+template <typename RealType> void NonbondedInteractionGroup<RealType>::reset() {
+    // Reset the steps since the last sort
+    steps_since_last_sort_ = 0;
 }
 
 template class NonbondedInteractionGroup<double>;
