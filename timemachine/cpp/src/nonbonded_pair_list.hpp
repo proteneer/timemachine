@@ -46,6 +46,8 @@ public:
         cudaStream_t stream) override;
 
     void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) override;
+
+    virtual void reset() override {};
 };
 
 } // namespace timemachine
