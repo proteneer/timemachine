@@ -174,4 +174,4 @@ def get_interpolation_fxn(name: InterpolationFxnName, src: ArrayLike, dst: Array
             return Quadratic(src, dst)
         case "exponential":
             return Exponential(src, dst)
-    assert 0, f"{name} is invalid"
+    raise ValueError(f"{name} is invalid")
