@@ -550,15 +550,45 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 def get_water_sampler_params(initial_state: InitialState) -> NDArray:
     """Given an initial state, return a copy of the parameters that define the nonbonded parameters of water with respect to the
     entire system.
+
+    Water Interactions (with other Waters, Ligand, Protein) need to be consistent with the MD potentials.
+
+    Given the full N x N nonbonded interaction matrix:
+
+       P       W      L
+    ----------------------
+    |   P0 |   W0 |   L1 |
+    | P0   | P0   | P1   |
+    |------.------|-------
+    | P0   | W0   | W1   |
+    |   W0 |   W0 |   L1 |
+    ---------------------|
+    | P1   | W1   | L0   |
+    |   L1 |   L1 |   L0 |
+    ----------------------
+
+    Let W0, P0, L0 be the parameters from NonbondedAllPairs, W1, P1, L1 from the NonbondedInteractionGroup
+
+    We expect the parameters used for the water sampler to meet the following requirements:
+
+    1) Waters Parameters: assert that W0 == W1, we use NonbondedAllPairs but could use either
+    2) Protein Parameters: read protein parameters (P0) from NonbondedAllPairs
+    3) Ligand Parameters: read ligand parameters (L1) from NonbondedInteractionGroup
+
+    Important to note that P1 can change in Protein-Ligand charge fitting, which is okay because it is only expected
+    to impact Protein-Ligand interactions and not Protein-Water.
     """
     nb_ixn_pot = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup)
     water_params = np.array(nb_ixn_pot.params)
 
-    # If the system contains a host, use the parameters of the Nonbonded potential for the water sampler
-    # the NonbondedInteractionGroup parameters may be modified for enhanced sampling purposes
+    # If the system contains a host, use the parameters of the Nonbonded potential for the water sampler the
+    # NonbondedInteractionGroup host parameters may be modified for protein-ligand charge fitting
     if initial_state.barostat is not None:
         host_idxs = np.delete(np.arange(initial_state.x0.shape[0]), initial_state.ligand_idxs)
-        host_params = get_bound_potential_by_type(initial_state.potentials, Nonbonded).params[host_idxs]
+        water_idxs = np.delete(host_idxs, initial_state.protein_idxs)
+        nb_all_pairs_params = get_bound_potential_by_type(initial_state.potentials, Nonbonded).params
+        assert (nb_all_pairs_params[water_idxs] == water_params[water_idxs]).all()
+        host_params = nb_all_pairs_params[host_idxs]
         water_params[host_idxs] = host_params
 
     assert water_params.shape[1] == 4
