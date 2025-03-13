@@ -39,7 +39,6 @@ from timemachine.md.states import CoordsVelBox
 from timemachine.potentials import (
     BoundPotential,
     HarmonicBond,
-    Nonbonded,
     NonbondedInteractionGroup,
     Potential,
     SummedPotential,
@@ -553,13 +552,6 @@ def get_water_sampler_params(initial_state: InitialState) -> NDArray:
     """
     nb_ixn_pot = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup)
     water_params = np.array(nb_ixn_pot.params)
-
-    # If the system contains a host, use the parameters of the Nonbonded potential for the water sampler
-    # the NonbondedInteractionGroup parameters may be modified for enhanced sampling purposes
-    if initial_state.barostat is not None:
-        host_idxs = np.delete(np.arange(initial_state.x0.shape[0]), initial_state.ligand_idxs)
-        host_params = get_bound_potential_by_type(initial_state.potentials, Nonbonded).params[host_idxs]
-        water_params[host_idxs] = host_params
 
     assert water_params.shape[1] == 4
     return water_params
