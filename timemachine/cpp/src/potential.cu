@@ -319,6 +319,8 @@ void Potential::execute_host_du_dx(
     d_du_dx.copy_to(h_du_dx);
 };
 
+void Potential::reset() {};
+
 void Potential::du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
     for (int i = 0; i < P; i++) {
         du_dp_float[i] = FIXED_TO_FLOAT<double>(du_dp[i]);

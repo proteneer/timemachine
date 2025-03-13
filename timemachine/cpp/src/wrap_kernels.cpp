@@ -1127,7 +1127,8 @@ void declare_potential(py::module &m) {
             },
             py::arg("coords"),
             py::arg("params"),
-            py::arg("box"));
+            py::arg("box"))
+        .def("reset", &Potential::reset);
 }
 
 void declare_bound_potential(py::module &m) {
