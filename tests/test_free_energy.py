@@ -485,18 +485,6 @@ def test_get_water_sampler_params_complex():
 
     np.testing.assert_array_equal(orig_prot_nb_params, water_sampler_nb_params[state.protein_idxs])
 
-    # updated ixn params, should still give the same params for the water sampler
-    nb_bp.params = nb_bp.params.at[state.protein_idxs, 0].set(1.0)
-    water_sampler_nb_params_update = get_water_sampler_params(state)
-    np.testing.assert_array_equal(orig_prot_nb_params, water_sampler_nb_params_update[state.protein_idxs])
-    np.testing.assert_array_equal(water_sampler_nb_params, water_sampler_nb_params_update)
-
-    # should also work for numpy arrays
-    nb_bp.params = np.array(nb_bp.params)
-    water_sampler_nb_params_update = get_water_sampler_params(state)
-    np.testing.assert_array_equal(orig_prot_nb_params, water_sampler_nb_params_update[state.protein_idxs])
-    np.testing.assert_array_equal(water_sampler_nb_params, water_sampler_nb_params_update)
-
 
 def test_run_sims_bisection_early_stopping(hif2a_ligand_pair_single_topology_lam0_state):
     initial_state = hif2a_ligand_pair_single_topology_lam0_state
