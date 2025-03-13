@@ -576,7 +576,8 @@ def get_water_sampler_params(initial_state: InitialState) -> NDArray:
     3) Ligand Parameters: read ligand parameters (L1) from NonbondedInteractionGroup
 
     Important to note that P1 can change in Protein-Ligand charge fitting, which is okay because it is only expected
-    to impact Protein-Ligand interactions and not Protein-Water.
+    to impact Protein-Ligand interactions and not Protein-Water. If protein side chains are to be enhanced, the parameter
+    changes are expected to be in P0 to ensure correct water sampling.
     """
     nb_ixn_pot = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup)
     water_params = np.array(nb_ixn_pot.params)
