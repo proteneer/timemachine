@@ -1243,6 +1243,12 @@ def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
         # also, assert barostat and integrator are self-consistent
         assert intg_a.temperature == baro_a.temperature
 
+        # The protein and water parameters should match exactly for the water sampling parameters
+        water_sampler_params_a = get_water_sampler_params(state_a)
+        water_sampler_params_b = get_water_sampler_params(state_b)
+        assert (state_a.ligand_idxs == state_b.ligand_idxs).all()
+        non_ligand_idxs = np.delete(np.arange(state_a.x0.shape[0]), state_a.ligand_idxs)
+        assert (water_sampler_params_a[non_ligand_idxs] == water_sampler_params_b[non_ligand_idxs]).all()
     else:
         # assert (A, B) are compatible NVT ensembles
         assert (state_a.box0 == state_b.box0).all()
