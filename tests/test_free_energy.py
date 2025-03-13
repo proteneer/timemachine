@@ -440,7 +440,6 @@ def test_get_water_sampler_params(num_windows, max_temperature_scale):
         ligand_water_params = system.nonbonded_ixn_group.params[host_config.conf.shape[0] :]
         if lamb == 0.0:
             assert np.all(ligand_water_params[mol_a_only_atoms][:, NBParamIdx.W_IDX] == 0.0)
-            print
             assert np.all(ligand_water_params[mol_b_only_atoms][:, NBParamIdx.W_IDX] == nb_pot.cutoff)
         elif lamb == 1.0:
             assert np.all(ligand_water_params[mol_a_only_atoms][:, NBParamIdx.W_IDX] == nb_pot.cutoff)
