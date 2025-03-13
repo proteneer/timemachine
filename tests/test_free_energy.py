@@ -13,7 +13,7 @@ from hypothesis.strategies import integers
 from jax import grad, jacfwd, jacrev, value_and_grad
 from scipy.optimize import check_grad, minimize
 
-from timemachine.constants import DEFAULT_TEMP
+from timemachine.constants import DEFAULT_TEMP, NBParamIdx
 from timemachine.fe import free_energy, topology, utils
 from timemachine.fe.bar import DEFAULT_SOLVER_PROTOCOL, ukln_to_ukn
 from timemachine.fe.free_energy import (
@@ -434,13 +434,18 @@ def test_get_water_sampler_params(num_windows, max_temperature_scale):
         water_sampler_nb_params = get_water_sampler_params(state)
         bound_nb_pot = get_bound_potential_by_type(state.potentials, Nonbonded)
         nb_pot = bound_nb_pot.potential
-        ligand_water_params = st._get_guest_params(forcefield.q_handle, forcefield.lj_handle, lamb, nb_pot.cutoff)
+        # TBD: Make _get_guest_params return the RESTful parameters
+        system = st.combine_with_host(
+            solvent_host.system, lamb, solvent_host.num_water_atoms, st.ff, solvent_host.omm_topology
+        )
+        ligand_water_params = system.nonbonded_ixn_group.params[host_config.conf.shape[0] :]
         if lamb == 0.0:
-            assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == 0.0)
-            assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == nb_pot.cutoff)
+            assert np.all(ligand_water_params[mol_a_only_atoms][:, NBParamIdx.W_IDX] == 0.0)
+            print
+            assert np.all(ligand_water_params[mol_b_only_atoms][:, NBParamIdx.W_IDX] == nb_pot.cutoff)
         elif lamb == 1.0:
-            assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == nb_pot.cutoff)
-            assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == 0.0)
+            assert np.all(ligand_water_params[mol_a_only_atoms][:, NBParamIdx.W_IDX] == nb_pot.cutoff)
+            assert np.all(ligand_water_params[mol_b_only_atoms][:, NBParamIdx.W_IDX] == 0.0)
 
         np.testing.assert_array_equal(water_sampler_nb_params[host_config.conf.shape[0] :], ligand_water_params)
         np.testing.assert_array_equal(

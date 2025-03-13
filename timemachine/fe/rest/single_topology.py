@@ -2,7 +2,6 @@ from dataclasses import replace
 from functools import cached_property
 
 import jax.numpy as jnp
-import numpy as np
 from numpy.typing import NDArray
 from openmm import app
 from rdkit import Chem
@@ -147,24 +146,24 @@ class SingleTopologyREST(SingleTopology):
     ) -> HostGuestSystem:
         ref_state = super().combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
 
+        num_host_atoms = host_system.nonbonded_all_pairs.params.shape[0]
         # NOTE: the following methods of scaling the ligand-environment interaction energy are all equivalent:
         #
         # 1. scaling ligand charges and LJ epsilons by energy_scale
         # 2. scaling environment charges and LJ epsilons by energy_scale
         # 3. scaling all charges and LJ epsilons by sqrt(energy_scale)
         #
-        # Here, we choose (3) since this is independent of the ordering of ligand and environment atoms, and so less
-        # error-prone.
+        # Here, we choose (1) since it provides us with a canonical set of ligand parameters for each host guest system.
 
-        sqrt_energy_scale = np.sqrt(self.get_energy_scale_factor(lamb))
+        energy_scale = self.get_energy_scale_factor(lamb)
 
         nonbonded_host_guest_ixn = replace(
             ref_state.nonbonded_ixn_group,
             params=jnp.asarray(ref_state.nonbonded_ixn_group.params)
-            .at[:, NBParamIdx.Q_IDX]
-            .mul(sqrt_energy_scale)  # scale ligand charges
-            .at[:, NBParamIdx.LJ_EPS_IDX]
-            .mul(sqrt_energy_scale),  # scale ligand epsilons
+            .at[num_host_atoms:, NBParamIdx.Q_IDX]
+            .mul(energy_scale)  # scale ligand charges
+            .at[num_host_atoms:, NBParamIdx.LJ_EPS_IDX]
+            .mul(energy_scale),  # scale ligand epsilons
         )
 
         return replace(ref_state, nonbonded_ixn_group=nonbonded_host_guest_ixn)
