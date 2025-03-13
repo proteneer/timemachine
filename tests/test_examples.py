@@ -264,9 +264,9 @@ def test_run_rbfe_legs(
             "53b75a556b5f63c90af108144bac5bace681bed581f1332b4e5fa3da8ac659a6",
         ),
         "complex": (
-            "59d62aa748f483aba93e83645c2e3512dd14ad9e9a8333fcce7053f4a9779892",
-            "3e2fbf623b2c89eb4833a7812df00b3108cc977f97fef7ac68bdec40ef1b5fb2",
-            "4ca200408ac0525bf89d992df0e75caeb2265aaaef577942d12cb456c1078cd2",
+            "1fb7f275f66dc0c4122dbdeeed488074c5e20065aa7836116937d98710619479",
+            "4b858b8b851e7dc642b58ead7468e1ddc6aac13ed7b5961768e75d8d638b3f41",
+            "81ec6f3634d110a8b360a97f09a40f562cd5958aff48c646ae4d0a45c22c6582",
         ),
     }
     with resources.as_file(resources.files("timemachine.testsystems.fep_benchmark.hif2a")) as hif2a_dir:
