@@ -682,7 +682,7 @@ def find_dummy_groups_and_anchors(
     mol_b,
     core_atoms_a: Sequence[int],
     core_atoms_b: Sequence[int],
-) -> dict[int, tuple[Optional[int], frozenset[int]]]:
+) -> dict[Optional[int], tuple[Optional[int], frozenset[int]]]:
     """Returns an arbitrary dummy group assignment for the A -> B transformation.
 
     Refer to :py:func:`assert_chiral_consistency` for definition of "chiral consistency".
