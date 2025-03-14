@@ -80,6 +80,24 @@ class SingleTopologyREST(SingleTopology):
         )
 
     @cached_property
+    def rest_region_atom_idxs(self) -> set[int]:
+        """Returns the set of indices of atoms in the combined ligand that are in the REST region."""
+        return {
+            idx
+            for diffs in [
+                self.aligned_bond_tuples,
+                self.aligned_angle_tuples,
+                self.aligned_proper_tuples,
+                self.aligned_improper_tuples,
+                self.aligned_chiral_atom_tuples,
+                # self.aligned_chiral_bond_tuples, # NOTE: chiral bonds not implemented
+                self.aligned_nonbonded_pairlist_tuples,
+            ]
+            for diff_idxs, _, _ in diffs
+            for idx in diff_idxs
+        }
+
+    @cached_property
     def aliphatic_ring_bonds(self) -> set[CanonicalBond]:
         """Returns the set of aliphatic ring bonds in the combined ligand."""
         ring_bonds_a = {bond.translate(self.a_to_c) for bond in get_aliphatic_ring_bonds(self.mol_a)}
