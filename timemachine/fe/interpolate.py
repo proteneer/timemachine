@@ -14,6 +14,11 @@ Params = Any
 Key = Any
 
 
+# used to convert arrays to a hashable type for use as dict keys and in sets
+def to_hashable(x):
+    return tuple(to_hashable(e) for e in x) if isinstance(x, Iterable) else x
+
+
 def align_idxs_and_params(
     src_idxs,
     src_params,
@@ -78,10 +83,6 @@ def align_idxs_and_params(
     for all_idxs in [src_idxs, dst_idxs]:
         for idxs in all_idxs:
             validate_idxs(idxs)
-
-    # used to convert arrays to a hashable type for use as dict keys and in sets
-    def to_hashable(x):
-        return tuple(to_hashable(e) for e in x) if isinstance(x, Iterable) else x
 
     def make_kv(all_idxs, all_params):
         kvs = [(to_hashable(key(idxs, params)), params) for idxs, params in zip(all_idxs, all_params)]
