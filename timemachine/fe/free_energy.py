@@ -580,7 +580,7 @@ def get_water_sampler_params(initial_state: InitialState) -> NDArray:
     changes are expected to be in P0 to ensure correct water sampling.
     """
     nb_ixn_pot = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup)
-    water_params = np.array(nb_ixn_pot.params)
+    water_sampler_params = np.array(nb_ixn_pot.params)
 
     # If the system contains a host, use the parameters of the Nonbonded potential for the water sampler the
     # NonbondedInteractionGroup host parameters may be modified for protein-ligand charge fitting
@@ -588,12 +588,12 @@ def get_water_sampler_params(initial_state: InitialState) -> NDArray:
         host_idxs = np.delete(np.arange(initial_state.x0.shape[0]), initial_state.ligand_idxs)
         water_idxs = np.delete(host_idxs, initial_state.protein_idxs)
         nb_all_pairs_params = get_bound_potential_by_type(initial_state.potentials, Nonbonded).params
-        assert (nb_all_pairs_params[water_idxs] == water_params[water_idxs]).all()
+        assert (nb_all_pairs_params[water_idxs] == water_sampler_params[water_idxs]).all()
         host_params = nb_all_pairs_params[host_idxs]
-        water_params[host_idxs] = host_params
+        water_sampler_params[host_idxs] = host_params
 
-    assert water_params.shape[1] == 4
-    return water_params
+    assert water_sampler_params.shape[1] == 4
+    return water_sampler_params
 
 
 def get_context(initial_state: InitialState, md_params: Optional[MDParams] = None) -> Context:
