@@ -1,4 +1,4 @@
-from dataclasses import replace
+from dataclasses import astuple, replace
 from functools import cached_property
 
 import jax.numpy as jnp
@@ -120,20 +120,30 @@ class SingleTopologyREST(SingleTopology):
         return [mkproper(*idxs) for idxs in super().setup_intermediate_state(0.0).proper.potential.idxs]
 
     @cached_property
-    def target_proper_idxs(self) -> list[int]:
-        """Returns a list of indices of the proper torsion interactions in the combined ligand that are targeted for
-        softening."""
-        return [
-            idx
+    def candidate_propers(self) -> set[tuple[int, CanonicalProper]]:
+        """Returns the set of propers in the combined ligand that are candidates for softening."""
+        return {
+            (idx, proper)
             for idx, proper in enumerate(self.propers)
             for bond in [mkbond(proper.j, proper.k)]
             if bond in self.rotatable_bonds or bond in self.aliphatic_ring_bonds
-        ]
+        }
 
     @cached_property
-    def target_propers(self) -> set[CanonicalProper]:
-        """Returns the set of proper torsions in the combined ligand that are targeted for softening."""
-        return {self.propers[i] for i in self.target_proper_idxs}
+    def target_propers(self) -> set[tuple[int, CanonicalProper]]:
+        """Returns the set of propers in the combined ligand that are candidates for softening and involve an atom in
+        the REST region."""
+        return {
+            (idx, proper)
+            for (idx, proper) in self.candidate_propers
+            if any(idx in self.rest_region_atom_idxs for idx in astuple(proper))
+        }
+
+    @cached_property
+    def target_proper_idxs(self) -> list[int]:
+        """Returns a list of indices of propers in the combined ligand that are candidates for softening and involve an
+        atom in the REST region."""
+        return [idx for idx, _ in self.target_propers]
 
     def get_energy_scale_factor(self, lamb: float) -> float:
         temperature_factor = float(self._temperature_scale_interpolation_fxn(lamb))

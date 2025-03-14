@@ -11,8 +11,15 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.rbfe import Host, setup_optimized_host
-from timemachine.fe.rest.interpolation import Exponential, Linear, Quadratic, Symmetric, plot_interpolation_fxn
-from timemachine.fe.rest.single_topology import InterpolationFxnName, SingleTopologyREST
+from timemachine.fe.rest.interpolation import (
+    Exponential,
+    InterpolationFxnName,
+    Linear,
+    Quadratic,
+    Symmetric,
+    plot_interpolation_fxn,
+)
+from timemachine.fe.rest.single_topology import SingleTopologyREST
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import GuestSystem
 from timemachine.fe.utils import get_romol_conf, read_sdf_mols_by_name
@@ -73,7 +80,7 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
 
     state = st_rest.setup_intermediate_state(lamb)
     state_ref = st.setup_intermediate_state(lamb)
-    assert len(st_rest.target_propers) < len(state_ref.proper.potential.idxs)
+    assert len(st_rest.candidate_propers) < len(state_ref.proper.potential.idxs)
 
     ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
 
@@ -99,7 +106,7 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
         assert energy_scale < 1.0
 
         if has_rotatable_bonds or has_aliphatic_rings:
-            assert 0 < len(st_rest.target_propers)
+            assert 0 < len(st_rest.candidate_propers)
 
             if energy_scale < 1.0:
                 assert U_proper < U_proper_ref
@@ -170,17 +177,17 @@ def test_single_topology_rest_propers():
     # benzene: no propers are scaled
     benzene = get_mol("c1ccccc1")
     st = get_identity_transformation(benzene)
-    assert st.target_propers == set()
+    assert st.candidate_propers == set()
 
     # cyclohexane: all 9 * 6 ring propers are scaled (|{H1, H2, C1}-C2-C3-{C4, H3, H4}| = 9 propers per C-C bond)
     cyclohexane = get_mol("C1CCCCC1")
     st = get_identity_transformation(cyclohexane)
-    assert len(st.target_propers) == 9 * 6
+    assert len({t for _, t in st.candidate_propers}) == 9 * 6
 
     # phenylcyclohexane: all 9 * 6 cyclohexane ring propers and 6 rotatable bond propers are scaled
     phenylcyclohexane = get_mol("c1ccc(C2CCCCC2)cc1")
     st = get_identity_transformation(phenylcyclohexane)
-    assert len(st.target_propers) == 9 * 6 + 6
+    assert len({t for _, t in st.candidate_propers}) == 9 * 6 + 6
 
 
 @pytest.mark.parametrize(
