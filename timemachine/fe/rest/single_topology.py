@@ -81,6 +81,7 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def aliphatic_ring_bonds(self) -> set[CanonicalBond]:
+        """Returns the set of aliphatic ring bonds in the combined ligand."""
         ring_bonds_a = {bond.translate(self.a_to_c) for bond in get_aliphatic_ring_bonds(self.mol_a)}
         ring_bonds_b = {bond.translate(self.b_to_c) for bond in get_aliphatic_ring_bonds(self.mol_b)}
         ring_bonds_c = ring_bonds_a | ring_bonds_b
@@ -88,6 +89,7 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def rotatable_bonds(self) -> set[CanonicalBond]:
+        """Returns the set of rotatable bonds in the combined ligand."""
         rotatable_bonds_a = {bond.translate(self.a_to_c) for bond in get_rotatable_bonds(self.mol_a)}
         rotatable_bonds_b = {bond.translate(self.b_to_c) for bond in get_rotatable_bonds(self.mol_b)}
         rotatable_bonds_c = rotatable_bonds_a | rotatable_bonds_b
@@ -95,11 +97,14 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def propers(self) -> list[CanonicalProper]:
+        """Returns a list of proper torsions in the combined ligand."""
         # TODO: refactor SingleTopology to compute src and dst alignment at initialization
         return [mkproper(*idxs) for idxs in super().setup_intermediate_state(0.0).proper.potential.idxs]
 
     @cached_property
     def target_proper_idxs(self) -> list[int]:
+        """Returns a list of indices of the proper torsion interactions in the combined ligand that are targeted for
+        softening."""
         return [
             idx
             for idx, proper in enumerate(self.propers)
@@ -109,6 +114,7 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def target_propers(self) -> set[CanonicalProper]:
+        """Returns the set of proper torsions in the combined ligand that are targeted for softening."""
         return {self.propers[i] for i in self.target_proper_idxs}
 
     def get_energy_scale_factor(self, lamb: float) -> float:
