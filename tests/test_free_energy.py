@@ -13,7 +13,7 @@ from hypothesis.strategies import integers
 from jax import grad, jacfwd, jacrev, value_and_grad
 from scipy.optimize import check_grad, minimize
 
-from timemachine.constants import DEFAULT_TEMP
+from timemachine.constants import DEFAULT_TEMP, NBParamIdx
 from timemachine.fe import free_energy, topology, utils
 from timemachine.fe.bar import DEFAULT_SOLVER_PROTOCOL, ukln_to_ukn
 from timemachine.fe.free_energy import (
@@ -39,6 +39,7 @@ from timemachine.fe.free_energy import (
     verify_and_sanitize_potential_matrix,
 )
 from timemachine.fe.rbfe import Host, setup_initial_state, setup_initial_states, setup_optimized_host
+from timemachine.fe.rest.single_topology import SingleTopologyREST
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.ff import Forcefield
@@ -407,12 +408,13 @@ def test_plot_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
 
 
 @pytest.mark.nocuda
+@pytest.mark.parametrize("max_temperature_scale", [1.0, 2.0])
 @pytest.mark.parametrize("num_windows", [2, 5])
-def test_get_water_sampler_params(num_windows):
+def test_get_water_sampler_params(num_windows, max_temperature_scale):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     # Use the simple charges simply because it is faster
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    st = SingleTopologyREST(mol_a, mol_b, core, forcefield, max_temperature_scale, "exponential")
     host_config = builders.build_water_system(3.0, forcefield.water_ff, mols=[mol_a, mol_b])
 
     # (YTZ): dedup later with rbfe.Host
@@ -430,16 +432,23 @@ def test_get_water_sampler_params(num_windows):
     for lamb in np.linspace(0.0, 1.0, num_windows, endpoint=True):
         state = setup_initial_state(st, lamb, solvent_host, DEFAULT_TEMP, 2024)
         water_sampler_nb_params = get_water_sampler_params(state)
-        nb_pot = get_bound_potential_by_type(state.potentials, Nonbonded).potential
-        ligand_water_params = st._get_guest_params(forcefield.q_handle, forcefield.lj_handle, lamb, nb_pot.cutoff)
+        bound_nb_pot = get_bound_potential_by_type(state.potentials, Nonbonded)
+        nb_pot = bound_nb_pot.potential
+        system = st.combine_with_host(
+            solvent_host.system, lamb, solvent_host.num_water_atoms, st.ff, solvent_host.omm_topology
+        )
+        ligand_water_params = system.nonbonded_ixn_group.params[host_config.conf.shape[0] :]
         if lamb == 0.0:
-            assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == 0.0)
-            assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == nb_pot.cutoff)
+            assert np.all(ligand_water_params[mol_a_only_atoms][:, NBParamIdx.W_IDX] == 0.0)
+            assert np.all(ligand_water_params[mol_b_only_atoms][:, NBParamIdx.W_IDX] == nb_pot.cutoff)
         elif lamb == 1.0:
-            assert np.all(ligand_water_params[mol_a_only_atoms][:, 3] == nb_pot.cutoff)
-            assert np.all(ligand_water_params[mol_b_only_atoms][:, 3] == 0.0)
+            assert np.all(ligand_water_params[mol_a_only_atoms][:, NBParamIdx.W_IDX] == nb_pot.cutoff)
+            assert np.all(ligand_water_params[mol_b_only_atoms][:, NBParamIdx.W_IDX] == 0.0)
 
-        np.testing.assert_array_equal(water_sampler_nb_params[host_config.num_water_atoms :], ligand_water_params)
+        np.testing.assert_array_equal(water_sampler_nb_params[host_config.conf.shape[0] :], ligand_water_params)
+        np.testing.assert_array_equal(
+            water_sampler_nb_params[: host_config.conf.shape[0]], bound_nb_pot.params[: host_config.conf.shape[0]]
+        )
 
 
 @pytest.mark.nocuda

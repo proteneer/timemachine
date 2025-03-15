@@ -1,5 +1,4 @@
 from functools import cache
-from importlib import resources
 
 import jax
 import matplotlib.pyplot as plt
@@ -20,9 +19,10 @@ from timemachine.fe.utils import get_romol_conf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.potentials import PeriodicTorsion
+from timemachine.utils import path_to_internal_file
 
-with resources.as_file(resources.files("timemachine.testsystems.fep_benchmark.hif2a")) as hif2a_data:
-    hif2a_ligands = read_sdf_mols_by_name(hif2a_data / "ligands.sdf")
+with path_to_internal_file("timemachine.testsystems.fep_benchmark.hif2a", "ligands.sdf") as ligands_path:
+    hif2a_ligands = read_sdf_mols_by_name(ligands_path)
 
 hif2a_ligand_pairs = [
     (mol_a, mol_b)

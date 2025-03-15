@@ -550,19 +550,50 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 def get_water_sampler_params(initial_state: InitialState) -> NDArray:
     """Given an initial state, return a copy of the parameters that define the nonbonded parameters of water with respect to the
     entire system.
+
+    Water Interactions (with other Waters, Ligand, Protein) need to be consistent with the MD potentials.
+
+    Given the full N x N nonbonded interaction matrix:
+
+       P       W      L
+    ----------------------
+    |   P0 |   W0 |   L1 |
+    | P0   | P0   | P1   |
+    |------.------|-------
+    | P0   | W0   | W1   |
+    |   W0 |   W0 |   L1 |
+    ---------------------|
+    | P1   | W1   | L0   |
+    |   L1 |   L1 |   L0 |
+    ----------------------
+
+    Let W0, P0, L0 be the parameters from NonbondedAllPairs, W1, P1, L1 from the NonbondedInteractionGroup
+
+    We expect the parameters used for the water sampler to meet the following requirements:
+
+    1) Waters Parameters: assert that W0 == W1, we use NonbondedAllPairs but could use either
+    2) Protein Parameters: read protein parameters (P0) from NonbondedAllPairs
+    3) Ligand Parameters: read ligand parameters (L1) from NonbondedInteractionGroup
+
+    Important to note that P1 can change in Protein-Ligand charge fitting, which is okay because it is only expected
+    to impact Protein-Ligand interactions and not Protein-Water. If protein side chains are to be enhanced, the parameter
+    changes are expected to be in P0 to ensure correct water sampling.
     """
     nb_ixn_pot = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup)
-    water_params = np.array(nb_ixn_pot.params)
+    water_sampler_params = np.array(nb_ixn_pot.params)
 
-    # If the protein is present, use the original protein parameters for the water sampler
-    if len(initial_state.protein_idxs):
-        prot_params = get_bound_potential_by_type(initial_state.potentials, Nonbonded).params[
-            initial_state.protein_idxs
-        ]
-        water_params[initial_state.protein_idxs] = prot_params
+    # If the system contains a host, use the parameters of the Nonbonded potential for the water sampler the
+    # NonbondedInteractionGroup host parameters may be modified for protein-ligand charge fitting
+    if initial_state.barostat is not None:
+        host_idxs = np.delete(np.arange(initial_state.x0.shape[0]), initial_state.ligand_idxs)
+        water_idxs = np.delete(host_idxs, initial_state.protein_idxs)
+        nb_all_pairs_params = get_bound_potential_by_type(initial_state.potentials, Nonbonded).params
+        assert (nb_all_pairs_params[water_idxs] == water_sampler_params[water_idxs]).all()
+        host_params = nb_all_pairs_params[host_idxs]
+        water_sampler_params[host_idxs] = host_params
 
-    assert water_params.shape[1] == 4
-    return water_params
+    assert water_sampler_params.shape[1] == 4
+    return water_sampler_params
 
 
 def get_context(initial_state: InitialState, md_params: Optional[MDParams] = None) -> Context:
@@ -1243,6 +1274,12 @@ def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
         # also, assert barostat and integrator are self-consistent
         assert intg_a.temperature == baro_a.temperature
 
+        # The protein and water parameters should match exactly for the water sampling parameters
+        water_sampler_params_a = get_water_sampler_params(state_a)
+        water_sampler_params_b = get_water_sampler_params(state_b)
+        assert (state_a.ligand_idxs == state_b.ligand_idxs).all()
+        non_ligand_idxs = np.delete(np.arange(state_a.x0.shape[0]), state_a.ligand_idxs)
+        assert (water_sampler_params_a[non_ligand_idxs] == water_sampler_params_b[non_ligand_idxs]).all()
     else:
         # assert (A, B) are compatible NVT ensembles
         assert (state_a.box0 == state_b.box0).all()
