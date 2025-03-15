@@ -2,7 +2,8 @@ from collections.abc import Iterable
 from functools import partial
 from typing import Any, Callable
 
-import jax.numpy as jnp
+# import jax.numpy as jnp
+import numpy as jnp
 
 
 class DuplicateAlignmentKeysError(RuntimeError):
@@ -12,6 +13,10 @@ class DuplicateAlignmentKeysError(RuntimeError):
 Idxs = Any
 Params = Any
 Key = Any
+
+
+def to_hashable(x):
+    return tuple(to_hashable(e) for e in x) if isinstance(x, Iterable) else x
 
 
 def align_idxs_and_params(
@@ -80,9 +85,6 @@ def align_idxs_and_params(
             validate_idxs(idxs)
 
     # used to convert arrays to a hashable type for use as dict keys and in sets
-    def to_hashable(x):
-        return tuple(to_hashable(e) for e in x) if isinstance(x, Iterable) else x
-
     def make_kv(all_idxs, all_params):
         kvs = [(to_hashable(key(idxs, params)), params) for idxs, params in zip(all_idxs, all_params)]
 
