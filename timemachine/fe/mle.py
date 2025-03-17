@@ -5,13 +5,13 @@ import numpy as np
 from jax import jit, value_and_grad
 from jax import numpy as jnp
 from jax.scipy.stats import norm
-import logging
+# import logging
 from time import time
 from scipy.optimize import minimize
 
 NxDiGraph = Union[nx.DiGraph, nx.MultiDiGraph]
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 
 def make_stddevs_finite(stddevs, min_stddev=1e-3):
@@ -136,10 +136,10 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), 
 
     t4 = time()
 
-    logger.debug(f"total elapsed time in infer_node_vals: {(t4 - t0):.3f}s")
-    logger.debug(f"\t_assert_edges_valid : {(t1 - t0):.3f}s")
-    logger.debug(f"\tscipy.optimize.minimize : {(t3 - t2):.3f}s")
-    logger.debug(f"\tscipy optimize result: {opt_result}")
+    print(f"total elapsed time in infer_node_vals: {(t4 - t0):.3f}s")
+    print(f"\t_assert_edges_valid : {(t1 - t0):.3f}s")
+    print(f"\tscipy.optimize.minimize : {(t3 - t2):.3f}s")
+    print(f"\tscipy optimize result: {opt_result}")
 
     return centered_node_vals + offset
 
@@ -347,8 +347,8 @@ def infer_node_vals_and_errs_networkx(
 
     t3 = time()
 
-    logger.debug(f"total elapsed time in infer_node_vals_and_errs_networkx: {(t3 - t0):.3f}s")
-    logger.debug(f"\tgraph validation / processing : {(t1 - t0):.3f}s")
-    logger.debug(f"\tinfer_node_vals_and_errs : {(t2 - t1):.3f}s")
+    print(f"total elapsed time in infer_node_vals_and_errs_networkx: {(t3 - t0):.3f}s")
+    print(f"\tgraph validation / processing : {(t1 - t0):.3f}s")
+    print(f"\tinfer_node_vals_and_errs : {(t2 - t1):.3f}s")
 
     return sg_with_inferred_values
