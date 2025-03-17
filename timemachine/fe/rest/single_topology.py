@@ -2,6 +2,7 @@ from dataclasses import astuple, replace
 from functools import cached_property
 
 import jax.numpy as jnp
+import numpy as np
 from numpy.typing import NDArray
 from openmm import app
 from rdkit import Chem
@@ -180,8 +181,9 @@ class SingleTopologyREST(SingleTopology):
     ) -> HostGuestSystem:
         ref_state = super().combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
 
+        # compute indices corresponding to REST-region ligand atoms in the host-guest interaction potential
         num_atoms_host = host_system.nonbonded_all_pairs.potential.num_atoms
-        ligand_idxs = slice(num_atoms_host, None, None)
+        ligand_idxs = np.array(sorted(self.rest_region_atom_idxs)) + num_atoms_host
 
         # NOTE: the following methods of scaling the ligand-environment interaction energy are all equivalent:
         #
