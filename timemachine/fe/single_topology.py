@@ -6,9 +6,6 @@ from typing import Any, Optional
 
 import jax
 import networkx as nx
-
-# import jax.numpy as jnp
-import numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
@@ -771,7 +768,7 @@ def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda
     k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
     x = pad(interpolate.linear_interpolation, src_x, dst_x, lamb, lambda_min, lambda_max)
 
-    return jnp.array([k, x])
+    return [k, x]
 
 
 def interpolate_chiral_volume_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
@@ -781,7 +778,7 @@ def interpolate_chiral_volume_params(src_params, dst_params, lamb, k_min, lambda
     log_linear_fn = partial(interpolate.log_linear_interpolation, min_value=k_min)
     k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
 
-    return jnp.array(k)
+    return [k]
 
 
 def cyclic_difference(a, b, period):
@@ -793,13 +790,12 @@ def cyclic_difference(a, b, period):
 
     with minimum abs(x).
     """
-
-    d = jnp.fmod(b - a, period)
+    d = np.fmod(b - a, period)
 
     def f(d):
-        return jnp.where(d <= period / 2, d, d - period)
+        return np.where(d <= period / 2, d, d - period)
 
-    return jnp.sign(d) * f(jnp.abs(d))
+    return np.sign(d) * f(np.abs(d))
 
 
 def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
@@ -845,9 +841,9 @@ def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambd
     # intermedates was chosen to be sufficiently large that no numerical instabilities were observed in testing (even
     # with bond force constants approximately zero), and sufficiently small to have negligible impact on the overlap of
     # the end states with neighboring intermediates.
-    eps = jnp.where((lamb == 0.0) | (lamb == 1.0), 0.0, 1e-3)
+    eps = np.where((lamb == 0.0) | (lamb == 1.0), 0.0, 1e-3)
 
-    return jnp.array([k, phase, eps])
+    return [k, phase, eps]
 
 
 def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min, lambda_max):
@@ -889,7 +885,7 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
     dst_phase = src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi)
     phase = pad(interpolate.linear_interpolation, src_phase, dst_phase, lamb, lambda_min, lambda_max)
 
-    return jnp.array([k, phase, src_period])
+    return [k, phase, src_period]
 
 
 def interpolate_w_coord(w0: float | NDArray, w1: float | NDArray, lamb: float):
@@ -904,11 +900,11 @@ def interpolate_w_coord(w0: float | NDArray, w1: float | NDArray, lamb: float):
         alchemical parameter
     """
     lambdas = construct_pre_optimized_relative_lambda_schedule(None)
-    x = jnp.linspace(0.0, 1.0, len(lambdas))
-    return jnp.where(
+    x = np.linspace(0.0, 1.0, len(lambdas))
+    return np.where(
         w0 < w1,
-        interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambdas)),
-        interpolate.linear_interpolation(w1, w0, jnp.interp(1.0 - lamb, x, lambdas)),
+        interpolate.linear_interpolation(w0, w1, np.interp(lamb, x, lambdas)),
+        interpolate.linear_interpolation(w1, w0, np.interp(1.0 - lamb, x, lambdas)),
     )
 
 
@@ -916,6 +912,9 @@ class AtomMapFlags(IntEnum):
     CORE = 0
     MOL_A = 1
     MOL_B = 2
+
+
+from functools import cache
 
 
 class AtomMapMixin:
@@ -974,12 +973,15 @@ class AtomMapMixin:
         self.c_to_a = {int(v): k for k, v in enumerate(self.a_to_c)}
         self.c_to_b = {int(v): k for k, v in enumerate(self.b_to_c)}
 
+    @cache
     def get_dummy_atoms_a(self) -> set[int]:
         return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_A}
 
+    @cache
     def get_dummy_atoms_b(self) -> set[int]:
         return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.MOL_B}
 
+    @cache
     def get_core_atoms(self) -> set[int]:
         return {idx for idx, flag in enumerate(self.c_flags) if flag == AtomMapFlags.CORE}
 
@@ -1323,9 +1325,7 @@ class SingleTopology(AtomMapMixin):
             self.ff, self.mol_b, self.mol_a, self.core[:, ::-1], self.b_to_c, self.a_to_c, self.anchored_dummy_groups_ba
         )
 
-    def align_and_interpolate_intramolecular_nonbonded(
-        self, lamb: float
-    ) -> BoundPotential[NonbondedPairListPrecomputed]:
+    def interpolate_aligned_intramolecular_nonbonded(self, lamb: float) -> BoundPotential[NonbondedPairListPrecomputed]:
         return self._setup_intermediate_nonbonded_term(
             self.src_system.nonbonded_pair_list,
             self.dst_system.nonbonded_pair_list,
@@ -1334,10 +1334,12 @@ class SingleTopology(AtomMapMixin):
         )
 
     @property
+    @cache
     def src_chiral_idxs(self):
         return set(tuple(x) for x in self.src_system.chiral_atom.potential.idxs)
 
     @property
+    @cache
     def dst_chiral_idxs(self):
         return set(tuple(x) for x in self.dst_system.chiral_atom.potential.idxs)
 
@@ -1358,39 +1360,39 @@ class SingleTopology(AtomMapMixin):
         pair_idxs = np.array([x for x, _, _ in pair_idxs_and_params], dtype=np.int32)
 
         if pair_idxs_and_params:
-            src_params = jnp.array([x for _, x, _ in pair_idxs_and_params])
-            dst_params = jnp.array([x for _, _, x in pair_idxs_and_params])
+            src_params = np.array([x for _, x, _ in pair_idxs_and_params])
+            dst_params = np.array([x for _, _, x in pair_idxs_and_params])
 
             src_qlj, src_w = src_params[:, : NBParamIdx.W_IDX], src_params[:, NBParamIdx.W_IDX]
             dst_qlj, dst_w = dst_params[:, : NBParamIdx.W_IDX], dst_params[:, NBParamIdx.W_IDX]
 
-            is_excluded_src = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
-            is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
+            is_excluded_src = np.all(src_qlj == 0.0, axis=1, keepdims=True)
+            is_excluded_dst = np.all(dst_qlj == 0.0, axis=1, keepdims=True)
 
             # parameters for pairs that do not interact in the src state
             w = interpolate_w_coord(cutoff, dst_w, lamb)
-            pair_params_excluded_src = jnp.concatenate((dst_qlj, w[:, None]), axis=1)
+            pair_params_excluded_src = np.concatenate((dst_qlj, w[:, None]), axis=1)
 
             # parameters for pairs that do not interact in the dst state
             w = interpolate_w_coord(src_w, cutoff, lamb)
-            pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
+            pair_params_excluded_dst = np.concatenate((src_qlj, w[:, None]), axis=1)
 
             # parameters for pairs that interact in both src and dst states
             w = jax.vmap(interpolate.linear_interpolation, (0, 0, None))(src_w, dst_w, lamb)
             qlj = interpolate_qlj_fn(src_qlj, dst_qlj, lamb)
-            pair_params_not_excluded = jnp.concatenate((qlj, w[:, None]), axis=1)
+            pair_params_not_excluded = np.concatenate((qlj, w[:, None]), axis=1)
 
-            pair_params = jnp.where(
+            pair_params = np.where(
                 is_excluded_src,
                 pair_params_excluded_src,
-                jnp.where(
+                np.where(
                     is_excluded_dst,
                     pair_params_excluded_dst,
                     pair_params_not_excluded,
                 ),
             )
         else:
-            pair_params = jnp.array([])
+            pair_params = np.array([])
 
         return NonbondedPairListPrecomputed(pair_idxs, src_nonbonded.potential.beta, cutoff).bind(pair_params)
 
@@ -1424,7 +1426,7 @@ class SingleTopology(AtomMapMixin):
         # these should be properly sized
         chiral_bond_idxs = np.array(chiral_bond_idxs_, dtype=np.int32).reshape((-1, 4))
 
-        return ChiralBondRestraint(chiral_bond_idxs, np.array(chiral_bond_signs)).bind(jnp.array(chiral_bond_params))
+        return ChiralBondRestraint(chiral_bond_idxs, np.array(chiral_bond_signs)).bind(np.array(chiral_bond_params))
 
     def all_idxs_belong_to_core(self, idxs):
         core_atoms = self.get_core_atoms()
@@ -1578,14 +1580,7 @@ class SingleTopology(AtomMapMixin):
 
         return interpolate_periodic_torsion_params(src_params, dst_params, lamb, *min_max)
 
-    def _align_and_interpolate_bonded_term(self, lamb, src_potential, dst_potential, set_of_tuples, interpolate_fn):
-        # set_of_tuples = align_fn(
-        #     src_potential.potential.idxs,
-        #     src_potential.params,
-        #     dst_potential.potential.idxs,
-        #     dst_potential.params,
-        # )
-
+    def _interpolate_aligned_bonded_term(self, lamb, src_potential, dst_potential, set_of_tuples, interpolate_fn):
         # (ytz): sigh, this is the garbage code that we need to write if we don't do re-shaping
         # at the potential level, sigh. If we have zero length arrays, for both src_potential and dst_potential,
         # then we lose information about the correct shapes.
@@ -1612,6 +1607,7 @@ class SingleTopology(AtomMapMixin):
 
         bonded_idxs = []
         bonded_params = []
+
         for idxs, src_params, dst_params in set_of_tuples:
             bonded_idxs.append(idxs)
             bonded_params.append(interpolate_fn(idxs, src_params, dst_params, lamb))
@@ -1620,12 +1616,12 @@ class SingleTopology(AtomMapMixin):
 
         if src_params_ndim == 1:
             # chiral atom
-            bonded_params = jnp.array(bonded_params, dtype=src_params_dtype)
+            bonded_params = np.array(bonded_params, dtype=src_params_dtype)
             pass
         elif src_params_ndim == 2:
             # everything else
             src_params_last_shape = src_potential.params.shape[1]
-            bonded_params = jnp.array(bonded_params, dtype=src_params_dtype).reshape(-1, src_params_last_shape)
+            bonded_params = np.array(bonded_params, dtype=src_params_dtype).reshape(-1, src_params_last_shape)
         else:
             assert 0
 
@@ -1640,8 +1636,8 @@ class SingleTopology(AtomMapMixin):
         bond_class = type(src_potential.potential)
         return bond_class(bonded_idxs).bind(bonded_params)
 
-    def align_and_interpolate_chiral_atoms(self, lamb: float):
-        return self._align_and_interpolate_bonded_term(
+    def interpolate_aligned_chiral_atoms(self, lamb: float):
+        return self._interpolate_aligned_bonded_term(
             lamb,
             self.src_system.chiral_atom,
             self.dst_system.chiral_atom,
@@ -1649,8 +1645,8 @@ class SingleTopology(AtomMapMixin):
             self._interpolate_chiral_atom,
         )
 
-    def align_and_interpolate_angles(self, lamb: float):
-        return self._align_and_interpolate_bonded_term(
+    def interpolate_aligned_angles(self, lamb: float):
+        return self._interpolate_aligned_bonded_term(
             lamb,
             self.src_system.angle,
             self.dst_system.angle,
@@ -1658,8 +1654,8 @@ class SingleTopology(AtomMapMixin):
             self._interpolate_angle,
         )
 
-    def align_and_interpolate_bonds(self, lamb: float):
-        return self._align_and_interpolate_bonded_term(
+    def interpolate_aligned_bonds(self, lamb: float):
+        return self._interpolate_aligned_bonded_term(
             lamb,
             self.src_system.bond,
             self.dst_system.bond,
@@ -1668,18 +1664,17 @@ class SingleTopology(AtomMapMixin):
         )
 
     # proper and impropers use the same logic for alignment
-    def align_and_interpolate_propers(self, lamb: float):
-        res = self._align_and_interpolate_bonded_term(
+    def interpolate_aligned_propers(self, lamb: float):
+        return self._interpolate_aligned_bonded_term(
             lamb,
             self.src_system.proper,
             self.dst_system.proper,
             self.aligned_proper_tuples,
             self._interpolate_torsion,
         )
-        return res
 
-    def align_and_interpolate_impropers(self, lamb: float):
-        return self._align_and_interpolate_bonded_term(
+    def interpolate_aligned_impropers(self, lamb: float):
+        return self._interpolate_aligned_bonded_term(
             lamb,
             self.src_system.improper,
             self.dst_system.improper,
@@ -1731,12 +1726,12 @@ class SingleTopology(AtomMapMixin):
         src_system = self.src_system
         dst_system = self.dst_system
 
-        bond = self.align_and_interpolate_bonds(lamb)
-        angle = self.align_and_interpolate_angles(lamb)
-        chiral_atom = self.align_and_interpolate_chiral_atoms(lamb)
-        proper = self.align_and_interpolate_propers(lamb)
-        improper = self.align_and_interpolate_impropers(lamb)
-        nonbonded = self.align_and_interpolate_intramolecular_nonbonded(lamb)
+        bond = self.interpolate_aligned_bonds(lamb)
+        angle = self.interpolate_aligned_angles(lamb)
+        chiral_atom = self.interpolate_aligned_chiral_atoms(lamb)
+        proper = self.interpolate_aligned_propers(lamb)
+        improper = self.interpolate_aligned_impropers(lamb)
+        nonbonded = self.interpolate_aligned_intramolecular_nonbonded(lamb)
 
         assert src_system.chiral_bond
         assert dst_system.chiral_bond
@@ -1869,7 +1864,7 @@ class SingleTopology(AtomMapMixin):
             guest_epsilons.append(eps)
             guest_w_coords.append(w)
 
-        return jnp.stack([guest_charges, guest_sigmas, guest_epsilons, guest_w_coords], axis=1)
+        return np.stack([guest_charges, guest_sigmas, guest_epsilons, guest_w_coords], axis=1)
 
     def _parameterize_host_nonbonded(self, host_nonbonded: BoundPotential[Nonbonded]) -> BoundPotential[Nonbonded]:
         """Parameterize host-host nonbonded interactions"""
@@ -1884,7 +1879,7 @@ class SingleTopology(AtomMapMixin):
 
         # Note: The choice of zeros here is arbitrary. It doesn't affect the
         # potentials or grads, but any function like the seed could depend on these values.
-        hg_nb_params = jnp.concatenate([host_params, np.zeros((num_guest_atoms, host_params.shape[1]))])
+        hg_nb_params = np.concatenate([host_params, np.zeros((num_guest_atoms, host_params.shape[1]))])
 
         combined_nonbonded = Nonbonded(
             num_host_atoms + num_guest_atoms,
@@ -2002,13 +1997,13 @@ class SingleTopology(AtomMapMixin):
         combined_bond_idxs = np.concatenate(
             [host_system.bond.potential.idxs, guest_system.bond.potential.idxs + num_host_atoms]
         )
-        combined_bond_params = jnp.concatenate([host_system.bond.params, guest_system.bond.params])
+        combined_bond_params = np.concatenate([host_system.bond.params, guest_system.bond.params])
         combined_bond = HarmonicBond(combined_bond_idxs).bind(combined_bond_params)
 
         combined_angle_idxs = np.concatenate(
             [host_system.angle.potential.idxs, guest_system.angle.potential.idxs + num_host_atoms]
         )
-        combined_angle_params = jnp.concatenate([host_system.angle.params, guest_system.angle.params])
+        combined_angle_params = np.concatenate([host_system.angle.params, guest_system.angle.params])
         combined_angle = HarmonicAngle(combined_angle_idxs).bind(combined_angle_params)
 
         # print(host_system.proper.potential.idxs.shape, guest_system.proper.potential.idxs.shape)
@@ -2017,13 +2012,13 @@ class SingleTopology(AtomMapMixin):
         )
 
         # print(host_system.proper.params.shape, guest_system.proper.params.shape)
-        combined_proper_params = jnp.concatenate([host_system.proper.params, guest_system.proper.params])
+        combined_proper_params = np.concatenate([host_system.proper.params, guest_system.proper.params])
         combined_proper = PeriodicTorsion(combined_proper_idxs).bind(combined_proper_params)
 
         combined_improper_idxs = np.concatenate(
             [host_system.improper.potential.idxs, guest_system.improper.potential.idxs + num_host_atoms]
         )
-        combined_improper_params = jnp.concatenate([host_system.improper.params, guest_system.improper.params])
+        combined_improper_params = np.concatenate([host_system.improper.params, guest_system.improper.params])
         combined_improper = PeriodicTorsion(combined_improper_idxs).bind(combined_improper_params)
 
         host_nonbonded_all_pairs = self._parameterize_host_nonbonded(host_system.nonbonded_all_pairs)

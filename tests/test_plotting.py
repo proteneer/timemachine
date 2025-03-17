@@ -104,24 +104,26 @@ def test_plot_interpolation_schedule():
     plot_dummy_b_interpolation_schedule(st)
 
 
-# import time
-# def test_setup_intermediate_state():
-#     ff = Forcefield.load_default()
-#     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-#     st = single_topology.SingleTopology(mol_a, mol_b, core, ff)
-
-#     import cProfile
-#     import pstats
-
-#     profiler = cProfile.Profile()
-#     profiler.enable()
-#     start_time = time.time()
-#     for lam in np.linspace(0, 1, 128):
-#         st.setup_intermediate_state(lam)
-#     print("total time", time.time() - start_time)
-#     profiler.disable()
-#     pstats.Stats(profiler).sort_stats(pstats.SortKey.CUMULATIVE).print_stats(100)
+import time
 
 
-# if __name__ == "__main__":
-#     test_setup_intermediate_state()
+def test_setup_intermediate_state():
+    ff = Forcefield.load_default()
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    st = single_topology.SingleTopology(mol_a, mol_b, core, ff)
+
+    import cProfile
+    import pstats
+
+    profiler = cProfile.Profile()
+    profiler.enable()
+    start_time = time.time()
+    for lam in np.linspace(0, 1, 128):
+        st.setup_intermediate_state(lam)
+    print("total time", time.time() - start_time)
+    profiler.disable()
+    pstats.Stats(profiler).sort_stats(pstats.SortKey.CUMULATIVE).print_stats(100)
+
+
+if __name__ == "__main__":
+    test_setup_intermediate_state()

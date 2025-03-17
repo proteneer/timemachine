@@ -2,8 +2,7 @@ from collections.abc import Iterable
 from functools import partial
 from typing import Any, Callable
 
-# import jax.numpy as jnp
-import numpy as jnp
+import numpy as np
 
 
 class DuplicateAlignmentKeysError(RuntimeError):
@@ -164,11 +163,11 @@ def log_linear_interpolation(src_params, dst_params, lamb, min_value):
     """
 
     # clip to handle out-of-range end state values
-    src_params = jnp.maximum(src_params, min_value)
-    dst_params = jnp.maximum(dst_params, min_value)
+    src_params = np.maximum(src_params, min_value)
+    dst_params = np.maximum(dst_params, min_value)
 
     # tbd: handle 0s better if lamb = 0 and src_params == 0
-    return jnp.exp(linear_interpolation(jnp.log(src_params), jnp.log(dst_params), lamb))
+    return np.exp(linear_interpolation(np.log(src_params), np.log(dst_params), lamb))
 
 
 def pad(f, src_params, dst_params, lamb, lambda_min, lambda_max):
@@ -176,12 +175,9 @@ def pad(f, src_params, dst_params, lamb, lambda_min, lambda_max):
     Use the specified interpolation function in the interval (lambda_min, lambda_max), otherwise pin to the end-state
     values.
     """
-    return jnp.where(
-        lamb <= lambda_min,
-        src_params,
-        jnp.where(
-            lambda_max <= lamb,
-            dst_params,
-            f(src_params, dst_params, (lamb - lambda_min) / (lambda_max - lambda_min)),
-        ),
-    )
+    if lamb <= lambda_min:
+        return src_params
+    elif lambda_max <= lamb:
+        return dst_params
+    else:
+        return f(src_params, dst_params, (lamb - lambda_min) / (lambda_max - lambda_min))

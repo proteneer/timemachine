@@ -631,6 +631,7 @@ def arbitrary_transformation():
 
 
 @pytest.mark.nocuda
+@pytest.skip("jax tracing is disabled - see PR https://github.com/proteneer/timemachine/pull/1523")
 def test_jax_transform_intermediate_potential(arbitrary_transformation):
     st, conf = arbitrary_transformation
 
@@ -703,18 +704,11 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
     st, _ = arbitrary_transformation
 
     def setup_intermediate_nonbonded_term_ref(src_nonbonded, dst_nonbonded, lamb, align_fn, interpolate_qlj_fn):
-        pair_idxs_and_params = align_fn(
-            src_nonbonded.potential.idxs,
-            src_nonbonded.params,
-            dst_nonbonded.potential.idxs,
-            dst_nonbonded.params,
-        )
-
         cutoff = src_nonbonded.potential.cutoff
 
         pair_idxs = []
         pair_params = []
-        for idxs, src_params, dst_params in pair_idxs_and_params:
+        for idxs, src_params, dst_params in st.aligned_nonbonded_pairlist_tuples:
             src_qlj, src_w = src_params[:3], src_params[3]
             dst_qlj, dst_w = dst_params[:3], dst_params[3]
 
@@ -747,7 +741,6 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
             st.src_system.nonbonded_pair_list,
             st.dst_system.nonbonded_pair_list,
             lamb,
-            align_nonbonded_idxs_and_params,
             linear_interpolation,
         )
 
