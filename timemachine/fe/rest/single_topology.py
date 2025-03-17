@@ -153,9 +153,9 @@ class SingleTopologyREST(SingleTopology):
         # 2. scaling environment charges and LJ epsilons by energy_scale
         # 3. scaling all charges and LJ epsilons by sqrt(energy_scale)
         #
-        # Here, we choose (1) because water sampling infers parameters from the NonbondedInteractionGroup.Changing
-        # the environment parameters prevents easy construction of equivalent parameters for water sampling, which
-        # leads to incorrect sampling.
+        # However, (2) and (3) are incompatible with the current water sampling implementation, which assumes that the
+        # parameters corresponding to water atoms are identical in the host-host all-pairs potential and the host-guest
+        # interaction group potential. Therefore we choose option (1).
 
         energy_scale = self.get_energy_scale_factor(lamb)
 
