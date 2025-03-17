@@ -146,7 +146,9 @@ class SingleTopologyREST(SingleTopology):
     ) -> HostGuestSystem:
         ref_state = super().combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
 
-        num_host_atoms = host_system.nonbonded_all_pairs.params.shape[0]
+        num_atoms_host = host_system.nonbonded_all_pairs.potential.num_atoms
+        ligand_idxs = slice(num_atoms_host, None, None)
+
         # NOTE: the following methods of scaling the ligand-environment interaction energy are all equivalent:
         #
         # 1. scaling ligand charges and LJ epsilons by energy_scale
@@ -162,9 +164,9 @@ class SingleTopologyREST(SingleTopology):
         nonbonded_host_guest_ixn = replace(
             ref_state.nonbonded_ixn_group,
             params=jnp.asarray(ref_state.nonbonded_ixn_group.params)
-            .at[num_host_atoms:, NBParamIdx.Q_IDX]
+            .at[ligand_idxs, NBParamIdx.Q_IDX]
             .mul(energy_scale)  # scale ligand charges
-            .at[num_host_atoms:, NBParamIdx.LJ_EPS_IDX]
+            .at[ligand_idxs, NBParamIdx.LJ_EPS_IDX]
             .mul(energy_scale),  # scale ligand epsilons
         )
 
