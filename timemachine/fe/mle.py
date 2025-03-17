@@ -5,9 +5,13 @@ import numpy as np
 from jax import jit, value_and_grad
 from jax import numpy as jnp
 from jax.scipy.stats import norm
+import logging
+from time import time
 from scipy.optimize import minimize
 
 NxDiGraph = Union[nx.DiGraph, nx.MultiDiGraph]
+
+logger = logging.getLogger(__name__)
 
 
 def make_stddevs_finite(stddevs, min_stddev=1e-3):
@@ -96,9 +100,13 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), 
         [K] array, inferred absolute values
     """
 
+    t0 = time()
+
     # check shapes
     assert len(edge_diffs) == len(edge_idxs), f"{len(edge_diffs)} != {len(edge_idxs)}"
     _assert_edges_valid(edge_idxs)
+
+    t1 = time()
 
     if len(ref_node_idxs) == 0:
         print("no reference node values: picking node 0 as arbitrary reference")
@@ -115,12 +123,23 @@ def infer_node_vals(edge_idxs, edge_diffs, edge_stddevs, ref_node_idxs=tuple(), 
 
     K = np.max(edge_idxs) + 1
     x0 = np.zeros(K)  # maybe initialize smarter, e.g. using random spanning tree?
-    result = minimize(loss, x0, jac=True, tol=0, method="L-BFGS-B").x
+
+    t2 = time()
+    opt_result = minimize(loss, x0, jac=True, tol=0, method="L-BFGS-B")
+    t3 = time()
+    result = opt_result.x
 
     centered_node_vals = result - result[0]
 
     # ref node vals only used to inform a single additive offset
     offset = np.mean(ref_node_vals - centered_node_vals[ref_node_idxs])
+
+    t4 = time()
+
+    logger.debug(f"total elapsed time in infer_node_vals: {(t4 - t0):.3f}s")
+    logger.debug(f"\t_assert_edges_valid : {(t1 - t0):.3f}s")
+    logger.debug(f"\tscipy.optimize.minimize : {(t3 - t2):.3f}s")
+    logger.debug(f"\tscipy optimize result: {opt_result}")
 
     return centered_node_vals + offset
 
@@ -259,6 +278,7 @@ def infer_node_vals_and_errs_networkx(
         Subgraph limited to edges with defined edge_diff_prop and edge_stddev_prop, where nodes have been labeled with
         the inferred values of `node_val_prop` and `node_stddev_prop`.
     """
+    t0 = time()
     assert isinstance(graph, (nx.DiGraph, nx.MultiDiGraph)), "Graph must be a DiGraph or MultiDiGraph"
 
     def keep_edge(e):
@@ -301,6 +321,8 @@ def infer_node_vals_and_errs_networkx(
             ref_node_vals.append(d[ref_node_val_prop])
             ref_node_stddevs.append(d.get(ref_node_stddev_prop, 0.0))
 
+    t1 = time()
+
     edges = np.array(sg_relabeled.edges)
     edge_idxs = edges[:, :2]  # remove edge key in MultiDiGraph if present
     dgs, dg_errs = infer_node_vals_and_errs(
@@ -314,11 +336,19 @@ def infer_node_vals_and_errs_networkx(
         seed,
     )
 
+    t2 = time()
+
     for n, (dg, dg_err) in enumerate(zip(dgs, dg_errs)):
         sg_relabeled.nodes[n][node_val_prop] = dg
         sg_relabeled.nodes[n][node_stddev_prop] = dg_err
 
     # Restore the original node labels
     sg_with_inferred_values = nx.relabel_nodes(sg_relabeled, idx_to_node)
+
+    t3 = time()
+
+    logger.debug(f"total elapsed time in infer_node_vals_and_errs_networkx: {(t3 - t0):.3f}s")
+    logger.debug(f"\tgraph validation / processing : {(t1 - t0):.3f}s")
+    logger.debug(f"\tinfer_node_vals_and_errs : {(t2 - t1):.3f}s")
 
     return sg_with_inferred_values
