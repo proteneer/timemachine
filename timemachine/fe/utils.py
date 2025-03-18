@@ -271,10 +271,13 @@ def plot_atom_mapping_grid(
     )
 
 
+type _Core = Sequence[Sequence[int]] | NDArray
+
+
 def view_atom_mapping_3d(
     mol_a: Chem.rdchem.Mol,
     mol_b: Chem.rdchem.Mol,
-    cores: Sequence[Sequence[Sequence[int]]] | NDArray = (),
+    cores: Sequence[_Core] | NDArray = (),
     colors: Sequence[str] = (
         # https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=12
         "#a6cee3",
