@@ -78,6 +78,8 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
     st = get_single_topology(mol_a, mol_b, core)
     st_rest = get_single_topology_rest(mol_a, mol_b, core, 2.0, temperature_scale_interpolation_fxn)
 
+    assert 0 < len(st_rest.rest_region_atom_idxs) < st_rest.get_num_atoms()
+
     state = st_rest.setup_intermediate_state(lamb)
     state_ref = st.setup_intermediate_state(lamb)
     assert len(st_rest.candidate_propers) < len(state_ref.proper.potential.idxs)

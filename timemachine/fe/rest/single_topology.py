@@ -1,6 +1,7 @@
 from dataclasses import astuple, replace
 from functools import cached_property
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
@@ -83,20 +84,38 @@ class SingleTopologyREST(SingleTopology):
     @cached_property
     def rest_region_atom_idxs(self) -> set[int]:
         """Returns the set of indices of atoms in the combined ligand that are in the REST region."""
-        return {
-            idx
-            for diffs in [
-                self.aligned_bond_tuples,
-                self.aligned_angle_tuples,
-                self.aligned_proper_tuples,
-                self.aligned_improper_tuples,
-                self.aligned_chiral_atom_tuples,
-                # self.aligned_chiral_bond_tuples, # NOTE: chiral bonds not implemented
-                self.aligned_nonbonded_pairlist_tuples,
-            ]
-            for diff_idxs, _, _ in diffs
-            for idx in diff_idxs
+
+        def params_eq(params_a, params_b) -> bool:
+            eq_p = params_a == params_b
+            if isinstance(eq_p, bool):
+                return eq_p
+            elif isinstance(eq_p, (np.ndarray, jax.Array)):
+                return bool(np.all(eq_p))
+            else:
+                assert False
+
+        # Heuristic: include in the rest region atoms involved in bond, angle, or improper torsion interactions that
+        # differ in the end states. Note that proper torsions are omitted from the heuristic as this tends to result in
+        # larger REST regions than seem desirable.
+        aligned_tuples_by_potential = [
+            self.aligned_bond_tuples,
+            self.aligned_angle_tuples,
+            self.aligned_improper_tuples,
+        ]
+
+        idxs = {
+            int(idx)
+            for aligned_tuples in aligned_tuples_by_potential
+            for idxs, params_a, params_b in aligned_tuples
+            if not params_eq(params_a, params_b)
+            for idx in idxs
         }
+
+        # Ensure all dummy atoms are included in the REST region
+        idxs |= self.get_dummy_atoms_a()
+        idxs |= self.get_dummy_atoms_b()
+
+        return idxs
 
     @cached_property
     def aliphatic_ring_bonds(self) -> set[CanonicalBond]:
