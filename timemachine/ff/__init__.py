@@ -328,5 +328,5 @@ def sanitize_water_ff(water_ff: str) -> str:
     if water_ff.lower() in ["tip3p", "tip3pfb"]:
         return "tip3p"
     if water_ff.lower() in ["tip4p", "tip4pew", "tip4pfb"]:
-        return "tip4p"
+        return "tip4pew"
     return water_ff

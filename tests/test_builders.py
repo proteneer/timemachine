@@ -10,6 +10,7 @@ from timemachine.ff import sanitize_water_ff
 from timemachine.md.barostat.utils import compute_box_volume
 from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.md.minimizer import check_force_norm
+from timemachine.potentials import Nonbonded
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
 from timemachine.utils import path_to_internal_file
 
@@ -53,6 +54,19 @@ def test_build_water_system():
             host_with_mols_config.conf, host_with_mols_config.box, compute_u=False
         )
         check_force_norm(-du_dx)
+
+
+@pytest.mark.nocuda
+@pytest.mark.parametrize("water_ff", ["amber14/tip3p", "amber14/tip4pfb", "amber14/spce", "tip5p"])
+def test_build_water_system_different_water_ffs(water_ff):
+    mol_a, mol_b, _ = get_hif2a_ligand_pair_single_topology()
+    host_config = build_water_system(4.0, water_ff, mols=[mol_a, mol_b])
+    host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes around boundary
+    for bp in host_config.host_system.get_U_fns():
+        # Skip the nonbonded potential, as a lot of memory is required when using the CPU JAX platform
+        if isinstance(bp.potential, Nonbonded):
+            continue
+        assert np.isfinite(bp(host_config.conf, host_config.box))
 
 
 @pytest.mark.nocuda
