@@ -226,7 +226,7 @@ def sample_biphenyl_hrex(
         for initial_state, traj in zip(initial_states, trajectories_by_state)
     ]
 
-    _, trajectories_by_state_hrex, diagnostics = run_sims_hrex(
+    _, trajectories_by_state_hrex, diagnostics, _ = run_sims_hrex(
         initial_states_hrex,
         replace(md_params, n_eq_steps=0),  # using pre-equilibrated samples
     )
