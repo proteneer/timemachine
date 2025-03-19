@@ -1133,57 +1133,6 @@ class SingleTopology(AtomMapMixin):
         assert_default_system_constraints(self.src_system)
         assert_default_system_constraints(self.dst_system)
 
-        self.aligned_bond_tuples = interpolate.align_harmonic_bond_idxs_and_params(
-            self.src_system.bond.potential.idxs,
-            self.src_system.bond.params,
-            self.dst_system.bond.potential.idxs,
-            self.dst_system.bond.params,
-        )
-
-        self.aligned_angle_tuples = interpolate.align_harmonic_angle_idxs_and_params(
-            self.src_system.angle.potential.idxs,
-            self.src_system.angle.params,
-            self.dst_system.angle.potential.idxs,
-            self.dst_system.angle.params,
-        )
-
-        self.aligned_proper_tuples = interpolate.align_proper_idxs_and_params(
-            self.src_system.proper.potential.idxs,
-            self.src_system.proper.params,
-            self.dst_system.proper.potential.idxs,
-            self.dst_system.proper.params,
-        )
-
-        self.aligned_improper_tuples = interpolate.align_improper_idxs_and_params(
-            self.src_system.improper.potential.idxs,
-            self.src_system.improper.params,
-            self.dst_system.improper.potential.idxs,
-            self.dst_system.improper.params,
-        )
-
-        self.aligned_nonbonded_pairlist_tuples = interpolate.align_nonbonded_idxs_and_params(
-            self.src_system.nonbonded_pair_list.potential.idxs,
-            self.src_system.nonbonded_pair_list.params,
-            self.dst_system.nonbonded_pair_list.potential.idxs,
-            self.dst_system.nonbonded_pair_list.params,
-        )
-
-        self.aligned_chiral_atom_tuples = interpolate.align_chiral_atom_idxs_and_params(
-            self.src_system.chiral_atom.potential.idxs,
-            self.src_system.chiral_atom.params,
-            self.dst_system.chiral_atom.potential.idxs,
-            self.dst_system.chiral_atom.params,
-        )
-
-        self.aligned_chiral_bond_tuples = interpolate.align_chiral_bond_idxs_and_params(
-            self.src_system.chiral_bond.potential.idxs,
-            self.src_system.chiral_bond.params,
-            self.src_system.chiral_bond.potential.signs,
-            self.dst_system.chiral_bond.potential.idxs,
-            self.dst_system.chiral_bond.params,
-            self.dst_system.chiral_bond.potential.signs,
-        )
-
     def combine_masses(self, use_hmr: bool = False) -> list[float]:
         """
         Combine masses between two end-states by taking the heavier of the two core atoms.
@@ -1328,6 +1277,7 @@ class SingleTopology(AtomMapMixin):
             self.src_system.nonbonded_pair_list,
             self.dst_system.nonbonded_pair_list,
             lamb,
+            interpolate.align_nonbonded_idxs_and_params,
             interpolate.linear_interpolation,
         )
 
@@ -1344,6 +1294,7 @@ class SingleTopology(AtomMapMixin):
         src_nonbonded: BoundPotential[NonbondedPairListPrecomputed],
         dst_nonbonded: BoundPotential[NonbondedPairListPrecomputed],
         lamb: float,
+        align_fn,
         interpolate_qlj_fn,
     ) -> BoundPotential[NonbondedPairListPrecomputed]:
         assert src_nonbonded.potential.beta == dst_nonbonded.potential.beta
@@ -1351,7 +1302,12 @@ class SingleTopology(AtomMapMixin):
 
         cutoff = src_nonbonded.potential.cutoff
 
-        pair_idxs_and_params = self.aligned_nonbonded_pairlist_tuples
+        pair_idxs_and_params = align_fn(
+            src_nonbonded.potential.idxs,
+            src_nonbonded.params,
+            dst_nonbonded.potential.idxs,
+            dst_nonbonded.params,
+        )
 
         pair_idxs = np.array([x for x, _, _ in pair_idxs_and_params], dtype=np.int32)
 
@@ -1576,7 +1532,14 @@ class SingleTopology(AtomMapMixin):
 
         return interpolate_periodic_torsion_params(src_params, dst_params, lamb, *min_max)
 
-    def _align_and_interpolate_bonded_term(self, lamb, src_potential, dst_potential, set_of_tuples, interpolate_fn):
+    def _align_and_interpolate_bonded_term(self, lamb, src_potential, dst_potential, align_fn, interpolate_fn):
+        set_of_tuples = align_fn(
+            src_potential.potential.idxs,
+            src_potential.params,
+            dst_potential.potential.idxs,
+            dst_potential.params,
+        )
+
         # (ytz): sigh, this is the garbage code that we need to write if we don't do re-shaping
         # at the potential level, sigh. If we have zero length arrays, for both src_potential and dst_potential,
         # then we lose information about the correct shapes.
@@ -1636,7 +1599,7 @@ class SingleTopology(AtomMapMixin):
             lamb,
             self.src_system.chiral_atom,
             self.dst_system.chiral_atom,
-            self.aligned_chiral_atom_tuples,
+            interpolate.align_chiral_atom_idxs_and_params,
             self._interpolate_chiral_atom,
         )
 
@@ -1645,7 +1608,7 @@ class SingleTopology(AtomMapMixin):
             lamb,
             self.src_system.angle,
             self.dst_system.angle,
-            self.aligned_angle_tuples,
+            interpolate.align_harmonic_angle_idxs_and_params,
             self._interpolate_angle,
         )
 
@@ -1654,7 +1617,7 @@ class SingleTopology(AtomMapMixin):
             lamb,
             self.src_system.bond,
             self.dst_system.bond,
-            self.aligned_bond_tuples,
+            interpolate.align_harmonic_bond_idxs_and_params,
             self._interpolate_bond,
         )
 
@@ -1664,7 +1627,7 @@ class SingleTopology(AtomMapMixin):
             lamb,
             self.src_system.proper,
             self.dst_system.proper,
-            self.aligned_proper_tuples,
+            interpolate.align_proper_idxs_and_params,
             self._interpolate_torsion,
         )
         return res
@@ -1674,7 +1637,7 @@ class SingleTopology(AtomMapMixin):
             lamb,
             self.src_system.improper,
             self.dst_system.improper,
-            self.aligned_improper_tuples,
+            interpolate.align_improper_idxs_and_params,
             self._interpolate_torsion,
         )
 
