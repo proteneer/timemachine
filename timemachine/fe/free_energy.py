@@ -1445,6 +1445,12 @@ def run_sims_hrex(
         neighbor_pairs = [(StateIdx(0), StateIdx(0)), *neighbor_pairs]
 
     barostat = context.get_barostat()
+    water_sampler: custom_ops.TIBDExchangeMove_f32 | custom_ops.TIBDExchangeMove_f64 | None = None
+
+    if barostat is not None and md_params.water_sampling_params is not None:
+        # Should have a barostat and a water sampler
+        assert len(context.get_movers()) == 2
+        water_sampler = next(mover for mover in context.get_movers() if isinstance(mover, WATER_SAMPLER_MOVERS))
 
     hrex = HREX.from_replicas([CoordsVelBox(s.x0, s.v0, s.box0) for s in initial_states])
 
@@ -1477,14 +1483,14 @@ def run_sims_hrex(
             # Setup the MC movers of the Context
             starting_water_acceptances = 0
             starting_water_proposals = 0
-            for mover in context.get_movers():
-                if md_params.water_sampling_params is not None and isinstance(mover, WATER_SAMPLER_MOVERS):
-                    assert water_params_by_state is not None
-                    mover.set_params(water_params_by_state[state_idx])
-                    starting_water_proposals = mover.n_proposed()
-                    starting_water_acceptances = mover.n_accepted()
-                # Set the step so that all windows have the movers be called the same number of times.
-                mover.set_step(current_step)
+            if water_sampler is not None:
+                assert water_params_by_state is not None
+                water_sampler.set_params(water_params_by_state[state_idx])
+                water_sampler.set_step(current_step)
+                starting_water_proposals = water_sampler.n_proposed()
+                starting_water_acceptances = water_sampler.n_accepted()
+            if barostat is not None:
+                barostat.set_step(current_step)
 
             md_params_replica = replace(
                 md_params,
@@ -1501,15 +1507,13 @@ def run_sims_hrex(
             )
             assert frame.shape[0] == 1
 
-            if md_params.water_sampling_params is not None:
-                for mover in context.get_movers():
-                    if isinstance(mover, WATER_SAMPLER_MOVERS):
-                        final_water_proposals = mover.n_proposed() - starting_water_proposals
-                        final_water_acceptances = mover.n_accepted() - starting_water_acceptances
-                        water_sampling_acceptance_proposal_counts_by_state[state_idx] = (
-                            final_water_acceptances,
-                            final_water_proposals,
-                        )
+            if water_sampler is not None:
+                final_water_proposals = water_sampler.n_proposed() - starting_water_proposals
+                final_water_acceptances = water_sampler.n_accepted() - starting_water_acceptances
+                water_sampling_acceptance_proposal_counts_by_state[state_idx] = (
+                    final_water_acceptances,
+                    final_water_proposals,
+                )
 
             final_barostat_volume_scale_factor = barostat.get_volume_scale_factor() if barostat is not None else None
 
