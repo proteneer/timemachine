@@ -97,7 +97,7 @@ class SingleTopologyREST(SingleTopology):
         # Heuristic: include in the rest region atoms involved in bond, angle, or improper torsion interactions that
         # differ in the end states. Note that proper torsions are omitted from the heuristic as this tends to result in
         # larger REST regions than seem desirable.
-        aligned_tuples_by_potential: list[AlignedPotential] = [
+        aligned_potentials: list[AlignedPotential] = [
             self.aligned_bond,
             self.aligned_angle,
             self.aligned_improper,
@@ -105,7 +105,7 @@ class SingleTopologyREST(SingleTopology):
 
         idxs = {
             int(idx)
-            for aligned in aligned_tuples_by_potential
+            for aligned in aligned_potentials
             for idxs, params_a, params_b in zip(aligned.idxs, aligned.src_params, aligned.dst_params)
             if not params_eq(params_a, params_b)
             for idx in idxs  # type: ignore[attr-defined]
