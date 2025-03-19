@@ -1,3 +1,4 @@
+from dataclasses import replace
 from functools import cache
 
 import jax
@@ -25,7 +26,6 @@ from timemachine.fe.system import GuestSystem
 from timemachine.fe.utils import get_romol_conf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.md import builders
-from timemachine.potentials import PeriodicTorsion
 from timemachine.utils import path_to_internal_file
 
 with path_to_internal_file("timemachine.testsystems.fep_benchmark.hif2a", "ligands.sdf") as ligands_path:
@@ -113,15 +113,17 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
             if energy_scale < 1.0:
                 assert U_proper < U_proper_ref
 
-        def get_proper_subset_energy(state: GuestSystem, ixn_idxs):
+        def compute_proper_energy(state: GuestSystem, ixn_idxs):
             assert state.proper
-            idxs = state.proper.potential.idxs[ixn_idxs, :]
-            params = state.proper.params[ixn_idxs, :]
-            potential = PeriodicTorsion(idxs).bind(params)
-            return potential(ligand_conf, None)
+            proper = replace(
+                state.proper,
+                potential=replace(state.proper.potential, idxs=state.proper.potential.idxs[ixn_idxs, :]),
+                params=state.proper.params[ixn_idxs, :],
+            )
+            return proper(ligand_conf, None)
 
-        U_proper_subset = get_proper_subset_energy(state, st_rest.target_proper_idxs)
-        U_proper_subset_ref = get_proper_subset_energy(state_ref, st_rest.target_proper_idxs)
+        U_proper_subset = compute_proper_energy(state, st_rest.target_proper_idxs)
+        U_proper_subset_ref = compute_proper_energy(state_ref, st_rest.target_proper_idxs)
         np.testing.assert_allclose(U_proper_subset, energy_scale * U_proper_subset_ref)
 
         np.testing.assert_allclose(U_nonbonded, energy_scale * U_nonbonded_ref)
@@ -152,12 +154,18 @@ def test_single_topology_rest_solvent(mol_pair, temperature_scale_interpolation_
     ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     conf = np.concatenate([host.conf, ligand_conf])
 
-    def get_nonbonded_host_guest_ixn_energy(st: SingleTopology):
+    def compute_host_guest_ixn_energy(st: SingleTopology, ligand_idxs: set[int]):
         hgs = st.combine_with_host(host.system, lamb, host_config.num_water_atoms, st.ff, host_config.omm_topology)
-        return hgs.nonbonded_ixn_group(conf, host_config.box)
+        num_atoms_host = host.system.nonbonded_all_pairs.potential.num_atoms
+        ligand_idxs_ = np.array(list(ligand_idxs), dtype=np.int32) + num_atoms_host
+        nonbonded_ixn_group = replace(
+            hgs.nonbonded_ixn_group,
+            potential=replace(hgs.nonbonded_ixn_group.potential, row_atom_idxs=ligand_idxs_),
+        )
+        return nonbonded_ixn_group(conf, host_config.box)
 
-    U = get_nonbonded_host_guest_ixn_energy(st_rest)
-    U_ref = get_nonbonded_host_guest_ixn_energy(st)
+    U = compute_host_guest_ixn_energy(st_rest, st_rest.rest_region_atom_idxs)
+    U_ref = compute_host_guest_ixn_energy(st, st_rest.rest_region_atom_idxs)
 
     energy_scale = st_rest.get_energy_scale_factor(lamb)
     np.testing.assert_allclose(U, energy_scale * U_ref, rtol=1e-5)
