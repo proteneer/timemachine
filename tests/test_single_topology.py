@@ -708,7 +708,7 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
         nonbonded_test = st.aligned_nonbonded_pair_list.interpolate(lamb)
 
         np.testing.assert_array_equal(nonbonded_ref.potential.idxs, nonbonded_test.potential.idxs)
-        np.testing.assert_array_almost_equal(nonbonded_ref.params, nonbonded_test.params)
+        np.testing.assert_array_equal(nonbonded_ref.params, nonbonded_test.params)
 
 
 @pytest.mark.nocuda
