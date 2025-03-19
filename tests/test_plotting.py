@@ -11,6 +11,7 @@ from timemachine.fe.plots import (
     plot_dummy_b_interpolation_schedule,
     plot_forward_and_reverse_ddg,
     plot_forward_and_reverse_dg,
+    plot_water_proposals_by_state,
     plot_work,
 )
 from timemachine.ff import Forcefield
@@ -102,3 +103,18 @@ def test_plot_interpolation_schedule():
     plot_core_interpolation_schedule(st)
     plot_dummy_a_interpolation_schedule(st)
     plot_dummy_b_interpolation_schedule(st)
+
+
+def test_plot_water_sampling_proposals():
+    lambdas = np.linspace(0, 1.0, 5)
+    n_iters = 10
+    proposals_per_iter = 10
+    rng = np.random.default_rng(2024)
+    proposals_by_state_by_iter = []
+    for _ in range(n_iters):
+        acceptances = rng.integers(0, proposals_per_iter, size=len(lambdas))
+        proposals_by_state_by_iter.append([[x, proposals_per_iter] for x in acceptances])
+
+    cummulative_proposals_by_state = np.array(proposals_by_state_by_iter, dtype=np.int32).sum(axis=0)
+    plot_water_proposals_by_state(lambdas, cummulative_proposals_by_state, prefix="example prefix")
+    plt.clf()
