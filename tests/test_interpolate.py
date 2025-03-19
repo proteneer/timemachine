@@ -1105,6 +1105,8 @@ def test_assert_torsions_defined_over_non_linear_angles(mol_a, mol_b, core, monk
 
     monkeypatch.setattr(single_topology, "CORE_TORSION_OFF_TO_ON_MIN_MAX", [0.0, 1.0])
     monkeypatch.setattr(single_topology, "CORE_TORSION_ON_TO_OFF_MIN_MAX", [0.0, 1.0])
+    # re-align since min/maxes are changed.
+    st.aligned_proper = st._align_propers()
 
     def assert_fn(lam):
         vs = st.setup_intermediate_state(lam)
