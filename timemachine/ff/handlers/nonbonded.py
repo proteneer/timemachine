@@ -577,7 +577,7 @@ class NNHandler(SerializableMixIn):
 
 class ScaleOffsetHandler(SerializableMixIn):
     def __init__(self, smirks, params, props):
-        self.smirks = []
+        self.smirks = ["scale", "offsets"]
         self.params = np.array(params, dtype=np.float64)
         self.props = None
 
