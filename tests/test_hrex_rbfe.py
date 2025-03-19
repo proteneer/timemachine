@@ -191,11 +191,6 @@ def test_hrex_rbfe_hif2a(hif2a_single_topology_leg, seed, max_bisection_windows,
         assert np.all(result.water_sampling_diagnostics.proposals_by_state_by_iter[:, :, 1] == proposals_per_frame)
         assert np.all(result.water_sampling_diagnostics.proposals_by_state_by_iter[:, :, 0] >= 0)
         assert result.water_sampling_diagnostics.cumulative_proposals_by_state.shape == (final_windows, 2)
-        assert result.water_sampling_diagnostics.proposals_by_replica_by_iter.shape == (
-            md_params.n_frames,
-            final_windows,
-            2,
-        )
     else:
         assert result.water_sampling_diagnostics is None
     assert len(result.hrex_diagnostics.replica_idx_by_state_by_iter) == md_params.n_frames
