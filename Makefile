@@ -48,7 +48,7 @@ memcheck_tests:
 
 .PHONY: unit_tests
 unit_tests:
-	pytest -m 'not $(NOCUDA_MARKER) and not $(NOGPU_MARKER) and not $(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
+	pytest -x -m 'not $(NOCUDA_MARKER) and not $(NOGPU_MARKER) and not $(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: nightly_tests
 nightly_tests:

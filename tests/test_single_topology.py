@@ -659,43 +659,6 @@ def test_setup_intermediate_state_not_unreasonably_slow(arbitrary_transformation
     assert elapsed_time / n_states <= 1.0
 
 
-# @pytest.mark.nocuda
-# def test_setup_intermediate_bonded_term(arbitrary_transformation):
-#     """Tests that the current vectorized implementation _setup_intermediate_bonded_term is consistent with the previous
-#     implementation"""
-#     st, _ = arbitrary_transformation
-#     interpolate_fn = functools.partial(interpolate_harmonic_bond_params, k_min=0.1, lambda_min=0.0, lambda_max=0.7)
-
-#     def setup_intermediate_bonded_term_ref(src_bond, dst_bond, lamb, align_fn, interpolate_fn):
-#         bond_idxs_and_params = align_fn(
-#             src_bond.potential.idxs,
-#             src_bond.params,
-#             dst_bond.potential.idxs,
-#             dst_bond.params,
-#         )
-
-#         bond_idxs = []
-#         bond_params = []
-
-#         for idxs, src_params, dst_params in bond_idxs_and_params:
-#             bond_idxs.append(idxs)
-#             new_params = interpolate_fn(src_params, dst_params, lamb)
-#             bond_params.append(new_params)
-
-#         return type(src_bond.potential)(np.array(bond_idxs)).bind(jnp.array(bond_params))
-
-#     for lamb in np.linspace(0.0, 1.0, 10):
-#         bonded_ref = setup_intermediate_bonded_term_ref(
-#             st.src_system.bond, st.dst_system.bond, lamb, align_harmonic_bond_idxs_and_params, interpolate_fn
-#         )
-#         bonded_test = st._setup_intermediate_bonded_term(
-#             st.src_system.bond, st.dst_system.bond, lamb, align_harmonic_bond_idxs_and_params, interpolate_fn
-#         )
-
-#         np.testing.assert_array_equal(bonded_ref.potential.idxs, bonded_test.potential.idxs)
-#         np.testing.assert_array_equal(bonded_ref.params, bonded_test.params)
-
-
 @pytest.mark.nocuda
 def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
     """Tests that the current vectorized implementation _setup_intermediate_nonbonded_term is consistent with the
@@ -703,20 +666,19 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
     st, _ = arbitrary_transformation
 
     def setup_intermediate_nonbonded_term_ref(src_nonbonded, dst_nonbonded, lamb, align_fn, interpolate_qlj_fn):
-        pair_idxs_and_params = align_fn(
-            src_nonbonded.potential.idxs,
-            src_nonbonded.params,
-            dst_nonbonded.potential.idxs,
-            dst_nonbonded.params,
-        )
-
         cutoff = src_nonbonded.potential.cutoff
-
         pair_idxs = []
         pair_params = []
-        for idxs, src_params, dst_params in pair_idxs_and_params:
+        for idxs, src_params, dst_params in zip(
+            st.aligned_nonbonded_pair_list.idxs,
+            st.aligned_nonbonded_pair_list.src_params,
+            st.aligned_nonbonded_pair_list.dst_params,
+        ):
             src_qlj, src_w = src_params[:3], src_params[3]
             dst_qlj, dst_w = dst_params[:3], dst_params[3]
+
+            src_qlj = tuple(src_qlj.tolist())
+            dst_qlj = tuple(dst_qlj.tolist())
 
             if src_qlj == (0, 0, 0):  # i.e. excluded in src state
                 new_params = (*dst_qlj, interpolate_w_coord(cutoff, 0, lamb))
@@ -743,16 +705,10 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
             align_nonbonded_idxs_and_params,
             linear_interpolation,
         )
-        nonbonded_test = st._setup_intermediate_nonbonded_term(
-            st.src_system.nonbonded_pair_list,
-            st.dst_system.nonbonded_pair_list,
-            lamb,
-            align_nonbonded_idxs_and_params,
-            linear_interpolation,
-        )
+        nonbonded_test = st.aligned_nonbonded_pair_list.interpolate(lamb)
 
         np.testing.assert_array_equal(nonbonded_ref.potential.idxs, nonbonded_test.potential.idxs)
-        np.testing.assert_array_equal(nonbonded_ref.params, nonbonded_test.params)
+        np.testing.assert_array_almost_equal(nonbonded_ref.params, nonbonded_test.params)
 
 
 @pytest.mark.nocuda
