@@ -58,6 +58,8 @@ class GpuImplWrapper:
         return cast(float, res)
 
     def bind(self, params: NDArray) -> "BoundGpuImplWrapper":
+        if params.dtype == np.float64:
+            params = params.astype(np.float32).astype(np.float64)
         return BoundGpuImplWrapper(custom_ops.BoundPotential(self.unbound_impl, params))
 
 
