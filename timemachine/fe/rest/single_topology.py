@@ -9,7 +9,7 @@ from openmm import app
 from rdkit import Chem
 
 from timemachine.constants import NBParamIdx
-from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.single_topology import AlignedPotential, SingleTopology
 from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
 from timemachine.ff import Forcefield
 
@@ -97,18 +97,18 @@ class SingleTopologyREST(SingleTopology):
         # Heuristic: include in the rest region atoms involved in bond, angle, or improper torsion interactions that
         # differ in the end states. Note that proper torsions are omitted from the heuristic as this tends to result in
         # larger REST regions than seem desirable.
-        aligned_tuples_by_potential = [
-            self.aligned_bond_tuples,
-            self.aligned_angle_tuples,
-            self.aligned_improper_tuples,
+        aligned_tuples_by_potential: list[AlignedPotential] = [
+            self.aligned_bond,
+            self.aligned_angle,
+            self.aligned_improper,
         ]
 
         idxs = {
             int(idx)
-            for aligned_tuples in aligned_tuples_by_potential
-            for idxs, params_a, params_b in aligned_tuples
+            for aligned in aligned_tuples_by_potential
+            for idxs, params_a, params_b in zip(aligned.idxs, aligned.src_params, aligned.dst_params)
             if not params_eq(params_a, params_b)
-            for idx in idxs
+            for idx in idxs  # type: ignore[attr-defined]
         }
 
         # Ensure all dummy atoms are included in the REST region

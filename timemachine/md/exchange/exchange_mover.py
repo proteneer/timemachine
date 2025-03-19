@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Optional
 
 import jax
@@ -49,6 +50,15 @@ def translate_coordinates(coords, new_loc):
     centroid = np.mean(coords, axis=0, keepdims=True)
     centered_coords = coords - centroid
     return centered_coords + new_loc
+
+
+@dataclass(frozen=True)
+class WaterSamplingDiagnostics:
+    proposals_by_state_by_iter: NDArray
+
+    @property
+    def cumulative_proposals_by_state(self) -> NDArray[np.int32]:
+        return np.sum(self.proposals_by_state_by_iter, axis=0)
 
 
 class BDExchangeMove(moves.MonteCarloMove):
