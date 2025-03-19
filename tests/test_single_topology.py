@@ -705,7 +705,7 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
             align_nonbonded_idxs_and_params,
             linear_interpolation,
         )
-        nonbonded_test = st.aligned_nonbonded_pairlist.interpolate(lamb)
+        nonbonded_test = st.aligned_nonbonded_pair_list.interpolate(lamb)
 
         np.testing.assert_array_equal(nonbonded_ref.potential.idxs, nonbonded_test.potential.idxs)
         np.testing.assert_array_almost_equal(nonbonded_ref.params, nonbonded_test.params)
