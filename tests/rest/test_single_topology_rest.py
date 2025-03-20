@@ -123,11 +123,19 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
             )
             return proper(ligand_conf, None)
 
-        U_proper_subset = compute_proper_energy(state, st_rest.target_proper_idxs)
-        U_proper_subset_ref = compute_proper_energy(state_ref, st_rest.target_proper_idxs)
-        np.testing.assert_allclose(U_proper_subset, energy_scale * U_proper_subset_ref)
+        # check that propers in the REST region are scaled appropriately
+        rest_proper_idxs = st_rest.target_proper_idxs
+        U_proper_rest = compute_proper_energy(state, rest_proper_idxs)
+        U_proper_rest_ref = compute_proper_energy(state_ref, rest_proper_idxs)
+        np.testing.assert_allclose(U_proper_rest, energy_scale * U_proper_rest_ref)
 
-        np.testing.assert_allclose(U_nonbonded, energy_scale * U_nonbonded_ref)
+        # check that propers outside of the REST region are not scaled
+        num_propers = len(st_rest.propers)
+        rest_complement_proper_idxs = set(range(num_propers)) - set(rest_proper_idxs)
+        rest_complement_proper_idxs = list(rest_complement_proper_idxs)
+        U_proper_complement = compute_proper_energy(state, rest_complement_proper_idxs)
+        U_proper_complement_ref = compute_proper_energy(state_ref, rest_complement_proper_idxs)
+        np.testing.assert_allclose(U_proper_complement, U_proper_complement_ref)
 
 
 @cache
@@ -165,11 +173,17 @@ def test_single_topology_rest_solvent(mol_pair, temperature_scale_interpolation_
         )
         return nonbonded_ixn_group(conf, host_config.box)
 
+    # check that interactions involving atoms in the REST region are scaled appropriately
     U = compute_host_guest_ixn_energy(st_rest, st_rest.rest_region_atom_idxs)
     U_ref = compute_host_guest_ixn_energy(st, st_rest.rest_region_atom_idxs)
-
     energy_scale = st_rest.get_energy_scale_factor(lamb)
     np.testing.assert_allclose(U, energy_scale * U_ref, rtol=1e-5)
+
+    # check that interactions involving atoms outside of the REST region are not scaled
+    rest_complement_atom_idxs = set(range(st_rest.get_num_atoms())) - st_rest.rest_region_atom_idxs
+    U_complement = compute_host_guest_ixn_energy(st_rest, rest_complement_atom_idxs)
+    U_complement_ref = compute_host_guest_ixn_energy(st, rest_complement_atom_idxs)
+    np.testing.assert_allclose(U_complement, U_complement_ref, rtol=1e-5)
 
 
 def get_mol(smiles: str):
