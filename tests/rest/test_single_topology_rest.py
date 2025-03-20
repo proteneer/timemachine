@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import replace
 from functools import cache
 
@@ -113,7 +114,7 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
             if energy_scale < 1.0:
                 assert U_proper < U_proper_ref
 
-        def compute_proper_energy(state: GuestSystem, ixn_idxs):
+        def compute_proper_energy(state: GuestSystem, ixn_idxs: Sequence[int]):
             assert state.proper
             proper = replace(
                 state.proper,
