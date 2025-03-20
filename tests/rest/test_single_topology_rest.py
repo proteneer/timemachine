@@ -135,7 +135,7 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
         rest_complement_proper_idxs = list(rest_complement_proper_idxs)
         U_proper_complement = compute_proper_energy(state, rest_complement_proper_idxs)
         U_proper_complement_ref = compute_proper_energy(state_ref, rest_complement_proper_idxs)
-        np.testing.assert_allclose(U_proper_complement, U_proper_complement_ref)
+        np.testing.assert_array_equal(U_proper_complement, U_proper_complement_ref)
 
 
 @cache
@@ -183,7 +183,7 @@ def test_single_topology_rest_solvent(mol_pair, temperature_scale_interpolation_
     rest_complement_atom_idxs = set(range(st_rest.get_num_atoms())) - st_rest.rest_region_atom_idxs
     U_complement = compute_host_guest_ixn_energy(st_rest, rest_complement_atom_idxs)
     U_complement_ref = compute_host_guest_ixn_energy(st, rest_complement_atom_idxs)
-    np.testing.assert_allclose(U_complement, U_complement_ref, rtol=1e-5)
+    np.testing.assert_array_equal(U_complement, U_complement_ref)
 
 
 def get_mol(smiles: str):
