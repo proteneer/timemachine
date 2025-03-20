@@ -79,6 +79,9 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
     st = get_single_topology(mol_a, mol_b, core)
     st_rest = get_single_topology_rest(mol_a, mol_b, core, 2.0, temperature_scale_interpolation_fxn)
 
+    # NOTE: This assertion is not guaranteed to hold in general (i.e. the REST region may be empty, or the whole
+    # combined ligand), but it does hold for typical cases, including the edges tested here. The stronger assertion here
+    # ensures that later assertions (e.g. that we only soften interactions in the REST region) are not trivially true.
     assert 0 < len(st_rest.rest_region_atom_idxs) < st_rest.get_num_atoms()
 
     state = st_rest.setup_intermediate_state(lamb)
