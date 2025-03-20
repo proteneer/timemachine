@@ -192,7 +192,7 @@ class SingleTopologyREST(SingleTopology):
 
         # compute indices corresponding to REST-region ligand atoms in the host-guest interaction potential
         num_atoms_host = host_system.nonbonded_all_pairs.potential.num_atoms
-        ligand_idxs = np.array(sorted(self.rest_region_atom_idxs)) + num_atoms_host
+        rest_region_atom_idxs = np.array(sorted(self.rest_region_atom_idxs)) + num_atoms_host
 
         # NOTE: the following methods of scaling the ligand-environment interaction energy are all equivalent:
         #
@@ -209,9 +209,9 @@ class SingleTopologyREST(SingleTopology):
         nonbonded_host_guest_ixn = replace(
             ref_state.nonbonded_ixn_group,
             params=jnp.asarray(ref_state.nonbonded_ixn_group.params)
-            .at[ligand_idxs, NBParamIdx.Q_IDX]
+            .at[rest_region_atom_idxs, NBParamIdx.Q_IDX]
             .mul(energy_scale)  # scale ligand charges
-            .at[ligand_idxs, NBParamIdx.LJ_EPS_IDX]
+            .at[rest_region_atom_idxs, NBParamIdx.LJ_EPS_IDX]
             .mul(energy_scale),  # scale ligand epsilons
         )
 
