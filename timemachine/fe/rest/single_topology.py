@@ -1,7 +1,6 @@
 from dataclasses import astuple, replace
 from functools import cached_property
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 from numpy.typing import NDArray
@@ -85,15 +84,6 @@ class SingleTopologyREST(SingleTopology):
     def rest_region_atom_idxs(self) -> set[int]:
         """Returns the set of indices of atoms in the combined ligand that are in the REST region."""
 
-        def params_eq(params_a, params_b) -> bool:
-            eq_p = params_a == params_b
-            if isinstance(eq_p, bool):
-                return eq_p
-            elif isinstance(eq_p, (np.ndarray, jax.Array)):
-                return bool(np.all(eq_p))
-            else:
-                assert False
-
         # Heuristic: include in the rest region atoms involved in bond, angle, or improper torsion interactions that
         # differ in the end states. Note that proper torsions are omitted from the heuristic as this tends to result in
         # larger REST regions than seem desirable.
@@ -107,7 +97,7 @@ class SingleTopologyREST(SingleTopology):
             int(idx)
             for aligned in aligned_potentials
             for idxs, params_a, params_b in zip(aligned.idxs, aligned.src_params, aligned.dst_params)
-            if not params_eq(params_a, params_b)
+            if not np.all(params_a == params_b)
             for idx in idxs  # type: ignore[attr-defined]
         }
 
