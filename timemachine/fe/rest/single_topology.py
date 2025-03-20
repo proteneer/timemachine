@@ -82,11 +82,13 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def rest_region_atom_idxs(self) -> set[int]:
-        """Returns the set of indices of atoms in the combined ligand that are in the REST region."""
+        """Returns the set of indices of atoms in the combined ligand that are in the REST region.
 
-        # Heuristic: include in the rest region atoms involved in bond, angle, or improper torsion interactions that
-        # differ in the end states. Note that proper torsions are omitted from the heuristic as this tends to result in
-        # larger REST regions than seem desirable.
+        Here the REST region is defined to include combined ligand atoms involved in bond, angle, or improper torsion
+        interactions that differ in the end states. Note that proper torsions are omitted from this heuristic as this
+        tends to result in larger REST regions than seem desirable.
+        """
+
         aligned_potentials: list[AlignedPotential] = [
             self.aligned_bond,
             self.aligned_angle,
@@ -131,7 +133,7 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def candidate_propers(self) -> dict[int, CanonicalProper]:
-        """Returns the set of propers in the combined ligand that are candidates for softening."""
+        """Returns a dict of propers in the combined ligand, keyed on index, that are candidates for softening."""
         return {
             idx: proper
             for idx, proper in enumerate(self.propers)
@@ -141,8 +143,8 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def target_propers(self) -> dict[int, CanonicalProper]:
-        """Returns the set of propers in the combined ligand that are candidates for softening and involve an atom in
-        the REST region."""
+        """Returns a dict of propers in the combined ligand, keyed on index, that are candidates for softening and
+        involve an atom in the REST region."""
         return {
             idx: proper
             for (idx, proper) in self.candidate_propers.items()
