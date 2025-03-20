@@ -205,7 +205,7 @@ def test_single_topology_rest_propers():
     # benzene: no propers are scaled
     benzene = get_mol("c1ccccc1")
     st = get_identity_transformation(benzene)
-    assert st.candidate_propers == set()
+    assert len(st.candidate_propers) == 0
 
     # cyclohexane: all 9 * 6 ring propers are scaled (|{H1, H2, C1}-C2-C3-{C4, H3, H4}| = 9 propers per C-C bond)
     cyclohexane = get_mol("C1CCCCC1")

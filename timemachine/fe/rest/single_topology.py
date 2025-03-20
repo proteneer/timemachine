@@ -130,22 +130,22 @@ class SingleTopologyREST(SingleTopology):
         return [mkproper(*idxs) for idxs in super().setup_intermediate_state(0.0).proper.potential.idxs]
 
     @cached_property
-    def candidate_propers(self) -> set[tuple[int, CanonicalProper]]:
+    def candidate_propers(self) -> dict[int, CanonicalProper]:
         """Returns the set of propers in the combined ligand that are candidates for softening."""
         return {
-            (idx, proper)
+            idx: proper
             for idx, proper in enumerate(self.propers)
             for bond in [mkbond(proper.j, proper.k)]
             if bond in self.rotatable_bonds or bond in self.aliphatic_ring_bonds
         }
 
     @cached_property
-    def target_propers(self) -> set[tuple[int, CanonicalProper]]:
+    def target_propers(self) -> dict[int, CanonicalProper]:
         """Returns the set of propers in the combined ligand that are candidates for softening and involve an atom in
         the REST region."""
         return {
-            (idx, proper)
-            for (idx, proper) in self.candidate_propers
+            idx: proper
+            for (idx, proper) in self.candidate_propers.items()
             if any(idx in self.rest_region_atom_idxs for idx in astuple(proper))
         }
 
@@ -153,7 +153,7 @@ class SingleTopologyREST(SingleTopology):
     def target_proper_idxs(self) -> list[int]:
         """Returns a list of indices of propers in the combined ligand that are candidates for softening and involve an
         atom in the REST region."""
-        return [idx for idx, _ in self.target_propers]
+        return list(self.target_propers.keys())
 
     def get_energy_scale_factor(self, lamb: float) -> float:
         temperature_factor = float(self._temperature_scale_interpolation_fxn(lamb))
