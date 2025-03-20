@@ -44,7 +44,7 @@ DEFAULT_ATOM_MAPPING_KWARGS: dict[str, Any] = {
     "min_connected_component_size": 1,
     "max_cores": 100_000,
     "enforce_core_core": True,
-    "ring_matches_ring_only": True,
+    "ring_matches_ring_only": False,
     "enforce_chiral": True,
     "disallow_planar_torsion_flips": True,
     "min_threshold": 0,
