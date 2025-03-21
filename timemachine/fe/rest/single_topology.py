@@ -1,13 +1,14 @@
-from dataclasses import replace
+from dataclasses import astuple, replace
 from functools import cached_property
 
 import jax.numpy as jnp
+import numpy as np
 from numpy.typing import NDArray
 from openmm import app
 from rdkit import Chem
 
 from timemachine.constants import NBParamIdx
-from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.single_topology import AlignedPotential, SingleTopology
 from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
 from timemachine.ff import Forcefield
 
@@ -80,7 +81,37 @@ class SingleTopologyREST(SingleTopology):
         )
 
     @cached_property
+    def rest_region_atom_idxs(self) -> set[int]:
+        """Returns the set of indices of atoms in the combined ligand that are in the REST region.
+
+        Here the REST region is defined to include combined ligand atoms involved in bond, angle, or improper torsion
+        interactions that differ in the end states. Note that proper torsions are omitted from this heuristic as this
+        tends to result in larger REST regions than seem desirable.
+        """
+
+        aligned_potentials: list[AlignedPotential] = [
+            self.aligned_bond,
+            self.aligned_angle,
+            self.aligned_improper,
+        ]
+
+        idxs = {
+            int(idx)
+            for aligned in aligned_potentials
+            for idxs, params_a, params_b in zip(aligned.idxs, aligned.src_params, aligned.dst_params)
+            if not np.all(params_a == params_b)
+            for idx in idxs  # type: ignore[attr-defined]
+        }
+
+        # Ensure all dummy atoms are included in the REST region
+        idxs |= self.get_dummy_atoms_a()
+        idxs |= self.get_dummy_atoms_b()
+
+        return idxs
+
+    @cached_property
     def aliphatic_ring_bonds(self) -> set[CanonicalBond]:
+        """Returns the set of aliphatic ring bonds in the combined ligand."""
         ring_bonds_a = {bond.translate(self.a_to_c) for bond in get_aliphatic_ring_bonds(self.mol_a)}
         ring_bonds_b = {bond.translate(self.b_to_c) for bond in get_aliphatic_ring_bonds(self.mol_b)}
         ring_bonds_c = ring_bonds_a | ring_bonds_b
@@ -88,6 +119,7 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def rotatable_bonds(self) -> set[CanonicalBond]:
+        """Returns the set of rotatable bonds in the combined ligand."""
         rotatable_bonds_a = {bond.translate(self.a_to_c) for bond in get_rotatable_bonds(self.mol_a)}
         rotatable_bonds_b = {bond.translate(self.b_to_c) for bond in get_rotatable_bonds(self.mol_b)}
         rotatable_bonds_c = rotatable_bonds_a | rotatable_bonds_b
@@ -95,21 +127,35 @@ class SingleTopologyREST(SingleTopology):
 
     @cached_property
     def propers(self) -> list[CanonicalProper]:
+        """Returns a list of proper torsions in the combined ligand."""
         # TODO: refactor SingleTopology to compute src and dst alignment at initialization
         return [mkproper(*idxs) for idxs in super().setup_intermediate_state(0.0).proper.potential.idxs]
 
     @cached_property
-    def target_proper_idxs(self) -> list[int]:
-        return [
-            idx
+    def candidate_propers(self) -> dict[int, CanonicalProper]:
+        """Returns a dict of propers in the combined ligand, keyed on index, that are candidates for softening."""
+        return {
+            idx: proper
             for idx, proper in enumerate(self.propers)
             for bond in [mkbond(proper.j, proper.k)]
             if bond in self.rotatable_bonds or bond in self.aliphatic_ring_bonds
-        ]
+        }
 
     @cached_property
-    def target_propers(self) -> set[CanonicalProper]:
-        return {self.propers[i] for i in self.target_proper_idxs}
+    def target_propers(self) -> dict[int, CanonicalProper]:
+        """Returns a dict of propers in the combined ligand, keyed on index, that are candidates for softening and
+        involve an atom in the REST region."""
+        return {
+            idx: proper
+            for (idx, proper) in self.candidate_propers.items()
+            if any(idx in self.rest_region_atom_idxs for idx in astuple(proper))
+        }
+
+    @cached_property
+    def target_proper_idxs(self) -> list[int]:
+        """Returns a list of indices of propers in the combined ligand that are candidates for softening and involve an
+        atom in the REST region."""
+        return list(self.target_propers.keys())
 
     def get_energy_scale_factor(self, lamb: float) -> float:
         temperature_factor = float(self._temperature_scale_interpolation_fxn(lamb))
@@ -146,25 +192,28 @@ class SingleTopologyREST(SingleTopology):
     ) -> HostGuestSystem:
         ref_state = super().combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
 
-        num_host_atoms = host_system.nonbonded_all_pairs.params.shape[0]
+        # compute indices corresponding to REST-region ligand atoms in the host-guest interaction potential
+        num_atoms_host = host_system.nonbonded_all_pairs.potential.num_atoms
+        rest_region_atom_idxs = np.array(sorted(self.rest_region_atom_idxs)) + num_atoms_host
+
         # NOTE: the following methods of scaling the ligand-environment interaction energy are all equivalent:
         #
         # 1. scaling ligand charges and LJ epsilons by energy_scale
         # 2. scaling environment charges and LJ epsilons by energy_scale
         # 3. scaling all charges and LJ epsilons by sqrt(energy_scale)
         #
-        # Here, we choose (1) because water sampling infers parameters from the NonbondedInteractionGroup.Changing
-        # the environment parameters prevents easy construction of equivalent parameters for water sampling, which
-        # leads to incorrect sampling.
+        # However, (2) and (3) are incompatible with the current water sampling implementation, which assumes that the
+        # parameters corresponding to water atoms are identical in the host-host all-pairs potential and the host-guest
+        # interaction group potential. Therefore we choose option (1).
 
         energy_scale = self.get_energy_scale_factor(lamb)
 
         nonbonded_host_guest_ixn = replace(
             ref_state.nonbonded_ixn_group,
             params=jnp.asarray(ref_state.nonbonded_ixn_group.params)
-            .at[num_host_atoms:, NBParamIdx.Q_IDX]
+            .at[rest_region_atom_idxs, NBParamIdx.Q_IDX]
             .mul(energy_scale)  # scale ligand charges
-            .at[num_host_atoms:, NBParamIdx.LJ_EPS_IDX]
+            .at[rest_region_atom_idxs, NBParamIdx.LJ_EPS_IDX]
             .mul(energy_scale),  # scale ligand epsilons
         )
 
