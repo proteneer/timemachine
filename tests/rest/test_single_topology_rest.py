@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-from dataclasses import replace
 from functools import cache
 
 import jax
@@ -13,20 +11,14 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.rbfe import Host, setup_optimized_host
-from timemachine.fe.rest.interpolation import (
-    Exponential,
-    InterpolationFxnName,
-    Linear,
-    Quadratic,
-    Symmetric,
-    plot_interpolation_fxn,
-)
-from timemachine.fe.rest.single_topology import SingleTopologyREST
+from timemachine.fe.rest.interpolation import Exponential, Linear, Quadratic, Symmetric, plot_interpolation_fxn
+from timemachine.fe.rest.single_topology import InterpolationFxnName, SingleTopologyREST
 from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import GuestSystem
 from timemachine.fe.utils import get_romol_conf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.md import builders
+from timemachine.potentials import PeriodicTorsion
 from timemachine.utils import path_to_internal_file
 
 with path_to_internal_file("timemachine.testsystems.fep_benchmark.hif2a", "ligands.sdf") as ligands_path:
@@ -79,14 +71,9 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
     st = get_single_topology(mol_a, mol_b, core)
     st_rest = get_single_topology_rest(mol_a, mol_b, core, 2.0, temperature_scale_interpolation_fxn)
 
-    # NOTE: This assertion is not guaranteed to hold in general (i.e. the REST region may be empty, or the whole
-    # combined ligand), but it does hold for typical cases, including the edges tested here. The stronger assertion here
-    # ensures that later assertions (e.g. that we only soften interactions in the REST region) are not trivially true.
-    assert 0 < len(st_rest.rest_region_atom_idxs) < st_rest.get_num_atoms()
-
     state = st_rest.setup_intermediate_state(lamb)
     state_ref = st.setup_intermediate_state(lamb)
-    assert len(st_rest.candidate_propers) < len(state_ref.proper.potential.idxs)
+    assert len(st_rest.target_propers) < len(state_ref.proper.potential.idxs)
 
     ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
 
@@ -112,33 +99,23 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
         assert energy_scale < 1.0
 
         if has_rotatable_bonds or has_aliphatic_rings:
-            assert 0 < len(st_rest.candidate_propers)
+            assert 0 < len(st_rest.target_propers)
 
             if energy_scale < 1.0:
                 assert U_proper < U_proper_ref
 
-        def compute_proper_energy(state: GuestSystem, ixn_idxs: Sequence[int]):
+        def get_proper_subset_energy(state: GuestSystem, ixn_idxs):
             assert state.proper
-            proper = replace(
-                state.proper,
-                potential=replace(state.proper.potential, idxs=state.proper.potential.idxs[ixn_idxs, :]),
-                params=state.proper.params[ixn_idxs, :],
-            )
-            return proper(ligand_conf, None)
+            idxs = state.proper.potential.idxs[ixn_idxs, :]
+            params = state.proper.params[ixn_idxs, :]
+            potential = PeriodicTorsion(idxs).bind(params)
+            return potential(ligand_conf, None)
 
-        # check that propers in the REST region are scaled appropriately
-        rest_proper_idxs = st_rest.target_proper_idxs
-        U_proper_rest = compute_proper_energy(state, rest_proper_idxs)
-        U_proper_rest_ref = compute_proper_energy(state_ref, rest_proper_idxs)
-        np.testing.assert_allclose(U_proper_rest, energy_scale * U_proper_rest_ref)
+        U_proper_subset = get_proper_subset_energy(state, st_rest.target_proper_idxs)
+        U_proper_subset_ref = get_proper_subset_energy(state_ref, st_rest.target_proper_idxs)
+        np.testing.assert_allclose(U_proper_subset, energy_scale * U_proper_subset_ref)
 
-        # check that propers outside of the REST region are not scaled
-        num_propers = len(st_rest.propers)
-        rest_complement_proper_idxs = set(range(num_propers)) - set(rest_proper_idxs)
-        rest_complement_proper_idxs = list(rest_complement_proper_idxs)
-        U_proper_complement = compute_proper_energy(state, rest_complement_proper_idxs)
-        U_proper_complement_ref = compute_proper_energy(state_ref, rest_complement_proper_idxs)
-        np.testing.assert_array_equal(U_proper_complement, U_proper_complement_ref)
+        np.testing.assert_allclose(U_nonbonded, energy_scale * U_nonbonded_ref)
 
 
 @cache
@@ -166,27 +143,15 @@ def test_single_topology_rest_solvent(mol_pair, temperature_scale_interpolation_
     ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     conf = np.concatenate([host.conf, ligand_conf])
 
-    def compute_host_guest_ixn_energy(st: SingleTopology, ligand_idxs: set[int]):
+    def get_nonbonded_host_guest_ixn_energy(st: SingleTopology):
         hgs = st.combine_with_host(host.system, lamb, host_config.num_water_atoms, st.ff, host_config.omm_topology)
-        num_atoms_host = host.system.nonbonded_all_pairs.potential.num_atoms
-        ligand_idxs_ = np.array(list(ligand_idxs), dtype=np.int32) + num_atoms_host
-        nonbonded_ixn_group = replace(
-            hgs.nonbonded_ixn_group,
-            potential=replace(hgs.nonbonded_ixn_group.potential, row_atom_idxs=ligand_idxs_),
-        )
-        return nonbonded_ixn_group(conf, host_config.box)
+        return hgs.nonbonded_ixn_group(conf, host_config.box)
 
-    # check that interactions involving atoms in the REST region are scaled appropriately
-    U = compute_host_guest_ixn_energy(st_rest, st_rest.rest_region_atom_idxs)
-    U_ref = compute_host_guest_ixn_energy(st, st_rest.rest_region_atom_idxs)
+    U = get_nonbonded_host_guest_ixn_energy(st_rest)
+    U_ref = get_nonbonded_host_guest_ixn_energy(st)
+
     energy_scale = st_rest.get_energy_scale_factor(lamb)
     np.testing.assert_allclose(U, energy_scale * U_ref, rtol=1e-5)
-
-    # check that interactions involving atoms outside of the REST region are not scaled
-    rest_complement_atom_idxs = set(range(st_rest.get_num_atoms())) - st_rest.rest_region_atom_idxs
-    U_complement = compute_host_guest_ixn_energy(st_rest, rest_complement_atom_idxs)
-    U_complement_ref = compute_host_guest_ixn_energy(st, rest_complement_atom_idxs)
-    np.testing.assert_array_equal(U_complement, U_complement_ref)
 
 
 def get_mol(smiles: str):
@@ -205,17 +170,17 @@ def test_single_topology_rest_propers():
     # benzene: no propers are scaled
     benzene = get_mol("c1ccccc1")
     st = get_identity_transformation(benzene)
-    assert len(st.candidate_propers) == 0
+    assert st.target_propers == set()
 
     # cyclohexane: all 9 * 6 ring propers are scaled (|{H1, H2, C1}-C2-C3-{C4, H3, H4}| = 9 propers per C-C bond)
     cyclohexane = get_mol("C1CCCCC1")
     st = get_identity_transformation(cyclohexane)
-    assert len(set(st.candidate_propers.values())) == 9 * 6
+    assert len(st.target_propers) == 9 * 6
 
     # phenylcyclohexane: all 9 * 6 cyclohexane ring propers and 6 rotatable bond propers are scaled
     phenylcyclohexane = get_mol("c1ccc(C2CCCCC2)cc1")
     st = get_identity_transformation(phenylcyclohexane)
-    assert len(set(st.candidate_propers.values())) == 9 * 6 + 6
+    assert len(st.target_propers) == 9 * 6 + 6
 
 
 @pytest.mark.parametrize(
