@@ -1077,8 +1077,8 @@ def run_vacuum(
     min_overlap: Optional[float] = None,
     min_cutoff: Optional[float] = None,
 ):
-    if md_params is not None and md_params.local_steps > 0:
-        md_params = replace(md_params, local_steps=0)
+    if md_params is not None and md_params.local_md_params is not None:
+        md_params = replace(md_params, local_md_params=None)
         warnings.warn("Vacuum simulations don't support local steps, will use all global steps")
     if md_params is not None and md_params.water_sampling_params is not None:
         md_params = replace(md_params, water_sampling_params=None)

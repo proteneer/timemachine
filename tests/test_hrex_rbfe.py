@@ -16,6 +16,7 @@ from timemachine.fe.free_energy import (
     HostConfig,
     HREXParams,
     HREXSimulationResult,
+    LocalMDParams,
     MDParams,
     RESTParams,
     WaterSamplingParams,
@@ -284,8 +285,8 @@ def test_hrex_rbfe_reproducibility(hif2a_single_topology_leg, local_md: bool, se
         n_frames=10,
         n_eq_steps=10,
         steps_per_frame=400,
-        local_steps=200 if local_md else 0,
         seed=seed,
+        local_md_params=LocalMDParams(local_steps=200) if local_md else None,
         hrex_params=HREXParams(n_frames_bisection=1),
     )
 

@@ -140,29 +140,39 @@ class WaterSamplingParams:
 
 
 @dataclass(frozen=True)
-class MDParams:
-    n_frames: int
-    n_eq_steps: int
-    steps_per_frame: int
-    seed: int
+class LocalMDParams:
     local_steps: int = 0
     k: float = 1_000.0  # kJ/mol/nm^4
     min_radius: float = 1.0  # nm
     max_radius: float = 3.0  # nm
     freeze_reference: bool = True
 
+    def __post_init__(self):
+        assert 0.1 <= self.min_radius <= self.max_radius
+        assert self.local_steps > 0
+        assert 1.0 <= self.k <= 1.0e6
+
+
+@dataclass(frozen=True)
+class MDParams:
+    n_frames: int
+    n_eq_steps: int
+    steps_per_frame: int
+    seed: int
+
+    # Set to LocalMDParams to enable local MD
+    local_md_params: LocalMDParams | None = None
     # Set to HREXParams or None to disable HREX
-    hrex_params: Optional[HREXParams] = None
+    hrex_params: HREXParams | None = None
     # Setting water_sampling_params to None disables water sampling.
-    water_sampling_params: Optional[WaterSamplingParams] = None
+    water_sampling_params: WaterSamplingParams | None = None
 
     def __post_init__(self):
         assert self.steps_per_frame > 0
         assert self.n_frames > 0
         assert self.n_eq_steps >= 0
-        assert 0.1 <= self.min_radius <= self.max_radius
-        assert 0 <= self.local_steps <= self.steps_per_frame
-        assert 1.0 <= self.k <= 1.0e6
+        if self.local_md_params is not None:
+            assert self.local_md_params.local_steps <= self.steps_per_frame
 
 
 @dataclass
@@ -700,8 +710,8 @@ def sample_with_context_iter(
 
     rng = np.random.default_rng(md_params.seed)
 
-    if md_params.local_steps > 0:
-        ctxt.setup_local_md(temperature, md_params.freeze_reference)
+    if md_params.local_md_params is not None:
+        ctxt.setup_local_md(temperature, md_params.local_md_params.freeze_reference)
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 
@@ -717,21 +727,22 @@ def sample_with_context_iter(
     def run_production_local_steps(n_steps: int) -> tuple[NDArray, NDArray, NDArray]:
         coords = []
         boxes = []
+        assert md_params.local_md_params is not None
         for steps in batches(n_steps, md_params.steps_per_frame):
             if steps < md_params.steps_per_frame:
                 warn(
                     f"Batch of sample has {steps} steps, less than batch size {md_params.steps_per_frame}. Setting to {md_params.steps_per_frame}"
                 )
                 steps = md_params.steps_per_frame
-            global_steps = steps - md_params.local_steps
-            local_steps = md_params.local_steps
+            local_steps = md_params.local_md_params.local_steps
+            global_steps = steps - local_steps
             if global_steps > 0:
                 ctxt.multiple_steps(n_steps=global_steps)
             x_t, box_t = ctxt.multiple_steps_local(
                 local_steps,
                 ligand_idxs.astype(np.int32),
-                k=md_params.k,
-                radius=rng.uniform(md_params.min_radius, md_params.max_radius),
+                k=md_params.local_md_params.k,
+                radius=rng.uniform(md_params.local_md_params.min_radius, md_params.local_md_params.max_radius),
                 seed=rng.integers(np.iinfo(np.int32).max),
             )
             coords.append(x_t)
@@ -742,7 +753,7 @@ def sample_with_context_iter(
         return np.concatenate(coords), np.concatenate(boxes), final_velocities
 
     steps_func = run_production_steps
-    if md_params.local_steps > 0:
+    if md_params.local_md_params is not None:
         steps_func = run_production_local_steps
 
     for n_frames in batches(md_params.n_frames, batch_size):

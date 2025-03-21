@@ -9,6 +9,7 @@ import pytest
 from timemachine.fe.free_energy import (
     HREXParams,
     HREXSimulationResult,
+    LocalMDParams,
     MDParams,
     PairBarResult,
     SimulationResult,
@@ -240,31 +241,63 @@ def test_md_params_validation():
 
     # assert that local steps <= steps per frame
     with pytest.raises(AssertionError):
-        MDParams(seed=2023, n_frames=frames, n_eq_steps=10, local_steps=5, steps_per_frame=steps_per_frame)
+        MDParams(
+            seed=2023,
+            n_frames=frames,
+            n_eq_steps=10,
+            local_md_params=LocalMDParams(local_steps=5),
+            steps_per_frame=steps_per_frame,
+        )
 
     # assert that local steps >= 0
     with pytest.raises(AssertionError):
-        MDParams(seed=2023, n_frames=frames, n_eq_steps=10, local_steps=-1, steps_per_frame=steps_per_frame)
+        MDParams(
+            seed=2023,
+            n_frames=frames,
+            n_eq_steps=10,
+            local_md_params=LocalMDParams(local_steps=-1),
+            steps_per_frame=steps_per_frame,
+        )
 
     # assert that min_radius <= max_radius
     with pytest.raises(AssertionError):
         MDParams(
-            seed=2023, n_frames=frames, n_eq_steps=10, min_radius=4.0, max_radius=1.0, steps_per_frame=steps_per_frame
+            seed=2023,
+            n_frames=frames,
+            n_eq_steps=10,
+            local_md_params=LocalMDParams(local_steps=1, min_radius=4.0, max_radius=1.0),
+            steps_per_frame=steps_per_frame,
         )
 
     # assert that min_radius >= 0.1
     with pytest.raises(AssertionError):
         MDParams(
-            seed=2023, n_frames=frames, n_eq_steps=10, min_radius=0.09, max_radius=1.0, steps_per_frame=steps_per_frame
+            seed=2023,
+            n_frames=frames,
+            n_eq_steps=10,
+            local_md_params=LocalMDParams(local_steps=1, min_radius=0.09, max_radius=1.0),
+            steps_per_frame=steps_per_frame,
         )
 
     # assert that k >= 1.0
     with pytest.raises(AssertionError):
-        MDParams(seed=2023, n_frames=frames, n_eq_steps=10, k=-1.0, steps_per_frame=steps_per_frame)
+        MDParams(
+            seed=2023,
+            n_frames=frames,
+            n_eq_steps=10,
+            local_md_params=LocalMDParams(local_steps=1, k=-1.0),
+            steps_per_frame=steps_per_frame,
+        )
 
     # assert that k <= 1e6
     with pytest.raises(AssertionError):
-        MDParams(seed=2023, n_frames=frames, n_eq_steps=10, k=1.0e7, steps_per_frame=steps_per_frame)
+        MDParams(
+            seed=2023,
+            n_frames=frames,
+            n_eq_steps=10,
+            local_md_params=LocalMDParams(local_steps=1, k=1.0e7),
+            steps_per_frame=steps_per_frame,
+        )
 
 
 def test_am1bcc_vacuum():
@@ -300,10 +333,12 @@ def test_local_md_parameters(freeze_reference):
         n_eq_steps=10,
         seed=seed,
         steps_per_frame=steps_per_frame,
-        local_steps=steps_per_frame,
-        min_radius=0.3,
-        max_radius=1.0,
-        freeze_reference=freeze_reference,
+        local_md_params=LocalMDParams(
+            local_steps=steps_per_frame,
+            min_radius=0.3,
+            max_radius=1.0,
+            freeze_reference=freeze_reference,
+        ),
     )
 
     # Local MD not supported by vacuum, will reset local_steps to 0
@@ -314,7 +349,7 @@ def test_local_md_parameters(freeze_reference):
 
     assert len(res.frames[0]) == frames
     assert res.md_params != md_params
-    assert res.md_params.local_steps == 0
+    assert res.md_params.local_md_params is None
 
     # All of the particles should have moved, since it was global MD
     assert np.all(res.frames[0][0] == res.frames[0][-1], axis=1).sum() == 0
@@ -330,6 +365,7 @@ def test_local_md_parameters(freeze_reference):
     )
     assert len(res.frames[0]) == frames
     assert res.md_params == md_params
+    assert res.md_params.local_md_params is not None and res.md_params.local_md_params.local_steps == steps_per_frame
 
     # Some of the particles should have never moved
     assert np.all(res.frames[0][0] == res.frames[0][-1], axis=1).sum() > 0
