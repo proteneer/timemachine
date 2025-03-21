@@ -271,13 +271,10 @@ def plot_atom_mapping_grid(
     )
 
 
-type _Core = Sequence[Sequence[int]] | NDArray
-
-
 def view_atom_mapping_3d(
     mol_a: Chem.rdchem.Mol,
     mol_b: Chem.rdchem.Mol,
-    cores: Sequence[_Core] | NDArray = (),
+    cores: Sequence[Sequence[Sequence[int]]] | NDArray = (),
     colors: Sequence[str] = (
         # https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=12
         "#a6cee3",
@@ -338,12 +335,8 @@ def view_atom_mapping_3d(
     for core in cores:
         assert np.asarray(core).ndim == 2, "expect a list of cores"
 
-    def make_style(props):
-        return {"stick": props}
-
-    def atom_style(color):
-        return make_style({"color": color})
-
+    make_style = lambda props: {"stick": props}
+    atom_style = lambda color: make_style({"color": color})
     dummy_style = atom_style("white")
 
     num_rows = 1 + len(cores)
@@ -380,51 +373,6 @@ def view_atom_mapping_3d(
         for (ia, ib), color in zip(core, colors_):
             view.setStyle({"serial": ia}, atom_style(color), viewer=(row, 0))
             view.setStyle({"serial": ib}, atom_style(color), viewer=(row, 1))
-
-    view.zoomTo()
-
-    if show_atom_idx_labels:
-        view.addPropertyLabels("serial", "", {"alignment": "center", "fontSize": 10})
-
-    return view
-
-
-def view_rest_region_3d(
-    mol_a: Chem.rdchem.Mol,
-    mol_b: Chem.rdchem.Mol,
-    rest_region_atom_idxs_a: Sequence[int],
-    rest_region_atom_idxs_b: Sequence[int],
-    show_atom_idx_labels: bool = False,
-):
-    try:
-        import py3Dmol
-    except ImportError as e:
-        raise RuntimeError("requires py3Dmol to be installed") from e
-
-    def make_style(props):
-        return {"stick": props}
-
-    def atom_style(color):
-        return make_style({"color": color})
-
-    view = py3Dmol.view(viewergrid=(2, 2))
-
-    def add_mol(mol, viewer):
-        view.addModel(Chem.MolToMolBlock(mol), "mol", viewer=viewer)
-
-    add_mol(mol_a, (0, 0))
-    add_mol(mol_b, (0, 1))
-    view.setStyle(make_style({}))
-
-    add_mol(mol_a, (1, 0))
-    view.setStyle(atom_style("white"), viewer=(1, 0))
-    for idx in rest_region_atom_idxs_a:
-        view.setStyle({"serial": idx}, {"stick": {"color": "red"}}, viewer=(1, 0))
-
-    add_mol(mol_b, (1, 1))
-    view.setStyle(atom_style("white"), viewer=(1, 1))
-    for idx in rest_region_atom_idxs_b:
-        view.setStyle({"serial": idx}, atom_style("red"), viewer=(1, 1))
 
     view.zoomTo()
 
