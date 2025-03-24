@@ -87,18 +87,21 @@ double Context::_get_temperature() {
     }
 }
 
-void Context::setup_local_md(double temperature, bool freeze_reference) {
+void Context::setup_local_md(double temperature, bool freeze_reference, double ixn_group_nblist_padding) {
     if (this->local_md_pots_ != nullptr) {
         if (this->local_md_pots_->temperature != temperature ||
-            this->local_md_pots_->freeze_reference != freeze_reference) {
+            this->local_md_pots_->freeze_reference != freeze_reference ||
+            this->local_md_pots_->ixn_group_nblist_padding != ixn_group_nblist_padding) {
             throw std::runtime_error(
                 "local md configured with different parameters, current parameters: Temperature " +
                 std::to_string(this->local_md_pots_->temperature) + " Freeze Reference " +
-                std::to_string(this->local_md_pots_->freeze_reference));
+                std::to_string(this->local_md_pots_->freeze_reference) + " Interaction Group Neighborlist padding " +
+                std::to_string(this->local_md_pots_->ixn_group_nblist_padding));
         }
         return;
     }
-    this->local_md_pots_.reset(new LocalMDPotentials(N_, bps_, freeze_reference, temperature));
+    this->local_md_pots_.reset(
+        new LocalMDPotentials(N_, bps_, freeze_reference, temperature, ixn_group_nblist_padding));
 }
 
 void Context::_ensure_local_md_intialized() {

@@ -62,7 +62,7 @@ public:
 
     void get_box(double *out_buffer) const;
 
-    void setup_local_md(double temperature, bool freeze_reference);
+    void setup_local_md(double temperature, bool freeze_reference, double ixn_group_nblist_padding = 0.3);
 
     std::shared_ptr<Integrator> get_integrator() const;
 

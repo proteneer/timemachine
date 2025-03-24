@@ -146,11 +146,13 @@ class LocalMDParams:
     min_radius: float = 1.0  # nm
     max_radius: float = 3.0  # nm
     freeze_reference: bool = True
+    ixn_group_nblist_padding: float = 0.3  # nm
 
     def __post_init__(self):
         assert 0.1 <= self.min_radius <= self.max_radius
         assert self.local_steps > 0
         assert 1.0 <= self.k <= 1.0e6
+        assert self.ixn_group_nblist_padding > 0.0
 
 
 @dataclass(frozen=True)
@@ -711,7 +713,11 @@ def sample_with_context_iter(
     rng = np.random.default_rng(md_params.seed)
 
     if md_params.local_md_params is not None:
-        ctxt.setup_local_md(temperature, md_params.local_md_params.freeze_reference)
+        ctxt.setup_local_md(
+            temperature,
+            md_params.local_md_params.freeze_reference,
+            ixn_group_nblist_padding=md_params.local_md_params.ixn_group_nblist_padding,
+        )
 
     assert np.all(np.isfinite(ctxt.get_x_t())), "Equilibration resulted in a nan"
 

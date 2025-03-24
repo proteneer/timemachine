@@ -21,8 +21,8 @@ void set_nonbonded_ixn_potential_idxs(
     unsigned int *d_row_idxs,
     const cudaStream_t stream);
 
-std::shared_ptr<BoundPotential>
-construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const int P, const double *d_params);
+std::shared_ptr<BoundPotential> construct_ixn_group_potential(
+    const int N, std::shared_ptr<Potential> pot, const int P, const double *d_params, const double nblist_padding);
 
 void verify_local_md_parameters(double radius, double k);
 
