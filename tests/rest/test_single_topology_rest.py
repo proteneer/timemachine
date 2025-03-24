@@ -202,6 +202,15 @@ def get_identity_transformation(mol):
 
 
 def test_single_topology_rest_propers():
+    """Example with some propers not in the REST region"""
+    mol_a = hif2a_ligands["15"]
+    mol_b = hif2a_ligands["30"]
+    core = get_core(mol_a, mol_b)
+    st = SingleTopologyREST(mol_a, mol_b, np.asarray(core), forcefield, 2.0)
+    assert set(st.target_propers.items()) < set(st.candidate_propers.items())
+
+
+def test_single_topology_rest_propers_identity():
     # benzene: no propers are scaled
     benzene = get_mol("c1ccccc1")
     st = get_identity_transformation(benzene)
