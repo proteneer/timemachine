@@ -113,11 +113,13 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
     else:
         assert energy_scale < 1.0
 
+        # check that a subset of ligand-ligand nonbonded interactions are scaled
+        assert U_nonbonded != U_nonbonded_ref
+        assert U_nonbonded != energy_scale * U_nonbonded_ref
+
         if has_rotatable_bonds or has_aliphatic_rings:
             assert 0 < len(st_rest.candidate_propers)
-
-            if energy_scale < 1.0:
-                assert U_proper < U_proper_ref
+            assert U_proper < U_proper_ref
 
         def compute_proper_energy(state: GuestSystem, ixn_idxs: Sequence[int]):
             assert state.proper
