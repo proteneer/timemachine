@@ -119,6 +119,7 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
 
         if has_rotatable_bonds or has_aliphatic_rings:
             assert 0 < len(st_rest.candidate_propers)
+            assert not np.isclose(U_proper, U_proper_ref)
             assert U_proper < U_proper_ref
 
         def compute_proper_energy(state: GuestSystem, ixn_idxs: Sequence[int]):
