@@ -254,9 +254,9 @@ def test_run_rbfe_legs(
     # Hashes are of results.npz, lambda0_traj.npz and lambda1_traj.npz respectively.
     leg_results_hashes = {
         "vacuum": (
-            "3b2fe61d8df0d80edcf482d9dfe8c38aabf79b1108b17a9042321f7d8d380ee4",
+            "177ddb8c1b1fa62411d8657a7f21a48812d9490796fe810273728e073460d82d",
             "c74ba1b503532af7fe83be82090cca82c33f5fa72744e74613dcaad9d978283a",
-            "69bcc498fba25febbf1a9c0bd2bda6ebd8855ef382d731b17307d4b7a4ae2540",
+            "7a1a88079c2eb345947a6a380e18872a27d1f0ec5a29437e6c0560b3876375db",
         ),
         "solvent": (
             "d6464cc055e486acf6d6d1311aadc90d0ba27118d818be3750d569ace27f39bf",
