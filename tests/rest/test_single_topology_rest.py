@@ -113,7 +113,7 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
     else:
         assert energy_scale < 1.0
 
-        # check that a subset of ligand-ligand nonbonded interactions are scaled
+        # check that a proper subset of ligand-ligand nonbonded interactions are scaled
         assert U_nonbonded != U_nonbonded_ref
         assert U_nonbonded != energy_scale * U_nonbonded_ref
 
