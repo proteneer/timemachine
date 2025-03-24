@@ -20,6 +20,7 @@ Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, DEFAULT_FF
 from timemachine.fe import atom_mapping
 from timemachine.fe.free_energy import HREXParams, RESTParams, WaterSamplingParams
+from timemachine.fe.plots import plot_as_png_fxn, plot_water_proposals_by_state
 from timemachine.fe.rbfe import (
     DEFAULT_NUM_WINDOWS,
     HREXSimulationResult,
@@ -168,6 +169,15 @@ def run_leg(
             Path(leg_name) / "hrex_replica_state_distribution_heatmap.png",
             res.hrex_plots.replica_state_distribution_heatmap_png,
         )
+        if res.water_sampling_diagnostics is not None:
+            file_client.store(
+                Path(leg_name) / "water_sampling_acceptances.png",
+                plot_as_png_fxn(
+                    plot_water_proposals_by_state,
+                    [state.lamb for state in res.final_result.initial_states],
+                    res.water_sampling_diagnostics.cumulative_proposals_by_state,
+                ),
+            )
 
 
 def main():

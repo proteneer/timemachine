@@ -311,6 +311,8 @@ def test_run_rbfe_legs(
             assert (leg_dir / "hrex_transition_matrix.png").is_file()
             assert (leg_dir / "hrex_swap_acceptance_rates_convergence.png").is_file()
             assert (leg_dir / "hrex_replica_state_distribution_heatmap.png").is_file()
+            if leg == "complex":
+                assert (leg_dir / "water_sampling_acceptances.png").is_file()
 
             results = np.load(str(leg_dir / "results.npz"))
             assert results["pred_dg"].size == 1
