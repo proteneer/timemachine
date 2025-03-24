@@ -1,4 +1,4 @@
-from dataclasses import astuple, replace
+from dataclasses import replace
 from functools import cached_property
 
 import jax.numpy as jnp
@@ -148,7 +148,7 @@ class SingleTopologyREST(SingleTopology):
         return {
             idx: proper
             for (idx, proper) in self.candidate_propers.items()
-            if any(idx in self.rest_region_atom_idxs for idx in astuple(proper))
+            if any(idx in self.rest_region_atom_idxs for idx in proper.idxs)
         }
 
     @cached_property
