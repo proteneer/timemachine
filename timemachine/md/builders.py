@@ -302,7 +302,7 @@ def build_water_system(
         Molecules to be part of the system, will remove water molecules that clash with the mols.
 
     ionic_concentration: optional float
-        Concentration of ions, molar units, to add to the system. Defaults to 0.0, meaning no ions are added.
+        Molar concentration of ions to add to the system. Defaults to 0.0, meaning no ions are added.
 
     neutralize: optional bool
         Whether or not to add ions to the system to ensure the system has a net charge of 0.0. Defaults to False.
