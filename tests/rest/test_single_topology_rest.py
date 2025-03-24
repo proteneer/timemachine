@@ -13,6 +13,7 @@ from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS
 from timemachine.fe import atom_mapping
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.rbfe import Host, setup_optimized_host
+from timemachine.fe.rest.bond import mkproper
 from timemachine.fe.rest.interpolation import (
     Exponential,
     InterpolationFxnName,
@@ -86,7 +87,8 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
 
     state = st_rest.setup_intermediate_state(lamb)
     state_ref = st.setup_intermediate_state(lamb)
-    assert len(st_rest.candidate_propers) < len(state_ref.proper.potential.idxs)
+    assert set(st_rest.propers) == set(mkproper(*idxs) for idxs in state_ref.proper.potential.idxs)
+    assert set(st_rest.candidate_propers.values()) < set(st_rest.propers)
 
     ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
 
