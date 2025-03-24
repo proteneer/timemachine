@@ -114,8 +114,8 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
         assert energy_scale < 1.0
 
         # check that a proper subset of ligand-ligand nonbonded interactions are scaled
-        assert U_nonbonded != U_nonbonded_ref
-        assert U_nonbonded != energy_scale * U_nonbonded_ref
+        assert not np.isclose(U_nonbonded, U_nonbonded_ref)
+        assert not np.isclose(U_nonbonded, energy_scale * U_nonbonded_ref)
 
         if has_rotatable_bonds or has_aliphatic_rings:
             assert 0 < len(st_rest.candidate_propers)
