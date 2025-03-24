@@ -79,6 +79,9 @@ def replace_clashy_waters(
     clash_distance: float
         Distance from a ligand atom to a water atom to consider as a clash, in nanometers
     """
+    if len(mols) == 0:
+        return
+
     water_coords = host_coords[water_idxs]
     ligand_coords = np.concatenate([get_romol_conf(mol) for mol in mols])
     clashy_idxs = idxs_within_cutoff(water_coords, ligand_coords, box, cutoff=clash_distance)
@@ -124,9 +127,38 @@ def solvate_modeller(
     ionic_concentration: float = 0.0,
     neutralize: bool = False,
 ):
-    """Utility function to handle the neutralization of adding mols"""
+    """Solvates a system while handling ions and neutralizing the system by adding dummy ions then removing them.
+
+    Parameters
+    ----------
+    modeller: app.Modeller
+        Modeller to update in place
+
+    box: NDArray[np.float64]
+        Box to evaluate PBCs under
+
+    mols: list[Mol]
+        List of molecules to determine which waters are clashy
+
+    ff: app.ForceField
+        The forcefield used for the host
+
+    water_ff: str
+        The water forcefield name (excluding .xml) to parametrize the water with.
+
+    mols: list[Mol] or None
+        List of molecules to determine the charge. Mols are expected to have the same charge
+
+    ionic_concentration: float
+        Molar concentration of ions
+
+    neutralize: bool
+        Whether or not to neutralize the system.
+    """
     dummy_chain_id = "DUMMY"
-    if neutralize and mols is not None:
+    add_dummy_ions = neutralize and mols is not None and len(mols) > 0
+    if add_dummy_ions:
+        assert mols is not None and len(mols) > 0
         # Since we do not add the ligands to the OpenMM system, we add ions that emulate the net charge
         # of the ligands so that `addSolvent` will neutralize the system correctly.
         charges = [Chem.GetFormalCharge(mol) for mol in mols]
@@ -155,7 +187,7 @@ def solvate_modeller(
         neutralize=neutralize,
         residueTemplates=combined_templates,
     )
-    if neutralize and mols is not None:
+    if add_dummy_ions:
         current_topo = modeller.getTopology()
         # Remove the chain filled with the dummy ions
         bad_chains = [chain for chain in current_topo.chains() if chain.id == dummy_chain_id]
