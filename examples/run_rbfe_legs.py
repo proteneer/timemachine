@@ -260,6 +260,9 @@ def main():
         pickle.dump(core, ofs)
     with open(file_client.full_path("ff.py"), "w") as ofs:
         ofs.write(ff.serialize())
+    with Chem.SDWriter(file_client.full_path("mols.sdf")) as writer:
+        writer.write(mol_a)
+        writer.write(mol_b)
 
     num_gpus = args.n_gpus
     if num_gpus is None:
