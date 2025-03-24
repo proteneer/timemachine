@@ -141,7 +141,7 @@ class WaterSamplingParams:
 
 @dataclass(frozen=True)
 class LocalMDParams:
-    local_steps: int = 0
+    local_steps: int
     k: float = 1_000.0  # kJ/mol/nm^4
     min_radius: float = 1.0  # nm
     max_radius: float = 3.0  # nm
