@@ -171,12 +171,18 @@ class SingleTopologyREST(SingleTopology):
             params=jnp.asarray(ref_state.proper.params).at[self.target_proper_idxs, 0].mul(energy_scale),
         )
 
+        rest_region_pair_idxs = [
+            idx
+            for idx, (i, j) in enumerate(ref_state.nonbonded_pair_list.potential.idxs)
+            if i in self.rest_region_atom_idxs or j in self.rest_region_atom_idxs
+        ]
+
         nonbonded_pair_list = replace(
             ref_state.nonbonded_pair_list,
             params=jnp.asarray(ref_state.nonbonded_pair_list.params)
-            .at[:, NBParamIdx.Q_IDX]
+            .at[rest_region_pair_idxs, NBParamIdx.Q_IDX]
             .mul(energy_scale)  # scale q_ij
-            .at[:, NBParamIdx.LJ_EPS_IDX]
+            .at[rest_region_pair_idxs, NBParamIdx.LJ_EPS_IDX]
             .mul(energy_scale),  # scale eps_ij
         )
 
