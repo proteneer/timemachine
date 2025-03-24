@@ -6,6 +6,7 @@ import jax
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdMolDescriptors
 
@@ -113,9 +114,32 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
     else:
         assert energy_scale < 1.0
 
-        # check that a proper subset of ligand-ligand nonbonded interactions are scaled
-        assert not np.isclose(U_nonbonded, U_nonbonded_ref)
-        assert not np.isclose(U_nonbonded, energy_scale * U_nonbonded_ref)
+        rest_atom_idxs = np.array(list(st_rest.rest_region_atom_idxs))
+        rest_pair_pred = (
+            (state.nonbonded_pair_list.potential.idxs[..., None] == rest_atom_idxs[None, None, :]).any(-1).any(-1)
+        )
+
+        def compute_lig_lig_ixn_energy(state: GuestSystem, pair_pred: NDArray[np.bool_]):
+            nonbonded_pair_list = replace(
+                state.nonbonded_pair_list,
+                potential=replace(
+                    state.nonbonded_pair_list.potential,
+                    idxs=state.nonbonded_pair_list.potential.idxs[pair_pred, :],
+                ),
+                params=state.nonbonded_pair_list.params[pair_pred, :],
+            )
+            return nonbonded_pair_list(ligand_conf, None)
+
+        # check that ligand-ligand pairs in the REST region are scaled appropriately
+        U_nb_rest = compute_lig_lig_ixn_energy(state, rest_pair_pred)
+        U_nb_rest_ref = compute_lig_lig_ixn_energy(state_ref, rest_pair_pred)
+        np.testing.assert_allclose(U_nb_rest, energy_scale * U_nb_rest_ref)
+
+        # check that ligand-ligand pairs in the REST region are not scaled
+        complement_pair_pred = ~rest_pair_pred
+        U_nb_complement = compute_lig_lig_ixn_energy(state, complement_pair_pred)
+        U_nb_complement_ref = compute_lig_lig_ixn_energy(state_ref, complement_pair_pred)
+        np.testing.assert_array_equal(U_nb_complement, U_nb_complement_ref)
 
         if has_rotatable_bonds or has_aliphatic_rings:
             assert 0 < len(st_rest.candidate_propers)
@@ -139,10 +163,10 @@ def test_single_topology_rest_vacuum(mol_pair, temperature_scale_interpolation_f
 
         # check that propers outside of the REST region are not scaled
         num_propers = len(st_rest.propers)
-        rest_complement_proper_idxs = set(range(num_propers)) - set(rest_proper_idxs)
-        rest_complement_proper_idxs = list(rest_complement_proper_idxs)
-        U_proper_complement = compute_proper_energy(state, rest_complement_proper_idxs)
-        U_proper_complement_ref = compute_proper_energy(state_ref, rest_complement_proper_idxs)
+        complement_proper_idxs = set(range(num_propers)) - set(rest_proper_idxs)
+        complement_proper_idxs = list(complement_proper_idxs)
+        U_proper_complement = compute_proper_energy(state, complement_proper_idxs)
+        U_proper_complement_ref = compute_proper_energy(state_ref, complement_proper_idxs)
         np.testing.assert_array_equal(U_proper_complement, U_proper_complement_ref)
 
 
@@ -188,9 +212,9 @@ def test_single_topology_rest_solvent(mol_pair, temperature_scale_interpolation_
     np.testing.assert_allclose(U, energy_scale * U_ref, rtol=1e-5)
 
     # check that interactions involving atoms outside of the REST region are not scaled
-    rest_complement_atom_idxs = set(range(st_rest.get_num_atoms())) - st_rest.rest_region_atom_idxs
-    U_complement = compute_host_guest_ixn_energy(st_rest, rest_complement_atom_idxs)
-    U_complement_ref = compute_host_guest_ixn_energy(st, rest_complement_atom_idxs)
+    complement_atom_idxs = set(range(st_rest.get_num_atoms())) - st_rest.rest_region_atom_idxs
+    U_complement = compute_host_guest_ixn_energy(st_rest, complement_atom_idxs)
+    U_complement_ref = compute_host_guest_ixn_energy(st, complement_atom_idxs)
     np.testing.assert_array_equal(U_complement, U_complement_ref)
 
 
