@@ -197,12 +197,12 @@ def deserialize_system(system: mm.System, cutoff: float) -> tuple[list[potential
         angle_params = np.array(angle_params_, dtype=np.float64)
         angle = potentials.HarmonicAngle(angle_idxs).bind(angle_params)
 
-    perioidic_forces = get_forces_by_type(omm_forces, mm.PeriodicTorsionForce)
-    if len(perioidic_forces) > 0:
+    torsion_forces = get_forces_by_type(omm_forces, mm.PeriodicTorsionForce)
+    if len(torsion_forces) > 0:
         torsion_idxs_ = []
         torsion_params_ = []
 
-        for force in perioidic_forces:
+        for force in torsion_forces:
             for t_idx in range(force.getNumTorsions()):
                 a_idx, b_idx, c_idx, d_idx, period, phase, k = force.getTorsionParameters(t_idx)
 
