@@ -259,14 +259,14 @@ def test_run_rbfe_legs(
             "7a1a88079c2eb345947a6a380e18872a27d1f0ec5a29437e6c0560b3876375db",
         ),
         "solvent": (
-            "d6464cc055e486acf6d6d1311aadc90d0ba27118d818be3750d569ace27f39bf",
+            "9ccc4cb16ea43c0eed4941a3485a591055ca9e68f30bdc6ae49113ca247ddbd4",
             "5c0f5fea16e7fad695fe48c4d7e9400de1ee081616e66d81c13cff975275785d",
             "18478e891fe7e5448df89c10e8eedba32f86bdf572a01749c63957da0dc315f6",
         ),
         "complex": (
-            "708233cf3dacaa9fe62ba7faf5f873bbe1ea34d1a8b8a5cf80a48d9553f65dc3",
-            "a9269276f75cc64dea521ea723a8af1f1ec7aa4dc99f79c6c940db66b3e576c6",
-            "cefc669291e5027c661be7eb9a3db225f980b1a5ab1b1dfa898da21eea2918ad",
+            "8f79bac368d05fb58fbd3a2f0fa0a0acb60b63e65351b3f94447de3b025865e6",
+            "9e66f5219a9d27331e5dbe38d458b6092dcdf15d1e9d11ff1595b40a46daa91a",
+            "a30c101c16373e17a10c062c3ab63fe6ee29d5d21e58c7f445361fc8be520848",
         ),
     }
     with resources.as_file(resources.files("timemachine.testsystems.fep_benchmark.hif2a")) as hif2a_dir:
