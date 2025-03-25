@@ -1,11 +1,9 @@
 import warnings
 from collections.abc import Collection, Sequence
-from dataclasses import dataclass
 from enum import IntEnum
-from functools import cache, cached_property, partial
+from functools import cache, cached_property
 from typing import Any, Optional
 
-import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
@@ -16,19 +14,24 @@ from timemachine.constants import (
     DEFAULT_BOND_IS_PRESENT_K,
     DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
     DEFAULT_CHIRAL_BOND_RESTRAINT_K,
-    NBParamIdx,
 )
 from timemachine.fe import interpolate, model_utils, topology, utils
+from timemachine.fe.aligned_potential import (
+    AlignedAngle,
+    AlignedBond,
+    AlignedChiralAtom,
+    AlignedNonbondedAllPairs,
+    AlignedNonbondedInteractionGroup,
+    AlignedNonbondedPairlist,
+    AlignedTorsion,
+)
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import (
     canonicalize_bond,
     generate_anchored_dummy_group_assignments,
     generate_dummy_group_assignments,
 )
-from timemachine.fe.interpolate import pad
-from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lambda_schedule
 from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
-from timemachine.fe.topology import get_ligand_ixn_pots_params
 from timemachine.ff import Forcefield
 from timemachine.graph_utils import convert_to_nx
 from timemachine.potentials import (
@@ -39,7 +42,6 @@ from timemachine.potentials import (
     HarmonicBond,
     Nonbonded,
     NonbondedInteractionGroup,
-    NonbondedPairListPrecomputed,
     PeriodicTorsion,
 )
 
@@ -737,258 +739,6 @@ def find_dummy_groups_and_anchors(
     return arbitrary_anchored_dummy_groups
 
 
-def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
-    """
-    Interpolate harmonic bond parameters using
-
-    1. Log-linear interpolation for force constants*
-    2. Linear interpolation for equilibrium bond lengths
-
-    * see note on special case when src_k=0 or dst_k=0 in the docstring of `interpolate_harmonic_force_constant`.
-
-    Parameters
-    ----------
-    src_params : array-like, float, (2,)
-        force constant and equilibrium length at lambda=0
-
-    dst_params : array-like, float, (2,)
-        force constant and equilibrium length at lambda=1
-
-    lamb : float
-        alchemical parameter
-
-    k_min, lambda_min, lambda_max : float
-        see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
-
-    Returns
-    -------
-    array, float, (2,)
-        interpolated (force constant, equilibrium length)
-    """
-    src_k, src_x = src_params
-    dst_k, dst_x = dst_params
-
-    log_linear_fn = partial(interpolate.log_linear_interpolation, min_value=k_min)
-    k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
-    x = pad(interpolate.linear_interpolation, src_x, dst_x, lamb, lambda_min, lambda_max)
-
-    return [k, x]
-
-
-def interpolate_chiral_volume_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
-    src_k = src_params
-    dst_k = dst_params
-
-    log_linear_fn = partial(interpolate.log_linear_interpolation, min_value=k_min)
-    k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
-
-    return [k]
-
-
-def cyclic_difference(a, b, period):
-    """
-    Returns the minimum difference between two points, with periodic boundaries.
-    I.e. the solution of ::
-
-        (a + x) % period = b % period
-
-    with minimum abs(x).
-    """
-    d = jnp.fmod(b - a, period)
-
-    def f(d):
-        return jnp.where(d <= period / 2, d, d - period)
-
-    return jnp.sign(d) * f(jnp.abs(d))
-
-
-def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
-    """
-    Interpolate harmonic angle parameters using
-
-    1. Log-linear interpolation for force constants*
-    2. Shortest-path linear interpolation for equilibrium angles
-
-    * see note on special case when src_k=0 or dst_k=0 in the docstring of `interpolate_harmonic_force_constant`.
-
-    Parameters
-    ----------
-    src_params : array-like, float, (2,)
-        force constant and equilibrium angle at lambda=0
-
-    dst_params : array-like, float, (2,)
-        force constant and equilibrium angle at lambda=1
-
-    lamb : float
-        alchemical parameter
-
-    k_min, lambda_min, lambda_max : float
-        see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
-
-    Returns
-    -------
-    array, float, (2,)
-        interpolated (force constant, equilibrium phase)
-    """
-
-    src_k, src_phase, _ = src_params
-    dst_k, dst_phase, _ = dst_params
-
-    log_linear_fn = partial(interpolate.log_linear_interpolation, min_value=k_min)
-    k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
-
-    src_phase = src_phase
-    dst_phase = src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi)
-    phase = pad(interpolate.linear_interpolation, src_phase, dst_phase, lamb, lambda_min, lambda_max)
-
-    # Use a stable functional form with small, finite `eps` for intermediate states only. The value of `eps` for
-    # intermedates was chosen to be sufficiently large that no numerical instabilities were observed in testing (even
-    # with bond force constants approximately zero), and sufficiently small to have negligible impact on the overlap of
-    # the end states with neighboring intermediates.
-    eps = jnp.where((lamb == 0.0) | (lamb == 1.0), 0.0, 1e-3)
-
-    return [k, phase, eps]
-
-
-def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min, lambda_max):
-    """
-    Interpolate periodic torsion parameters using
-
-    1. Linear interpolation for force constants*
-    2. Linear interpolation for angles, using the shortest path
-    3. No interpolation for periodicity (pinned to source value)
-
-    * see note on special case when src_k=0 or dst_k=0 in the docstring of `interpolate_harmonic_force_constant`.
-
-    Parameters
-    ----------
-    src_params : array-like, float, (2,)
-        force constant, equilibrium dihedral angle, and periodicity at lambda=0
-
-    dst_params : array-like, float, (2,)
-        force constant and equilibrium dihedral angle, and periodicity at lambda=1
-
-    lamb : float
-        alchemical parameter
-
-    lambda_min, lambda_max : float
-        see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
-
-    Returns
-    -------
-    array, float, (3,)
-        interpolated (force constant, equilibrium phase, periodicity)
-    """
-
-    src_k, src_phase, src_period = src_params
-    dst_k, dst_phase, _ = dst_params
-
-    k = pad(interpolate.linear_interpolation, src_k, dst_k, lamb, lambda_min, lambda_max)
-
-    src_phase = src_phase
-    dst_phase = src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi)
-    phase = pad(interpolate.linear_interpolation, src_phase, dst_phase, lamb, lambda_min, lambda_max)
-
-    return [k, phase, src_period]
-
-
-def interpolate_w_coord(w0: float | jax.Array, w1: float | jax.Array, lamb: float):
-    """Interpolate 4D coordinate using schedule optimized for RBFE calculations.
-
-    Parameters
-    ----------
-    w0, w1 : float
-        w coordinates at lambda = 0 and 1 respectively
-
-    lamb : float
-        alchemical parameter
-    """
-    lambdas = construct_pre_optimized_relative_lambda_schedule(None)
-    x = jnp.linspace(0.0, 1.0, len(lambdas))
-    return jnp.where(
-        w0 < w1,
-        interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambdas)),
-        interpolate.linear_interpolation(w1, w0, jnp.interp(1.0 - lamb, x, lambdas)),
-    )
-
-
-batch_interpolate_harmonic_bond_params = jax.jit(
-    jax.vmap(interpolate_harmonic_bond_params, in_axes=(0, 0, None, None, 0, 0))
-)
-batch_interpolate_harmonic_angle_params = jax.jit(
-    jax.vmap(interpolate_harmonic_angle_params, in_axes=(0, 0, None, None, 0, 0))
-)
-batch_interpolate_periodic_torsion_params = jax.jit(
-    jax.vmap(interpolate_periodic_torsion_params, in_axes=(0, 0, None, 0, 0))
-)
-batch_interpolate_chiral_atom_params = jax.jit(
-    jax.vmap(interpolate_chiral_volume_params, in_axes=(0, 0, None, None, 0, 0))
-)
-
-
-@jax.jit
-def batch_interpolate_nonbonded_pair_list_params(
-    cutoff,
-    src_params,
-    dst_params,
-    lamb: float,
-):
-    """
-    Interpolate nonbonded pairlists between two systems. This function sets w coordinates to cutoff
-    for dummy atoms, and linearly interpolates charge, sigma, and epsilon parameters.
-
-    Parameters
-    ----------
-    cutoff: float
-        nonbonded cutoff
-
-    src_params: NDArray
-        Array of P x 4-tuples (q,s,e,w) for the source system
-
-    dst_params: NDArray
-        Array of P x 4-tuples (q,s,e,w) for the destination system
-
-    lamb: float
-        scalar between 0 and 1
-
-    Returns
-    -------
-    NDArray
-        P x 4 array of interpolated pairs.
-
-    """
-    src_qlj, src_w = src_params[:, : NBParamIdx.W_IDX], src_params[:, NBParamIdx.W_IDX]
-    dst_qlj, dst_w = dst_params[:, : NBParamIdx.W_IDX], dst_params[:, NBParamIdx.W_IDX]
-
-    is_excluded_src = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
-    is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
-
-    # parameters for pairs that do not interact in the src state
-    w = interpolate_w_coord(cutoff, dst_w, lamb)
-    pair_params_excluded_src = jnp.concatenate((dst_qlj, w[:, None]), axis=1)
-
-    # parameters for pairs that do not interact in the dst state
-    w = interpolate_w_coord(src_w, cutoff, lamb)
-    pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
-
-    # parameters for pairs that interact in both src and dst states
-    w = jax.vmap(interpolate.linear_interpolation, (0, 0, None))(src_w, dst_w, lamb)
-    qlj = interpolate.linear_interpolation(src_qlj, dst_qlj, lamb)
-    pair_params_not_excluded = jnp.concatenate((qlj, w[:, None]), axis=1)
-
-    pair_params = jnp.where(
-        is_excluded_src,
-        pair_params_excluded_src,
-        jnp.where(
-            is_excluded_dst,
-            pair_params_excluded_dst,
-            pair_params_not_excluded,
-        ),
-    )
-
-    return pair_params
-
-
 class AtomMapFlags(IntEnum):
     CORE = 0
     MOL_A = 1
@@ -1010,22 +760,18 @@ class AtomMapMixin:
     self.c_flags
     """
 
-    def __init__(self, mol_a, mol_b, core: NDArray):
+    def __init__(self, num_atoms_a, num_atoms_b, core: NDArray):
         assert core.shape[1] == 2
-        assert mol_a is not None
-        assert mol_b is not None
-
-        self.mol_a = mol_a
-        self.mol_b = mol_b
         self.core = core
-        assert mol_a is not None
-        assert mol_b is not None
         assert core.shape[1] == 2
+
+        self.num_atoms_a = num_atoms_a
+        self.num_atoms_b = num_atoms_b
 
         # map into idxs in the combined molecule
 
-        self.a_to_c = np.arange(mol_a.GetNumAtoms(), dtype=np.int32)  # identity
-        self.b_to_c = np.zeros(mol_b.GetNumAtoms(), dtype=np.int32) - 1
+        self.a_to_c = np.arange(num_atoms_a, dtype=np.int32)  # identity
+        self.b_to_c = np.zeros(num_atoms_b, dtype=np.int32) - 1
 
         # mark membership:
         # AtomMapFlags.CORE: Core
@@ -1040,7 +786,7 @@ class AtomMapMixin:
             self.c_flags[a] = AtomMapFlags.CORE
             self.b_to_c[b] = a
 
-        iota = self.mol_a.GetNumAtoms()
+        iota = self.num_atoms_a
         for b_idx, c_idx in enumerate(self.b_to_c):
             if c_idx == -1:
                 self.b_to_c[b_idx] = iota
@@ -1072,7 +818,7 @@ class AtomMapMixin:
         int
             Total number of atoms.
         """
-        return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core)
+        return self.num_atoms_a + self.num_atoms_b - len(self.core)
 
     def get_num_dummy_atoms(self) -> int:
         """
@@ -1083,7 +829,7 @@ class AtomMapMixin:
         int
             Total number of atoms.
         """
-        return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core) - len(self.core)
+        return self.num_atoms_a + self.num_atoms_b - len(self.core) - len(self.core)
 
 
 class MissingBondsInChiralVolumeException(Exception):
@@ -1158,6 +904,73 @@ def assert_torsions_defined_over_non_linear_angles(system: GuestSystem | HostGue
                 )
 
 
+def build_combined_atom_map_mixin(
+    num_host_atoms: int, mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray[np.int32]
+) -> AtomMapMixin:
+    new_core_ = []
+    for idx in range(num_host_atoms):
+        new_core_.append((idx, idx))
+
+    for i, j in core:
+        new_core_.append((i + num_host_atoms, j + num_host_atoms))
+
+    new_core = np.array(new_core_, dtype=np.int32)
+
+    num_atoms_a = num_host_atoms + mol_a.GetNumAtoms()
+    num_atoms_b = num_host_atoms + mol_b.GetNumAtoms()
+
+    return AtomMapMixin(num_atoms_a, num_atoms_b, new_core)
+
+
+def build_end_state_reference_all_pairs(
+    num_guest_atoms: int, host_nonbonded_all_pairs: BoundPotential[Nonbonded]
+) -> BoundPotential[Nonbonded]:
+    host_params = host_nonbonded_all_pairs.params
+    nb_params = np.concatenate([host_params, np.zeros((num_guest_atoms, host_params.shape[1]))])
+
+    num_host_atoms = host_nonbonded_all_pairs.potential.num_atoms
+    host_atom_idxs = np.arange(num_host_atoms, dtype=np.int32)
+
+    host_exclusion_idxs = host_nonbonded_all_pairs.potential.exclusion_idxs
+    host_scale_factors = host_nonbonded_all_pairs.potential.scale_factors
+    host_cutoff = host_nonbonded_all_pairs.potential.cutoff
+    host_beta = host_nonbonded_all_pairs.potential.beta
+    total_num_atoms = num_host_atoms + num_guest_atoms
+
+    nonbonded_all_pairs = Nonbonded(
+        total_num_atoms, host_exclusion_idxs, host_scale_factors, host_beta, host_cutoff, host_atom_idxs
+    )
+    return nonbonded_all_pairs.bind(nb_params)
+
+
+def build_end_state_reference_ixn_group(
+    mol: Chem.Mol, nonbonded_all_pairs: BoundPotential[Nonbonded], ff
+) -> BoundPotential[NonbondedInteractionGroup]:
+    guest_q = ff.q_handle.parameterize(mol)
+    guest_lj = ff.lj_handle.parameterize(mol)
+    guest_w = jnp.zeros_like(guest_q)
+
+    host_q = nonbonded_all_pairs.params[:, 0]
+    host_lj = nonbonded_all_pairs.params[:, 1:3]
+    host_w = np.zeros_like(host_q)
+
+    combined_q = jnp.concatenate([host_q, guest_q]).reshape(-1, 1)
+    combined_lj = jnp.concatenate([host_lj, guest_lj])
+    combined_w = jnp.concatenate([host_w, guest_w]).reshape(-1, 1)
+
+    combined_params = jnp.hstack([combined_q, combined_lj, combined_w])
+
+    num_host_atoms = nonbonded_all_pairs.potential.num_atoms
+    row_atom_idxs = np.arange(mol.GetNumAtoms()) + num_host_atoms
+    col_atom_idxs = np.arange(num_host_atoms)
+
+    host_cutoff = nonbonded_all_pairs.potential.cutoff
+    host_beta = nonbonded_all_pairs.potential.beta
+    num_atoms = num_host_atoms + mol.GetNumAtoms()
+    ixn_group = NonbondedInteractionGroup(num_atoms, row_atom_idxs, host_beta, host_cutoff, col_atom_idxs)
+    return ixn_group.bind(combined_params)
+
+
 def assert_chiral_consistency(src_chiral_idxs: NDArray, dst_chiral_idxs: NDArray):
     """
     Assert that the chiral volumes are not inverting in src and dst.
@@ -1168,71 +981,6 @@ def assert_chiral_consistency(src_chiral_idxs: NDArray, dst_chiral_idxs: NDArray
     # ensure that we don't have any chiral inversions between src and dst end states
     assert len(src_chiral_restr_idx_set.allowed_set.intersection(dst_chiral_restr_idx_set.disallowed_set)) == 0
     assert len(dst_chiral_restr_idx_set.allowed_set.intersection(src_chiral_restr_idx_set.disallowed_set)) == 0
-
-
-@dataclass
-class AlignedPotential:
-    idxs: NDArray[np.int32]
-    src_params: NDArray[np.float64]
-    dst_params: NDArray[np.float64]
-    mins: NDArray[np.float64]
-    maxes: NDArray[np.float64]
-
-    def interpolate(self, lamb):
-        raise NotImplementedError()
-
-
-class AlignedBond(AlignedPotential):
-    def interpolate(self, lamb):
-        k_min = 0.1
-        params = batch_interpolate_harmonic_bond_params(
-            self.src_params, self.dst_params, lamb, k_min, self.mins, self.maxes
-        )
-        params = jnp.array(params).T
-
-        return HarmonicBond(self.idxs).bind(params)
-
-
-class AlignedAngle(AlignedPotential):
-    def interpolate(self, lamb):
-        k_min = 0.05
-        params = batch_interpolate_harmonic_angle_params(
-            self.src_params, self.dst_params, lamb, k_min, self.mins, self.maxes
-        )
-        params = jnp.array(params).T
-        return HarmonicAngle(self.idxs).bind(params)
-
-
-class AlignedTorsion(AlignedPotential):
-    def interpolate(self, lamb):
-        params = batch_interpolate_periodic_torsion_params(
-            self.src_params, self.dst_params, lamb, self.mins, self.maxes
-        )
-        params = jnp.array(params).T
-        return PeriodicTorsion(self.idxs).bind(params)
-
-
-class AlignedChiralAtom(AlignedPotential):
-    def interpolate(self, lamb):
-        k_min = 0.025
-        params = batch_interpolate_chiral_atom_params(
-            self.src_params, self.dst_params, lamb, k_min, self.mins, self.maxes
-        )
-        params = jnp.array(params).reshape(-1)
-        return ChiralAtomRestraint(self.idxs).bind(params)
-
-
-@dataclass
-class AlignedNonbondedPairlist(AlignedPotential):
-    cutoff: float
-    beta: float
-
-    def interpolate(self, lamb):
-        # (ytz): batch_interpolate_nonbonded_pair_list_params currently fails to respect the self.mins and self.maxes
-        # boundaries.
-        params = batch_interpolate_nonbonded_pair_list_params(self.cutoff, self.src_params, self.dst_params, lamb)
-        params = jnp.array(params)
-        return NonbondedPairListPrecomputed(self.idxs, self.beta, self.cutoff).bind(params)
 
 
 class SingleTopology(AtomMapMixin):
@@ -1260,7 +1008,10 @@ class SingleTopology(AtomMapMixin):
             Forcefield to be used for parameterization.
         """
         # initialize the mixin to get the a_to_c, b_to_c, c_to_a, c_to_b, and c_flags
-        super().__init__(mol_a, mol_b, core)
+        super().__init__(mol_a.GetNumAtoms(), mol_b.GetNumAtoms(), core)
+
+        self.mol_a = mol_a
+        self.mol_b = mol_b
 
         self.ff = forcefield
 
@@ -1290,20 +1041,6 @@ class SingleTopology(AtomMapMixin):
         self.aligned_chiral_atom = self._align_chiral_atoms()
         self.aligned_nonbonded_pair_list = self._align_nonbonded_pair_list()
 
-    def _align_bonded_term(self, align_fn, assign_min_max_fn, src_potential, dst_potential):
-        aligned_tuples = align_fn(
-            src_potential.potential.idxs,
-            src_potential.params,
-            dst_potential.potential.idxs,
-            dst_potential.params,
-        )
-        aligned_idxs = np.array([x[0] for x in aligned_tuples], dtype=np.int32)
-        aligned_src_params = jnp.array([x[1] for x in aligned_tuples], dtype=np.float64)
-        aligned_dst_params = jnp.array([x[2] for x in aligned_tuples], dtype=np.float64)
-        aligned_mins, aligned_maxes = assign_min_max_fn(aligned_tuples)
-
-        return aligned_idxs, aligned_src_params, aligned_dst_params, aligned_mins, aligned_maxes
-
     def _align_bonds(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
             interpolate.align_harmonic_bond_idxs_and_params,
@@ -1314,7 +1051,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 2)
         src_params = src_params.reshape(-1, 2)
         dst_params = dst_params.reshape(-1, 2)
-        return AlignedBond(idxs, src_params, dst_params, mins, maxes)
+        return AlignedBond(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
 
     def _align_angles(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1326,7 +1063,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 3)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedAngle(idxs, src_params, dst_params, mins, maxes)
+        return AlignedAngle(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
 
     def _align_propers(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1338,7 +1075,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedTorsion(idxs, src_params, dst_params, mins, maxes)
+        return AlignedTorsion(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
 
     def _align_impropers(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1350,7 +1087,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedTorsion(idxs, src_params, dst_params, mins, maxes)
+        return AlignedTorsion(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
 
     def _align_chiral_atoms(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1362,7 +1099,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1)
         dst_params = dst_params.reshape(-1)
-        return AlignedChiralAtom(idxs, src_params, dst_params, mins, maxes)
+        return AlignedChiralAtom(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
 
     def _align_nonbonded_pair_list(self):
         src_cutoff = self.src_system.nonbonded_pair_list.potential.cutoff
@@ -1392,6 +1129,184 @@ class SingleTopology(AtomMapMixin):
             cutoff=src_cutoff,
             beta=src_beta,
         )
+
+    def _process_ixn_group_idxs_and_params(
+        self, src_row_or_col_idxs, src_params, dst_row_or_col_idxs, dst_params, a_to_c, b_to_c, cutoff
+    ):
+        # note a_to_c, b_to_c are *combined* with the atoms
+        combined_kv = dict()  # key: atom_idxs indexed in th combined, val: params
+        for idx in src_row_or_col_idxs:
+            q, s, e, w = src_params[idx]
+            new_idx = a_to_c[idx]
+            combined_kv[new_idx] = [(q, s, e, w), (q, s, e, cutoff)]
+        for idx in dst_row_or_col_idxs:
+            q, s, e, w = dst_params[idx]
+            new_idx = b_to_c[idx]
+            if new_idx in combined_kv:
+                combined_kv[new_idx][1] = (q, s, e, w)
+            else:
+                combined_kv[new_idx] = [(q, s, e, cutoff), (q, s, e, w)]
+
+        all_idxs = []
+        src_params = []
+        dst_params = []
+
+        for idx, (src_p, dst_p) in combined_kv.items():
+            all_idxs.append(idx)
+            src_params.append(src_p)
+            dst_params.append(dst_p)
+
+        return (
+            np.array(all_idxs, dtype=np.int32),
+            jnp.array(src_params, dtype=np.float64),
+            jnp.array(dst_params, dtype=np.float64),
+        )
+
+    def _align_nonbonded_interaction_group(
+        self,
+        src_nb_ixn_group: BoundPotential[NonbondedInteractionGroup],
+        dst_nb_ixn_group: BoundPotential[NonbondedInteractionGroup],
+        combined_atom_map_mixin,
+    ):
+        assert src_nb_ixn_group.potential.beta == dst_nb_ixn_group.potential.beta
+        assert src_nb_ixn_group.potential.cutoff == dst_nb_ixn_group.potential.cutoff
+
+        row_idxs, row_src_params, row_dst_params = self._process_ixn_group_idxs_and_params(
+            src_nb_ixn_group.potential.row_atom_idxs,
+            src_nb_ixn_group.params,
+            dst_nb_ixn_group.potential.row_atom_idxs,
+            dst_nb_ixn_group.params,
+            combined_atom_map_mixin.a_to_c,
+            combined_atom_map_mixin.b_to_c,
+            src_nb_ixn_group.potential.cutoff,
+        )
+
+        col_idxs, col_src_params, col_dst_params = self._process_ixn_group_idxs_and_params(
+            src_nb_ixn_group.potential.col_atom_idxs,
+            src_nb_ixn_group.params,
+            dst_nb_ixn_group.potential.col_atom_idxs,
+            dst_nb_ixn_group.params,
+            combined_atom_map_mixin.a_to_c,
+            combined_atom_map_mixin.b_to_c,
+            src_nb_ixn_group.potential.cutoff,
+        )
+
+        assert len(set(col_idxs).intersection(set(row_idxs))) == 0
+
+        # (ytz): does this have to be jnp?
+        aligned_src_params = jnp.zeros((combined_atom_map_mixin.get_num_atoms(), 4))
+        aligned_src_params = aligned_src_params.at[row_idxs].set(row_src_params)
+        aligned_src_params = aligned_src_params.at[col_idxs].set(col_src_params)
+
+        aligned_dst_params = jnp.zeros((combined_atom_map_mixin.get_num_atoms(), 4))
+        aligned_dst_params = aligned_dst_params.at[row_idxs].set(row_dst_params)
+        aligned_dst_params = aligned_dst_params.at[col_idxs].set(col_dst_params)
+
+        assert aligned_src_params.shape == aligned_dst_params.shape
+
+        return AlignedNonbondedInteractionGroup(
+            row_atom_idxs=row_idxs,
+            col_atom_idxs=col_idxs,
+            src_params=aligned_src_params,
+            dst_params=aligned_dst_params,
+            mins=None,
+            maxes=None,
+            cutoff=src_nb_ixn_group.potential.cutoff,
+            beta=src_nb_ixn_group.potential.beta,
+        )
+
+    def _align_nonbonded_all_pairs(
+        self,
+        src_nb_all_pairs: BoundPotential[Nonbonded],
+        dst_nb_all_pairs: BoundPotential[Nonbonded],
+        combined_atom_map_mixin: AtomMapMixin,
+    ):
+        assert dst_nb_all_pairs.potential.beta == dst_nb_all_pairs.potential.beta
+        assert dst_nb_all_pairs.potential.cutoff == dst_nb_all_pairs.potential.cutoff
+
+        assert src_nb_all_pairs.potential.atom_idxs is not None
+        assert dst_nb_all_pairs.potential.atom_idxs is not None
+
+        src_atom_idxs = src_nb_all_pairs.potential.atom_idxs
+        dst_atom_idxs = dst_nb_all_pairs.potential.atom_idxs
+
+        atom_idxs, src_params, dst_params = self._process_ixn_group_idxs_and_params(
+            src_atom_idxs,
+            src_nb_all_pairs.params,
+            dst_atom_idxs,
+            dst_nb_all_pairs.params,
+            combined_atom_map_mixin.a_to_c,
+            combined_atom_map_mixin.b_to_c,
+            src_nb_all_pairs.potential.cutoff,
+        )
+
+        aligned_src_params = jnp.zeros((combined_atom_map_mixin.get_num_atoms(), 4))
+        aligned_src_params = aligned_src_params.at[atom_idxs].set(src_params)
+        aligned_dst_params = jnp.zeros((combined_atom_map_mixin.get_num_atoms(), 4))
+        aligned_dst_params = aligned_dst_params.at[atom_idxs].set(dst_params)
+
+        # assert that exclusion idxs and scale factors are identical at the end-states. We have no way
+        # of morphing scale factors since they're not part of the "parameters", and HREX requires that we use
+        # .set_params to do all interpolation schemes.
+
+        src_exclusion_idxs = src_nb_all_pairs.potential.exclusion_idxs
+        dst_exclusion_idxs = dst_nb_all_pairs.potential.exclusion_idxs
+
+        src_exclusion_scale_factors = src_nb_all_pairs.potential.scale_factors
+        dst_exclusion_scale_factors = dst_nb_all_pairs.potential.scale_factors
+
+        exclusions_kv = dict()
+
+        for (i, j), sf in zip(src_exclusion_idxs, src_exclusion_scale_factors):
+            # mypy complaint: error: Value of type variable "SupportsRichComparisonT" of "sorted" cannot be "ndarray[tuple[int, ...], dtype[signedinteger[_32Bit]]]"  [type-var]
+            key = tuple(sorted([combined_atom_map_mixin.a_to_c[i], combined_atom_map_mixin.a_to_c[j]]))  # type: ignore
+            exclusions_kv[key] = sf
+
+        for (i, j), sf in zip(dst_exclusion_idxs, dst_exclusion_scale_factors):
+            # mypy complaint: error: Value of type variable "SupportsRichComparisonT" of "sorted" cannot be "ndarray[tuple[int, ...], dtype[Any]]"  [type-var]
+            key = tuple(sorted([combined_atom_map_mixin.b_to_c[i], combined_atom_map_mixin.b_to_c[j]]))  # type: ignore
+            if key in exclusions_kv:
+                np.testing.assert_array_equal(exclusions_kv[key], sf)
+            else:
+                exclusions_kv[key] = sf
+
+        exclusion_idxs_ = []
+        scale_factors_ = []
+
+        for (i, j), sf in exclusions_kv.items():
+            assert i < j
+            exclusion_idxs_.append((i, j))
+            scale_factors_.append(sf)
+
+        exclusion_idxs = np.array(exclusion_idxs_, dtype=np.int32)
+        scale_factors = np.array(scale_factors_, dtype=np.float64)
+
+        return AlignedNonbondedAllPairs(
+            num_atoms=combined_atom_map_mixin.get_num_atoms(),
+            exclusion_idxs=exclusion_idxs,
+            scale_factors=scale_factors,
+            cutoff=src_nb_all_pairs.potential.cutoff,
+            beta=src_nb_all_pairs.potential.beta,
+            src_params=aligned_src_params,
+            dst_params=aligned_dst_params,
+            atom_idxs=atom_idxs,
+            mins=None,
+            maxes=None,
+        )
+
+    def _align_bonded_term(self, align_fn, assign_min_max_fn, src_potential, dst_potential):
+        aligned_tuples = align_fn(
+            src_potential.potential.idxs,
+            src_potential.params,
+            dst_potential.potential.idxs,
+            dst_potential.params,
+        )
+        aligned_idxs = np.array([x[0] for x in aligned_tuples], dtype=np.int32)
+        aligned_src_params = jnp.array([x[1] for x in aligned_tuples], dtype=np.float64)
+        aligned_dst_params = jnp.array([x[2] for x in aligned_tuples], dtype=np.float64)
+        aligned_mins, aligned_maxes = assign_min_max_fn(aligned_tuples)
+
+        return aligned_idxs, aligned_src_params, aligned_dst_params, aligned_mins, aligned_maxes
 
     def combine_masses(self, use_hmr: bool = False) -> list[float]:
         """
@@ -1835,144 +1750,27 @@ class SingleTopology(AtomMapMixin):
         # make read-only
         return Chem.Mol(mol)
 
-    def _get_guest_params(self, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
-        """
-        Return an array containing the guest_charges, guest_sigmas, guest_epsilons, guest_w_coords
-        for the guest at a given lambda.
-        """
-        guest_charges = []
-        guest_sigmas = []
-        guest_epsilons = []
-        guest_w_coords = []
+    def _wrap_align_host_nonbonded(self, host_nonbonded: BoundPotential[Nonbonded]) -> AlignedNonbondedAllPairs:
+        lhs_nb_ap = build_end_state_reference_all_pairs(self.mol_a.GetNumAtoms(), host_nonbonded)
+        rhs_nb_ap = build_end_state_reference_all_pairs(self.mol_b.GetNumAtoms(), host_nonbonded)
+        camm = build_combined_atom_map_mixin(host_nonbonded.potential.num_atoms, self.mol_a, self.mol_b, self.core)
+        return self._align_nonbonded_all_pairs(lhs_nb_ap, rhs_nb_ap, camm)
 
-        # generate charges and lj parameters for each guest
-        guest_a_q = q_handle.parameterize(self.mol_a)
-        guest_a_lj = lj_handle.parameterize(self.mol_a)
-
-        guest_b_q = q_handle.parameterize(self.mol_b)
-        guest_b_lj = lj_handle.parameterize(self.mol_b)
-
-        for idx, membership in enumerate(self.c_flags):
-            if membership == AtomMapFlags.CORE:  # core atom
-                a_idx = self.c_to_a[idx]
-                b_idx = self.c_to_b[idx]
-
-                # interpolate charges when in common-core
-                q = (1 - lamb) * guest_a_q[a_idx] + lamb * guest_b_q[b_idx]
-                sig = (1 - lamb) * guest_a_lj[a_idx, 0] + lamb * guest_b_lj[b_idx, 0]
-                eps = (1 - lamb) * guest_a_lj[a_idx, 1] + lamb * guest_b_lj[b_idx, 1]
-
-                # fixed at w = 0
-                w = 0.0
-
-            elif membership == AtomMapFlags.MOL_A:  # dummy_A
-                a_idx = self.c_to_a[idx]
-                q = guest_a_q[a_idx]
-                sig = guest_a_lj[a_idx, 0]
-                eps = guest_a_lj[a_idx, 1]
-
-                # Decouple dummy group A as lambda goes from 0 to 1
-                w = interpolate_w_coord(0.0, cutoff, lamb)
-
-            elif membership == AtomMapFlags.MOL_B:  # dummy_B
-                b_idx = self.c_to_b[idx]
-                q = guest_b_q[b_idx]
-                sig = guest_b_lj[b_idx, 0]
-                eps = guest_b_lj[b_idx, 1]
-
-                # Couple dummy group B as lambda goes from 0 to 1
-                # NOTE: this is only for host-guest nonbonded ixns (there is no clash between A and B at lambda = 0.5)
-                w = interpolate_w_coord(cutoff, 0.0, lamb)
-            else:
-                assert 0
-
-            guest_charges.append(q)
-            guest_sigmas.append(sig)
-            guest_epsilons.append(eps)
-            guest_w_coords.append(w)
-
-        return jnp.stack(jnp.array([guest_charges, guest_sigmas, guest_epsilons, guest_w_coords]), axis=1)
-
-    def _parameterize_host_nonbonded(self, host_nonbonded: BoundPotential[Nonbonded]) -> BoundPotential[Nonbonded]:
-        """Parameterize host-host nonbonded interactions"""
-        num_host_atoms = host_nonbonded.params.shape[0]
-        num_guest_atoms = self.get_num_atoms()
-        host_params = host_nonbonded.params
-        cutoff = host_nonbonded.potential.cutoff
-        beta = host_nonbonded.potential.beta
-
-        exclusion_idxs = host_nonbonded.potential.exclusion_idxs
-        scale_factors = host_nonbonded.potential.scale_factors
-
-        # Note: The choice of zeros here is arbitrary. It doesn't affect the
-        # potentials or grads, but any function like the seed could depend on these values.
-        hg_nb_params = jnp.concatenate([host_params, np.zeros((num_guest_atoms, host_params.shape[1]))])
-
-        combined_nonbonded = Nonbonded(
-            num_host_atoms + num_guest_atoms,
-            exclusion_idxs,
-            scale_factors,
-            beta,
-            cutoff,
-            atom_idxs=np.arange(num_host_atoms, dtype=np.int32),
-        )
-
-        return combined_nonbonded.bind(hg_nb_params)
-
-    def _parameterize_host_guest_nonbonded_ixn(
-        self,
-        lamb: float,
-        host_nonbonded: BoundPotential[Nonbonded],
-        num_water_atoms: int,
-        ff: Forcefield,
-        omm_topology: OpenMMTopology,
-    ) -> BoundPotential[NonbondedInteractionGroup]:
-        """Parameterize nonbonded interactions between the host and guest"""
-        num_host_atoms = host_nonbonded.params.shape[0]
-        num_guest_atoms = self.get_num_atoms()
-        cutoff = host_nonbonded.potential.cutoff
-
-        guest_ixn_env_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
-
-        # L-W terms
-        num_other_atoms = num_host_atoms - num_water_atoms
-
-        def get_lig_idxs() -> NDArray[np.int32]:
-            return np.arange(num_guest_atoms, dtype=np.int32) + num_host_atoms
-
-        def get_water_idxs() -> NDArray[np.int32]:
-            return np.arange(num_water_atoms, dtype=np.int32) + num_other_atoms
-
-        def get_other_idxs() -> NDArray[np.int32]:
-            return np.arange(num_other_atoms, dtype=np.int32)
-
-        def get_env_idxs() -> NDArray[np.int32]:
-            return np.concatenate([get_other_idxs(), get_water_idxs()])
-
-        hg_nb_ixn_params = host_nonbonded.params.copy()
-        if ff.env_bcc_handle is not None:
-            env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
-            hg_nb_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
-
-        ixn_pot, ixn_params = get_ligand_ixn_pots_params(
-            get_lig_idxs(),
-            get_env_idxs(),
-            hg_nb_ixn_params,
-            guest_ixn_env_params,
-            beta=host_nonbonded.potential.beta,
-            cutoff=cutoff,
-        )
-
-        bound_ixn_pot = ixn_pot.bind(ixn_params)
-        return bound_ixn_pot
+    def _wrap_aligned_host_guest_nonbonded_ixn_group(
+        self, host_nonbonded: BoundPotential[Nonbonded]
+    ) -> AlignedNonbondedInteractionGroup:
+        lhs_nb_ixn_group = build_end_state_reference_ixn_group(self.mol_a, host_nonbonded, self.ff)
+        rhs_nb_ixn_group = build_end_state_reference_ixn_group(self.mol_b, host_nonbonded, self.ff)
+        camm = build_combined_atom_map_mixin(host_nonbonded.potential.num_atoms, self.mol_a, self.mol_b, self.core)
+        return self._align_nonbonded_interaction_group(lhs_nb_ixn_group, rhs_nb_ixn_group, camm)
 
     def combine_with_host(
         self,
         host_system: HostSystem,
         lamb: float,
-        num_water_atoms: int,
-        ff: Forcefield,
-        omm_topology: OpenMMTopology,
+        num_water_atoms: int,  # deprecated/unused
+        ff: Forcefield,  # deprecated/unused
+        omm_topology: OpenMMTopology,  # deprecated/unused
     ) -> HostGuestSystem:
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
@@ -2044,14 +1842,14 @@ class SingleTopology(AtomMapMixin):
         combined_improper_params = jnp.concatenate([host_system.improper.params, guest_system.improper.params])
         combined_improper = PeriodicTorsion(combined_improper_idxs).bind(combined_improper_params)
 
-        host_nonbonded_all_pairs = self._parameterize_host_nonbonded(host_system.nonbonded_all_pairs)
-        host_guest_nonbonded_ixn_group = self._parameterize_host_guest_nonbonded_ixn(
-            lamb,
-            host_system.nonbonded_all_pairs,
-            num_water_atoms,
-            ff,
-            omm_topology,
+        # combined_nonbonded_all_pairs = None
+        # combined_nonbonded_interaction_group = None
+        combined_nonbonded_all_pairs = self._wrap_align_host_nonbonded(host_system.nonbonded_all_pairs).interpolate(
+            lamb
         )
+        combined_nonbonded_interaction_group = self._wrap_aligned_host_guest_nonbonded_ixn_group(
+            host_system.nonbonded_all_pairs
+        ).interpolate(lamb)
 
         return HostGuestSystem(
             bond=combined_bond,
@@ -2061,6 +1859,6 @@ class SingleTopology(AtomMapMixin):
             chiral_atom=guest_system.chiral_atom,
             chiral_bond=guest_system.chiral_bond,
             nonbonded_pair_list=guest_system.nonbonded_pair_list,
-            nonbonded_all_pairs=host_nonbonded_all_pairs,
-            nonbonded_ixn_group=host_guest_nonbonded_ixn_group,
+            nonbonded_all_pairs=combined_nonbonded_all_pairs,
+            nonbonded_ixn_group=combined_nonbonded_interaction_group,
         )

@@ -1,5 +1,6 @@
 from dataclasses import replace
 from functools import cached_property
+from typing import Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -8,7 +9,8 @@ from openmm import app
 from rdkit import Chem
 
 from timemachine.constants import NBParamIdx
-from timemachine.fe.single_topology import AlignedPotential, SingleTopology
+from timemachine.fe.aligned_potential import AlignedAngle, AlignedBond, AlignedTorsion
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
 from timemachine.ff import Forcefield
 
@@ -89,7 +91,7 @@ class SingleTopologyREST(SingleTopology):
         tends to result in larger REST regions than seem desirable.
         """
 
-        aligned_potentials: list[AlignedPotential] = [
+        aligned_potentials: list[Union[AlignedBond, AlignedAngle, AlignedTorsion]] = [
             self.aligned_bond,
             self.aligned_angle,
             self.aligned_improper,
