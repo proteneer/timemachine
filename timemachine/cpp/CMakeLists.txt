@@ -31,7 +31,9 @@ string(APPEND CMAKE_CUDA_FLAGS
   " -Wfloat-conversion"
   " -Wno-deprecated-declarations"
   " -restrict"  # Warn if device pointers are not restricted
+  " -rdc=true" # Enable relocatable device code (needed for dynamic parallelisim)
 )
+set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 message("C++ Compiler Flags" ${CMAKE_CXX_FLAGS})
 message("Cuda Compiler Flags" ${CMAKE_CUDA_FLAGS})
 
