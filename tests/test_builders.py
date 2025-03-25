@@ -2,12 +2,15 @@ from tempfile import NamedTemporaryFile
 
 import numpy as np
 import pytest
+from common import ligand_from_smiles
 from openmm import app, unit
+from rdkit import Chem
 
-from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF
+from timemachine.constants import DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, ONE_4PI_EPS0, NBParamIdx
+from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.utils import get_romol_conf, read_sdf, set_romol_conf
 from timemachine.ff import sanitize_water_ff
-from timemachine.md.barostat.utils import compute_box_volume
+from timemachine.md.barostat.utils import compute_box_volume, get_bond_list, get_group_indices
 from timemachine.md.builders import build_protein_system, build_water_system
 from timemachine.md.minimizer import check_force_norm
 from timemachine.potentials import Nonbonded
@@ -78,7 +81,7 @@ def test_build_protein_system_returns_correct_water_count():
     mol_b = mols[1]
     last_num_waters = None
     # Verify that even adding different molecules produces the same number of waters in the system
-    for mols in (None, [mol_a], [mol_b], [mol_a, mol_b]):
+    for mols in (None, [], [mol_a], [mol_b], [mol_a, mol_b]):
         with path_to_internal_file("timemachine.testsystems.fep_benchmark.pfkfb3", "6hvi_prepared.pdb") as pdb_path:
             host_config = build_protein_system(str(pdb_path), DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, mols=mols)
             # The builder should not modify the number of atoms in the protein at all
@@ -88,6 +91,174 @@ def test_build_protein_system_returns_correct_water_count():
             if last_num_waters is not None:
                 assert last_num_waters == host_config.num_water_atoms
             last_num_waters = host_config.num_water_atoms
+
+
+def validate_host_config_ions_and_charge(
+    host_config: HostConfig,
+    mol: Chem.Mol | None,
+    ionic_concentration: float,
+    expected_host_charge: int,
+    neutralized: bool,
+    atol: float = 1e-15,
+    input_host_charge: int = 0,
+):
+    mol_formal_charge = 0
+    if mol is not None:
+        mol_formal_charge = Chem.GetFormalCharge(mol)
+    np.testing.assert_allclose(
+        np.sum(host_config.host_system.nonbonded_all_pairs.params[:, NBParamIdx.Q_IDX]) / np.sqrt(ONE_4PI_EPS0),
+        expected_host_charge,
+        atol=atol,
+    )
+
+    bond_indices = get_bond_list(host_config.host_system.bond.potential)
+
+    all_group_idxs = get_group_indices(bond_indices, host_config.conf.shape[0])
+    ions = [group for group in all_group_idxs if len(group) == 1]
+    num_ions = len(ions)
+    if ionic_concentration > 0.0:
+        assert num_ions > 0
+        if neutralized:
+            assert num_ions % 2 == abs(mol_formal_charge + input_host_charge) % 2
+        else:
+            assert num_ions % 2 == 0
+    elif neutralized:
+        # Should have the number of ions extra to account for the charge of the ligand
+        assert num_ions == abs(mol_formal_charge + input_host_charge)
+    else:
+        assert num_ions == 0
+
+
+@pytest.mark.nocuda
+@pytest.mark.parametrize("ionic_concentration", [0.0, 0.15])
+@pytest.mark.parametrize("neutralize", [False, True])
+def test_water_system_ion_concentration_and_neutralization(ionic_concentration, neutralize):
+    positive_mol = ligand_from_smiles("c1cc[nH+]cc1")
+    negative_mol = ligand_from_smiles("[N+](=O)([O-])[O-]")
+    neutral_mol = ligand_from_smiles("c1ccccc1")
+
+    box_size = 2.0
+
+    host_config_no_ions = build_water_system(box_size, DEFAULT_WATER_FF, ionic_concentration=0.0)
+    # Host system will have zero net charge if no ionic concentration and not neutralized
+    assert np.sum(host_config_no_ions.host_system.nonbonded_all_pairs.params[:, NBParamIdx.Q_IDX]) == 0.0
+
+    # Can't mix ligands of different charges when neutralizing the system
+    if neutralize:
+        with pytest.raises(AssertionError):
+            build_water_system(
+                box_size,
+                DEFAULT_WATER_FF,
+                mols=[positive_mol, negative_mol],
+                ionic_concentration=ionic_concentration,
+                neutralize=neutralize,
+            )
+    else:
+        build_water_system(
+            box_size,
+            DEFAULT_WATER_FF,
+            mols=[positive_mol, negative_mol],
+            ionic_concentration=ionic_concentration,
+            neutralize=neutralize,
+        )
+    host_config = build_water_system(
+        box_size, DEFAULT_WATER_FF, mols=[], ionic_concentration=ionic_concentration, neutralize=neutralize
+    )
+    validate_host_config_ions_and_charge(host_config, None, ionic_concentration, 0, neutralize)
+    for mol in [positive_mol, negative_mol, neutral_mol]:
+        host_config = build_water_system(
+            box_size, DEFAULT_WATER_FF, mols=[mol], ionic_concentration=ionic_concentration, neutralize=neutralize
+        )
+        expected_charge = 0
+        if neutralize:
+            # Since the ligand isn't in the system, should be missing the charge of the ligand
+            expected_charge = -Chem.GetFormalCharge(mol)
+        validate_host_config_ions_and_charge(host_config, mol, ionic_concentration, expected_charge, neutralize)
+
+
+@pytest.mark.nocuda
+@pytest.mark.parametrize("ionic_concentration", [0.0, 0.15])
+@pytest.mark.parametrize("neutralize", [False, True])
+def test_protein_system_ion_concentration_and_neutralization(ionic_concentration, neutralize):
+    # Note that none of this ligands go with the protein, but as long as we don't minimize, all is well.
+    positive_mol = ligand_from_smiles("c1cc[nH+]cc1")
+    negative_mol = ligand_from_smiles("[N+](=O)([O-])[O-]")
+    neutral_mol = ligand_from_smiles("c1ccccc1")
+
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as pdb_path:
+        host_pdbfile = str(pdb_path)
+
+    host_config_no_ions = build_protein_system(
+        host_pdbfile, DEFAULT_PROTEIN_FF, DEFAULT_WATER_FF, ionic_concentration=0.0, neutralize=False
+    )
+    # Without neutralizing the system, the protein system may have some charge
+    reference_protein_charge = np.sum(
+        host_config_no_ions.host_system.nonbonded_all_pairs.params[:, NBParamIdx.Q_IDX]
+    ) / np.sqrt(ONE_4PI_EPS0)
+
+    # Can't mix ligands of different charges when neutralizing the system
+    if neutralize:
+        with pytest.raises(AssertionError):
+            build_protein_system(
+                host_pdbfile,
+                DEFAULT_PROTEIN_FF,
+                DEFAULT_WATER_FF,
+                mols=[positive_mol, negative_mol],
+                ionic_concentration=ionic_concentration,
+                neutralize=neutralize,
+            )
+    else:
+        build_protein_system(
+            host_pdbfile,
+            DEFAULT_PROTEIN_FF,
+            DEFAULT_WATER_FF,
+            mols=[positive_mol, negative_mol],
+            ionic_concentration=ionic_concentration,
+            neutralize=neutralize,
+        )
+    host_config = build_protein_system(
+        host_pdbfile,
+        DEFAULT_PROTEIN_FF,
+        DEFAULT_WATER_FF,
+        mols=[],
+        ionic_concentration=ionic_concentration,
+        neutralize=neutralize,
+    )
+    input_host_charge = int(np.rint(reference_protein_charge))
+    expected_charge = reference_protein_charge
+    if neutralize:
+        expected_charge = 0
+    validate_host_config_ions_and_charge(
+        host_config,
+        None,
+        ionic_concentration,
+        expected_charge,
+        neutralize,
+        atol=1.5e-15,
+        input_host_charge=input_host_charge,
+    )
+    for mol in [positive_mol, negative_mol, neutral_mol]:
+        host_config = build_protein_system(
+            host_pdbfile,
+            DEFAULT_PROTEIN_FF,
+            DEFAULT_WATER_FF,
+            mols=[mol],
+            ionic_concentration=ionic_concentration,
+            neutralize=neutralize,
+        )
+        expected_charge = reference_protein_charge
+        if neutralize:
+            # Since the ligand isn't in the system, should be missing the charge of the ligand
+            expected_charge = -Chem.GetFormalCharge(mol)
+        validate_host_config_ions_and_charge(
+            host_config,
+            mol,
+            ionic_concentration,
+            expected_charge,
+            neutralize,
+            atol=1.5e-15,
+            input_host_charge=input_host_charge,
+        )
 
 
 @pytest.mark.nocuda
