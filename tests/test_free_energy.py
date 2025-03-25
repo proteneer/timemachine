@@ -22,6 +22,7 @@ from timemachine.fe.free_energy import (
     HREXSimulationResult,
     IndeterminateEnergyWarning,
     InitialState,
+    LocalMDParams,
     MDParams,
     MinOverlapWarning,
     PairBarResult,
@@ -294,7 +295,13 @@ def test_sample_max_buffer_frames_with_local_md(
     steps_per_frame = 1
     n_eq_steps = 1
 
-    md_params = MDParams(n_frames, n_eq_steps, steps_per_frame, 2023, local_steps=local_steps)
+    md_params = MDParams(
+        n_frames,
+        n_eq_steps,
+        steps_per_frame,
+        2023,
+        local_md_params=LocalMDParams(local_steps=local_steps) if local_steps > 0 else None,
+    )
     traj = sample(solvent_hif2a_ligand_pair_single_topology_lam0_state, md_params, max_buffer_frames)
     assert isinstance(traj.frames, StoredArrays)
     assert len(traj.frames) == n_frames
