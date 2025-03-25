@@ -210,7 +210,7 @@ def test_openmm_deserialize_system_handles_duplicate_bonded_forces():
     phase = 180.0
     k = 10.0
 
-    # Add a new force that duplicates an existing torsion, the parameters of the torsion is unimportant
+    # Add a new force that duplicates an existing torsion, the parameters of the torsion are unimportant
     new_force = mm.PeriodicTorsionForce()
     new_force.setName("dihedrals_a")
     new_force.addTorsion(*torsion_idxs, period, phase, k)
