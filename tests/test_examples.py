@@ -16,7 +16,7 @@ from scipy.special import logsumexp
 
 from timemachine.constants import DEFAULT_FF, DEFAULT_KT, KCAL_TO_KJ
 from timemachine.fe.free_energy import assert_deep_eq
-from timemachine.fe.utils import get_mol_name
+from timemachine.fe.utils import get_mol_name, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.testsystems import fetch_freesolv
 
@@ -286,6 +286,10 @@ def test_run_rbfe_legs(
 
         def verify_run(output_dir: Path):
             assert output_dir.is_dir()
+            mols_by_name = read_sdf_mols_by_name(output_dir / "mols.sdf")
+            assert len(mols_by_name) == 2
+            assert mol_a in mols_by_name
+            assert mol_b in mols_by_name
             assert (output_dir / "md_params.pkl").is_file()
             assert (output_dir / "atom_mapping.svg").is_file()
             assert (output_dir / "core.pkl").is_file()
@@ -307,6 +311,8 @@ def test_run_rbfe_legs(
             assert (leg_dir / "hrex_transition_matrix.png").is_file()
             assert (leg_dir / "hrex_swap_acceptance_rates_convergence.png").is_file()
             assert (leg_dir / "hrex_replica_state_distribution_heatmap.png").is_file()
+            if leg == "complex":
+                assert (leg_dir / "water_sampling_acceptances.png").is_file()
 
             results = np.load(str(leg_dir / "results.npz"))
             assert results["pred_dg"].size == 1
