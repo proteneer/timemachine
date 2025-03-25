@@ -1,6 +1,7 @@
 #pragma once
 
 #include "potential.hpp"
+#include <cuda_runtime.h>
 #include <vector>
 
 namespace timemachine {
@@ -9,6 +10,11 @@ template <typename RealType> class HarmonicBond : public Potential {
 
 private:
     const int B_;
+
+    cudaGraph_t graph_;
+    cudaGraphExec_t graph_exec_ = NULL;
+    cudaGraphNode_t bonded_node_;
+    cudaKernelNodeParams bonded_params_;
 
     int *d_bond_idxs_;
     __int128 *d_u_buffer_;
