@@ -11,11 +11,14 @@ import jax
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
+from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_TEMP, ONE_4PI_EPS0
 from timemachine.fe import rbfe
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.utils import set_mol_name
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import nonbonded
 from timemachine.lib import custom_ops
@@ -586,3 +589,10 @@ def check_split_ixns(
 
         np.testing.assert_allclose(expected_u, sum_u_prot, rtol=rtol, atol=atol)
         np.testing.assert_allclose(expected_grad, sum_grad_prot, rtol=rtol, atol=atol)
+
+
+def ligand_from_smiles(smiles: str, seed: int = 2024) -> Chem.Mol:
+    mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
+    AllChem.EmbedMolecule(mol, randomSeed=seed)
+    set_mol_name(mol, smiles)
+    return mol
