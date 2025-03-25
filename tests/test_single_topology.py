@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 import pytest
-from common import check_split_ixns, load_split_forcefields
+from common import check_split_ixns, ligand_from_smiles, load_split_forcefields
 from hypothesis import event, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -36,7 +36,7 @@ from timemachine.fe.single_topology import (
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import minimize_scipy, simulate_system
-from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, read_sdf_mols_by_name, set_mol_name
+from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.md import minimizer
 from timemachine.md.builders import build_protein_system, build_water_system
@@ -1031,13 +1031,6 @@ def test_combine_with_host_split(precision, rtol, atol):
         compute_intra_grad_u,
         compute_ixn_grad_u,
     )
-
-
-def ligand_from_smiles(smiles: str, seed: int = 2024) -> Chem.Mol:
-    mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
-    AllChem.EmbedMolecule(mol, randomSeed=seed)
-    set_mol_name(mol, smiles)
-    return mol
 
 
 def _get_core_by_mcs(mol_a, mol_b):
