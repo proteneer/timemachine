@@ -128,6 +128,10 @@ class GuestSystem(AbstractSystem):
     chiral_bond: BoundPotential[ChiralBondRestraint]
     nonbonded_pair_list: BoundPotential[NonbondedPairListPrecomputed]
 
+    @property
+    def num_atoms(self):
+        return np.amax(self.bond.potential.idxs) + 1
+
 
 @dataclass
 class HostGuestSystem(AbstractSystem):

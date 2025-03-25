@@ -18,6 +18,21 @@ def convert_to_nx(mol):
     return g
 
 
+def convert_to_nx_from_bond_list(bond_list, num_atoms) -> nx.Graph:
+    """
+    Convert an Chem.Mol into a networkx graph.
+    """
+    g = nx.Graph()
+    for atom in range(num_atoms):
+        g.add_node(atom)
+
+    for src, dst in bond_list:
+        g.add_edge(src, dst)
+
+    return g
+
+
+
 _Node = TypeVar("_Node")
 
 

@@ -30,7 +30,7 @@ from timemachine.fe.lambda_schedule import construct_pre_optimized_relative_lamb
 from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
 from timemachine.fe.topology import get_ligand_ixn_pots_params
 from timemachine.ff import Forcefield
-from timemachine.graph_utils import convert_to_nx
+from timemachine.graph_utils import convert_to_nx_from_bond_list
 from timemachine.potentials import (
     BoundPotential,
     ChiralAtomRestraint,
@@ -185,39 +185,6 @@ def setup_dummy_bond_and_chiral_interactions(
 
     return bonded_idxs, bonded_params
 
-
-def setup_dummy_interactions_from_ff(
-    ff, mol, dummy_group, root_anchor_atom, nbr_anchor_atom, core_atoms, chiral_atom_k, chiral_bond_k
-):
-    """
-    Setup interactions involving atoms in a given dummy group.
-    """
-    top = topology.BaseTopology(mol, ff)
-
-    bond_params, hb = top.parameterize_harmonic_bond(ff.hb_handle.params)
-    angle_params, ha = top.parameterize_harmonic_angle(ff.ha_handle.params)
-    improper_params, it = top.parameterize_improper_torsion(ff.it_handle.params)
-    chiral_atom_potential, _ = top.setup_chiral_restraints(chiral_atom_k, chiral_bond_k)
-    chiral_atom_idxs = chiral_atom_potential.potential.idxs
-    chiral_atom_params = chiral_atom_potential.params
-
-    # note: core atoms are not simply set(mol_a_atoms).difference(dummy_group)
-    # since multiple dummy groups may be present
-
-    return setup_dummy_interactions(
-        hb.idxs,
-        bond_params,
-        ha.idxs,
-        angle_params,
-        it.idxs,
-        improper_params,
-        chiral_atom_idxs,
-        chiral_atom_params,
-        dummy_group,
-        root_anchor_atom,
-        nbr_anchor_atom,
-        core_atoms,
-    )
 
 
 def setup_dummy_interactions(
@@ -431,15 +398,15 @@ def canonicalize_chiral_atom_idxs(idxs: NDArray[np.int32]) -> NDArray[np.int32]:
     return np.concatenate([c, ijk_canon], axis=1)
 
 
+import copy
+
 def setup_end_state(
-    ff: Forcefield,
-    mol_a: Chem.Mol,
-    mol_b: Chem.Mol,
-    core: NDArray,
-    a_to_c: NDArray,
-    b_to_c: NDArray,
-    anchored_dummy_groups: dict[int, tuple[Optional[int], frozenset[int]]],
-) -> GuestSystem:
+    system_a,
+    system_b,
+    core,
+    a_to_c,
+    b_to_c,
+    anchored_dummy_groups):
     """
     Setup end-state for mol_a with dummy atoms of mol_b attached. The mapped indices will correspond
     to the alchemical molecule with dummy atoms. Note that the bond, angle, torsion, nonbonded pairs,
@@ -474,12 +441,24 @@ def setup_end_state(
         A parameterized system.
 
     """
-
+    system_a = copy.deepcopy(system_a)
+    system_b = copy.deepcopy(system_b)
     all_dummy_angle_idxs_, all_dummy_angle_params_ = [], []
     all_dummy_improper_idxs_, all_dummy_improper_params_ = [], []
     for anchor, (nbr, dg) in anchored_dummy_groups.items():
-        all_idxs, all_params = setup_dummy_interactions_from_ff(
-            ff, mol_b, dg, anchor, nbr, core[:, 1], DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
+        all_idxs, all_params = setup_dummy_interactions(
+            system_b.bond.potential.idxs,
+            system_b.bond.params,
+            system_b.angle.potential.idxs,
+            system_b.angle.params,
+            system_b.improper.potential.idxs,
+            system_b.improper.params,
+            system_b.chiral_atom.potential.idxs,
+            system_b.chiral_atom.params,
+            dg,
+            anchor,
+            nbr,
+            core[:, 1]
         )
         # append idxs
         all_dummy_angle_idxs_.extend(all_idxs[1])
@@ -489,52 +468,31 @@ def setup_end_state(
         all_dummy_improper_params_.extend(all_params[2])
 
     all_dummy_angle_idxs = np.array(all_dummy_angle_idxs_, np.int32).reshape(-1, 3)
-    all_dummy_angle_params = np.array(all_dummy_angle_params_, np.float64).reshape(-1, 3)
 
+    # (-1, 3) to support stable harmonic angle
+    all_dummy_angle_params = np.array(all_dummy_angle_params_, np.float64).reshape(-1, 3) 
     all_dummy_improper_idxs = np.array(all_dummy_improper_idxs_, np.int32).reshape(-1, 4)
     all_dummy_improper_params = np.array(all_dummy_improper_params_, np.float64).reshape(-1, 3)
 
-    # generate parameters for mol_a
-    mol_a_top = topology.BaseTopology(mol_a, ff)
-    assert ff.ha_handle is not None
-    mol_a_angle_params, mol_a_ha = mol_a_top.parameterize_harmonic_angle(ff.ha_handle.params)
-    assert ff.pt_handle is not None
-    mol_a_proper_params, mol_a_pt = mol_a_top.parameterize_proper_torsion(ff.pt_handle.params)
-    assert ff.it_handle is not None
-    mol_a_improper_params, mol_a_it = mol_a_top.parameterize_improper_torsion(ff.it_handle.params)
-
-    assert ff.q_handle is not None
-    assert ff.q_handle_intra is not None
-
-    assert ff.lj_handle is not None
-    assert ff.lj_handle_intra is not None
-    mol_a_nbpl_params, mol_a_nbpl = mol_a_top.parameterize_nonbonded_pairlist(
-        ff.q_handle.params,
-        ff.q_handle_intra.params,
-        ff.lj_handle.params,
-        ff.lj_handle_intra.params,
-        intramol_params=True,
-    )
-
-    mol_a_angle_idxs = a_to_c[mol_a_ha.idxs]
-    mol_a_proper_idxs = a_to_c[mol_a_pt.idxs]
-    mol_a_improper_idxs = a_to_c[mol_a_it.idxs]
-    mol_a_nbpl_idxs = a_to_c[mol_a_nbpl.idxs]
+    mol_a_angle_idxs = a_to_c[system_a.angle.potential.idxs]
+    mol_a_proper_idxs = a_to_c[system_a.proper.potential.idxs]
+    mol_a_improper_idxs = a_to_c[system_a.improper.potential.idxs]
+    mol_a_nbpl_idxs = a_to_c[system_a.nonbonded_pair_list.potential.idxs]
 
     all_dummy_angle_idxs = b_to_c[all_dummy_angle_idxs]  # type: ignore
     all_dummy_improper_idxs = b_to_c[all_dummy_improper_idxs]  # type: ignore
 
     mol_c_angle_idxs = np.concatenate([mol_a_angle_idxs, all_dummy_angle_idxs])
-    mol_c_angle_params = np.concatenate([mol_a_angle_params, all_dummy_angle_params])
+    mol_c_angle_params = np.concatenate([system_a.angle.params, all_dummy_angle_params])
 
     mol_c_proper_idxs = np.array([canonicalize_bond(idxs) for idxs in mol_a_proper_idxs], dtype=np.int32)
-    mol_c_proper_params = mol_a_proper_params
+    mol_c_proper_params = system_a.proper.params
     proper_potential = PeriodicTorsion(mol_c_proper_idxs.reshape(-1, 4)).bind(
         np.array(mol_c_proper_params.reshape(-1, 3), dtype=np.float64)
     )
 
     mol_c_improper_idxs = np.concatenate([mol_a_improper_idxs, all_dummy_improper_idxs])
-    mol_c_improper_params = np.concatenate([mol_a_improper_params, all_dummy_improper_params])
+    mol_c_improper_params = np.concatenate([system_a.improper.params, all_dummy_improper_params])
     # canonicalize improper with clockwise/counter-clockwise check
     mol_c_improper_idxs = np.array(
         [canonicalize_improper_idxs(idxs) for idxs in mol_c_improper_idxs], np.int32
@@ -545,34 +503,27 @@ def setup_end_state(
 
     # canonicalize angles
     mol_c_angle_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_c_angle_idxs], dtype=np.int32)
-    # Set the stable angle epsilon values to zero
     angle_potential = HarmonicAngle(mol_c_angle_idxs_canon).bind(mol_c_angle_params)
 
     # dummy atoms do not have any nonbonded interactions, so we simply turn them off
     mol_c_nbpl_idxs_canon = np.array([canonicalize_bond(idxs) for idxs in mol_a_nbpl_idxs], dtype=np.int32)
-    mol_a_nbpl.idxs = mol_c_nbpl_idxs_canon
-    nonbonded_potential = mol_a_nbpl.bind(np.array(mol_a_nbpl_params, dtype=np.float64))
 
-    assert ff.hb_handle
+    # mutate system_a_nbpl
+    system_a.nonbonded_pair_list.potential.idxs = mol_c_nbpl_idxs_canon
+    nonbonded_potential = system_a.nonbonded_pair_list
 
-    mol_a_top = topology.BaseTopology(mol_a, ff)
-    mol_a_bond_params, mol_a_hb = mol_a_top.parameterize_harmonic_bond(ff.hb_handle.params)
-    mol_a_chiral_atom, mol_a_chiral_bond = mol_a_top.setup_chiral_restraints(
-        DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
-    )
+    mol_a_bond_params, mol_a_hb = system_a.bond.params, system_a.bond
+    mol_a_chiral_atom, mol_a_chiral_bond = system_a.chiral_atom, system_a.chiral_bond
 
-    mol_b_top = topology.BaseTopology(mol_b, ff)
-    mol_b_bond_params, mol_b_hb = mol_b_top.parameterize_harmonic_bond(ff.hb_handle.params)
-    mol_b_chiral_atom, _ = mol_b_top.setup_chiral_restraints(
-        DEFAULT_CHIRAL_ATOM_RESTRAINT_K, DEFAULT_CHIRAL_BOND_RESTRAINT_K
-    )
+    mol_b_bond_params, mol_b_hb = system_b.bond.params, system_b.bond
+    mol_b_chiral_atom, mol_b_chiral_bond = system_b.chiral_atom, system_b.chiral_bond
 
     all_dummy_bond_idxs_, all_dummy_bond_params_ = [], []
     all_dummy_chiral_atom_idxs_, all_dummy_chiral_atom_params_ = [], []
 
     for anchor, (_, dg) in anchored_dummy_groups.items():
         all_idxs, all_params = setup_dummy_bond_and_chiral_interactions(
-            mol_b_hb.idxs,
+            mol_b_hb.potential.idxs,
             mol_b_bond_params,
             mol_b_chiral_atom.potential.idxs,
             np.asarray(mol_b_chiral_atom.params),
@@ -596,7 +547,7 @@ def setup_end_state(
     all_dummy_chiral_atom_idxs = concatenate(all_dummy_chiral_atom_idxs_, (0, 4), np.int32)
     all_dummy_chiral_atom_params = concatenate(all_dummy_chiral_atom_params_, (0,), np.float64)
 
-    mol_a_bond_idxs = a_to_c[mol_a_hb.idxs]
+    mol_a_bond_idxs = a_to_c[mol_a_hb.potential.idxs]
     mol_a_chiral_atom_idxs = a_to_c[mol_a_chiral_atom.potential.idxs]
     mol_a_chiral_bond_idxs = a_to_c[mol_a_chiral_bond.potential.idxs]
 
@@ -665,10 +616,7 @@ def setup_end_state(
         mol_a_chiral_bond.params
     )
 
-    num_atoms = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
-    assert get_num_connected_components(num_atoms, bond_potential.potential.idxs) == 1, (
-        "hybrid molecule has multiple connected components"
-    )
+    # TBD - logic for nonbonded interactions if we have HostGuestSystems
 
     return GuestSystem(
         bond=bond_potential,
@@ -681,9 +629,12 @@ def setup_end_state(
     )
 
 
+
 def find_dummy_groups_and_anchors(
-    mol_a,
-    mol_b,
+    system_a_bond_list,
+    system_b_bond_list,
+    system_a_num_atoms,
+    system_b_num_atoms,
     core_atoms_a: Sequence[int],
     core_atoms_b: Sequence[int],
 ) -> dict[int, tuple[Optional[int], frozenset[int]]]:
@@ -714,9 +665,8 @@ def find_dummy_groups_and_anchors(
     it's not super obvious how to best detect this. So instead, we will pick an arbitrary anchor atom. One possible
     solution later on is to minimize the number of rotatable bonds?
     """
-
-    bond_graph_a = convert_to_nx(mol_a)
-    bond_graph_b = convert_to_nx(mol_b)
+    bond_graph_a = convert_to_nx_from_bond_list(system_a_bond_list, system_a_num_atoms)
+    bond_graph_b = convert_to_nx_from_bond_list(system_b_bond_list, system_b_num_atoms)
 
     candidates = (
         anchored_dummy_groups
@@ -735,7 +685,6 @@ def find_dummy_groups_and_anchors(
             warnings.warn("Unable to find stable angle term in mol_a", CoreBondChangeWarning)
 
     return arbitrary_anchored_dummy_groups
-
 
 def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
     """
@@ -1010,22 +959,17 @@ class AtomMapMixin:
     self.c_flags
     """
 
-    def __init__(self, mol_a, mol_b, core: NDArray):
+    def __init__(self, num_atoms_a, num_atoms_b, core: NDArray):
         assert core.shape[1] == 2
-        assert mol_a is not None
-        assert mol_b is not None
 
-        self.mol_a = mol_a
-        self.mol_b = mol_b
+        self.num_atoms_a = num_atoms_a
+        self.num_atoms_b = num_atoms_b
         self.core = core
-        assert mol_a is not None
-        assert mol_b is not None
         assert core.shape[1] == 2
 
         # map into idxs in the combined molecule
-
-        self.a_to_c = np.arange(mol_a.GetNumAtoms(), dtype=np.int32)  # identity
-        self.b_to_c = np.zeros(mol_b.GetNumAtoms(), dtype=np.int32) - 1
+        self.a_to_c = np.arange(num_atoms_a, dtype=np.int32)  # identity
+        self.b_to_c = np.zeros(num_atoms_b, dtype=np.int32) - 1
 
         # mark membership:
         # AtomMapFlags.CORE: Core
@@ -1040,7 +984,7 @@ class AtomMapMixin:
             self.c_flags[a] = AtomMapFlags.CORE
             self.b_to_c[b] = a
 
-        iota = self.mol_a.GetNumAtoms()
+        iota = self.num_atoms_a
         for b_idx, c_idx in enumerate(self.b_to_c):
             if c_idx == -1:
                 self.b_to_c[b_idx] = iota
@@ -1072,7 +1016,7 @@ class AtomMapMixin:
         int
             Total number of atoms.
         """
-        return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core)
+        return self.num_atoms_a + self.num_atoms_b - len(self.core)
 
     def get_num_dummy_atoms(self) -> int:
         """
@@ -1083,7 +1027,7 @@ class AtomMapMixin:
         int
             Total number of atoms.
         """
-        return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms() - len(self.core) - len(self.core)
+        return self.num_atoms_a + self.num_atoms_b - len(self.core) - len(self.core)
 
 
 class MissingBondsInChiralVolumeException(Exception):
@@ -1221,6 +1165,13 @@ class AlignedChiralAtom(AlignedPotential):
         params = jnp.array(params).reshape(-1)
         return ChiralAtomRestraint(self.idxs).bind(params)
 
+# class AlignedNonbondedInteractionGroup(AlignedPotential):
+
+    # def interpolate(self, lamb):
+
+
+# class AlignedNonbondedAllPairs(AlignedPotential):
+
 
 @dataclass
 class AlignedNonbondedPairlist(AlignedPotential):
@@ -1235,8 +1186,29 @@ class AlignedNonbondedPairlist(AlignedPotential):
         return NonbondedPairListPrecomputed(self.idxs, self.beta, self.cutoff).bind(params)
 
 
+# @dataclass
+# class AlignedNonbondedInteractionGroup(AlignedPotential):
+#     cutoff: float
+#     beta: float
+
+#     def interpolate(self, lamb):
+#         # (ytz): batch_interpolate_nonbonded_pair_list_params currently fails to respect the self.mins and self.maxes
+#         # boundaries.
+#         params = batch_interpolate_nonbonded_pair_list_params(self.cutoff, self.src_params, self.dst_params, lamb)
+#         params = jnp.array(params)
+#         return NonbondedPairListPrecomputed(self.idxs, self.beta, self.cutoff).bind(params)
+
+
+from timemachine.fe.topology import BaseTopology
+from timemachine.fe.system import AbstractSystem
+
 class SingleTopology(AtomMapMixin):
-    def __init__(self, mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, forcefield: Forcefield):
+
+    # TBD: from_guest_system
+    # TBD: from_host_guest_system
+
+    @classmethod
+    def from_mol(cls, mol_a: Chem.Mol, mol_b: Chem.Mol, core: NDArray, forcefield: Forcefield):
         """
         SingleTopology combines two molecules through a common core. The combined mol has
         atom indices laid out such that mol_a is identically mapped to the combined mol indices.
@@ -1259,20 +1231,45 @@ class SingleTopology(AtomMapMixin):
         forcefield: ff.Forcefield
             Forcefield to be used for parameterization.
         """
-        # initialize the mixin to get the a_to_c, b_to_c, c_to_a, c_to_b, and c_flags
-        super().__init__(mol_a, mol_b, core)
-
-        self.ff = forcefield
-
         a_charge = Chem.GetFormalCharge(mol_a)
         b_charge = Chem.GetFormalCharge(mol_b)
         if a_charge != b_charge:
             raise ChargePertubationError(f"mol a and mol b don't have the same charge: a: {a_charge} b: {b_charge}")
 
-        self.anchored_dummy_groups_ab = find_dummy_groups_and_anchors(mol_a, mol_b, core[:, 0], core[:, 1])  # type: ignore[arg-type]
-        self.anchored_dummy_groups_ba = find_dummy_groups_and_anchors(mol_b, mol_a, core[:, 1], core[:, 0])  # type: ignore[arg-type]
+        bt_a = BaseTopology(mol_a, forcefield)
+        bt_b = BaseTopology(mol_b, forcefield)
 
-        # setup end states
+        # no dummy atoms
+        system_a = bt_a.setup_chiral_end_state()
+        system_b = bt_b.setup_chiral_end_state()
+
+        return cls(system_a, system_b, core)
+
+    def __init__(self, system_a: AbstractSystem, system_b: AbstractSystem, core: NDArray):
+
+        self.system_a = system_a
+        self.system_b = system_b
+        self.core = core
+
+        super().__init__(system_a.num_atoms, system_b.num_atoms, core)
+
+        self.anchored_dummy_groups_ab = find_dummy_groups_and_anchors(
+            self.system_a.bond.potential.idxs,
+            self.system_b.bond.potential.idxs,
+            self.system_a.num_atoms,
+            self.system_b.num_atoms,
+            self.core[:, 0],
+            self.core[:, 1])
+
+        self.anchored_dummy_groups_ba = find_dummy_groups_and_anchors(
+            self.system_b.bond.potential.idxs,
+            self.system_a.bond.potential.idxs,
+            self.system_b.num_atoms,
+            self.system_a.num_atoms,         
+            self.core[:, 1],
+            self.core[:, 0])  # type: ignore[arg-type]
+
+        # setup end states, with dummy atoms
         self.src_system = self._setup_end_state_src()
         self.dst_system = self._setup_end_state_dst()
 
@@ -1289,6 +1286,28 @@ class SingleTopology(AtomMapMixin):
         self.aligned_improper = self._align_impropers()
         self.aligned_chiral_atom = self._align_chiral_atoms()
         self.aligned_nonbonded_pair_list = self._align_nonbonded_pair_list()
+
+    def _align_nonbonded_interaction_group(
+            self,
+            src_nb_ixn_group: BoundPotential[NonbondedInteractionGroup],
+            dst_nb_ixn_group: BoundPotential[NonbondedInteractionGroup]):
+
+        src_row_idxs = [self.a_to_c[x] for x in src_nb_ixn_group.potential.row_atom_idxs]
+        src_col_idxs = [self.a_to_c[x] for x in src_nb_ixn_group.potential.col_atom_idxs]
+
+        dst_row_idxs = [self.b_to_c[x] for x in dst_nb_ixn_group.potential.row_atom_idxs]
+        dst_col_idxs = [self.b_to_c[x] for x in dst_nb_ixn_group.potential.col_atom_idxs]
+
+        src_params = np.zeros(self.get_num_atoms(),4)
+        row_params = []
+
+        # src_row_idxs_combined = set(src_row_idxs).union(dst_row_idxs)
+        # src_col_idxs_combined = set(src_col_idxs).union(dst_col_idxs)
+
+        # row_idxs = 
+        # return np.arange(num_guest_atoms, dtype=np.int32) + num_host_atoms
+
+        return aligned_row_idxs, aligned_src_params
 
     def _align_bonded_term(self, align_fn, assign_min_max_fn, src_potential, dst_potential):
         aligned_tuples = align_fn(
@@ -1393,37 +1412,64 @@ class SingleTopology(AtomMapMixin):
             beta=src_beta,
         )
 
-    def combine_masses(self, use_hmr: bool = False) -> list[float]:
+
+    def _align_nonbonded_interaction_group(self):
+        src_cutoff = self.src_system.nonbonded_pair_list.potential.cutoff
+        src_beta = self.src_system.nonbonded_pair_list.potential.beta
+
+        dst_cutoff = self.dst_system.nonbonded_pair_list.potential.cutoff
+        dst_beta = self.dst_system.nonbonded_pair_list.potential.beta
+
+        assert src_cutoff == dst_cutoff
+        assert src_beta == dst_beta
+
+        idxs, jdxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
+            interpolate.align_nonbonded_idxs_and_params,
+            self._assign_nonbonded_idxs_min_max,
+            self.src_system.nonbonded_pair_list,
+            self.dst_system.nonbonded_pair_list,
+        )
+        idxs = idxs.reshape(-1, 2)
+        src_params = src_params.reshape(-1, 4)
+        dst_params = dst_params.reshape(-1, 4)
+        return AlignedNonbondedPairlist(
+            idxs=idxs,
+            src_params=src_params,
+            dst_params=dst_params,
+            mins=mins,
+            maxes=maxes,
+            cutoff=src_cutoff,
+            beta=src_beta,
+        )
+
+    def combine_masses(self, mol_a_masses, mol_b_masses, use_hmr: bool = False) -> list[float]:
         """
         Combine masses between two end-states by taking the heavier of the two core atoms.
 
         Parameters
         ----------
-
+        mol_a_masses: list[float]
+            masses of atoms in mol_a
+        
+        mol_b_masses: list[float]
+            masses of atoms in mol_b
+        
         use_hmr: bool
             Applies HMR to the masses. Refer to timemachine.fe.model_utils.apply_hmr for details.
 
         Returns
         -------
-        masses: list of float
+        masses: list[float]
             len(masses) == self.get_num_atoms()
         """
-        mol_a_masses = utils.get_mol_masses(self.mol_a)
-        mol_b_masses = utils.get_mol_masses(self.mol_b)
-
+        assert len(mol_a_masses) == self.system_a.num_atoms
+        assert len(mol_b_masses) == self.system_b.num_atoms
         # with HMR, apply to each molecule independently
         # then use the larger value for core atoms and the
         # HMR value for dummy atoms
         if use_hmr:
-            # Can't use src_system, dst_system as these have dummy atoms attached
-            mol_a_top = topology.BaseTopology(self.mol_a, self.ff)
-            mol_b_top = topology.BaseTopology(self.mol_b, self.ff)
-            assert self.ff.hb_handle is not None
-            _, mol_a_hb = mol_a_top.parameterize_harmonic_bond(self.ff.hb_handle.params)
-            _, mol_b_hb = mol_b_top.parameterize_harmonic_bond(self.ff.hb_handle.params)
-
-            mol_a_masses = model_utils.apply_hmr(mol_a_masses, mol_a_hb.idxs)
-            mol_b_masses = model_utils.apply_hmr(mol_b_masses, mol_b_hb.idxs)
+            mol_a_masses = model_utils.apply_hmr(mol_a_masses, self.system_a.bond.potential.idxs)
+            mol_b_masses = model_utils.apply_hmr(mol_b_masses, self.system_b.bond.potential.idxs)
 
         mol_c_masses = []
         for c_idx in range(self.get_num_atoms()):
@@ -1477,8 +1523,8 @@ class SingleTopology(AtomMapMixin):
         Combine x_a and x_b conformations for lambda=1
         """
         # place a first, then b overrides a
-        assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
-        assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
+        assert x_a.shape == (self.system_a.num_atoms, 3)
+        assert x_b.shape == (self.system_b.num_atoms, 3)
         x0 = np.zeros((self.get_num_atoms(), 3))
         for src, dst in enumerate(self.a_to_c):
             x0[dst] = x_a[src]
@@ -1492,8 +1538,8 @@ class SingleTopology(AtomMapMixin):
         Combine x_a and x_b conformations for lambda=0
         """
         # place b first, then a overrides b
-        assert x_a.shape == (self.mol_a.GetNumAtoms(), 3)
-        assert x_b.shape == (self.mol_b.GetNumAtoms(), 3)
+        assert x_a.shape == (self.system_a.num_atoms, 3)
+        assert x_b.shape == (self.system_b.num_atoms, 3)
         x0 = np.zeros((self.get_num_atoms(), 3))
         for src, dst in enumerate(self.b_to_c):
             x0[dst] = x_b[src]
@@ -1513,7 +1559,7 @@ class SingleTopology(AtomMapMixin):
             Vacuum system
         """
         return setup_end_state(
-            self.ff, self.mol_a, self.mol_b, self.core, self.a_to_c, self.b_to_c, self.anchored_dummy_groups_ab
+            self.system_a, self.system_b, self.core, self.a_to_c, self.b_to_c, self.anchored_dummy_groups_ab
         )
 
     def _setup_end_state_dst(self):
@@ -1527,7 +1573,7 @@ class SingleTopology(AtomMapMixin):
             Vacuum system
         """
         return setup_end_state(
-            self.ff, self.mol_b, self.mol_a, self.core[:, ::-1], self.b_to_c, self.a_to_c, self.anchored_dummy_groups_ba
+            self.system_b, self.system_a, self.core[:, ::-1], self.b_to_c, self.a_to_c, self.anchored_dummy_groups_ba
         )
 
     @cached_property
@@ -1966,6 +2012,7 @@ class SingleTopology(AtomMapMixin):
         bound_ixn_pot = ixn_pot.bind(ixn_params)
         return bound_ixn_pot
 
+    # not implemented
     def combine_with_host(
         self,
         host_system: HostSystem,
@@ -1974,6 +2021,7 @@ class SingleTopology(AtomMapMixin):
         ff: Forcefield,
         omm_topology: OpenMMTopology,
     ) -> HostGuestSystem:
+        assert 0
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
         combined. In particular:
