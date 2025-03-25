@@ -12,6 +12,15 @@ import numpy as np
 from numpy.typing import NDArray
 from rdkit import Chem
 
+from timemachine.fe.aligned_potential import (
+    AlignedBond,
+    AlignedAngle,
+    AlignedTorsion,
+    AlignedChiralAtom,
+    AlignedNonbondedPairlist,
+    AlignedNonbondedInteractionGroup
+)
+
 from timemachine.constants import (
     DEFAULT_BOND_IS_PRESENT_K,
     DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
@@ -629,7 +638,6 @@ def setup_end_state(
     )
 
 
-
 def find_dummy_groups_and_anchors(
     system_a_bond_list,
     system_b_bond_list,
@@ -685,257 +693,6 @@ def find_dummy_groups_and_anchors(
             warnings.warn("Unable to find stable angle term in mol_a", CoreBondChangeWarning)
 
     return arbitrary_anchored_dummy_groups
-
-def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
-    """
-    Interpolate harmonic bond parameters using
-
-    1. Log-linear interpolation for force constants*
-    2. Linear interpolation for equilibrium bond lengths
-
-    * see note on special case when src_k=0 or dst_k=0 in the docstring of `interpolate_harmonic_force_constant`.
-
-    Parameters
-    ----------
-    src_params : array-like, float, (2,)
-        force constant and equilibrium length at lambda=0
-
-    dst_params : array-like, float, (2,)
-        force constant and equilibrium length at lambda=1
-
-    lamb : float
-        alchemical parameter
-
-    k_min, lambda_min, lambda_max : float
-        see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
-
-    Returns
-    -------
-    array, float, (2,)
-        interpolated (force constant, equilibrium length)
-    """
-    src_k, src_x = src_params
-    dst_k, dst_x = dst_params
-
-    log_linear_fn = partial(interpolate.log_linear_interpolation, min_value=k_min)
-    k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
-    x = pad(interpolate.linear_interpolation, src_x, dst_x, lamb, lambda_min, lambda_max)
-
-    return [k, x]
-
-
-def interpolate_chiral_volume_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
-    src_k = src_params
-    dst_k = dst_params
-
-    log_linear_fn = partial(interpolate.log_linear_interpolation, min_value=k_min)
-    k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
-
-    return [k]
-
-
-def cyclic_difference(a, b, period):
-    """
-    Returns the minimum difference between two points, with periodic boundaries.
-    I.e. the solution of ::
-
-        (a + x) % period = b % period
-
-    with minimum abs(x).
-    """
-    d = jnp.fmod(b - a, period)
-
-    def f(d):
-        return jnp.where(d <= period / 2, d, d - period)
-
-    return jnp.sign(d) * f(jnp.abs(d))
-
-
-def interpolate_harmonic_angle_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
-    """
-    Interpolate harmonic angle parameters using
-
-    1. Log-linear interpolation for force constants*
-    2. Shortest-path linear interpolation for equilibrium angles
-
-    * see note on special case when src_k=0 or dst_k=0 in the docstring of `interpolate_harmonic_force_constant`.
-
-    Parameters
-    ----------
-    src_params : array-like, float, (2,)
-        force constant and equilibrium angle at lambda=0
-
-    dst_params : array-like, float, (2,)
-        force constant and equilibrium angle at lambda=1
-
-    lamb : float
-        alchemical parameter
-
-    k_min, lambda_min, lambda_max : float
-        see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
-
-    Returns
-    -------
-    array, float, (2,)
-        interpolated (force constant, equilibrium phase)
-    """
-
-    src_k, src_phase, _ = src_params
-    dst_k, dst_phase, _ = dst_params
-
-    log_linear_fn = partial(interpolate.log_linear_interpolation, min_value=k_min)
-    k = pad(log_linear_fn, src_k, dst_k, lamb, lambda_min, lambda_max)
-
-    src_phase = src_phase
-    dst_phase = src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi)
-    phase = pad(interpolate.linear_interpolation, src_phase, dst_phase, lamb, lambda_min, lambda_max)
-
-    # Use a stable functional form with small, finite `eps` for intermediate states only. The value of `eps` for
-    # intermedates was chosen to be sufficiently large that no numerical instabilities were observed in testing (even
-    # with bond force constants approximately zero), and sufficiently small to have negligible impact on the overlap of
-    # the end states with neighboring intermediates.
-    eps = jnp.where((lamb == 0.0) | (lamb == 1.0), 0.0, 1e-3)
-
-    return [k, phase, eps]
-
-
-def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min, lambda_max):
-    """
-    Interpolate periodic torsion parameters using
-
-    1. Linear interpolation for force constants*
-    2. Linear interpolation for angles, using the shortest path
-    3. No interpolation for periodicity (pinned to source value)
-
-    * see note on special case when src_k=0 or dst_k=0 in the docstring of `interpolate_harmonic_force_constant`.
-
-    Parameters
-    ----------
-    src_params : array-like, float, (2,)
-        force constant, equilibrium dihedral angle, and periodicity at lambda=0
-
-    dst_params : array-like, float, (2,)
-        force constant and equilibrium dihedral angle, and periodicity at lambda=1
-
-    lamb : float
-        alchemical parameter
-
-    lambda_min, lambda_max : float
-        see docstring of `interpolate_harmonic_force_constant` for documentation of these parameters
-
-    Returns
-    -------
-    array, float, (3,)
-        interpolated (force constant, equilibrium phase, periodicity)
-    """
-
-    src_k, src_phase, src_period = src_params
-    dst_k, dst_phase, _ = dst_params
-
-    k = pad(interpolate.linear_interpolation, src_k, dst_k, lamb, lambda_min, lambda_max)
-
-    src_phase = src_phase
-    dst_phase = src_phase + cyclic_difference(src_phase, dst_phase, period=2 * np.pi)
-    phase = pad(interpolate.linear_interpolation, src_phase, dst_phase, lamb, lambda_min, lambda_max)
-
-    return [k, phase, src_period]
-
-
-def interpolate_w_coord(w0: float | jax.Array, w1: float | jax.Array, lamb: float):
-    """Interpolate 4D coordinate using schedule optimized for RBFE calculations.
-
-    Parameters
-    ----------
-    w0, w1 : float
-        w coordinates at lambda = 0 and 1 respectively
-
-    lamb : float
-        alchemical parameter
-    """
-    lambdas = construct_pre_optimized_relative_lambda_schedule(None)
-    x = jnp.linspace(0.0, 1.0, len(lambdas))
-    return jnp.where(
-        w0 < w1,
-        interpolate.linear_interpolation(w0, w1, jnp.interp(lamb, x, lambdas)),
-        interpolate.linear_interpolation(w1, w0, jnp.interp(1.0 - lamb, x, lambdas)),
-    )
-
-
-batch_interpolate_harmonic_bond_params = jax.jit(
-    jax.vmap(interpolate_harmonic_bond_params, in_axes=(0, 0, None, None, 0, 0))
-)
-batch_interpolate_harmonic_angle_params = jax.jit(
-    jax.vmap(interpolate_harmonic_angle_params, in_axes=(0, 0, None, None, 0, 0))
-)
-batch_interpolate_periodic_torsion_params = jax.jit(
-    jax.vmap(interpolate_periodic_torsion_params, in_axes=(0, 0, None, 0, 0))
-)
-batch_interpolate_chiral_atom_params = jax.jit(
-    jax.vmap(interpolate_chiral_volume_params, in_axes=(0, 0, None, None, 0, 0))
-)
-
-
-@jax.jit
-def batch_interpolate_nonbonded_pair_list_params(
-    cutoff,
-    src_params,
-    dst_params,
-    lamb: float,
-):
-    """
-    Interpolate nonbonded pairlists between two systems. This function sets w coordinates to cutoff
-    for dummy atoms, and linearly interpolates charge, sigma, and epsilon parameters.
-
-    Parameters
-    ----------
-    cutoff: float
-        nonbonded cutoff
-
-    src_params: NDArray
-        Array of P x 4-tuples (q,s,e,w) for the source system
-
-    dst_params: NDArray
-        Array of P x 4-tuples (q,s,e,w) for the destination system
-
-    lamb: float
-        scalar between 0 and 1
-
-    Returns
-    -------
-    NDArray
-        P x 4 array of interpolated pairs.
-
-    """
-    src_qlj, src_w = src_params[:, : NBParamIdx.W_IDX], src_params[:, NBParamIdx.W_IDX]
-    dst_qlj, dst_w = dst_params[:, : NBParamIdx.W_IDX], dst_params[:, NBParamIdx.W_IDX]
-
-    is_excluded_src = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
-    is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
-
-    # parameters for pairs that do not interact in the src state
-    w = interpolate_w_coord(cutoff, dst_w, lamb)
-    pair_params_excluded_src = jnp.concatenate((dst_qlj, w[:, None]), axis=1)
-
-    # parameters for pairs that do not interact in the dst state
-    w = interpolate_w_coord(src_w, cutoff, lamb)
-    pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
-
-    # parameters for pairs that interact in both src and dst states
-    w = jax.vmap(interpolate.linear_interpolation, (0, 0, None))(src_w, dst_w, lamb)
-    qlj = interpolate.linear_interpolation(src_qlj, dst_qlj, lamb)
-    pair_params_not_excluded = jnp.concatenate((qlj, w[:, None]), axis=1)
-
-    pair_params = jnp.where(
-        is_excluded_src,
-        pair_params_excluded_src,
-        jnp.where(
-            is_excluded_dst,
-            pair_params_excluded_dst,
-            pair_params_not_excluded,
-        ),
-    )
-
-    return pair_params
 
 
 class AtomMapFlags(IntEnum):
@@ -1114,91 +871,6 @@ def assert_chiral_consistency(src_chiral_idxs: NDArray, dst_chiral_idxs: NDArray
     assert len(dst_chiral_restr_idx_set.allowed_set.intersection(src_chiral_restr_idx_set.disallowed_set)) == 0
 
 
-@dataclass
-class AlignedPotential:
-    idxs: NDArray[np.int32]
-    src_params: NDArray[np.float64]
-    dst_params: NDArray[np.float64]
-    mins: NDArray[np.float64]
-    maxes: NDArray[np.float64]
-
-    def interpolate(self, lamb):
-        raise NotImplementedError()
-
-
-class AlignedBond(AlignedPotential):
-    def interpolate(self, lamb):
-        k_min = 0.1
-        params = batch_interpolate_harmonic_bond_params(
-            self.src_params, self.dst_params, lamb, k_min, self.mins, self.maxes
-        )
-        params = jnp.array(params).T
-
-        return HarmonicBond(self.idxs).bind(params)
-
-
-class AlignedAngle(AlignedPotential):
-    def interpolate(self, lamb):
-        k_min = 0.05
-        params = batch_interpolate_harmonic_angle_params(
-            self.src_params, self.dst_params, lamb, k_min, self.mins, self.maxes
-        )
-        params = jnp.array(params).T
-        return HarmonicAngle(self.idxs).bind(params)
-
-
-class AlignedTorsion(AlignedPotential):
-    def interpolate(self, lamb):
-        params = batch_interpolate_periodic_torsion_params(
-            self.src_params, self.dst_params, lamb, self.mins, self.maxes
-        )
-        params = jnp.array(params).T
-        return PeriodicTorsion(self.idxs).bind(params)
-
-
-class AlignedChiralAtom(AlignedPotential):
-    def interpolate(self, lamb):
-        k_min = 0.025
-        params = batch_interpolate_chiral_atom_params(
-            self.src_params, self.dst_params, lamb, k_min, self.mins, self.maxes
-        )
-        params = jnp.array(params).reshape(-1)
-        return ChiralAtomRestraint(self.idxs).bind(params)
-
-# class AlignedNonbondedInteractionGroup(AlignedPotential):
-
-    # def interpolate(self, lamb):
-
-
-# class AlignedNonbondedAllPairs(AlignedPotential):
-
-
-@dataclass
-class AlignedNonbondedPairlist(AlignedPotential):
-    cutoff: float
-    beta: float
-
-    def interpolate(self, lamb):
-        # (ytz): batch_interpolate_nonbonded_pair_list_params currently fails to respect the self.mins and self.maxes
-        # boundaries.
-        params = batch_interpolate_nonbonded_pair_list_params(self.cutoff, self.src_params, self.dst_params, lamb)
-        params = jnp.array(params)
-        return NonbondedPairListPrecomputed(self.idxs, self.beta, self.cutoff).bind(params)
-
-
-# @dataclass
-# class AlignedNonbondedInteractionGroup(AlignedPotential):
-#     cutoff: float
-#     beta: float
-
-#     def interpolate(self, lamb):
-#         # (ytz): batch_interpolate_nonbonded_pair_list_params currently fails to respect the self.mins and self.maxes
-#         # boundaries.
-#         params = batch_interpolate_nonbonded_pair_list_params(self.cutoff, self.src_params, self.dst_params, lamb)
-#         params = jnp.array(params)
-#         return NonbondedPairListPrecomputed(self.idxs, self.beta, self.cutoff).bind(params)
-
-
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.system import AbstractSystem
 
@@ -1287,25 +959,61 @@ class SingleTopology(AtomMapMixin):
         self.aligned_chiral_atom = self._align_chiral_atoms()
         self.aligned_nonbonded_pair_list = self._align_nonbonded_pair_list()
 
+    def _process_ixn_group_idxs_and_params(self, src_row_or_col_idxs, src_params, dst_row_or_col_idxs, dst_params, a_to_c, b_to_c):
+        combined_kv = dict() # key: atom_idxs indexed in th combined, val: params 
+        for idx in src_row_or_col_idxs:
+            q,s,e,w = src_params[idx]
+            new_idx = a_to_c[idx]
+            combined_kv[new_idx] = ((q,s,e,w), (q,s,e,0.0))
+        for idx in dst_row_or_col_idxs:
+            q,s,e,w = dst_params[idx]
+            new_idx = b_to_c[idx]
+            if new_idx in combined_kv:
+                combined_kv[new_idx][1] = ((q,s,e,w))
+            else:
+                combined_kv[new_idx] = ((q,s,e,0.0), (q,s,e,w))
+
+
+        all_idxs = []
+        src_params = []
+        dst_params = []
+
+        for idx, (src_p, dst_p) in combined_kv.items():
+            all_idxs.append(idx)
+            src_params.append(src_p)
+            dst_params.append(dst_p)
+
+        return all_idxs, src_params, dst_params
+
     def _align_nonbonded_interaction_group(
             self,
             src_nb_ixn_group: BoundPotential[NonbondedInteractionGroup],
             dst_nb_ixn_group: BoundPotential[NonbondedInteractionGroup]):
+        
+        row_idxs, row_src_params, row_dst_params = self._process_ixn_group_idxs_and_params(
+            src_nb_ixn_group.potential.row_atom_idxs,
+            src_nb_ixn_group.params,
+            dst_nb_ixn_group.potential.row_atom_idxs,
+            dst_nb_ixn_group.params,
+            self.a_to_c,
+            self.b_to_c
+        )
 
-        src_row_idxs = [self.a_to_c[x] for x in src_nb_ixn_group.potential.row_atom_idxs]
-        src_col_idxs = [self.a_to_c[x] for x in src_nb_ixn_group.potential.col_atom_idxs]
+        col_idxs, col_src_params, col_dst_params  = self._process_ixn_group_idxs_and_params(
+            src_nb_ixn_group.potential.col_atom_idxs,
+            src_nb_ixn_group.params,
+            dst_nb_ixn_group.potential.col_atom_idxs,
+            dst_nb_ixn_group.params,
+            self.a_to_c,
+            self.b_to_c
+        )
 
-        dst_row_idxs = [self.b_to_c[x] for x in dst_nb_ixn_group.potential.row_atom_idxs]
-        dst_col_idxs = [self.b_to_c[x] for x in dst_nb_ixn_group.potential.col_atom_idxs]
 
-        src_params = np.zeros(self.get_num_atoms(),4)
-        row_params = []
+        assert len(set(col_idxs).intersection(set(row_idxs))) == 0
 
-        # src_row_idxs_combined = set(src_row_idxs).union(dst_row_idxs)
-        # src_col_idxs_combined = set(src_col_idxs).union(dst_col_idxs)
+        # move row and col src_params (Each of length R and C) into final params of length N
+        aligned_row_params = []
 
-        # row_idxs = 
-        # return np.arange(num_guest_atoms, dtype=np.int32) + num_host_atoms
 
         return aligned_row_idxs, aligned_src_params
 
@@ -1333,7 +1041,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 2)
         src_params = src_params.reshape(-1, 2)
         dst_params = dst_params.reshape(-1, 2)
-        return AlignedBond(idxs, src_params, dst_params, mins, maxes)
+        return AlignedBond(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
 
     def _align_angles(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1345,7 +1053,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 3)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedAngle(idxs, src_params, dst_params, mins, maxes)
+        return AlignedAngle(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
 
     def _align_propers(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1357,7 +1065,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedTorsion(idxs, src_params, dst_params, mins, maxes)
+        return AlignedTorsion(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
 
     def _align_impropers(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1369,7 +1077,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedTorsion(idxs, src_params, dst_params, mins, maxes)
+        return AlignedTorsion(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
 
     def _align_chiral_atoms(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1381,7 +1089,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1)
         dst_params = dst_params.reshape(-1)
-        return AlignedChiralAtom(idxs, src_params, dst_params, mins, maxes)
+        return AlignedChiralAtom(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
 
     def _align_nonbonded_pair_list(self):
         src_cutoff = self.src_system.nonbonded_pair_list.potential.cutoff
