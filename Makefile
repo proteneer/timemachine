@@ -16,6 +16,11 @@ NOGPU_MARKER := nogpu
 
 MEMCHECK_MARKER := memcheck
 NIGHTLY_MARKER := nightly
+
+# pytest mark to indicate tests that compare the hash of a result with
+# a hardcoded reference. It's sometimes convenient to run these
+# separately during development to get updated hash values in cases
+# where we expect the output to change.
 FIXED_OUTPUT_MARKER := fixed_output
 
 COMPUTE_SANITIZER_CMD := compute-sanitizer --launch-timeout 120 --padding 2048 --tool memcheck --leak-check full --error-exitcode 1
