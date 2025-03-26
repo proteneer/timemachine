@@ -16,6 +16,7 @@ NOGPU_MARKER := nogpu
 
 MEMCHECK_MARKER := memcheck
 NIGHTLY_MARKER := nightly
+FIXED_OUTPUT_MARKER := fixed_output
 
 COMPUTE_SANITIZER_CMD := compute-sanitizer --launch-timeout 120 --padding 2048 --tool memcheck --leak-check full --error-exitcode 1
 
@@ -42,13 +43,17 @@ nocuda_tests:
 nogpu_tests:
 	pytest -m '$(NOGPU_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
+.PHONY: fixed_output_tests
+fixed_output_tests:
+	pytest -m '$(FIXED_OUTPUT_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
+
 .PHONY: memcheck_tests
 memcheck_tests:
 	$(COMPUTE_SANITIZER_CMD) pytest -m '$(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: unit_tests
 unit_tests:
-	pytest -x -m 'not $(NOCUDA_MARKER) and not $(NOGPU_MARKER) and not $(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
+	pytest -x -m 'not $(NOCUDA_MARKER) and not $(NOGPU_MARKER) and not $(FIXED_OUTPUT_MARKER) and not $(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: nightly_tests
 nightly_tests:
@@ -65,6 +70,10 @@ nocuda_nightly_tests:
 .PHONY: nogpu_nightly_tests
 nogpu_nightly_tests:
 	pytest -m '$(NIGHTLY_MARKER) and $(NOGPU_MARKER)' $(PYTEST_CI_ARGS)
+
+.PHONY: fixed_output_nightly_tests
+fixed_output_nightly_tests:
+	pytest -m '$(NIGHTLY_MARKER) and $(FIXED_OUTPUT_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: ci
 ci: verify memcheck_tests unit_tests

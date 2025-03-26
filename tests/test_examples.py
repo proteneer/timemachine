@@ -209,6 +209,7 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
             np.testing.assert_array_equal(test_data[key], reference_data[key])
 
 
+@pytest.mark.fixed_output
 @pytest.mark.parametrize(
     "leg, n_windows, n_frames, n_eq_steps",
     [

@@ -148,6 +148,25 @@ unit-tests:
     when: on_success
     expire_in: 1 week
 
+fixed-output-tests:
+  stage: test
+  image: $DOCKER_TAG
+  needs: ["lint"]
+  tags:
+    - aws-tardis-gpu
+  rules:
+    - if: $CI_EXTERNAL_PULL_REQUEST_IID
+  script:
+    - pip install .[test]
+    - make fixed_output_tests
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-tests"
+    paths:
+        - coverage/
+        - $CI_ARTIFACT_DIR
+    when: on_success
+    expire_in: 1 week
+
 nightly-tests:
   stage: test
   image: $DOCKER_TAG
