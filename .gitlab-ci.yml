@@ -164,7 +164,6 @@ fixed-output-tests:
     paths:
         - coverage/
         - $CI_ARTIFACT_DIR
-    when: on_success
     expire_in: 1 week
 
 nightly-tests:
