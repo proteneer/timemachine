@@ -17,6 +17,11 @@ NOGPU_MARKER := nogpu
 MEMCHECK_MARKER := memcheck
 NIGHTLY_MARKER := nightly
 
+# pytest mark to indicate tests that compare a computed result (or hash) with a hardcoded reference.
+# It's sometimes convenient to run these separately during development to compute updated values in cases where we
+# expect the output to change.
+FIXED_OUTPUT_MARKER := fixed_output
+
 COMPUTE_SANITIZER_CMD := compute-sanitizer --launch-timeout 120 --padding 2048 --tool memcheck --leak-check full --error-exitcode 1
 
 NPROCS = `nproc`
@@ -42,13 +47,18 @@ nocuda_tests:
 nogpu_tests:
 	pytest -m '$(NOGPU_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
+.PHONY: fixed_output_tests
+fixed_output_tests:
+	pytest -m '$(FIXED_OUTPUT_MARKER)' $(PYTEST_CI_ARGS)
+
 .PHONY: memcheck_tests
 memcheck_tests:
 	$(COMPUTE_SANITIZER_CMD) pytest -m '$(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
+# NOTE: unit_tests pass -x to pytest to exit after first failure
 .PHONY: unit_tests
 unit_tests:
-	pytest -x -m 'not $(NOCUDA_MARKER) and not $(NOGPU_MARKER) and not $(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
+	pytest -x -m 'not $(NOCUDA_MARKER) and not $(NOGPU_MARKER) and not $(FIXED_OUTPUT_MARKER) and not $(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: nightly_tests
 nightly_tests:
