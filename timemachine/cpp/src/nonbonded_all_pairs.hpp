@@ -33,7 +33,6 @@ private:
     double *d_nblist_box_;  // box which was used to rebuild the nblist
     __int128 *d_u_buffer_;
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
-    int *p_rebuild_nblist_; // pinned
 
     // "gathered" arrays represent the subset of atoms specified by
     // atom_idxs (if the latter is specified, otherwise all atoms).
@@ -47,8 +46,6 @@ private:
     double *d_gathered_p_;             // sorted parameters for subset of atoms
     unsigned long long *d_gathered_du_dx_;
     unsigned long long *d_gathered_du_dp_;
-
-    cudaEvent_t nblist_flag_sync_event_; // Event to synchronize on
 
     std::unique_ptr<HilbertSort> hilbert_sort_;
 

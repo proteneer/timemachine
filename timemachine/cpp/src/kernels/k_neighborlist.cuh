@@ -115,6 +115,25 @@ void __global__ k_find_block_bounds(
     }
 }
 
+template <typename RealType>
+void __global__ k_maybe_find_block_bounds(
+    const int num_tiles,                       // Number of tiles
+    const int num_indices,                     // Number of indices
+    const unsigned int *__restrict__ row_idxs, // [num_indices]
+    const double *__restrict__ coords,         // [N*3]
+    const double *__restrict__ box,            // [3*3]
+    RealType *__restrict__ block_bounds_ctr,   // [num_tiles*3]
+    RealType *__restrict__ block_bounds_ext,   // [num_tiles*3]
+    unsigned int *__restrict__ ixn_count,      // [1]
+    const int *d_build_nblist,
+    const int tpb) {
+
+    if (d_build_nblist[0]) {
+        k_find_block_bounds<<<(num_indices + tpb - 1) / tpb, tpb, 0>>>(
+            num_tiles, num_indices, row_idxs, coords, box, block_bounds_ctr, block_bounds_ext, ixn_count);
+    }
+}
+
 void __global__ k_compact_trim_atoms(
     const int N,
     const int Y,
@@ -173,6 +192,23 @@ void __global__ k_compact_trim_atoms(
         __syncwarp();
         interactingTiles[sync_start[0]] = row_block_idx;
         interactingAtoms[sync_start[0] * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+    }
+}
+
+void __global__ k_maybe_compact_trim_atoms(
+    const int N,
+    const int Y,
+    unsigned int *__restrict__ trim_atoms,
+    unsigned int *__restrict__ interactionCount,
+    int *__restrict__ interactingTiles,
+    unsigned int *__restrict__ interactingAtoms,
+    const int *d_build_nblist,
+    const int row_blocks,
+    const int tpb) {
+
+    if (d_build_nblist[0]) {
+        k_compact_trim_atoms<<<row_blocks, tpb, 0>>>(
+            N, Y, trim_atoms, interactionCount, interactingTiles, interactingAtoms);
     }
 }
 
@@ -455,6 +491,75 @@ void __global__ k_find_blocks_with_ixns(
     // store trim
     const int Y = gridDim.y;
     trim_atoms[blockIdx.x * Y * WARP_SIZE + blockIdx.y * WARP_SIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
+}
+
+template <typename RealType, bool UPPER_TRIAG>
+void __global__ k_maybe_find_blocks_with_ixns(
+    const int N,                                  // Total number of atoms
+    const int NC,                                 // Number of columns idxs
+    const int NR,                                 // Number of rows idxs
+    const unsigned int *__restrict__ column_idxs, // [NC]
+    const unsigned int *__restrict__ row_idxs,    // [NR]
+    const RealType *__restrict__ column_bb_ctr,   // [N * 3] block centers
+    const RealType *__restrict__ column_bb_ext,   // [N * 3] block extents
+    const RealType *__restrict__ row_bb_ctr,      // [N * 3] block centers
+    const RealType *__restrict__ row_bb_ext,      // [N * 3] block extents
+    const double *__restrict__ coords,            // [N * 3]
+    const double *__restrict__ box,
+    unsigned int *__restrict__ interactionCount,  // number of tiles that have interactions
+    int *__restrict__ interactingTiles,           // the row block idx of the tile that is interacting
+    unsigned int *__restrict__ interactingAtoms,  // [NR * WARP_SIZE] atom indices interacting with each row block
+    unsigned int *__restrict__ trim_atoms,        // the left-over trims that will later be compacted
+    const double cutoff,
+    const int *d_build_nblist,
+    const dim3 dimGrid,
+    const int tpb) {
+    if (d_build_nblist[0]) {
+        k_find_blocks_with_ixns<RealType, UPPER_TRIAG><<<dimGrid, tpb, 0>>>(
+            N,
+            NC,
+            NR,
+            column_idxs,
+            row_idxs,
+            column_bb_ctr,
+            column_bb_ext,
+            row_bb_ctr,
+            row_bb_ext,
+            coords,
+            box,
+            interactionCount,
+            interactingTiles,
+            interactingAtoms,
+            trim_atoms,
+            cutoff);
+    }
+}
+
+template <typename RealType>
+void __global__ k_reset_nblist_rebuild(const int N, int *d_rebuild_nblist, double *d_nblist_x, double *d_nblist_box) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // TODO: while loops?
+    if (idx == 0) {
+        d_rebuild_nblist[0] = 0;
+    }
+
+    if (idx < N * 3) {
+        d_nblist_x[idx] = 0;
+    }
+
+    if (idx < 3 * 3) {
+        d_nblist_box[idx] = 0;
+    }
+}
+
+template <typename RealType>
+void __global__ k_maybe_reset_nblist_rebuild(
+    const int N, const int tpb, int *d_rebuild_nblist, double *d_nblist_x, double *d_nblist_box) {
+    if (d_rebuild_nblist[0]) {
+        k_reset_nblist_rebuild<RealType>
+            <<<(N + tpb - 1) / tpb, tpb, 0>>>(N, d_rebuild_nblist, d_nblist_x, d_nblist_box); // TODO: use ceil_divide
+    }
 }
 
 } // namespace timemachine

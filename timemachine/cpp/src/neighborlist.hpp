@@ -54,6 +54,16 @@ public:
     void build_nblist_device(
         const int N, const double *d_coords, const double *d_box, const double cutoff, const cudaStream_t stream);
 
+    void maybe_build_nblist_device(
+        const int N,
+        const double *d_coords,
+        const double *d_box,
+        const double cutoff,
+        const cudaStream_t stream,
+        int *d_build_nblist,
+        double *d_nblist_x,
+        double *d_nblist_box);
+
     void compute_block_bounds_host(
         const int N, const double *h_coords, const double *h_box, double *h_bb_ctrs, double *h_bb_exts);
 
@@ -85,6 +95,14 @@ private:
 
     void compute_block_bounds_device(
         const int N, const int D, const double *d_coords, const double *d_box, cudaStream_t stream);
+
+    void maybe_compute_block_bounds_device(
+        const int N,
+        const int D,
+        const double *d_coords,
+        const double *d_box,
+        cudaStream_t stream,
+        const int *d_build_nblist);
 };
 
 } // namespace timemachine

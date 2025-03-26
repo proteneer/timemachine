@@ -206,6 +206,81 @@ void Neighborlist<RealType>::build_nblist_device(
 }
 
 template <typename RealType>
+void Neighborlist<RealType>::maybe_build_nblist_device(
+    const int N,
+    const double *d_coords,
+    const double *d_box,
+    const double cutoff,
+    const cudaStream_t stream,
+    int *d_rebuild_nblist,
+    double *d_nblist_x,
+    double *d_nblist_box) {
+
+    const int D = 3;
+    this->maybe_compute_block_bounds_device(N, D, d_coords, d_box, stream, d_rebuild_nblist);
+    const int tpb = TILE_SIZE;
+    const int row_blocks = this->num_row_blocks();
+    const int Y = this->Y();
+
+    dim3 dimGrid(row_blocks, Y, 1); // block x, y, z dims
+
+    // (ytz): TBD shared memory, stream
+    if (this->compute_upper_triangular()) {
+        // Compute only the upper triangle as rows and cols are the same
+        // pass duplicates of column coords and the bounding boxes
+        k_maybe_find_blocks_with_ixns<RealType, true><<<1, 1, 0, stream>>>(
+            N_,
+            NC_,
+            NR_,
+            d_column_idxs_,
+            d_row_idxs_,
+            d_column_block_bounds_ctr_,
+            d_column_block_bounds_ext_,
+            d_column_block_bounds_ctr_,
+            d_column_block_bounds_ext_,
+            d_coords,
+            d_box,
+            d_ixn_count_,
+            d_ixn_tiles_,
+            d_ixn_atoms_,
+            d_trim_atoms_,
+            cutoff,
+            d_rebuild_nblist,
+            dimGrid,
+            tpb);
+    } else {
+        k_maybe_find_blocks_with_ixns<RealType, false><<<1, 1, 0, stream>>>(
+            N_,
+            NC_,
+            NR_,
+            d_column_idxs_,
+            d_row_idxs_,
+            d_column_block_bounds_ctr_,
+            d_column_block_bounds_ext_,
+            d_row_block_bounds_ctr_,
+            d_row_block_bounds_ext_,
+            d_coords,
+            d_box,
+            d_ixn_count_,
+            d_ixn_tiles_,
+            d_ixn_atoms_,
+            d_trim_atoms_,
+            cutoff,
+            d_rebuild_nblist,
+            dimGrid,
+            tpb);
+    }
+
+    gpuErrchk(cudaPeekAtLastError());
+    k_maybe_compact_trim_atoms<<<row_blocks, tpb, 0, stream>>>(
+        N_, Y, d_trim_atoms_, d_ixn_count_, d_ixn_tiles_, d_ixn_atoms_, d_rebuild_nblist, row_blocks, tpb);
+
+    k_maybe_reset_nblist_rebuild<RealType><<<1, 1, 0, stream>>>(N, tpb, d_rebuild_nblist, d_nblist_x, d_nblist_box);
+
+    gpuErrchk(cudaPeekAtLastError());
+}
+
+template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_device(
     const int N,            // Number of atoms
     const int D,            // Box dimensions
@@ -245,6 +320,50 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     }
 };
 
+template <typename RealType>
+void Neighborlist<RealType>::maybe_compute_block_bounds_device(
+    const int N,            // Number of atoms
+    const int D,            // Box dimensions
+    const double *d_coords, // [N*3]
+    const double *d_box,    // [D*3]
+    const cudaStream_t stream,
+    const int *d_rebuild_nblist) {
+
+    if (D != 3) {
+        throw std::runtime_error("D != 3");
+    }
+
+    const int tpb = DEFAULT_THREADS_PER_BLOCK;
+
+    k_maybe_find_block_bounds<RealType><<<1, 1, 0, stream>>>(
+        this->num_column_blocks(),
+        NC_,
+        d_column_idxs_,
+        d_coords,
+        d_box,
+        d_column_block_bounds_ctr_,
+        d_column_block_bounds_ext_,
+        d_ixn_count_,
+        d_rebuild_nblist,
+        tpb);
+    gpuErrchk(cudaPeekAtLastError());
+    // In the case of upper triangle of the matrix, the column and row indices are the same, so only compute block ixns for both
+    // when they are different
+    if (!this->compute_upper_triangular()) {
+        k_maybe_find_block_bounds<RealType><<<1, 1, 0, stream>>>(
+            this->num_row_blocks(),
+            NR_,
+            d_row_idxs_,
+            d_coords,
+            d_box,
+            d_row_block_bounds_ctr_,
+            d_row_block_bounds_ext_,
+            d_ixn_count_,
+            d_rebuild_nblist,
+            tpb);
+        gpuErrchk(cudaPeekAtLastError());
+    }
+};
 template <typename RealType> void Neighborlist<RealType>::set_row_idxs(std::vector<unsigned int> row_idxs) {
     if (row_idxs.size() == 0) {
         throw std::runtime_error("idxs can't be empty");

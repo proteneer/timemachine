@@ -34,6 +34,8 @@ string(APPEND CMAKE_CUDA_FLAGS
   " -rdc=true" # Enable relocatable device code (needed for dynamic parallelisim)
 )
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+set(CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+
 message("C++ Compiler Flags" ${CMAKE_CXX_FLAGS})
 message("Cuda Compiler Flags" ${CMAKE_CUDA_FLAGS})
 
