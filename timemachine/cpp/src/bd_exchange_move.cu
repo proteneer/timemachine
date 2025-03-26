@@ -460,7 +460,8 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
     d_translations_.copy_from(h_translations);
     d_samples_.copy_from(h_mol_idxs);
 
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
+    cudaStream_t stream;
+    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
 
     // Set the offset to 0
     gpuErrchk(cudaMemsetAsync(d_noise_offset_.data, 0, d_noise_offset_.size(), stream));
@@ -478,6 +479,7 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
         stream);
 
     gpuErrchk(cudaStreamSynchronize(stream));
+    gpuErrchk(cudaStreamDestroy(stream));
 
     std::vector<RealType> h_log_weights_after(d_log_weights_after_.length);
     d_log_weights_after_.copy_to(&h_log_weights_after[0]);
@@ -510,11 +512,13 @@ std::vector<RealType> BDExchangeMove<RealType>::compute_initial_log_weights_host
     d_coords.copy_from(h_coords);
     d_box.copy_from(h_box);
 
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
+    cudaStream_t stream;
+    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
 
     // Setup the initial weights
     this->compute_initial_log_weights_device(N, d_coords.data, d_box.data, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
+    gpuErrchk(cudaStreamDestroy(stream));
 
     return this->get_before_log_weights();
 }
@@ -566,11 +570,13 @@ template <typename RealType> std::vector<double> BDExchangeMove<RealType>::get_p
 };
 
 template <typename RealType> void BDExchangeMove<RealType>::set_params(const std::vector<double> &params) {
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
+    cudaStream_t stream;
+    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
     DeviceBuffer<double> d_params(params.size());
     d_params.copy_from(&params[0]);
     this->set_params_device(params.size(), d_params.data, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
+    gpuErrchk(cudaStreamDestroy(stream));
 };
 
 template <typename RealType>

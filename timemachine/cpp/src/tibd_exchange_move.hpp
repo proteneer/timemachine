@@ -47,6 +47,11 @@ private:
     DeviceBuffer<RealType> d_lse_max_src_;             // [this->batch_size, this->num_target_mols_]
     DeviceBuffer<RealType> d_lse_exp_sum_src_;         // [this->batch_size, this->num_target_mols_]
 
+    cudaGraph_t graph_;
+    cudaGraphExec_t graph_exec_ = nullptr;
+    cudaGraphConditionalHandle while_handle_;
+    cudaGraphNodeParams conditional_params_ = {cudaGraphNodeTypeConditional};
+
 public:
     TIBDExchangeMove(
         const int N,
