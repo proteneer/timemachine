@@ -49,7 +49,7 @@ nogpu_tests:
 
 .PHONY: fixed_output_tests
 fixed_output_tests:
-	pytest -m '$(FIXED_OUTPUT_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
+	pytest -m '$(FIXED_OUTPUT_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: memcheck_tests
 memcheck_tests:
@@ -74,10 +74,6 @@ nocuda_nightly_tests:
 .PHONY: nogpu_nightly_tests
 nogpu_nightly_tests:
 	pytest -m '$(NIGHTLY_MARKER) and $(NOGPU_MARKER)' $(PYTEST_CI_ARGS)
-
-.PHONY: fixed_output_nightly_tests
-fixed_output_nightly_tests:
-	pytest -m '$(NIGHTLY_MARKER) and $(FIXED_OUTPUT_MARKER)' $(PYTEST_CI_ARGS)
 
 .PHONY: ci
 ci: verify memcheck_tests unit_tests

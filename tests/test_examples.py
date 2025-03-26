@@ -212,11 +212,7 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
 @pytest.mark.fixed_output
 @pytest.mark.parametrize(
     "leg, n_windows, n_frames, n_eq_steps",
-    [
-        ("vacuum", 6, 50, 1000),
-        pytest.param("solvent", 5, 50, 1000, marks=pytest.mark.nightly),
-        pytest.param("complex", 5, 50, 1000, marks=pytest.mark.nightly),
-    ],
+    [("vacuum", 6, 50, 1000), ("solvent", 5, 50, 1000), ("complex", 5, 50, 1000)],
 )
 @pytest.mark.parametrize("mol_a, mol_b", [("15", "30")])
 @pytest.mark.parametrize("seed", [2025])

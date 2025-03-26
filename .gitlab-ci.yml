@@ -245,22 +245,3 @@ nightly-tests-nogpu:
         - $CI_ARTIFACT_DIR
     when: on_success
     expire_in: 1 week
-
-nightly-tests-fixed-output:
-  stage: test
-  image: $DOCKER_TAG
-  needs: ["lint"]
-  tags:
-    - aws-tardis-gpu
-  rules:
-    - if: $NIGHTLY_TESTS
-  script:
-    - pip install .[test]
-    - make fixed_output_nightly_tests
-  artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-fixed-output-nightly-tests"
-    paths:
-        - coverage/
-        - $CI_ARTIFACT_DIR
-    when: on_success
-    expire_in: 1 week
