@@ -160,7 +160,7 @@ fixed-output-tests:
     - pip install .[test]
     - make fixed_output_tests
   artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-tests"
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME-fixed-output-tests"
     paths:
         - coverage/
         - $CI_ARTIFACT_DIR
