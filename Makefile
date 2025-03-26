@@ -55,6 +55,7 @@ fixed_output_tests:
 memcheck_tests:
 	$(COMPUTE_SANITIZER_CMD) pytest -m '$(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
 
+# NOTE: unit_tests pass -x to pytest to exit after first failure
 .PHONY: unit_tests
 unit_tests:
 	pytest -x -m 'not $(NOCUDA_MARKER) and not $(NOGPU_MARKER) and not $(FIXED_OUTPUT_MARKER) and not $(MEMCHECK_MARKER) and not $(NIGHTLY_MARKER)' $(PYTEST_CI_ARGS)
