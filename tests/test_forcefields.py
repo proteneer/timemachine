@@ -8,13 +8,18 @@ from warnings import catch_warnings
 import numpy as np
 import pytest
 from common import load_split_forcefields, temporary_working_dir
+from openmm import app
+from openmm import openmm as mm
 from rdkit import Chem
 
 from timemachine import constants
 from timemachine.ff import Forcefield, combine_params
 from timemachine.ff.handlers import nonbonded
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.openmm_deserializer import deserialize_system
 from timemachine.md import builders
+from timemachine.potentials.potentials import PeriodicTorsion
+from timemachine.utils import path_to_internal_file
 
 pytestmark = [pytest.mark.nocuda]
 
@@ -171,3 +176,51 @@ def test_amber14_tip3p_matches_tip3p():
 
         # Amber14/tip3p handles ions without issue
         builders.build_protein_system(temp.name, constants.DEFAULT_PROTEIN_FF, constants.DEFAULT_WATER_FF)
+
+
+def test_openmm_deserialize_system_handles_duplicate_bonded_forces():
+    """In some cases it may be useful to construct an OpenMM system that contains forces of the same type.
+    Expectation is that these forces get correctly converted to Timemachine bound potentials. Test only exercises
+    Periodic Torsions, but expected to work for bonds/angles.
+
+    Note that we do not handle duplicate Nonbonded potentials, mostly to avoid nuances of merging them.
+    """
+    ff = app.ForceField(f"{constants.DEFAULT_PROTEIN_FF}.xml")
+
+    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
+        host_pdb = app.PDBFile(str(path_to_pdb))
+
+    # Create empty topology and coordinates.
+    modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
+
+    omm_host_system = ff.createSystem(
+        modeller.getTopology(), nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
+    )
+
+    assert len([f for f in omm_host_system.getForces() if isinstance(f, mm.PeriodicTorsionForce)]) == 1
+
+    existing_torsion_force = next(f for f in omm_host_system.getForces() if isinstance(f, mm.PeriodicTorsionForce))
+    first_torsion = existing_torsion_force.getTorsionParameters(0)
+
+    initial_num_torsions = existing_torsion_force.getNumTorsions()
+    total_torsions = initial_num_torsions
+
+    torsion_idxs = first_torsion[:4]
+    period = 3
+    phase = 180.0
+    k = 10.0
+
+    # Add a new force that duplicates an existing torsion, the parameters of the torsion are unimportant
+    new_force = mm.PeriodicTorsionForce()
+    new_force.setName("dihedrals_a")
+    new_force.addTorsion(*torsion_idxs, period, phase, k)
+    omm_host_system.addForce(new_force)
+    total_torsions += new_force.getNumTorsions()
+
+    assert len([f for f in omm_host_system.getForces() if isinstance(f, mm.PeriodicTorsionForce)]) == 2
+
+    bps, _ = deserialize_system(omm_host_system, cutoff=1.2)
+    # We separate the torsions in the OpenMM system into periodic/improper, have to get both and combine indices
+    tm_torsions = [bp.potential for bp in bps if isinstance(bp.potential, PeriodicTorsion)]
+    tm_torsion_idxs = np.concatenate([pot.idxs for pot in tm_torsions])
+    assert tm_torsion_idxs.shape == (total_torsions, 4)
