@@ -16,7 +16,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_TEMP, ONE_4PI_EPS0
-from timemachine.fe import rbfe
+from timemachine.fe import interpolate, rbfe
 from timemachine.fe.aligned_potential import interpolate_w_coord
 from timemachine.fe.free_energy import HostConfig
 from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
@@ -622,10 +622,14 @@ def get_guest_params(mol_a, mol_b, atom_map_mixin, q_handle, lj_handle, lamb: fl
             a_idx = atom_map_mixin.c_to_a[idx]
             b_idx = atom_map_mixin.c_to_b[idx]
 
+            q = interpolate.linear_interpolation(guest_a_q[a_idx], guest_b_q[b_idx], lamb)
+            sig = interpolate.linear_interpolation(guest_a_lj[a_idx, 0], guest_b_lj[b_idx, 0], lamb)
+            eps = interpolate.linear_interpolation(guest_a_lj[a_idx, 1], guest_b_lj[b_idx, 1], lamb)
+
             # interpolate charges when in common-core
-            q = (1 - lamb) * guest_a_q[a_idx] + lamb * guest_b_q[b_idx]
-            sig = (1 - lamb) * guest_a_lj[a_idx, 0] + lamb * guest_b_lj[b_idx, 0]
-            eps = (1 - lamb) * guest_a_lj[a_idx, 1] + lamb * guest_b_lj[b_idx, 1]
+            # q = (1 - lamb) * guest_a_q[a_idx] + lamb * guest_b_q[b_idx]
+            # sig = (1 - lamb) * guest_a_lj[a_idx, 0] + lamb * guest_b_lj[b_idx, 0]
+            # eps = (1 - lamb) * guest_a_lj[a_idx, 1] + lamb * guest_b_lj[b_idx, 1]
 
             # fixed at w = 0
             w = 0.0

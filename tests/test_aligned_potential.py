@@ -151,12 +151,7 @@ def test_nonbonded_interaction_group():
             host_config.omm_topology,
         )
 
-        # round trip to 32-bit and back so we can test for exact equality in the assertions
-        ref_ixn_group.params = ref_ixn_group.params.astype(np.float32).astype(np.float64)
-        test_ixn_group.params = test_ixn_group.params.astype(np.float32).astype(np.float64)
-
         coords = np.vstack([host_config.conf, st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))])
-
         np.testing.assert_array_equal(ref_ixn_group.params, test_ixn_group.params)
         np.testing.assert_array_equal(ref_ixn_group.potential.row_atom_idxs, test_ixn_group.potential.row_atom_idxs)
         np.testing.assert_array_equal(ref_ixn_group.potential.col_atom_idxs, test_ixn_group.potential.col_atom_idxs)
@@ -184,10 +179,6 @@ def test_nonbonded_all_pairs():
         ref_nb_ap = _parameterize_host_nonbonded_reference(
             guest_atom_map_mixin.get_num_atoms(), host_config.host_system.nonbonded_all_pairs
         )
-
-        # round trip to 32-bit and back so we can test for exact equality in the assertions
-        ref_nb_ap.params = ref_nb_ap.params.astype(np.float32).astype(np.float64)
-        test_nb_ap.params = test_nb_ap.params.astype(np.float32).astype(np.float64)
 
         coords = np.vstack([host_config.conf, st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))])
 

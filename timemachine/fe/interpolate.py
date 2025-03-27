@@ -150,7 +150,7 @@ def linear_interpolation(src_params, dst_params, lamb):
     """
     Linearly interpolate between src and dst params
     """
-    return (1 - lamb) * src_params + lamb * dst_params
+    return jnp.where(src_params == dst_params, src_params, (1 - lamb) * src_params + lamb * dst_params)
 
 
 def log_linear_interpolation(src_params, dst_params, lamb, min_value):
