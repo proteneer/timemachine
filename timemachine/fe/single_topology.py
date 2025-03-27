@@ -14,6 +14,7 @@ from timemachine.constants import (
     DEFAULT_BOND_IS_PRESENT_K,
     DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
     DEFAULT_CHIRAL_BOND_RESTRAINT_K,
+    NBParamIdx,
 )
 from timemachine.fe import interpolate, model_utils, topology, utils
 from timemachine.fe.aligned_potential import (
@@ -32,6 +33,7 @@ from timemachine.fe.dummy import (
     generate_dummy_group_assignments,
 )
 from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
+from timemachine.fe.topology import get_ligand_ixn_pots_params
 from timemachine.ff import Forcefield
 from timemachine.graph_utils import convert_to_nx
 from timemachine.potentials import (
@@ -944,31 +946,53 @@ def build_end_state_reference_all_pairs(
 
 
 def build_end_state_reference_ixn_group(
-    mol: Chem.Mol, nonbonded_all_pairs: BoundPotential[Nonbonded], ff
+    mol: Chem.Mol,
+    nonbonded_all_pairs: BoundPotential[Nonbonded],
+    num_water_atoms: int,
+    ixn_group_ff: Forcefield,  # forcefield used specifically used to parameterize the NB Ixn group
+    omm_topology,
 ) -> BoundPotential[NonbondedInteractionGroup]:
-    guest_q = ff.q_handle.parameterize(mol)
-    guest_lj = ff.lj_handle.parameterize(mol)
-    guest_w = jnp.zeros_like(guest_q)
-
-    host_q = nonbonded_all_pairs.params[:, 0]
-    host_lj = nonbonded_all_pairs.params[:, 1:3]
-    host_w = np.zeros_like(host_q)
-
-    combined_q = jnp.concatenate([host_q, guest_q]).reshape(-1, 1)
-    combined_lj = jnp.concatenate([host_lj, guest_lj])
-    combined_w = jnp.concatenate([host_w, guest_w]).reshape(-1, 1)
-
-    combined_params = jnp.hstack([combined_q, combined_lj, combined_w])
-
     num_host_atoms = nonbonded_all_pairs.potential.num_atoms
-    row_atom_idxs = np.arange(mol.GetNumAtoms()) + num_host_atoms
-    col_atom_idxs = np.arange(num_host_atoms)
 
-    host_cutoff = nonbonded_all_pairs.potential.cutoff
-    host_beta = nonbonded_all_pairs.potential.beta
-    num_atoms = num_host_atoms + mol.GetNumAtoms()
-    ixn_group = NonbondedInteractionGroup(num_atoms, row_atom_idxs, host_beta, host_cutoff, col_atom_idxs)
-    return ixn_group.bind(combined_params)
+    # (ytz): Typing errors
+    # timemachine/fe/single_topology.py:956: error: Item "NNHandler" of "SimpleChargeHandler | AM1BCCHandler | AM1CCCHandler | AM1BCCCCCHandler | PrecomputedChargeHandler | NNHandler | None" has no attribute "parameterize"  [union-attr]
+    # timemachine/fe/single_topology.py:956: error: Item "None" of "SimpleChargeHandler | AM1BCCHandler | AM1CCCHandler | AM1BCCCCCHandler | PrecomputedChargeHandler | NNHandler | None" has no attribute "parameterize"  [union-attr]
+    # timemachine/fe/single_topology.py:957: error: Item "None" of "LennardJonesHandler | None" has no attribute "parameterize"  [union-attr]
+    guest_q = ixn_group_ff.q_handle.parameterize(mol).reshape(-1, 1)  # type: ignore
+    guest_lj = ixn_group_ff.lj_handle.parameterize(mol)  # type: ignore
+    guest_w = jnp.zeros_like(guest_q).reshape(-1, 1)
+    guest_params = jnp.hstack([guest_q, guest_lj, guest_w])
+
+    host_params = nonbonded_all_pairs.params.copy()
+    if ixn_group_ff.env_bcc_handle is not None:
+        env_bcc_h = ixn_group_ff.env_bcc_handle.get_env_handle(omm_topology, ixn_group_ff)
+        host_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ixn_group_ff.env_bcc_handle.params)
+
+    num_other_atoms = num_host_atoms - num_water_atoms
+    num_guest_atoms = mol.GetNumAtoms()
+
+    def get_lig_idxs() -> NDArray[np.int32]:
+        return np.arange(num_guest_atoms, dtype=np.int32) + num_host_atoms
+
+    def get_water_idxs() -> NDArray[np.int32]:
+        return np.arange(num_water_atoms, dtype=np.int32) + num_other_atoms
+
+    def get_other_idxs() -> NDArray[np.int32]:
+        return np.arange(num_other_atoms, dtype=np.int32)
+
+    def get_env_idxs() -> NDArray[np.int32]:
+        return np.concatenate([get_other_idxs(), get_water_idxs()])
+
+    ixn_pot, ixn_params = get_ligand_ixn_pots_params(
+        get_lig_idxs(),
+        get_env_idxs(),
+        host_params,
+        guest_params,
+        beta=nonbonded_all_pairs.potential.beta,
+        cutoff=nonbonded_all_pairs.potential.cutoff,
+    )
+
+    return ixn_pot.bind(ixn_params)
 
 
 def assert_chiral_consistency(src_chiral_idxs: NDArray, dst_chiral_idxs: NDArray):
@@ -1757,10 +1781,14 @@ class SingleTopology(AtomMapMixin):
         return self._align_nonbonded_all_pairs(lhs_nb_ap, rhs_nb_ap, camm)
 
     def _wrap_aligned_host_guest_nonbonded_ixn_group(
-        self, host_nonbonded: BoundPotential[Nonbonded]
+        self, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms, ixn_group_ff: Forcefield, omm_topology
     ) -> AlignedNonbondedInteractionGroup:
-        lhs_nb_ixn_group = build_end_state_reference_ixn_group(self.mol_a, host_nonbonded, self.ff)
-        rhs_nb_ixn_group = build_end_state_reference_ixn_group(self.mol_b, host_nonbonded, self.ff)
+        lhs_nb_ixn_group = build_end_state_reference_ixn_group(
+            self.mol_a, host_nonbonded, num_water_atoms, ixn_group_ff, omm_topology
+        )
+        rhs_nb_ixn_group = build_end_state_reference_ixn_group(
+            self.mol_b, host_nonbonded, num_water_atoms, ixn_group_ff, omm_topology
+        )
         camm = build_combined_atom_map_mixin(host_nonbonded.potential.num_atoms, self.mol_a, self.mol_b, self.core)
         return self._align_nonbonded_interaction_group(lhs_nb_ixn_group, rhs_nb_ixn_group, camm)
 
@@ -1768,9 +1796,9 @@ class SingleTopology(AtomMapMixin):
         self,
         host_system: HostSystem,
         lamb: float,
-        num_water_atoms: int,  # deprecated/unused
-        ff: Forcefield,  # deprecated/unused
-        omm_topology: OpenMMTopology,  # deprecated/unused
+        num_water_atoms: int,
+        ff: Forcefield,
+        omm_topology: OpenMMTopology,
     ) -> HostGuestSystem:
         """
         Setup host guest system. Bonds, angles, torsions, chiral_atom, chiral_bond and nonbonded terms are
@@ -1797,7 +1825,7 @@ class SingleTopology(AtomMapMixin):
             Number of water atoms as part of the host.
 
         ff:
-            Forcefield object
+            Forcefield object used to parameterize the nonbonded interaction group.
 
         omm_topology:
             Openmm topology for the host.
@@ -1846,7 +1874,7 @@ class SingleTopology(AtomMapMixin):
             lamb
         )
         combined_nonbonded_interaction_group = self._wrap_aligned_host_guest_nonbonded_ixn_group(
-            host_system.nonbonded_all_pairs
+            host_system.nonbonded_all_pairs, num_water_atoms, ff, omm_topology
         ).interpolate(lamb)
 
         return HostGuestSystem(

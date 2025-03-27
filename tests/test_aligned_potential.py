@@ -58,7 +58,7 @@ def _parameterize_host_guest_nonbonded_ixn_reference(
 ) -> BoundPotential[NonbondedInteractionGroup]:
     """Parameterize nonbonded interactions between the host and guest"""
 
-    num_host_atoms = host_nonbonded.params.shape[0]
+    num_host_atoms = host_nonbonded.potential.num_atoms
     cutoff = host_nonbonded.potential.cutoff
 
     guest_ixn_env_params = get_guest_params(mol_a, mol_b, atom_map_mixin, ff.q_handle, ff.lj_handle, lamb, cutoff)
