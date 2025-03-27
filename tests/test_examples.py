@@ -133,26 +133,6 @@ def get_smc_free_solv_results(result_path: str) -> tuple[Array, Array]:
     return dG_preds, dG_expts
 
 
-@pytest.mark.skip("needs update since removal of lambda dependence in nonbonded potentials")
-def test_smc_freesolv(smc_free_solv_path):
-    """run_smc_on_freesolv.py with reasonable settings on a small subset of FreeSolv, and expect
-    * output in summary_smc_result_*.pkl
-    * no NaNs in accumulated log weights
-    * predictions within 2 kcal/mol of experiment
-    """
-    dG_preds, dG_expts = get_smc_free_solv_results(smc_free_solv_path)
-    # compute error summaries
-    mean_abs_err_kcalmol = np.mean(np.abs(dG_preds - dG_expts))
-    print(dG_preds, dG_expts, mean_abs_err_kcalmol)
-
-    # expect small error
-    # * MAE of ~1.5 kcal/mol: run with these settings on 10 molecules from FreeSolv
-    # * MAE of ~1.5 kcal/mol: run with these settings on ~500 molecules from FreeSolv
-    # * MAE of ~1.1 kcal/mol: FreeSolv reference calculations
-    #   https://www.biorxiv.org/content/10.1101/104281v1.full
-    assert mean_abs_err_kcalmol <= 2
-
-
 @pytest.mark.nightly
 @pytest.mark.parametrize("insertion_type", ["untargeted"])
 def test_water_sampling_mc_bulk_water(insertion_type):
@@ -229,13 +209,10 @@ def test_water_sampling_mc_buckyball(batch_size, insertion_type):
             np.testing.assert_array_equal(test_data[key], reference_data[key])
 
 
+@pytest.mark.fixed_output
 @pytest.mark.parametrize(
     "leg, n_windows, n_frames, n_eq_steps",
-    [
-        ("vacuum", 6, 50, 1000),
-        pytest.param("solvent", 5, 50, 1000, marks=pytest.mark.nightly),
-        pytest.param("complex", 5, 50, 1000, marks=pytest.mark.nightly),
-    ],
+    [("vacuum", 6, 50, 1000), ("solvent", 5, 50, 1000), ("complex", 5, 50, 1000)],
 )
 @pytest.mark.parametrize("mol_a, mol_b", [("15", "30")])
 @pytest.mark.parametrize("seed", [2025])
