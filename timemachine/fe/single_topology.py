@@ -924,9 +924,29 @@ def build_combined_atom_map_mixin(
     return AtomMapMixin(num_atoms_a, num_atoms_b, new_core)
 
 
-def build_end_state_reference_all_pairs(
+def setup_host_guest_nonbonded_all_pairs(
     num_guest_atoms: int, host_nonbonded_all_pairs: BoundPotential[Nonbonded]
 ) -> BoundPotential[Nonbonded]:
+    """
+    Setup the Nonbonded potential for use in a host-guest system. This function effectively
+    pads the host_params with extra zeros equal to length of num_guest_atoms, and updates the
+    num_atoms property to include guest atom count. Note that this function omits both Host-Guest
+    nonbonded interactions (see interaction group below), as well as the Guest-Guest interactions.
+
+    Parameters
+    ----------
+    num_guest_atoms: int
+        Number of atoms in the guest.
+
+    host_nonbonded_all_pairs: BoundPotential[Nonbonded]
+        Nonbonded potential from the host system.
+
+    Returns
+    -------
+    BoundPotential[Nonbonded]
+        Nonbonded potential modified to also include guest atoms.
+
+    """
     # Note: The choice of zeros here is arbitrary. It doesn't affect the
     # potentials or grads, but any function like the seed could depend on these values.
     host_params = host_nonbonded_all_pairs.params
@@ -947,14 +967,41 @@ def build_end_state_reference_all_pairs(
     return nonbonded_all_pairs.bind(nb_params)
 
 
-def build_end_state_reference_ixn_group(
+def setup_host_guest_nonbonded_ixn_group(
     mol: Chem.Mol,
-    nonbonded_all_pairs: BoundPotential[Nonbonded],
+    host_nonbonded_all_pairs: BoundPotential[Nonbonded],
     num_water_atoms: int,
     ixn_group_ff: Forcefield,  # forcefield used specifically used to parameterize the NB Ixn group
     omm_topology,
 ) -> BoundPotential[NonbondedInteractionGroup]:
-    num_host_atoms = nonbonded_all_pairs.potential.num_atoms
+    """
+    Setup the NonbondedInteractionGroup potential for use in a host-guest system. Ligand charges, sigmas, and epsilons
+    are directly parameterized by the ixn_group_ff. However, host charges are overwritten only if env_bcc_handle is specified,
+    and host sigmas and host epsilons are directly inherited from the host_nonbonded_all_pairs.
+
+    Parameters
+    ----------
+    num_guest_atoms: int
+        Number of atoms in the guest.
+
+    host_nonbonded_all_pairs: BoundPotential[Nonbonded]
+        Nonbonded potential from the host system.
+
+    num_water_atoms: int
+        Number of water atoms in the system
+
+    ixn_group_ff: Forcefield
+        Forcefield used to parameterize the interaction group.
+
+    omm_topology: OpenMM Topology
+        Used only if we need to invoke the ff.env_bcc_handle
+
+    Returns
+    -------
+    BoundPotential[NonbondedInteractionGroup]
+
+    """
+    num_host_atoms = host_nonbonded_all_pairs.potential.num_atoms
 
     assert ixn_group_ff.q_handle is not None
     assert ixn_group_ff.lj_handle is not None
@@ -963,7 +1010,7 @@ def build_end_state_reference_ixn_group(
     guest_w = jnp.zeros_like(guest_q).reshape(-1, 1)
     guest_params = jnp.hstack([guest_q, guest_lj, guest_w])
 
-    host_params = nonbonded_all_pairs.params.copy()
+    host_params = host_nonbonded_all_pairs.params.copy()
     if ixn_group_ff.env_bcc_handle is not None:
         env_bcc_h = ixn_group_ff.env_bcc_handle.get_env_handle(omm_topology, ixn_group_ff)
         host_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ixn_group_ff.env_bcc_handle.params)
@@ -988,8 +1035,8 @@ def build_end_state_reference_ixn_group(
         get_env_idxs(),
         host_params,
         guest_params,
-        beta=nonbonded_all_pairs.potential.beta,
-        cutoff=nonbonded_all_pairs.potential.cutoff,
+        beta=host_nonbonded_all_pairs.potential.beta,
+        cutoff=host_nonbonded_all_pairs.potential.cutoff,
     )
 
     return ixn_pot.bind(ixn_params)
@@ -1652,14 +1699,8 @@ class SingleTopology(AtomMapMixin):
 
         return min_maxes[:, 0], min_maxes[:, 1]
 
-    def _assign_nonbonded_idxs_min_max(self, aligned_tuples):
-        # (ytz): the interpolation code does not currently respect the min/max bounds here
-        # this blob of code is mostly to maintain consistency in the API
-        min_maxes = []
-        for _ in aligned_tuples:
-            min_maxes.append(DEFAULT_MIN_MAX)
-        min_maxes = np.array(min_maxes).reshape(-1, 2)
-        return min_maxes[:, 0], min_maxes[:, 1]
+    def _assign_nonbonded_idxs_min_max(self, _):
+        return None, None
 
     def setup_intermediate_state(self, lamb: float) -> GuestSystem:
         r"""
@@ -1784,18 +1825,20 @@ class SingleTopology(AtomMapMixin):
         return Chem.Mol(mol)
 
     def _wrap_align_host_nonbonded(self, host_nonbonded: BoundPotential[Nonbonded]) -> AlignedNonbondedAllPairs:
-        lhs_nb_ap = build_end_state_reference_all_pairs(self.mol_a.GetNumAtoms(), host_nonbonded)
-        rhs_nb_ap = build_end_state_reference_all_pairs(self.mol_b.GetNumAtoms(), host_nonbonded)
+        # This is temporary scaffolding code. Will be removed once HostGuestSystems can be directly passed into SingleTopology.
+        lhs_nb_ap = setup_host_guest_nonbonded_all_pairs(self.mol_a.GetNumAtoms(), host_nonbonded)
+        rhs_nb_ap = setup_host_guest_nonbonded_all_pairs(self.mol_b.GetNumAtoms(), host_nonbonded)
         camm = build_combined_atom_map_mixin(host_nonbonded.potential.num_atoms, self.mol_a, self.mol_b, self.core)
         return self._align_nonbonded_all_pairs(lhs_nb_ap, rhs_nb_ap, camm)
 
     def _wrap_aligned_host_guest_nonbonded_ixn_group(
         self, host_nonbonded: BoundPotential[Nonbonded], num_water_atoms, ixn_group_ff: Forcefield, omm_topology
     ) -> AlignedNonbondedInteractionGroup:
-        lhs_nb_ixn_group = build_end_state_reference_ixn_group(
+        # This is temporary scaffolding code. Will be removed once HostGuestSystems can be directly passed into SingleTopology.
+        lhs_nb_ixn_group = setup_host_guest_nonbonded_ixn_group(
             self.mol_a, host_nonbonded, num_water_atoms, ixn_group_ff, omm_topology
         )
-        rhs_nb_ixn_group = build_end_state_reference_ixn_group(
+        rhs_nb_ixn_group = setup_host_guest_nonbonded_ixn_group(
             self.mol_b, host_nonbonded, num_water_atoms, ixn_group_ff, omm_topology
         )
         camm = build_combined_atom_map_mixin(host_nonbonded.potential.num_atoms, self.mol_a, self.mol_b, self.core)
