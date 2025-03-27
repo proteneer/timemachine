@@ -927,6 +927,8 @@ def build_combined_atom_map_mixin(
 def build_end_state_reference_all_pairs(
     num_guest_atoms: int, host_nonbonded_all_pairs: BoundPotential[Nonbonded]
 ) -> BoundPotential[Nonbonded]:
+    # Note: The choice of zeros here is arbitrary. It doesn't affect the
+    # potentials or grads, but any function like the seed could depend on these values.
     host_params = host_nonbonded_all_pairs.params
     nb_params = np.concatenate([host_params, np.zeros((num_guest_atoms, host_params.shape[1]))])
 
