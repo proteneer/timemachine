@@ -1842,8 +1842,6 @@ class SingleTopology(AtomMapMixin):
         combined_improper_params = jnp.concatenate([host_system.improper.params, guest_system.improper.params])
         combined_improper = PeriodicTorsion(combined_improper_idxs).bind(combined_improper_params)
 
-        # combined_nonbonded_all_pairs = None
-        # combined_nonbonded_interaction_group = None
         combined_nonbonded_all_pairs = self._wrap_align_host_nonbonded(host_system.nonbonded_all_pairs).interpolate(
             lamb
         )
