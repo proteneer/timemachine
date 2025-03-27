@@ -163,6 +163,12 @@ def test_nonbonded_interaction_group():
         ref_u = ref_ixn_group(coords, box0)
         test_u = test_ixn_group(coords, box0)
         np.testing.assert_equal(ref_u, test_u)
+        # gpu version
+        ref_du_dx, ref_u = ref_ixn_group.to_gpu(np.float32).bound_impl.execute(coords, box0)
+        test_du_dx, test_u = test_ixn_group.to_gpu(np.float32).bound_impl.execute(coords, box0)
+
+        np.testing.assert_equal(ref_u, test_u)
+        np.testing.assert_array_equal(ref_du_dx, test_du_dx)
 
 
 def test_nonbonded_all_pairs():
@@ -199,6 +205,8 @@ def test_nonbonded_all_pairs():
         np.testing.assert_equal(ref_u, test_u)
 
         # gpu version
-        # _, ref_u = ref_nb_ap.to_gpu(np.float32).bound_impl.execute(coords, box0)
-        # _, test_u = test_nb_ap.to_gpu(np.float32).bound_impl.execute(coords, box0)
+        ref_du_dx, ref_u = ref_nb_ap.to_gpu(np.float32).bound_impl.execute(coords, box0)
+        test_du_dx, test_u = test_nb_ap.to_gpu(np.float32).bound_impl.execute(coords, box0)
+
         np.testing.assert_equal(ref_u, test_u)
+        np.testing.assert_array_equal(ref_du_dx, test_du_dx)
