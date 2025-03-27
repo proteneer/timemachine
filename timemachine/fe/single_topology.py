@@ -1297,6 +1297,8 @@ class SingleTopology(AtomMapMixin):
             # mypy complaint: error: Value of type variable "SupportsRichComparisonT" of "sorted" cannot be "ndarray[tuple[int, ...], dtype[Any]]"  [type-var]
             key = tuple(sorted([combined_atom_map_mixin.b_to_c[i], combined_atom_map_mixin.b_to_c[j]]))  # type: ignore
             if key in exclusions_kv:
+                # we require that any duplicate exclusions in src and dst share the same scaling factors (since we're not allowed interpolate
+                # over them currently with our HREX .set_params() requirement).
                 np.testing.assert_array_equal(exclusions_kv[key], sf)
             else:
                 exclusions_kv[key] = sf
