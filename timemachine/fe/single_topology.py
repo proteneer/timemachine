@@ -1223,7 +1223,8 @@ class SingleTopology(AtomMapMixin):
 
         assert len(set(col_idxs).intersection(set(row_idxs))) == 0
 
-        # (ytz): does this have to be jnp?
+        # (ytz): this has to be jnp since we require traceability in a couple of tests. eg:
+        # test_single_topology_combined.py::test_nonbonded_host_params_independent_of_lambda()
         aligned_src_params = jnp.zeros((combined_atom_map_mixin.get_num_atoms(), 4))
         aligned_src_params = aligned_src_params.at[row_idxs].set(row_src_params)
         aligned_src_params = aligned_src_params.at[col_idxs].set(col_src_params)
