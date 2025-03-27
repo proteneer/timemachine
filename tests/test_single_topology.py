@@ -669,7 +669,7 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
         pair_idxs = []
         pair_params = []
         for idxs, src_params, dst_params in zip(
-            st.aligned_nonbonded_pair_list.idxs,
+            st.aligned_nonbonded_pair_list.potential.idxs,
             st.aligned_nonbonded_pair_list.src_params,
             st.aligned_nonbonded_pair_list.dst_params,
         ):

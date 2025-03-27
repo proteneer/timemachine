@@ -1114,7 +1114,7 @@ class SingleTopology(AtomMapMixin):
         self.aligned_chiral_atom = self._align_chiral_atoms()
         self.aligned_nonbonded_pair_list = self._align_nonbonded_pair_list()
 
-    def _align_bonds(self):
+    def _align_bonds(self) -> AlignedBond:
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
             interpolate.align_harmonic_bond_idxs_and_params,
             self._assign_bond_idxs_min_max,
@@ -1132,7 +1132,7 @@ class SingleTopology(AtomMapMixin):
             lambda_max=maxes,
         )
 
-    def _align_angles(self):
+    def _align_angles(self) -> AlignedAngle:
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
             interpolate.align_harmonic_angle_idxs_and_params,
             self._assign_angle_idxs_min_max,
@@ -1150,7 +1150,7 @@ class SingleTopology(AtomMapMixin):
             lambda_max=maxes,
         )
 
-    def _align_propers(self):
+    def _align_propers(self) -> AlignedPeriodicTorsion:
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
             interpolate.align_proper_idxs_and_params,
             self._assign_periodic_torsion_idxs_min_max,
@@ -1168,7 +1168,7 @@ class SingleTopology(AtomMapMixin):
             lambda_max=maxes,
         )
 
-    def _align_impropers(self):
+    def _align_impropers(self) -> AlignedPeriodicTorsion:
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
             interpolate.align_improper_idxs_and_params,
             self._assign_periodic_torsion_idxs_min_max,
@@ -1186,7 +1186,7 @@ class SingleTopology(AtomMapMixin):
             lambda_max=maxes,
         )
 
-    def _align_chiral_atoms(self):
+    def _align_chiral_atoms(self) -> AlignedChiralAtomRestraint:
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
             interpolate.align_chiral_atom_idxs_and_params,
             self._assign_chiral_atom_idxs_min_max,
@@ -1204,7 +1204,7 @@ class SingleTopology(AtomMapMixin):
             lambda_max=maxes,
         )
 
-    def _align_nonbonded_pair_list(self):
+    def _align_nonbonded_pair_list(self) -> AlignedNonbondedPairlist:
         src_cutoff = self.src_system.nonbonded_pair_list.potential.cutoff
         src_beta = self.src_system.nonbonded_pair_list.potential.beta
 
@@ -1282,7 +1282,7 @@ class SingleTopology(AtomMapMixin):
         src_nb_ixn_group: BoundPotential[NonbondedInteractionGroup],
         dst_nb_ixn_group: BoundPotential[NonbondedInteractionGroup],
         combined_atom_map_mixin,
-    ):
+    ) -> AlignedNonbondedInteractionGroup:
         assert src_nb_ixn_group.potential.beta == dst_nb_ixn_group.potential.beta
         assert src_nb_ixn_group.potential.cutoff == dst_nb_ixn_group.potential.cutoff
 
@@ -1342,7 +1342,7 @@ class SingleTopology(AtomMapMixin):
         src_nb_all_pairs: BoundPotential[Nonbonded],
         dst_nb_all_pairs: BoundPotential[Nonbonded],
         combined_atom_map_mixin: AtomMapMixin,
-    ):
+    ) -> AlignedNonbondedAllPairs:
         assert dst_nb_all_pairs.potential.beta == dst_nb_all_pairs.potential.beta
         assert dst_nb_all_pairs.potential.cutoff == dst_nb_all_pairs.potential.cutoff
 
