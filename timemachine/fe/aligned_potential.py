@@ -1,7 +1,8 @@
+import copy
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import partial
-from typing import Optional, Union
+from typing import Optional
 
 import jax
 import jax.numpy as jnp
@@ -20,7 +21,9 @@ from timemachine.potentials import (
     NonbondedInteractionGroup,
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
+    Potential,
 )
+from timemachine.potentials.types import Params
 
 
 def interpolate_harmonic_bond_params(src_params, dst_params, lamb, k_min, lambda_min, lambda_max):
@@ -178,7 +181,7 @@ def interpolate_periodic_torsion_params(src_params, dst_params, lamb, lambda_min
     return [k, phase, src_period]
 
 
-def interpolate_w_coord(w0: float | jax.Array, w1: float | jax.Array, lamb: float):
+def interpolate_w_coord(w0: float | jax.Array | NDArray, w1: float | jax.Array | NDArray, lamb: float):
     """Interpolate 4D coordinate using schedule optimized for RBFE calculations.
 
     Parameters
@@ -276,15 +279,22 @@ def batch_interpolate_nonbonded_pair_list_params(
 
 
 @dataclass(kw_only=True)
-class AlignedPotential(ABC):
-    src_params: Union[NDArray[np.float64], jax.Array]
-    dst_params: Union[NDArray[np.float64], jax.Array]
+class AlignedPotential[P: Potential](ABC):
+    potential: P
+
+    src_params: Params
+    dst_params: Params
+
     lambda_min: Optional[NDArray[np.float64]]
     lambda_max: Optional[NDArray[np.float64]]
 
     @abstractmethod
-    def interpolate(self, lamb):
+    def interpolate_params(self, lamb: float) -> Params:
         raise NotImplementedError()
+
+    def interpolate(self, lamb):
+        params = self.interpolate_params(lamb)
+        return copy.deepcopy(self.potential).bind(params)
 
     def __post_init__(self):
         # check that bounds are well-defined
@@ -298,103 +308,57 @@ class AlignedPotential(ABC):
 
 
 @dataclass(kw_only=True)
-class AlignedBond(AlignedPotential):
-    idxs: NDArray[np.int32]
-
-    def interpolate(self, lamb):
+class AlignedBond(AlignedPotential[HarmonicBond]):
+    def interpolate_params(self, lamb: float) -> Params:
         k_min = 0.1
         params = batch_interpolate_harmonic_bond_params(
             self.src_params, self.dst_params, lamb, k_min, self.lambda_min, self.lambda_max
         )
-        params = jnp.array(params).T
-
-        return HarmonicBond(self.idxs).bind(params)
+        return jnp.array(params).T
 
 
 @dataclass(kw_only=True)
-class AlignedAngle(AlignedPotential):
-    idxs: NDArray[np.int32]
-
-    def interpolate(self, lamb):
+class AlignedAngle(AlignedPotential[HarmonicAngle]):
+    def interpolate_params(self, lamb: float) -> Params:
         k_min = 0.05
         params = batch_interpolate_harmonic_angle_params(
             self.src_params, self.dst_params, lamb, k_min, self.lambda_min, self.lambda_max
         )
-        params = jnp.array(params).T
-        return HarmonicAngle(self.idxs).bind(params)
+        return jnp.array(params).T
 
 
 @dataclass(kw_only=True)
-class AlignedTorsion(AlignedPotential):
-    idxs: NDArray[np.int32]
-
-    def interpolate(self, lamb):
+class AlignedPeriodicTorsion(AlignedPotential[PeriodicTorsion]):
+    def interpolate_params(self, lamb: float) -> Params:
         params = batch_interpolate_periodic_torsion_params(
             self.src_params, self.dst_params, lamb, self.lambda_min, self.lambda_max
         )
-        params = jnp.array(params).T
-        return PeriodicTorsion(self.idxs).bind(params)
+        return jnp.array(params).T
 
 
 @dataclass(kw_only=True)
-class AlignedChiralAtom(AlignedPotential):
-    idxs: NDArray[np.int32]
-
-    def interpolate(self, lamb):
+class AlignedChiralAtomRestraint(AlignedPotential[ChiralAtomRestraint]):
+    def interpolate_params(self, lamb: float) -> Params:
         k_min = 0.025
         params = batch_interpolate_chiral_atom_params(
             self.src_params, self.dst_params, lamb, k_min, self.lambda_min, self.lambda_max
         )
-        params = jnp.array(params).reshape(-1)
-        return ChiralAtomRestraint(self.idxs).bind(params)
+        return jnp.array(params).reshape(-1)
 
 
 @dataclass(kw_only=True)
-class AlignedNonbondedPairlist(AlignedPotential):
-    idxs: NDArray[np.int32]
-    cutoff: float
-    beta: float
-
-    def interpolate(self, lamb):
+class AlignedNonbondedPairlist(AlignedPotential[NonbondedPairListPrecomputed]):
+    def interpolate_params(self, lamb: float) -> Params:
         assert self.lambda_min is None and self.lambda_max is None
-        params = batch_interpolate_nonbonded_pair_list_params(self.cutoff, self.src_params, self.dst_params, lamb)
-        params = jnp.array(params)
-        return NonbondedPairListPrecomputed(self.idxs, self.beta, self.cutoff).bind(params)
-
-
-@dataclass(kw_only=True)
-class AlignedNonbondedInteractionGroup(AlignedPotential):
-    row_atom_idxs: NDArray[np.int32]
-    col_atom_idxs: NDArray[np.int32]
-    cutoff: float
-    beta: float
-
-    def interpolate(self, lamb):
-        assert self.lambda_min is None and self.lambda_max is None
-        qse_idxs = [NBParamIdx.Q_IDX, NBParamIdx.LJ_SIG_IDX, NBParamIdx.LJ_EPS_IDX]
-        src_qse = self.src_params[:, qse_idxs]
-        dst_qse = self.dst_params[:, qse_idxs]
-        qse = interpolate.linear_interpolation(src_qse, dst_qse, lamb)
-        src_w = self.src_params[:, NBParamIdx.W_IDX]
-        dst_w = self.dst_params[:, NBParamIdx.W_IDX]
-        w = interpolate_w_coord(src_w, dst_w, lamb).reshape(-1, 1)
-        params = jnp.hstack([qse, w])
-        n_atoms = len(params)
-        return NonbondedInteractionGroup(n_atoms, self.row_atom_idxs, self.beta, self.cutoff, self.col_atom_idxs).bind(
-            params
+        params = batch_interpolate_nonbonded_pair_list_params(
+            self.potential.cutoff, self.src_params, self.dst_params, lamb
         )
+        return jnp.array(params)
 
 
 @dataclass(kw_only=True)
-class AlignedNonbondedAllPairs(AlignedPotential):
-    num_atoms: int
-    exclusion_idxs: NDArray[np.int32]
-    atom_idxs: NDArray[np.int32]
-    scale_factors: NDArray[np.float64]
-    cutoff: float
-    beta: float
-
-    def interpolate(self, lamb):
+class AlignedNonbondedInteractionGroup(AlignedPotential[NonbondedInteractionGroup]):
+    def interpolate_params(self, lamb: float) -> Params:
         assert self.lambda_min is None and self.lambda_max is None
         qse_idxs = [NBParamIdx.Q_IDX, NBParamIdx.LJ_SIG_IDX, NBParamIdx.LJ_EPS_IDX]
         src_qse = self.src_params[:, qse_idxs]
@@ -404,6 +368,18 @@ class AlignedNonbondedAllPairs(AlignedPotential):
         dst_w = self.dst_params[:, NBParamIdx.W_IDX]
         w = interpolate_w_coord(src_w, dst_w, lamb).reshape(-1, 1)
         params = jnp.hstack([qse, w])
-        return Nonbonded(
-            self.num_atoms, self.exclusion_idxs, self.scale_factors, self.beta, self.cutoff, self.atom_idxs
-        ).bind(params)
+        return params
+
+
+@dataclass(kw_only=True)
+class AlignedNonbondedAllPairs(AlignedPotential[Nonbonded]):
+    def interpolate_params(self, lamb: float) -> Params:
+        assert self.lambda_min is None and self.lambda_max is None
+        qse_idxs = [NBParamIdx.Q_IDX, NBParamIdx.LJ_SIG_IDX, NBParamIdx.LJ_EPS_IDX]
+        src_qse = self.src_params[:, qse_idxs]
+        dst_qse = self.dst_params[:, qse_idxs]
+        qse = interpolate.linear_interpolation(src_qse, dst_qse, lamb)
+        src_w = self.src_params[:, NBParamIdx.W_IDX]
+        dst_w = self.dst_params[:, NBParamIdx.W_IDX]
+        w = interpolate_w_coord(src_w, dst_w, lamb).reshape(-1, 1)
+        return jnp.hstack([qse, w])

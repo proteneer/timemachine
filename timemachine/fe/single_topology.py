@@ -21,11 +21,11 @@ from timemachine.fe import interpolate, model_utils, topology, utils
 from timemachine.fe.aligned_potential import (
     AlignedAngle,
     AlignedBond,
-    AlignedChiralAtom,
+    AlignedChiralAtomRestraint,
     AlignedNonbondedAllPairs,
     AlignedNonbondedInteractionGroup,
     AlignedNonbondedPairlist,
-    AlignedTorsion,
+    AlignedPeriodicTorsion,
 )
 from timemachine.fe.chiral_utils import ChiralRestrIdxSet
 from timemachine.fe.dummy import (
@@ -45,6 +45,7 @@ from timemachine.potentials import (
     HarmonicBond,
     Nonbonded,
     NonbondedInteractionGroup,
+    NonbondedPairListPrecomputed,
     PeriodicTorsion,
 )
 
@@ -1123,7 +1124,13 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 2)
         src_params = src_params.reshape(-1, 2)
         dst_params = dst_params.reshape(-1, 2)
-        return AlignedBond(idxs=idxs, src_params=src_params, dst_params=dst_params, lambda_min=mins, lambda_max=maxes)
+        return AlignedBond(
+            potential=HarmonicBond(idxs),
+            src_params=src_params,
+            dst_params=dst_params,
+            lambda_min=mins,
+            lambda_max=maxes,
+        )
 
     def _align_angles(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1135,7 +1142,13 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 3)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedAngle(idxs=idxs, src_params=src_params, dst_params=dst_params, lambda_min=mins, lambda_max=maxes)
+        return AlignedAngle(
+            potential=HarmonicAngle(idxs),
+            src_params=src_params,
+            dst_params=dst_params,
+            lambda_min=mins,
+            lambda_max=maxes,
+        )
 
     def _align_propers(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1147,8 +1160,12 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedTorsion(
-            idxs=idxs, src_params=src_params, dst_params=dst_params, lambda_min=mins, lambda_max=maxes
+        return AlignedPeriodicTorsion(
+            potential=PeriodicTorsion(idxs),
+            src_params=src_params,
+            dst_params=dst_params,
+            lambda_min=mins,
+            lambda_max=maxes,
         )
 
     def _align_impropers(self):
@@ -1161,8 +1178,12 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedTorsion(
-            idxs=idxs, src_params=src_params, dst_params=dst_params, lambda_min=mins, lambda_max=maxes
+        return AlignedPeriodicTorsion(
+            potential=PeriodicTorsion(idxs),
+            src_params=src_params,
+            dst_params=dst_params,
+            lambda_min=mins,
+            lambda_max=maxes,
         )
 
     def _align_chiral_atoms(self):
@@ -1175,8 +1196,12 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1)
         dst_params = dst_params.reshape(-1)
-        return AlignedChiralAtom(
-            idxs=idxs, src_params=src_params, dst_params=dst_params, lambda_min=mins, lambda_max=maxes
+        return AlignedChiralAtomRestraint(
+            potential=ChiralAtomRestraint(idxs),
+            src_params=src_params,
+            dst_params=dst_params,
+            lambda_min=mins,
+            lambda_max=maxes,
         )
 
     def _align_nonbonded_pair_list(self):
@@ -1199,13 +1224,11 @@ class SingleTopology(AtomMapMixin):
         src_params = src_params.reshape(-1, 4)
         dst_params = dst_params.reshape(-1, 4)
         return AlignedNonbondedPairlist(
-            idxs=idxs,
+            potential=NonbondedPairListPrecomputed(idxs=idxs, beta=src_beta, cutoff=src_cutoff),
             src_params=src_params,
             dst_params=dst_params,
             lambda_min=mins,
             lambda_max=maxes,
-            cutoff=src_cutoff,
-            beta=src_beta,
         )
 
     def _process_nonbonded_idxs_and_params(
@@ -1301,14 +1324,17 @@ class SingleTopology(AtomMapMixin):
         assert aligned_src_params.shape == aligned_dst_params.shape
 
         return AlignedNonbondedInteractionGroup(
-            row_atom_idxs=row_idxs,
-            col_atom_idxs=col_idxs,
+            potential=NonbondedInteractionGroup(
+                num_atoms=combined_atom_map_mixin.get_num_atoms(),
+                row_atom_idxs=row_idxs,
+                col_atom_idxs=col_idxs,
+                cutoff=src_nb_ixn_group.potential.cutoff,
+                beta=src_nb_ixn_group.potential.beta,
+            ),
             src_params=aligned_src_params,
             dst_params=aligned_dst_params,
             lambda_min=None,
             lambda_max=None,
-            cutoff=src_nb_ixn_group.potential.cutoff,
-            beta=src_nb_ixn_group.potential.beta,
         )
 
     def _align_nonbonded_all_pairs(
@@ -1380,14 +1406,16 @@ class SingleTopology(AtomMapMixin):
         scale_factors = np.array(scale_factors_, dtype=np.float64)
 
         return AlignedNonbondedAllPairs(
-            num_atoms=combined_atom_map_mixin.get_num_atoms(),
-            exclusion_idxs=exclusion_idxs,
-            scale_factors=scale_factors,
-            cutoff=src_nb_all_pairs.potential.cutoff,
-            beta=src_nb_all_pairs.potential.beta,
+            potential=Nonbonded(
+                num_atoms=combined_atom_map_mixin.get_num_atoms(),
+                exclusion_idxs=exclusion_idxs,
+                scale_factors=scale_factors,
+                cutoff=src_nb_all_pairs.potential.cutoff,
+                beta=src_nb_all_pairs.potential.beta,
+                atom_idxs=atom_idxs,
+            ),
             src_params=aligned_src_params,
             dst_params=aligned_dst_params,
-            atom_idxs=atom_idxs,
             lambda_min=None,
             lambda_max=None,
         )
