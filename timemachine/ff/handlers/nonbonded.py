@@ -524,11 +524,11 @@ def eval_nn(features, params_by_layer):
 
 
 class NNHandler(SerializableMixIn):
-    def __init__(self, layer_sizes, params, props):
-        assert len(layer_sizes) == 1
+    def __init__(self, encoded_unflatten_str, params, props):
+        assert len(encoded_unflatten_str) == 1
         assert len(params) == 1
         # TODO: Make SerializableMixIn generic w.r.t. attribute names
-        self.smirks = layer_sizes
+        self.smirks = encoded_unflatten_str
         self.params = np.array(params, dtype=np.float64)
         self.props = props
 
@@ -573,6 +573,9 @@ class NNHandler(SerializableMixIn):
         bond_idxs, deltas = NNHandler.get_bond_idxs_and_charge_deltas(flat_params, encoded_unflatten_str, mol)
         final_charges = apply_bond_charge_corrections(am1_charges, bond_idxs, jnp.array(deltas), runtime_validate=False)
         return final_charges
+
+    def parameterize(self, mol):
+        return self.static_parameterize(self.params, self.smirks, mol)
 
 
 class AM1BCCHandler(SerializableMixIn):
