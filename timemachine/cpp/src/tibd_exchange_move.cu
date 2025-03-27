@@ -19,12 +19,7 @@ namespace timemachine {
 // Each step will have 6 values for a translation, first 3 is the inner translation and second 3 is outer translation
 static const int TIBD_TRANSLATIONS_PER_STEP_XYZXYZ = 6;
 
-void __global__ k_set_handle(cudaGraphConditionalHandle handle) {
-    printf("Jank %ld\n", handle);
-    cudaGraphSetConditional(handle, 1);
-}
-
-void __global__ k_while_nonsense(int expected_proposals, int *proposals, cudaGraphConditionalHandle handle) {
+void __global__ k_while_proposals_left(int expected_proposals, int *proposals, cudaGraphConditionalHandle handle) {
     if (*proposals >= expected_proposals) {
         cudaGraphSetConditional(handle, 0);
     }
@@ -66,7 +61,8 @@ TIBDExchangeMove<RealType>::TIBDExchangeMove(
       d_selected_translations_(this->num_proposals_per_move_ * 3), // TBD: Duplicating some jank... sad
       d_sample_after_segment_offsets_(this->d_sample_segments_offsets_.length),
       d_weights_before_counts_(this->batch_size_), d_weights_after_counts_(this->batch_size_),
-      d_lse_max_src_(this->batch_size_), d_lse_exp_sum_src_(this->batch_size_) {
+      d_coords_copy_(this->N_ * 3), d_box_copy_(3 * 3), d_lse_max_src_(this->batch_size_),
+      d_lse_exp_sum_src_(this->batch_size_) {
 
     if (radius <= 0.0) {
         throw std::runtime_error("radius must be greater than 0.0");
@@ -203,6 +199,10 @@ void TIBDExchangeMove<RealType>::move(
         this->num_proposals_per_move_, d_box, d_center_.data, radius_, d_rand_states_.data, this->d_translations_.data);
     gpuErrchk(cudaPeekAtLastError());
 
+    // Copy coords/box into memory so that cuda graph uses the same parameters.
+    gpuErrchk(cudaMemcpyAsync(d_coords_copy_.data, d_coords, d_coords_copy_.size(), cudaMemcpyDeviceToDevice, stream));
+    gpuErrchk(cudaMemcpyAsync(d_box_copy_.data, d_box, d_box_copy_.size(), cudaMemcpyDeviceToDevice, stream));
+
     /* --Algorithm Description--
     * Targeted Insertion Biased Deletion algorithm is as follows
     *
@@ -237,7 +237,6 @@ void TIBDExchangeMove<RealType>::move(
     // Ensure the handle is set to loop, its just an unsigned long long
     while_handle_ = 1;
 
-    // For the first pass just set the value to zero on the host
     if (graph_exec_ == nullptr) {
         cudaGraph_t body_graph = conditional_params_.conditional.phGraph_out[0];
         gpuErrchk(cudaStreamBeginCaptureToGraph(stream, body_graph, nullptr, nullptr, 0, cudaStreamCaptureModeGlobal));
@@ -341,7 +340,13 @@ void TIBDExchangeMove<RealType>::move(
         // by different bias deletion movers (such as targeted insertion)
         // Don't scale the translations as they are computed to be within the targeted region
         this->compute_incremental_log_weights_device(
-            N, false, d_box, d_coords, this->d_quaternions_.data, this->d_selected_translations_.data, stream);
+            this->N_,
+            false,
+            this->d_box_copy_.data,
+            this->d_coords_copy_.data,
+            this->d_quaternions_.data,
+            this->d_selected_translations_.data,
+            stream);
 
         k_setup_destination_weights_for_targeted<RealType><<<dim3(mol_blocks, this->batch_size_, 1), tpb, 0, stream>>>(
             this->num_proposals_per_move_,
@@ -392,7 +397,7 @@ void TIBDExchangeMove<RealType>::move(
             this->d_target_mol_offsets_.data,
             this->d_sample_segments_offsets_.data,
             this->d_intermediate_coords_.data,
-            d_coords,
+            d_coords_copy_.data,
             this->d_before_mol_energy_buffer_.data,
             this->d_proposal_mol_energy_buffer_.data,
             this->d_noise_offset_.data,
@@ -405,12 +410,17 @@ void TIBDExchangeMove<RealType>::move(
             this->d_before_mol_energy_buffer_.data,
             this->d_log_weights_before_.data);
         gpuErrchk(cudaPeekAtLastError());
-        k_while_nonsense<<<1, 1, 0, stream>>>(this->num_proposals_per_move_, this->d_noise_offset_.data, while_handle_);
+
+        k_while_proposals_left<<<1, 1, 0, stream>>>(
+            this->num_proposals_per_move_, this->d_noise_offset_.data, while_handle_);
         gpuErrchk(cudaPeekAtLastError());
+
         gpuErrchk(cudaStreamEndCapture(stream, nullptr));
         gpuErrchk(cudaGraphInstantiate(&graph_exec_, graph_, NULL, NULL, 0));
     }
     gpuErrchk(cudaGraphLaunch(graph_exec_, stream));
+    // Only copy back the coords, the boxes aren't changed by the move.
+    gpuErrchk(cudaMemcpyAsync(d_coords, d_coords_copy_.data, d_coords_copy_.size(), cudaMemcpyDeviceToDevice, stream));
     this->num_attempted_ += this->num_proposals_per_move_;
 }
 

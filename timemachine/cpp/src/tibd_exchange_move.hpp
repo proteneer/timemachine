@@ -44,6 +44,9 @@ private:
     DeviceBuffer<int> d_weights_before_counts_;        // [this->batch_size_]
     DeviceBuffer<int> d_weights_after_counts_;         // [this->batch_size_]
 
+    DeviceBuffer<double> d_coords_copy_;               // [N_, 3]
+    DeviceBuffer<double> d_box_copy_;                  // [9]
+
     DeviceBuffer<RealType> d_lse_max_src_;             // [this->batch_size, this->num_target_mols_]
     DeviceBuffer<RealType> d_lse_exp_sum_src_;         // [this->batch_size, this->num_target_mols_]
 
