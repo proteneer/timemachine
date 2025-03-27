@@ -956,10 +956,8 @@ def build_end_state_reference_ixn_group(
 ) -> BoundPotential[NonbondedInteractionGroup]:
     num_host_atoms = nonbonded_all_pairs.potential.num_atoms
 
-    # (ytz): Typing errors
-    # timemachine/fe/single_topology.py:956: error: Item "NNHandler" of "SimpleChargeHandler | AM1BCCHandler | AM1CCCHandler | AM1BCCCCCHandler | PrecomputedChargeHandler | NNHandler | None" has no attribute "parameterize"  [union-attr]
-    # timemachine/fe/single_topology.py:956: error: Item "None" of "SimpleChargeHandler | AM1BCCHandler | AM1CCCHandler | AM1BCCCCCHandler | PrecomputedChargeHandler | NNHandler | None" has no attribute "parameterize"  [union-attr]
-    # timemachine/fe/single_topology.py:957: error: Item "None" of "LennardJonesHandler | None" has no attribute "parameterize"  [union-attr]
+    assert ixn_group_ff.q_handle is not None
+    assert ixn_group_ff.lj_handle is not None
     guest_q = ixn_group_ff.q_handle.parameterize(mol).reshape(-1, 1)  # type: ignore
     guest_lj = ixn_group_ff.lj_handle.parameterize(mol)  # type: ignore
     guest_w = jnp.zeros_like(guest_q).reshape(-1, 1)
