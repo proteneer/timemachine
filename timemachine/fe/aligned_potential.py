@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import partial
 from typing import Optional, Union
@@ -275,14 +276,25 @@ def batch_interpolate_nonbonded_pair_list_params(
 
 
 @dataclass(kw_only=True)
-class AlignedPotential:
+class AlignedPotential(ABC):
     src_params: Union[NDArray[np.float64], jax.Array]
     dst_params: Union[NDArray[np.float64], jax.Array]
-    mins: Optional[NDArray[np.float64]]
-    maxes: Optional[NDArray[np.float64]]
+    lambda_min: Optional[NDArray[np.float64]]
+    lambda_max: Optional[NDArray[np.float64]]
 
+    @abstractmethod
     def interpolate(self, lamb):
         raise NotImplementedError()
+
+    def __post_init__(self):
+        # check that bounds are well-defined
+        # check that
+        if self.lambda_min is not None and self.lambda_max is not None:
+            assert np.all(0.0 <= self.lambda_min)
+            assert np.all(self.lambda_min <= self.lambda_max)
+            assert np.all(self.lambda_max <= 1.0)
+        else:
+            assert self.lambda_min is None and self.lambda_max is None
 
 
 @dataclass(kw_only=True)
@@ -292,7 +304,7 @@ class AlignedBond(AlignedPotential):
     def interpolate(self, lamb):
         k_min = 0.1
         params = batch_interpolate_harmonic_bond_params(
-            self.src_params, self.dst_params, lamb, k_min, self.mins, self.maxes
+            self.src_params, self.dst_params, lamb, k_min, self.lambda_min, self.lambda_max
         )
         params = jnp.array(params).T
 
@@ -306,7 +318,7 @@ class AlignedAngle(AlignedPotential):
     def interpolate(self, lamb):
         k_min = 0.05
         params = batch_interpolate_harmonic_angle_params(
-            self.src_params, self.dst_params, lamb, k_min, self.mins, self.maxes
+            self.src_params, self.dst_params, lamb, k_min, self.lambda_min, self.lambda_max
         )
         params = jnp.array(params).T
         return HarmonicAngle(self.idxs).bind(params)
@@ -318,7 +330,7 @@ class AlignedTorsion(AlignedPotential):
 
     def interpolate(self, lamb):
         params = batch_interpolate_periodic_torsion_params(
-            self.src_params, self.dst_params, lamb, self.mins, self.maxes
+            self.src_params, self.dst_params, lamb, self.lambda_min, self.lambda_max
         )
         params = jnp.array(params).T
         return PeriodicTorsion(self.idxs).bind(params)
@@ -331,7 +343,7 @@ class AlignedChiralAtom(AlignedPotential):
     def interpolate(self, lamb):
         k_min = 0.025
         params = batch_interpolate_chiral_atom_params(
-            self.src_params, self.dst_params, lamb, k_min, self.mins, self.maxes
+            self.src_params, self.dst_params, lamb, k_min, self.lambda_min, self.lambda_max
         )
         params = jnp.array(params).reshape(-1)
         return ChiralAtomRestraint(self.idxs).bind(params)
@@ -344,8 +356,7 @@ class AlignedNonbondedPairlist(AlignedPotential):
     beta: float
 
     def interpolate(self, lamb):
-        # (ytz): batch_interpolate_nonbonded_pair_list_params currently fails to respect the self.mins and self.maxes
-        # boundaries.
+        assert self.lambda_min is None and self.lambda_max is None
         params = batch_interpolate_nonbonded_pair_list_params(self.cutoff, self.src_params, self.dst_params, lamb)
         params = jnp.array(params)
         return NonbondedPairListPrecomputed(self.idxs, self.beta, self.cutoff).bind(params)
@@ -359,7 +370,7 @@ class AlignedNonbondedInteractionGroup(AlignedPotential):
     beta: float
 
     def interpolate(self, lamb):
-        # (ytz): self.mins and self.max is currently ignored.
+        assert self.lambda_min is None and self.lambda_max is None
         qse_idxs = [NBParamIdx.Q_IDX, NBParamIdx.LJ_SIG_IDX, NBParamIdx.LJ_EPS_IDX]
         src_qse = self.src_params[:, qse_idxs]
         dst_qse = self.dst_params[:, qse_idxs]
@@ -384,7 +395,7 @@ class AlignedNonbondedAllPairs(AlignedPotential):
     beta: float
 
     def interpolate(self, lamb):
-        # (ytz): self.mins and self.max is currently ignored.
+        assert self.lambda_min is None and self.lambda_max is None
         qse_idxs = [NBParamIdx.Q_IDX, NBParamIdx.LJ_SIG_IDX, NBParamIdx.LJ_EPS_IDX]
         src_qse = self.src_params[:, qse_idxs]
         dst_qse = self.dst_params[:, qse_idxs]

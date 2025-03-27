@@ -1075,7 +1075,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 2)
         src_params = src_params.reshape(-1, 2)
         dst_params = dst_params.reshape(-1, 2)
-        return AlignedBond(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
+        return AlignedBond(idxs=idxs, src_params=src_params, dst_params=dst_params, lambda_min=mins, lambda_max=maxes)
 
     def _align_angles(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1087,7 +1087,7 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 3)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedAngle(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
+        return AlignedAngle(idxs=idxs, src_params=src_params, dst_params=dst_params, lambda_min=mins, lambda_max=maxes)
 
     def _align_propers(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1099,7 +1099,9 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedTorsion(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
+        return AlignedTorsion(
+            idxs=idxs, src_params=src_params, dst_params=dst_params, lambda_min=mins, lambda_max=maxes
+        )
 
     def _align_impropers(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1111,7 +1113,9 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1, 3)
         dst_params = dst_params.reshape(-1, 3)
-        return AlignedTorsion(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
+        return AlignedTorsion(
+            idxs=idxs, src_params=src_params, dst_params=dst_params, lambda_min=mins, lambda_max=maxes
+        )
 
     def _align_chiral_atoms(self):
         idxs, src_params, dst_params, mins, maxes = self._align_bonded_term(
@@ -1123,7 +1127,9 @@ class SingleTopology(AtomMapMixin):
         idxs = idxs.reshape(-1, 4)
         src_params = src_params.reshape(-1)
         dst_params = dst_params.reshape(-1)
-        return AlignedChiralAtom(idxs=idxs, src_params=src_params, dst_params=dst_params, mins=mins, maxes=maxes)
+        return AlignedChiralAtom(
+            idxs=idxs, src_params=src_params, dst_params=dst_params, lambda_min=mins, lambda_max=maxes
+        )
 
     def _align_nonbonded_pair_list(self):
         src_cutoff = self.src_system.nonbonded_pair_list.potential.cutoff
@@ -1148,8 +1154,8 @@ class SingleTopology(AtomMapMixin):
             idxs=idxs,
             src_params=src_params,
             dst_params=dst_params,
-            mins=mins,
-            maxes=maxes,
+            lambda_min=mins,
+            lambda_max=maxes,
             cutoff=src_cutoff,
             beta=src_beta,
         )
@@ -1233,8 +1239,8 @@ class SingleTopology(AtomMapMixin):
             col_atom_idxs=col_idxs,
             src_params=aligned_src_params,
             dst_params=aligned_dst_params,
-            mins=None,
-            maxes=None,
+            lambda_min=None,
+            lambda_max=None,
             cutoff=src_nb_ixn_group.potential.cutoff,
             beta=src_nb_ixn_group.potential.beta,
         )
@@ -1314,8 +1320,8 @@ class SingleTopology(AtomMapMixin):
             src_params=aligned_src_params,
             dst_params=aligned_dst_params,
             atom_idxs=atom_idxs,
-            mins=None,
-            maxes=None,
+            lambda_min=None,
+            lambda_max=None,
         )
 
     def _align_bonded_term(self, align_fn, assign_min_max_fn, src_potential, dst_potential):
