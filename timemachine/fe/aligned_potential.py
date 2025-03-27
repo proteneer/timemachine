@@ -367,7 +367,9 @@ class AlignedNonbondedInteractionGroup(AlignedPotential):
         src_w = self.src_params[:, NBParamIdx.W_IDX]
         dst_w = self.dst_params[:, NBParamIdx.W_IDX]
         w = interpolate_w_coord(src_w, dst_w, lamb).reshape(-1, 1)
-        params = jnp.hstack([qse, w])
+        # (ytz): deal with spurious loss of precision when we interpolate nearly identical values:
+        # eg. 0.3*x + 0.7*x ~= x
+        params = jnp.hstack([qse, w]).astype(np.float32).astype(np.float64)
         n_atoms = len(params)
         return NonbondedInteractionGroup(n_atoms, self.row_atom_idxs, self.beta, self.cutoff, self.col_atom_idxs).bind(
             params
