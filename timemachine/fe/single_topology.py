@@ -4,6 +4,7 @@ from enum import IntEnum
 from functools import cache, cached_property
 from typing import Any, Optional
 
+import jax
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
@@ -1207,9 +1208,23 @@ class SingleTopology(AtomMapMixin):
             beta=src_beta,
         )
 
-    def _process_ixn_group_idxs_and_params(
-        self, src_row_or_col_idxs, src_params, dst_row_or_col_idxs, dst_params, a_to_c, b_to_c, cutoff
-    ):
+    def _process_nonbonded_idxs_and_params(
+        self,
+        src_row_or_col_idxs: NDArray[np.int32],
+        src_params: NDArray[np.float64] | jax.Array,
+        dst_row_or_col_idxs: NDArray[np.int32],
+        dst_params: NDArray[np.float64] | jax.Array,
+        a_to_c: NDArray[np.int32],
+        b_to_c: NDArray[np.int32],
+        cutoff: float,
+    ) -> tuple[NDArray[np.int32], jax.Array, jax.Array]:
+        """
+        Compute updated nonbonded idxs and parameters under an atom-mapping. This is intended to map "full" systems, i.e.
+        the atom-mapping contains mapping information for both both host and guest atoms.
+
+        This function is used by both the nonbonded interaction group as well as the nonbonded all pairs during the
+        alignment step.
+        """
         # note a_to_c, b_to_c are *combined* with the atoms
         combined_kv = dict()  # key: atom_idxs indexed in th combined, val: params
         for idx in src_row_or_col_idxs:
@@ -1224,19 +1239,19 @@ class SingleTopology(AtomMapMixin):
             else:
                 combined_kv[new_idx] = [(q, s, e, cutoff), (q, s, e, w)]
 
-        all_idxs = []
-        src_params = []
-        dst_params = []
+        atom_idxs = []
+        atom_src_params = []
+        atom_dst_params = []
 
         for idx, (src_p, dst_p) in combined_kv.items():
-            all_idxs.append(idx)
-            src_params.append(src_p)
-            dst_params.append(dst_p)
+            atom_idxs.append(idx)
+            atom_src_params.append(src_p)
+            atom_dst_params.append(dst_p)
 
         return (
-            np.array(all_idxs, dtype=np.int32),
-            jnp.array(src_params, dtype=np.float64),
-            jnp.array(dst_params, dtype=np.float64),
+            np.array(atom_idxs, dtype=np.int32),
+            jnp.array(atom_src_params, dtype=np.float64),
+            jnp.array(atom_dst_params, dtype=np.float64),
         )
 
     def _align_nonbonded_interaction_group(
@@ -1248,7 +1263,7 @@ class SingleTopology(AtomMapMixin):
         assert src_nb_ixn_group.potential.beta == dst_nb_ixn_group.potential.beta
         assert src_nb_ixn_group.potential.cutoff == dst_nb_ixn_group.potential.cutoff
 
-        row_idxs, row_src_params, row_dst_params = self._process_ixn_group_idxs_and_params(
+        row_idxs, row_src_params, row_dst_params = self._process_nonbonded_idxs_and_params(
             src_nb_ixn_group.potential.row_atom_idxs,
             src_nb_ixn_group.params,
             dst_nb_ixn_group.potential.row_atom_idxs,
@@ -1258,7 +1273,10 @@ class SingleTopology(AtomMapMixin):
             src_nb_ixn_group.potential.cutoff,
         )
 
-        col_idxs, col_src_params, col_dst_params = self._process_ixn_group_idxs_and_params(
+        assert src_nb_ixn_group.potential.col_atom_idxs is not None
+        assert dst_nb_ixn_group.potential.col_atom_idxs is not None
+
+        col_idxs, col_src_params, col_dst_params = self._process_nonbonded_idxs_and_params(
             src_nb_ixn_group.potential.col_atom_idxs,
             src_nb_ixn_group.params,
             dst_nb_ixn_group.potential.col_atom_idxs,
@@ -1308,7 +1326,7 @@ class SingleTopology(AtomMapMixin):
         src_atom_idxs = src_nb_all_pairs.potential.atom_idxs
         dst_atom_idxs = dst_nb_all_pairs.potential.atom_idxs
 
-        atom_idxs, src_params, dst_params = self._process_ixn_group_idxs_and_params(
+        atom_idxs, src_params, dst_params = self._process_nonbonded_idxs_and_params(
             src_atom_idxs,
             src_nb_all_pairs.params,
             dst_atom_idxs,
