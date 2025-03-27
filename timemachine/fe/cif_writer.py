@@ -26,8 +26,8 @@ def convert_single_topology_mols(coords: np.ndarray, atom_map: AtomMapMixin) -> 
         >>> writer.close()
 
     """
-    xa = np.zeros((atom_map.mol_a.GetNumAtoms(), 3))
-    xb = np.zeros((atom_map.mol_b.GetNumAtoms(), 3))
+    xa = np.zeros((atom_map.num_atoms_a, 3))
+    xb = np.zeros((atom_map.num_atoms_b, 3))
     for a_idx, c_idx in enumerate(atom_map.a_to_c):
         xa[a_idx] = coords[c_idx]
     for b_idx, c_idx in enumerate(atom_map.b_to_c):
