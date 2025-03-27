@@ -146,7 +146,8 @@ void Context::multiple_steps_local(
                 double *coord_ptr = h_x + ((i / store_x_interval) - 1) * N_ * 3;
                 gpuErrchk(
                     cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream_));
-                gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream_));
+                gpuErrchk(
+                    cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(*d_box_t_), cudaMemcpyDeviceToHost, stream_));
                 this->_verify_coords_and_box(coord_ptr, box_ptr, stream_);
             }
         }
@@ -194,7 +195,8 @@ void Context::multiple_steps_local_selection(
                 double *coord_ptr = h_x + ((i / store_x_interval) - 1) * N_ * 3;
                 gpuErrchk(
                     cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream_));
-                gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream_));
+                gpuErrchk(
+                    cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(*d_box_t_), cudaMemcpyDeviceToHost, stream_));
                 this->_verify_coords_and_box(coord_ptr, box_ptr, stream_);
             }
         }
@@ -224,7 +226,7 @@ void Context::multiple_steps(const int n_steps, const int n_samples, double *h_x
             double *box_ptr = h_box + ((i / store_x_interval) - 1) * 3 * 3;
             double *coord_ptr = h_x + ((i / store_x_interval) - 1) * N_ * 3;
             gpuErrchk(cudaMemcpyAsync(coord_ptr, d_x_t_, N_ * 3 * sizeof(*d_x_t_), cudaMemcpyDeviceToHost, stream_));
-            gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(double), cudaMemcpyDeviceToHost, stream_));
+            gpuErrchk(cudaMemcpyAsync(box_ptr, d_box_t_, 3 * 3 * sizeof(*d_box_t_), cudaMemcpyDeviceToHost, stream_));
             this->_verify_coords_and_box(coord_ptr, box_ptr, stream_);
         }
     }
