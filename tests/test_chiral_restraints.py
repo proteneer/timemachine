@@ -728,7 +728,7 @@ def test_chiral_inversion_in_single_topology(well_aligned):
     )
 
     atom_map = AtomMapMixin(mol_a.GetNumAtoms(), mol_b.GetNumAtoms(), core)
-    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(vacuum_results, atom_map)
+    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(vacuum_results, atom_map, mol_a, mol_b)
     assert (heatmap_a[0] == 0).all(), "chirality in end state A was not preserved"
     assert (heatmap_b[-1] == 0).all(), "chirality in end state B was not preserved"
 
@@ -836,7 +836,7 @@ def test_chiral_inversion_in_single_topology_solvent():
 
     res, _ = run_solvent(mol_a, mol_b, core, ff, None, md_params, n_windows=3)
     atom_map = AtomMapMixin(mol_a.GetNumAtoms(), mol_b.GetNumAtoms(), core)
-    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(res, atom_map)
+    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(res, atom_map, mol_a, mol_b)
     assert (heatmap_a[0] == 0).all(), "chirality in end state A was not preserved"
     assert (heatmap_b[-1] == 0).all(), "chirality in end state B was not preserved"
 
