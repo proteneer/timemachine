@@ -440,7 +440,7 @@ def xs_ab_from_xs(xs: NDArray, atom_map):
     # Import here to avoid circular, TBD Deboggle
     from timemachine.fe.cif_writer import convert_single_topology_mols
 
-    n_a = atom_map.mol_a.GetNumAtoms()
+    n_a = atom_map.num_atoms_a
     xs_a_, xs_b_ = [], []
     for x in xs:
         combined = convert_single_topology_mols(x, atom_map)
