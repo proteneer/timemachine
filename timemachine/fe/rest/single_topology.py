@@ -8,7 +8,8 @@ from openmm import app
 from rdkit import Chem
 
 from timemachine.constants import NBParamIdx
-from timemachine.fe.single_topology import AlignedPotential, SingleTopology
+from timemachine.fe.aligned_potential import AlignedPotential
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
 from timemachine.ff import Forcefield
 
@@ -98,7 +99,7 @@ class SingleTopologyREST(SingleTopology):
         idxs = {
             int(idx)
             for aligned in aligned_potentials
-            for idxs, params_a, params_b in zip(aligned.idxs, aligned.src_params, aligned.dst_params)
+            for idxs, params_a, params_b in zip(aligned.potential.idxs, aligned.src_params, aligned.dst_params)
             if not np.all(params_a == params_b)
             for idx in idxs  # type: ignore[attr-defined]
         }
