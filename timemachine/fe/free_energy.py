@@ -627,8 +627,11 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
         hb_potential = get_bound_potential_by_type(initial_state.potentials, HarmonicBond).potential
         group_indices = get_group_indices(get_bond_list(hb_potential), len(initial_state.integrator.masses))
 
+        print("LIGAND_IDXS", initial_state.ligand_idxs)
+        print("GROUP_INDICES", group_indices)
         water_idxs = get_water_idxs(group_indices, ligand_idxs=initial_state.ligand_idxs)
 
+        print("WATER IDXS", np.sort(np.array(water_idxs).reshape(-1)))
         # Select a Nonbonded Potential to get the the cutoff/beta, assumes all have same cutoff/beta.
         nb = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup).potential
 

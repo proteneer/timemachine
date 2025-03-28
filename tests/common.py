@@ -16,9 +16,10 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_TEMP, ONE_4PI_EPS0
-from timemachine.fe import interpolate, rbfe
+from timemachine.fe import interpolate
 from timemachine.fe.aligned_potential import interpolate_w_coord
 from timemachine.fe.free_energy import HostConfig
+from timemachine.fe.rbfe import make_setup_initial_states_fns
 from timemachine.fe.single_topology import AtomMapFlags
 from timemachine.fe.utils import set_mol_name
 from timemachine.ff import Forcefield
@@ -63,48 +64,14 @@ def fixed_overflowed(a):
     return converted_a == np.iinfo(np.int64).max
 
 
-from timemachine.fe.single_topology import SingleTopology
-from timemachine.fe.utils import get_romol_conf
-
-
 def prepare_single_topology_initial_state(mol_a, mol_b, core, ff, host_config: Optional[HostConfig], lamb: float = 0.1):
     temperature = DEFAULT_TEMP
-    # if host_config is not None:
-    # host = rbfe.setup_optimized_host(mol_a, mol_b, ff, host_config)
-    is_complex_leg = host_config is not None and len(host_config.conf) != host_config.num_water_atoms
-
-    if host_config:
-        host_config = rbfe.setup_optimized_host(mol_a, mol_b, ff, host_config)
-        single_topology = SingleTopology.from_mols_with_host(mol_a, mol_b, core, host_config, ff)
-        num_host_atoms = len(host_config.masses)
-        ligand_idxs = np.arange(0, single_topology.get_num_atoms(), dtype=np.int32) + num_host_atoms
-        protein_idxs = np.arange(0, num_host_atoms, dtype=np.int32)
-        x_a = np.vstack([host_config.conf, get_romol_conf(mol_a)])
-        x_b = np.vstack([host_config.conf, get_romol_conf(mol_b)])
-        box = host_config.box
-    else:
-        single_topology = SingleTopology.from_mols(mol_a, mol_b, core, ff)
-        ligand_idxs = np.arange(0, single_topology.get_num_atoms(), dtype=np.int32)
-        protein_idxs = np.zeros(0, dtype=np.int32)
-        x_a = get_romol_conf(mol_a)
-        x_b = get_romol_conf(mol_b)
-        box = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
-
     seed = 2022
-    min_cutoff = 0.7 if is_complex_leg else None
+    batch_fn, _ = make_setup_initial_states_fns(mol_a, mol_b, core, ff, host_config, temperature, seed)
 
-    initial_state = rbfe.setup_initial_states(
-        single_topology,
-        temperature,
-        [lamb],
-        seed,
-        min_cutoff,
-        x_a,
-        x_b,
-        box,
-        ligand_idxs,
-        protein_idxs,
-    )[0]
+    is_complex_leg = host_config is not None and len(host_config.conf) != host_config.num_water_atoms
+    min_cutoff = 0.7 if is_complex_leg else None
+    initial_state = batch_fn(lambda_schedule=[lamb], min_cutoff=min_cutoff)[0]
     return initial_state
 
 

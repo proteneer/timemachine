@@ -36,7 +36,7 @@ from timemachine.fe.plots import (
     plot_hrex_swap_acceptance_rates_convergence,
     plot_hrex_transition_matrix,
 )
-from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
+from timemachine.fe.single_topology import AtomMapFlags, AtomMapMixin, SingleTopology
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
@@ -67,61 +67,9 @@ DEFAULT_REST_PARAMS = replace(
 )
 
 
-# @dataclass
-# class Host:
-#     system: HostSystem
-#     physical_masses: list[float]
-#     conf: NDArray
-#     box: NDArray
-#     num_water_atoms: int
-#     omm_topology: app.topology.Topology
-
-
 def _get_default_state_minimization_config() -> minimizer.MinimizationConfig:
     """The parameters to be used to minimize initial states"""
     return minimizer.ScipyMinimizationConfig(method="BFGS", options={"disp": True})
-
-
-# def setup_in_vacuum(st: SingleTopology, ligand_conf, lamb):
-#     """Prepare potentials, initial coords, large 10x10x10nm box, and HMR masses"""
-
-#     system = st.setup_intermediate_state(lamb)
-#     assert_default_system_constraints(system)
-#     hmr_masses = np.array(st.combine_masses(use_hmr=True))
-
-#     potentials = system.get_U_fns()
-#     baro = None
-
-#     x0 = ligand_conf
-#     box0 = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
-
-#     return x0, box0, hmr_masses, potentials, baro
-
-
-# def setup_in_env(
-#     st: SingleTopology,
-#     host: HostConfig,
-#     ligand_conf: NDArray,
-#     lamb: float,
-#     temperature: float,
-#     run_seed: int,
-# ):
-#     """Prepare potentials, concatenate environment and ligand coords, apply HMR, and construct barostat"""
-#     barostat_interval = 25
-#     system = st.combine_with_host(host.system, lamb, host.num_water_atoms, st.ff, host.omm_topology)
-#     assert_default_system_constraints(system)
-#     # combine_masses internally will automatically take care of host masses too.
-#     hmr_masses = st.combine_masses(use_hmr=True)
-
-#     potentials = system.get_U_fns()
-#     group_idxs = get_group_indices(get_bond_list(system.bond.potential), len(hmr_masses))
-#     baro = MonteCarloBarostat(
-#         len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, run_seed + 1
-#     )
-
-#     x0 = np.concatenate([host.conf, ligand_conf])
-
-#     return x0, hmr_masses, potentials, baro
 
 
 def assert_all_states_have_same_masses(initial_states: list[InitialState]):
@@ -212,6 +160,7 @@ def setup_initial_state(
     # Determine the ligand atoms that are in the 4d plane defined by all w_coords being 0.0
     # TBD: Do something more sophisticated depending on the actual parameters for when we vary w_coords independently.
     # Easily done for solvent and complex, little bit trickier in the vacuum case where there is a NonbondedPairlistPrecomputed
+
     if lamb == 0.0:
         interacting_atoms = [x for x in ligand_idxs if (st.c_flags[x] != AtomMapFlags.MOL_B)]
     elif lamb == 1.0:
@@ -591,6 +540,59 @@ def optimize_coordinates(
     return all_xs
 
 
+def make_setup_initial_states_fns(
+    mol_a: Chem.Mol,
+    mol_b: Chem.Mol,
+    core: NDArray,
+    ff: Forcefield,
+    host_config: Optional[HostConfig],
+    temperature: float,
+    seed: int,
+):
+    if host_config:
+        host_config = setup_optimized_host(mol_a, mol_b, ff, host_config)
+        single_topology = SingleTopology.from_mols_with_host(mol_a, mol_b, core, host_config, ff)
+        num_host_atoms = len(host_config.masses)
+        guest_atom_map_mixin = AtomMapMixin(mol_a.GetNumAtoms(), mol_b.GetNumAtoms(), core)
+        ligand_idxs = np.arange(0, guest_atom_map_mixin.get_num_atoms(), dtype=np.int32) + num_host_atoms
+        protein_idxs = np.arange(0, num_host_atoms, dtype=np.int32) - host_config.num_water_atoms
+        x_a = np.vstack([host_config.conf, get_romol_conf(mol_a)])
+        x_b = np.vstack([host_config.conf, get_romol_conf(mol_b)])
+        box = host_config.box
+    else:
+        single_topology = SingleTopology.from_mols(mol_a, mol_b, core, ff)
+        ligand_idxs = np.arange(0, single_topology.get_num_atoms(), dtype=np.int32)
+        protein_idxs = np.zeros(0, dtype=np.int32)
+        x_a = get_romol_conf(mol_a)
+        x_b = get_romol_conf(mol_b)
+        box = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
+
+    make_batch_initial_states_fn = partial(
+        setup_initial_states,
+        st=single_topology,
+        temperature=temperature,
+        seed=seed,
+        x_a=x_a,
+        x_b=x_b,
+        box=box,
+        ligand_idxs=ligand_idxs,
+        protein_idxs=protein_idxs,
+    )
+    make_initial_state_fn = partial(
+        setup_initial_state,
+        single_topology,
+        temperature=temperature,
+        seed=seed,
+        x_a=x_a,
+        x_b=x_b,
+        box0=box,
+        ligand_idxs=ligand_idxs,
+        protein_idxs=protein_idxs,
+    )
+
+    return make_batch_initial_states_fn, make_initial_state_fn
+
+
 def estimate_relative_free_energy(
     mol_a: Chem.rdchem.Mol,
     mol_b: Chem.rdchem.Mol,
@@ -656,35 +658,9 @@ def estimate_relative_free_energy(
 
     temperature = DEFAULT_TEMP
 
-    if host_config:
-        host_config = setup_optimized_host(mol_a, mol_b, ff, host_config)
-        single_topology = SingleTopology.from_mols_with_host(mol_a, mol_b, core, host_config, ff)
-        num_host_atoms = len(host_config.masses)
-        ligand_idxs = np.arange(0, single_topology.get_num_atoms(), dtype=np.int32) + num_host_atoms
-        protein_idxs = np.arange(0, num_host_atoms, dtype=np.int32)
-        x_a = np.vstack([host_config.conf, get_romol_conf(mol_a)])
-        x_b = np.vstack([host_config.conf, get_romol_conf(mol_b)])
-        box = host_config.box
-    else:
-        single_topology = SingleTopology.from_mols(mol_a, mol_b, core, ff)
-        ligand_idxs = np.arange(0, single_topology.get_num_atoms(), dtype=np.int32)
-        protein_idxs = np.zeros(0, dtype=np.int32)
-        x_a = get_romol_conf(mol_a)
-        x_b = get_romol_conf(mol_b)
-        box = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
+    batch_fn, _ = make_setup_initial_states_fns(mol_a, mol_b, core, ff, host_config, temperature, md_params.seed)
 
-    initial_states = setup_initial_states(
-        single_topology,
-        temperature,
-        lambda_schedule,
-        md_params.seed,
-        min_cutoff,
-        x_a,
-        x_b,
-        box,
-        ligand_idxs,
-        protein_idxs,
-    )
+    initial_states = batch_fn(lambda_schedule=lambda_schedule, min_cutoff=min_cutoff)
 
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
@@ -780,63 +756,23 @@ def estimate_relative_free_energy_bisection(
         n_windows = DEFAULT_NUM_WINDOWS
     assert n_windows >= 2
 
-    if host_config:
-        host_config = setup_optimized_host(mol_a, mol_b, ff, host_config)
-        single_topology = SingleTopology.from_mols_with_host(mol_a, mol_b, core, host_config, ff)
-        num_host_atoms = len(host_config.masses)
-        ligand_idxs = np.arange(0, single_topology.get_num_atoms(), dtype=np.int32) + num_host_atoms
-        protein_idxs = np.arange(0, num_host_atoms, dtype=np.int32)
-        x_a = np.vstack([host_config.conf, get_romol_conf(mol_a)])
-        x_b = np.vstack([host_config.conf, get_romol_conf(mol_b)])
-        box = host_config.box
-    else:
-        single_topology = SingleTopology.from_mols(mol_a, mol_b, core, ff)
-        ligand_idxs = np.arange(0, single_topology.get_num_atoms(), dtype=np.int32)
-        protein_idxs = np.zeros(0, dtype=np.int32)
-        x_a = get_romol_conf(mol_a)
-        x_b = get_romol_conf(mol_b)
-        box = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
-
     lambda_interval = lambda_interval or (0.0, 1.0)
     lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
 
     temperature = DEFAULT_TEMP
-
-    # host = setup_optimized_host(single_topology, host_config) if host_config else None
-
     lambda_grid = bisection_lambda_schedule(n_windows, lambda_interval=lambda_interval)
-
-    initial_states = setup_initial_states(
-        single_topology,
-        temperature,
-        lambda_grid,
-        md_params.seed,
-        min_cutoff,
-        x_a,
-        x_b,
-        box,
-        ligand_idxs,
-        protein_idxs,
+    batch_fn, make_initial_state_fn = make_setup_initial_states_fns(
+        mol_a, mol_b, core, ff, host_config, temperature, md_params.seed
     )
 
-    make_initial_state_fn = partial(
-        setup_initial_state,
-        single_topology,
-        temperature=temperature,
-        seed=md_params.seed,
-        x_a=x_a,
-        x_b=x_b,
-        box0=box,
-        ligand_idxs=ligand_idxs,
-        protein_idxs=protein_idxs,
-    )
+    initial_states = batch_fn(lambda_schedule=lambda_grid, min_cutoff=min_cutoff)
 
     make_optimized_initial_state_fn = partial(
         optimize_initial_state_from_pre_optimized,
         optimized_initial_states=initial_states,
     )
 
-    make_bisection_state = lambda lamb: make_optimized_initial_state_fn(make_initial_state_fn(lamb))
+    make_bisection_state = lambda lamb: make_optimized_initial_state_fn(make_initial_state_fn(lamb=lamb))
 
     # TODO: rename prefix to postfix, or move to beginning of combined_prefix?
     combined_prefix = get_mol_name(mol_a) + "_" + get_mol_name(mol_b) + "_" + prefix
@@ -1122,53 +1058,16 @@ def estimate_relative_free_energy_bisection_hrex(
     # else SingleTopology(mol_a, mol_b, core, ff)
     # )
 
-    if host_config:
-        host_config = setup_optimized_host(mol_a, mol_b, ff, host_config)
-        single_topology = SingleTopology.from_mols_with_host(mol_a, mol_b, core, host_config, ff)
-        num_host_atoms = len(host_config.masses)
-        ligand_idxs = np.arange(0, single_topology.get_num_atoms(), dtype=np.int32) + num_host_atoms
-        protein_idxs = np.arange(0, num_host_atoms, dtype=np.int32)
-        x_a = np.vstack([host_config.conf, get_romol_conf(mol_a)])
-        x_b = np.vstack([host_config.conf, get_romol_conf(mol_b)])
-        box = host_config.box
-    else:
-        single_topology = SingleTopology.from_mols(mol_a, mol_b, core, ff)
-        ligand_idxs = np.arange(0, single_topology.get_num_atoms(), dtype=np.int32)
-        protein_idxs = np.zeros(0, dtype=np.int32)
-        x_a = get_romol_conf(mol_a)
-        x_b = get_romol_conf(mol_b)
-        box = np.eye(3, dtype=np.float64) * 10  # make a large 10x10x10nm box
+    temperature = DEFAULT_TEMP
 
+    batch_fn, make_initial_state_fn = make_setup_initial_states_fns(
+        mol_a, mol_b, core, ff, host_config, temperature, md_params.seed
+    )
     lambda_interval = lambda_interval or (0.0, 1.0)
     lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
 
-    temperature = DEFAULT_TEMP
-
     lambda_grid = bisection_lambda_schedule(n_windows, lambda_interval=lambda_interval)
-    initial_states = setup_initial_states(
-        single_topology,
-        temperature,
-        lambda_grid,
-        md_params.seed,
-        min_cutoff,
-        x_a,
-        x_b,
-        box,
-        ligand_idxs,
-        protein_idxs,
-    )
-
-    make_initial_state_fn = partial(
-        setup_initial_state,
-        single_topology,
-        temperature=temperature,
-        seed=md_params.seed,
-        x_a=x_a,
-        x_b=x_b,
-        box0=box,
-        ligand_idxs=ligand_idxs,
-        protein_idxs=protein_idxs,
-    )
+    initial_states = batch_fn(lambda_schedule=lambda_grid, seed=md_params.seed)
 
     make_optimized_initial_state_fn = partial(
         optimize_initial_state_from_pre_optimized,
