@@ -1187,6 +1187,9 @@ def test_nn_handler():
     charges = nn.static_parameterize(params, enc_unflatten_str, mol)
     assert np.sum(charges) < 1e-5
 
+    charges2 = nn.parameterize(mol)
+    np.testing.assert_array_equal(charges, charges2)
+
     def loss_fn(params):
         return jnp.sum(jnp.abs(nn.static_parameterize(params, enc_unflatten_str, mol)))
 

@@ -231,19 +231,19 @@ def test_run_rbfe_legs(
     # Hashes are of results.npz, lambda0_traj.npz and lambda1_traj.npz respectively.
     leg_results_hashes = {
         "vacuum": (
-            "177ddb8c1b1fa62411d8657a7f21a48812d9490796fe810273728e073460d82d",
-            "c74ba1b503532af7fe83be82090cca82c33f5fa72744e74613dcaad9d978283a",
-            "7a1a88079c2eb345947a6a380e18872a27d1f0ec5a29437e6c0560b3876375db",
+            "d176d143aad4212fda400cc29f6002f7c63862db268f01e4b24a0fd79672ef06",
+            "551f363c55f439a1003d7170a6fb7a6f04a032a3185ef332ad00e34c8b8526a8",
+            "315f295bdb702e837b8ac8b28d346de9c6b74c13a4bbbb178de0ea8ec8fca775",
         ),
         "solvent": (
-            "9ccc4cb16ea43c0eed4941a3485a591055ca9e68f30bdc6ae49113ca247ddbd4",
-            "5c0f5fea16e7fad695fe48c4d7e9400de1ee081616e66d81c13cff975275785d",
-            "18478e891fe7e5448df89c10e8eedba32f86bdf572a01749c63957da0dc315f6",
+            "4c670bdfd97cf73e3741fa6b359a40bfc2631cbfa5482c29223a41b388fb690e",
+            "e1f48a5c986884bb6d1215154205f162ba30d4d8be764b85de2ffd883350ca9c",
+            "3bea905e7483d71147635983a8f8ef1ce4ebecd68fd7413c226c97e391bb6c46",
         ),
         "complex": (
-            "8f79bac368d05fb58fbd3a2f0fa0a0acb60b63e65351b3f94447de3b025865e6",
-            "9e66f5219a9d27331e5dbe38d458b6092dcdf15d1e9d11ff1595b40a46daa91a",
-            "a30c101c16373e17a10c062c3ab63fe6ee29d5d21e58c7f445361fc8be520848",
+            "e2a6a61efa177b3f4a5d248dcda59b0a32d334b650c3dad120bc89afedffede9",
+            "27a72b2ebe4afb41a816ca5c20d6dab8f9cf1f8234dcbd4dc46687bd9ba03be0",
+            "cd17f40884be900b52050a9982110dd72ec1c6938ab2b4eb2d9b431c8dfcb08e",
         ),
     }
     with resources.as_file(resources.files("timemachine.testsystems.fep_benchmark.hif2a")) as hif2a_dir:

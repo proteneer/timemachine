@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 import pytest
-from common import check_split_ixns, ligand_from_smiles, load_split_forcefields
+from common import check_split_ixns, get_guest_params, ligand_from_smiles, load_split_forcefields
 from hypothesis import event, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -20,6 +20,7 @@ from timemachine.constants import (
     NBParamIdx,
 )
 from timemachine.fe import atom_mapping, single_topology
+from timemachine.fe.aligned_potential import cyclic_difference, interpolate_w_coord
 from timemachine.fe.dummy import MultipleAnchorWarning, canonicalize_bond
 from timemachine.fe.interpolate import align_nonbonded_idxs_and_params, linear_interpolation
 from timemachine.fe.single_topology import (
@@ -31,8 +32,6 @@ from timemachine.fe.single_topology import (
     canonicalize_bonds,
     canonicalize_chiral_atom_idxs,
     canonicalize_improper_idxs,
-    cyclic_difference,
-    interpolate_w_coord,
     setup_dummy_interactions_from_ff,
 )
 from timemachine.fe.system import minimize_scipy, simulate_system
@@ -670,7 +669,7 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
         pair_idxs = []
         pair_params = []
         for idxs, src_params, dst_params in zip(
-            st.aligned_nonbonded_pair_list.idxs,
+            st.aligned_nonbonded_pair_list.potential.idxs,
             st.aligned_nonbonded_pair_list.src_params,
             st.aligned_nonbonded_pair_list.dst_params,
         ):
@@ -861,7 +860,7 @@ class SingleTopologyRef(SingleTopology):
         host_params = host_nonbonded.params
         cutoff = host_nonbonded.potential.cutoff
 
-        guest_params = self._get_guest_params(self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
+        guest_params = get_guest_params(self.mol_a, self.mol_b, self, self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
         combined_nonbonded_params = np.concatenate([host_params, guest_params])
 
         host_guest_nonbonded_ixn = potentials.NonbondedInteractionGroup(
@@ -1004,7 +1003,7 @@ def test_combine_with_host_split(precision, rtol, atol):
 
         q_handle = ff.q_handle
         lj_handle = ff.lj_handle
-        guest_params = st._get_guest_params(q_handle, lj_handle, lamb, cutoff)
+        guest_params = get_guest_params(st.mol_a, st.mol_b, st, q_handle, lj_handle, lamb, cutoff)
 
         host_ixn_params = host_system.nonbonded_all_pairs.params.copy()
         if not is_solvent and ff.env_bcc_handle is not None:  # protein
@@ -1578,8 +1577,8 @@ def _assert_u_and_grad_consistent(u_fwd, u_rev, x_fwd, fused_map, canon_fn):
 
 
 def _get_fused_map(mol_a, mol_b, core):
-    amm_fwd = AtomMapMixin(mol_a, mol_b, core)
-    amm_rev = AtomMapMixin(mol_b, mol_a, core[:, ::-1])
+    amm_fwd = AtomMapMixin(mol_a.GetNumAtoms(), mol_b.GetNumAtoms(), core)
+    amm_rev = AtomMapMixin(mol_b.GetNumAtoms(), mol_a.GetNumAtoms(), core[:, ::-1])
     fused_map = np.concatenate(
         [
             np.array([[x, y] for x, y in zip(amm_fwd.a_to_c, amm_rev.b_to_c)], dtype=np.int32).reshape(-1, 2),

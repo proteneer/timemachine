@@ -150,7 +150,9 @@ def linear_interpolation(src_params, dst_params, lamb):
     """
     Linearly interpolate between src and dst params
     """
-    return (1 - lamb) * src_params + lamb * dst_params
+    # (ytz): the extra jnp.where is to avoid round-off errors in floating point arithmetic.
+    # eg. if lambda=0.7, we have 0.3x + 0.7x ~= 1.0x, but with the where condition, we can return exactly x.
+    return jnp.where(src_params == dst_params, src_params, (1 - lamb) * src_params + lamb * dst_params)
 
 
 def log_linear_interpolation(src_params, dst_params, lamb, min_value):
