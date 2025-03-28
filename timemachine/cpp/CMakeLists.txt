@@ -29,7 +29,7 @@ string(APPEND CMAKE_CUDA_FLAGS
   " -Wno-unused-parameter"
   " -Wreorder"
   " -Wfloat-conversion"
-  " -Wno-deprecated-declarations"
+  " -Wno-missing-field-initializers" # Annoying change needed to construct Cuda Graph Conditional Node Params
   " -restrict"  # Warn if device pointers are not restricted
 )
 message("C++ Compiler Flags" ${CMAKE_CXX_FLAGS})
