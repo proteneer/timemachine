@@ -4,7 +4,7 @@ config.update("jax_enable_x64", True)
 
 import jax.numpy as jnp
 import numpy as np
-from common import get_guest_params
+from common import get_alchemical_guest_params
 from numpy.typing import NDArray
 
 from timemachine.constants import DEFAULT_ATOM_MAPPING_KWARGS, NBParamIdx
@@ -61,7 +61,9 @@ def _parameterize_host_guest_nonbonded_ixn_reference(
     num_host_atoms = host_nonbonded.potential.num_atoms
     cutoff = host_nonbonded.potential.cutoff
 
-    guest_ixn_env_params = get_guest_params(mol_a, mol_b, atom_map_mixin, ff.q_handle, ff.lj_handle, lamb, cutoff)
+    guest_ixn_env_params = get_alchemical_guest_params(
+        mol_a, mol_b, atom_map_mixin, ff.q_handle, ff.lj_handle, lamb, cutoff
+    )
 
     # L-W terms
     num_other_atoms = num_host_atoms - num_water_atoms
@@ -125,7 +127,7 @@ def get_test_system():
 
     core = _get_core_by_mcs(mol_a, mol_b)
 
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols_with_host(mol_a, mol_b, core, host_config, ff)
 
     return mol_a, mol_b, core, st, host_config, ff
 
@@ -136,10 +138,7 @@ def test_nonbonded_interaction_group():
     box0 = host_config.box
 
     for lamb in np.linspace(0, 1, 12):
-        host_guest_system = st.combine_with_host(
-            host_config.host_system, lamb, host_config.num_water_atoms, ff, host_config.omm_topology
-        )
-        test_ixn_group = host_guest_system.nonbonded_ixn_group
+        test_ixn_group = st.setup_intermediate_state(lamb).nonbonded_ixn_group
         ref_ixn_group = _parameterize_host_guest_nonbonded_ixn_reference(
             mol_a,
             mol_b,
@@ -151,7 +150,9 @@ def test_nonbonded_interaction_group():
             host_config.omm_topology,
         )
 
-        coords = np.vstack([host_config.conf, st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))])
+        lhs_conf = np.vstack([host_config.conf, get_romol_conf(mol_a)])
+        rhs_conf = np.vstack([host_config.conf, get_romol_conf(mol_b)])
+        coords = st.combine_confs(lhs_conf, rhs_conf, lamb)
         np.testing.assert_array_equal(ref_ixn_group.params, test_ixn_group.params)
         np.testing.assert_array_equal(ref_ixn_group.potential.row_atom_idxs, test_ixn_group.potential.row_atom_idxs)
         np.testing.assert_array_equal(ref_ixn_group.potential.col_atom_idxs, test_ixn_group.potential.col_atom_idxs)
@@ -172,15 +173,14 @@ def test_nonbonded_all_pairs():
     box0 = host_config.box
 
     for lamb in np.linspace(0, 1, 12):
-        test_host_guest_system = st.combine_with_host(
-            host_config.host_system, lamb, host_config.num_water_atoms, ff, host_config.omm_topology
-        )
-        test_nb_ap = test_host_guest_system.nonbonded_all_pairs
+        test_nb_ap = st.setup_intermediate_state(lamb).nonbonded_all_pairs
         ref_nb_ap = _parameterize_host_nonbonded_reference(
             guest_atom_map_mixin.get_num_atoms(), host_config.host_system.nonbonded_all_pairs
         )
 
-        coords = np.vstack([host_config.conf, st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))])
+        lhs_conf = np.vstack([host_config.conf, get_romol_conf(mol_a)])
+        rhs_conf = np.vstack([host_config.conf, get_romol_conf(mol_b)])
+        coords = st.combine_confs(lhs_conf, rhs_conf, lamb)
 
         np.testing.assert_array_equal(ref_nb_ap.potential.num_atoms, test_nb_ap.potential.num_atoms)
         np.testing.assert_array_equal(ref_nb_ap.params, test_nb_ap.params)

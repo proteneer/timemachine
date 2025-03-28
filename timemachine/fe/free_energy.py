@@ -26,7 +26,7 @@ from timemachine.fe.plots import (
     plot_overlap_summary_figure,
 )
 from timemachine.fe.protocol_refinement import greedy_bisection_step
-from timemachine.fe.rest.single_topology import InterpolationFxnName
+from timemachine.fe.rest.interpolation import InterpolationFxnName
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield, ForcefieldParams

@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import networkx as nx
 import numpy as np
 import pytest
-from common import check_split_ixns, get_guest_params, ligand_from_smiles, load_split_forcefields
+from common import ligand_from_smiles, load_split_forcefields
 from hypothesis import event, given, seed
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -16,8 +16,6 @@ from timemachine import potentials
 from timemachine.constants import (
     DEFAULT_ATOM_MAPPING_KWARGS,
     DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
-    DEFAULT_CHIRAL_BOND_RESTRAINT_K,
-    NBParamIdx,
 )
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.aligned_potential import cyclic_difference, interpolate_w_coord
@@ -32,21 +30,23 @@ from timemachine.fe.single_topology import (
     canonicalize_bonds,
     canonicalize_chiral_atom_idxs,
     canonicalize_improper_idxs,
-    setup_dummy_interactions_from_ff,
+    setup_dummy_interactions_from_system,
 )
 from timemachine.fe.system import minimize_scipy, simulate_system
+from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import get_mol_name, get_romol_conf, read_sdf, read_sdf_mols_by_name
 from timemachine.ff import Forcefield
 from timemachine.md import minimizer
-from timemachine.md.builders import build_protein_system, build_water_system
+from timemachine.md.builders import build_water_system
 from timemachine.potentials.jax_utils import pairwise_distances
 from timemachine.utils import path_to_internal_file
 
-setup_chiral_dummy_interactions_from_ff = functools.partial(
-    setup_dummy_interactions_from_ff,
-    chiral_atom_k=DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
-    chiral_bond_k=DEFAULT_CHIRAL_BOND_RESTRAINT_K,
-)
+
+def setup_chiral_dummy_interactions_from_ff(ff, mol, dummy_group, root_anchor_atom, nbr_anchor_atom, core_atoms):
+    guest_system = BaseTopology(mol, ff).setup_chiral_end_state()
+    return setup_dummy_interactions_from_system(
+        guest_system, dummy_group, root_anchor_atom, nbr_anchor_atom, core_atoms
+    )
 
 
 @pytest.mark.nocuda
@@ -263,6 +263,15 @@ def test_methyl_chiral_atom_idxs():
     assert_bond_sets_equal(chiral_atom_idxs, expected_chiral_atom_idxs)
 
 
+def _find_dummy_groups_and_anchors_from_mols(mol_a, mol_b, core_a, core_b):
+    bond_list_a = [(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()) for bond in mol_a.GetBonds()]
+    bond_list_b = [(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()) for bond in mol_b.GetBonds()]
+
+    return single_topology.find_dummy_groups_and_anchors(
+        bond_list_a, bond_list_b, mol_a.GetNumAtoms(), mol_b.GetNumAtoms(), core_a, core_b
+    )
+
+
 @pytest.mark.nocuda
 def test_find_dummy_groups_and_anchors():
     """
@@ -277,14 +286,14 @@ def test_find_dummy_groups_and_anchors():
 
     core_pairs = np.array([[1, 2], [2, 1], [3, 0]])
 
-    dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+    dgs = _find_dummy_groups_and_anchors_from_mols(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
     assert dgs == {2: (1, {3})}
 
     # angle should swap
     core_pairs = np.array([[1, 2], [2, 0], [3, 1]])
 
     with pytest.warns(CoreBondChangeWarning):
-        dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+        dgs = _find_dummy_groups_and_anchors_from_mols(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
         assert dgs == {2: (None, {3})}
 
 
@@ -300,18 +309,16 @@ def test_find_dummy_groups_and_anchors_multiple_angles():
     AllChem.EmbedMolecule(mol_b, randomSeed=2022)
 
     core_pairs = np.array([[0, 2], [1, 1], [2, 3]])
-    dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+    dgs = _find_dummy_groups_and_anchors_from_mols(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
     assert dgs == {1: (2, {0})} or dgs == {1: (3, {0})}
 
-    dgs_zero = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+    dgs_zero = _find_dummy_groups_and_anchors_from_mols(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
 
     # this code should be invariant to different random seeds and different ordering of core pairs
     for idx in range(100):
         np.random.seed(idx)
         core_pairs_shuffle = np.random.permutation(core_pairs)
-        dgs = single_topology.find_dummy_groups_and_anchors(
-            mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1]
-        )
+        dgs = _find_dummy_groups_and_anchors_from_mols(mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1])
         assert dgs == dgs_zero
 
 
@@ -330,17 +337,15 @@ def test_find_dummy_groups_and_multiple_anchors():
     core_pairs = np.array([[1, 1], [2, 2]])
 
     with pytest.warns(MultipleAnchorWarning):
-        dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+        dgs = _find_dummy_groups_and_anchors_from_mols(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
         assert dgs == {1: (2, {0})} or dgs == {2: (1, {0})}
 
     # test determinism, should be robust against seeds
-    dgs_zero = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
+    dgs_zero = _find_dummy_groups_and_anchors_from_mols(mol_a, mol_b, core_pairs[:, 0], core_pairs[:, 1])
     for idx in range(100):
         np.random.seed(idx)
         core_pairs_shuffle = np.random.permutation(core_pairs)
-        dgs = single_topology.find_dummy_groups_and_anchors(
-            mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1]
-        )
+        dgs = _find_dummy_groups_and_anchors_from_mols(mol_a, mol_b, core_pairs_shuffle[:, 0], core_pairs_shuffle[:, 1])
         assert dgs == dgs_zero
 
     mol_a = Chem.MolFromSmiles("C(C)(C)C")
@@ -353,7 +358,7 @@ def test_find_dummy_groups_and_multiple_anchors():
     core_b = [2, 1, 4, 3]
 
     with pytest.warns(MultipleAnchorWarning):
-        dgs = single_topology.find_dummy_groups_and_anchors(mol_a, mol_b, core_a, core_b)
+        dgs = _find_dummy_groups_and_anchors_from_mols(mol_a, mol_b, core_a, core_b)
         assert dgs == {1: (2, {0})}
 
 
@@ -366,7 +371,7 @@ def test_ethane_cyclobutadiene():
 
     core = np.array([[2, 0], [4, 2], [0, 3], [3, 7]])
     ff = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
 
     g = nx.Graph()
     g.add_nodes_from(range(st.get_num_atoms()))
@@ -388,7 +393,7 @@ def test_charge_perturbation_is_invalid():
     core[:, 1] = core[:, 0]
 
     with pytest.raises(ChargePertubationError) as e:
-        SingleTopology(mol_a, mol_b, core, ff)
+        SingleTopology.from_mols(mol_a, mol_b, core, ff)
     assert str(e.value) == "mol a and mol b don't have the same charge: a: 0 b: 1"
 
 
@@ -437,7 +442,7 @@ def test_hif2a_end_state_stability(num_pairs_to_setup=25, num_pairs_to_simulate=
     for pair_idx, (mol_a, mol_b) in enumerate(pairs[:num_pairs_to_setup]):
         print("Checking", get_mol_name(mol_a), "->", get_mol_name(mol_b))
         core = _get_core_by_mcs(mol_a, mol_b)
-        st = SingleTopology(mol_a, mol_b, core, ff)
+        st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
         x0 = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
         systems = [st.src_system, st.dst_system]
 
@@ -538,7 +543,7 @@ def test_combine_masses():
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
 
     test_masses = st.combine_masses()
     ref_masses = [Br_mass, C_mass, C_mass, max(C_mass, N_mass), C_mass, C_mass, C_mass, F_mass]
@@ -563,7 +568,7 @@ def test_combine_masses_hmr():
     core = np.array([[0, 0]])
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
 
     # No HMR
     test_masses = st.combine_masses()
@@ -590,7 +595,7 @@ def test_combine_masses_hmr():
     core = np.array([[0, 0], [1, 1]])
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
 
     # No HMR
     test_masses = st.combine_masses()
@@ -624,7 +629,7 @@ def arbitrary_transformation():
 
     core = _get_core_by_mcs(mol_a, mol_b)
     ff = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
     conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     return st, conf
 
@@ -712,18 +717,15 @@ def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
 
 @pytest.mark.nocuda
 def test_combine_achiral_ligand_with_host():
-    """Verifies that combine_with_host correctly sets up all of the U functions"""
+    """Verifies single topology sets up all of the U functions"""
     mol_a = ligand_from_smiles("BrC1=CC=CC=C1", seed=2022)
     mol_b = ligand_from_smiles("C1=CN=CC=C1F", seed=2022)
 
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-
     host_config = build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
-    st = SingleTopology(mol_a, mol_b, core, ff)
-    combined_system = st.combine_with_host(
-        host_config.host_system, 0.5, host_config.conf.shape[0], ff, host_config.omm_topology
-    )
+    st = SingleTopology.from_mols_with_host(mol_a, mol_b, core, host_config, ff)
+    combined_system = st.setup_intermediate_state(0.5)
     assert (
         set(type(bp.potential) for bp in combined_system.get_U_fns())
         == {
@@ -743,17 +745,15 @@ def test_combine_achiral_ligand_with_host():
 
 @pytest.mark.nocuda
 def test_combine_chiral_ligand_with_host():
-    """Verifies that combine_with_host correctly sets up all of the U functions"""
+    """Verifies single topology sets up all of the U functions"""
     mol_a = ligand_from_smiles("BrC1CCCCC1", seed=2022)
     mol_b = ligand_from_smiles("C1=CN=CC=C1F", seed=2022)
 
     core = np.array([[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     host_config = build_water_system(4.0, ff.water_ff, mols=[mol_a, mol_b])
-    st = SingleTopology(mol_a, mol_b, core, ff)
-    combined_system = st.combine_with_host(
-        host_config.host_system, 0.5, host_config.conf.shape[0], ff, host_config.omm_topology
-    )
+    st = SingleTopology.from_mols_with_host(mol_a, mol_b, core, host_config, ff)
+    combined_system = st.setup_intermediate_state(0.5)
     assert set(type(bp.potential) for bp in combined_system.get_U_fns()) == {
         potentials.HarmonicBond,
         potentials.HarmonicAngle,
@@ -791,18 +791,17 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
     solvent_conf = minimizer.fire_minimize_host([mol_a, mol_b], solvent_host_config, ffs.ref)
 
     def get_vacuum_solvent_u_grads(ff, lamb):
-        st = SingleTopology(mol_a, mol_b, core, ff)
-        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
+        st_vacuum = SingleTopology.from_mols(mol_a, mol_b, core, ff)
+        ligand_conf = st_vacuum.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
         combined_conf = np.concatenate([solvent_conf, ligand_conf])
 
-        vacuum_system = st.setup_intermediate_state(lamb)
+        vacuum_system = st_vacuum.setup_intermediate_state(lamb)
         vacuum_potentials = vacuum_system.get_U_fns()
         val_and_grad_fn = minimizer.get_val_and_grad_fn(vacuum_potentials, solvent_host_config.box, precision=precision)
         vacuum_u, vacuum_grad = val_and_grad_fn(ligand_conf)
 
-        solvent_system = st.combine_with_host(
-            solvent_host_config.host_system, lamb, solvent_conf.shape[0], ff, solvent_host_config.omm_topology
-        )
+        st_solvent = SingleTopology.from_mols_with_host(mol_a, mol_b, core, solvent_host_config, ff)
+        solvent_system = st_solvent.setup_intermediate_state(lamb)
         solvent_potentials = solvent_system.get_U_fns()
         solv_val_and_grad_fn = minimizer.get_val_and_grad_fn(
             solvent_potentials, solvent_host_config.box, precision=precision
@@ -851,187 +850,6 @@ def test_nonbonded_intra_split(precision, rtol, atol, use_tiny_mol):
         np.testing.assert_allclose(vacuum_grad_ref, vacuum_grad_env, rtol=rtol, atol=atol)
 
 
-class SingleTopologyRef(SingleTopology):
-    def _parameterize_host_guest_nonbonded_ixn(self, lamb, host_nonbonded, *_):
-        # Parameterize nonbonded potential for the host guest interaction
-        num_host_atoms = host_nonbonded.params.shape[0]
-        num_guest_atoms = self.get_num_atoms()
-
-        host_params = host_nonbonded.params
-        cutoff = host_nonbonded.potential.cutoff
-
-        guest_params = get_guest_params(self.mol_a, self.mol_b, self, self.ff.q_handle, self.ff.lj_handle, lamb, cutoff)
-        combined_nonbonded_params = np.concatenate([host_params, guest_params])
-
-        host_guest_nonbonded_ixn = potentials.NonbondedInteractionGroup(
-            num_host_atoms + num_guest_atoms,
-            np.arange(num_host_atoms, dtype=np.int32),
-            host_nonbonded.potential.beta,
-            host_nonbonded.potential.cutoff,
-        ).bind(combined_nonbonded_params)
-
-        return host_guest_nonbonded_ixn
-
-
-@pytest.mark.parametrize("precision", [np.float64, np.float32])
-@pytest.mark.parametrize("lamb", [0.0, 0.5, 1.0])
-def test_nonbonded_intra_split_bitwise_identical(precision, lamb):
-    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf_mols_by_name(path_to_ligand)
-    mol_a = mols["338"]
-    mol_b = mols["43"]
-    core = _get_core_by_mcs(mol_a, mol_b)
-
-    ff = Forcefield.load_default()
-
-    with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
-        host_config = build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
-        host_config.box += np.diag([0.1, 0.1, 0.1])
-
-    st_ref = SingleTopologyRef(mol_a, mol_b, core, ff)
-
-    combined_ref = st_ref.combine_with_host(
-        host_config.host_system, lamb, host_config.num_water_atoms, ff, host_config.omm_topology
-    )
-    ref_potentials = combined_ref.get_U_fns()
-    ref_summed = potentials.SummedPotential(
-        [bp.potential for bp in ref_potentials], [bp.params for bp in ref_potentials]
-    )
-    flattened_ref_params = np.concatenate([bp.params.reshape(-1) for bp in ref_potentials])
-
-    st_split = SingleTopology(mol_a, mol_b, core, ff)
-    combined_split = st_split.combine_with_host(
-        host_config.host_system, lamb, host_config.num_water_atoms, ff, host_config.omm_topology
-    )
-    split_potentials = combined_split.get_U_fns()
-    split_summed = potentials.SummedPotential(
-        [bp.potential for bp in split_potentials], [bp.params for bp in split_potentials]
-    )
-    flattened_split_params = np.concatenate([bp.params.reshape(-1) for bp in split_potentials])
-
-    ligand_conf = st_ref.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
-    combined_conf = np.concatenate([host_config.conf, ligand_conf])
-
-    # Ensure that the du_dx and du_dp are exactly identical, ignore du_dp as shapes are different
-    ref_du_dx, _, ref_u = ref_summed.to_gpu(precision).unbound_impl.execute(
-        combined_conf, flattened_ref_params, host_config.box, True, False, True
-    )
-    split_du_dx, _, split_u = split_summed.to_gpu(precision).unbound_impl.execute(
-        combined_conf, flattened_split_params, host_config.box, True, False, True
-    )
-    np.testing.assert_array_equal(ref_du_dx, split_du_dx)
-    np.testing.assert_equal(ref_u, split_u)
-
-
-@pytest.mark.parametrize(
-    "precision, rtol, atol",
-    [pytest.param(np.float64, 1e-8, 1e-8, marks=pytest.mark.nightly(reason="slow")), (np.float32, 1e-4, 5e-4)],
-)
-def test_combine_with_host_split(precision, rtol, atol):
-    # test the split P-L and L-W interactions
-
-    with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
-        mols = read_sdf_mols_by_name(path_to_ligand)
-    mol_a = mols["338"]
-    mol_b = mols["43"]
-    core = _get_core_by_mcs(mol_a, mol_b)
-
-    def compute_ref_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_system, omm_topology):
-        # Use the original code to compute the nb grads and potential
-        st = SingleTopologyRef(mol_a, mol_b, core, ff)
-        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
-        num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
-        combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
-
-        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
-        potentials = combined_system.get_U_fns()
-        u, grad = minimizer.get_val_and_grad_fn(potentials, box, precision=precision)(combined_conf)
-        return grad, u
-
-    def compute_new_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, host_system, omm_topology):
-        st = SingleTopology(mol_a, mol_b, core, ff)
-        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
-        num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
-        combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
-
-        combined_system = st.combine_with_host(host_system, lamb, num_water_atoms, ff, omm_topology)
-        potentials = combined_system.get_U_fns()
-        u, grad = minimizer.get_val_and_grad_fn(potentials, box, precision=precision)(combined_conf)
-        return grad, u
-
-    def compute_intra_grad_u(ff: Forcefield, precision, x0, box, lamb, num_water_atoms, num_host_atoms):
-        st = SingleTopology(mol_a, mol_b, core, ff)
-        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
-
-        vacuum_system = st.setup_intermediate_state(lamb)
-        potentials = vacuum_system.get_U_fns()
-        u, grad = minimizer.get_val_and_grad_fn(potentials, box, precision=precision)(ligand_conf)
-
-        # Pad g so it's the same shape as the others
-        grad_padded = np.concatenate([np.zeros((num_host_atoms, 3)), grad])
-        return grad_padded, u
-
-    def compute_ixn_grad_u(
-        ff: Forcefield,
-        precision,
-        x0,
-        box,
-        lamb,
-        num_water_atoms,
-        host_system,
-        water_idxs,
-        ligand_idxs,
-        protein_idxs,
-        omm_topology,
-        is_solvent=False,
-    ):
-        assert num_water_atoms == len(water_idxs)
-        st = SingleTopology(mol_a, mol_b, core, ff)
-        ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), lamb)
-        num_host_atoms = x0.shape[0] - ligand_conf.shape[0]
-        combined_conf = np.concatenate([x0[:num_host_atoms], ligand_conf])
-        num_total_atoms = combined_conf.shape[0]
-
-        cutoff = host_system.nonbonded_all_pairs.potential.cutoff
-        u = potentials.NonbondedInteractionGroup(
-            num_total_atoms,
-            ligand_idxs,
-            host_system.nonbonded_all_pairs.potential.beta,
-            cutoff,
-            col_atom_idxs=water_idxs if is_solvent else protein_idxs,
-        )
-
-        q_handle = ff.q_handle
-        lj_handle = ff.lj_handle
-        guest_params = get_guest_params(st.mol_a, st.mol_b, st, q_handle, lj_handle, lamb, cutoff)
-
-        host_ixn_params = host_system.nonbonded_all_pairs.params.copy()
-        if not is_solvent and ff.env_bcc_handle is not None:  # protein
-            env_bcc_h = ff.env_bcc_handle.get_env_handle(omm_topology, ff)
-            host_ixn_params[:, NBParamIdx.Q_IDX] = env_bcc_h.parameterize(ff.env_bcc_handle.params)
-
-        combined_nonbonded_params = np.concatenate([host_ixn_params, guest_params])
-        u_impl = u.bind(combined_nonbonded_params).to_gpu(precision=precision).bound_impl
-        return u_impl.execute(combined_conf, box)
-
-    ffs = load_split_forcefields()
-    st = SingleTopologyRef(mol_a, mol_b, core, ffs.ref)
-    ligand_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b), 0.0)
-    ligand_idxs = np.arange(ligand_conf.shape[0], dtype=np.int32)
-
-    check_split_ixns(
-        ligand_conf,
-        ligand_idxs,
-        precision,
-        rtol,
-        atol,
-        compute_ref_grad_u,
-        compute_new_grad_u,
-        compute_intra_grad_u,
-        compute_ixn_grad_u,
-    )
-
-
 def _get_core_by_mcs(mol_a, mol_b):
     all_cores = atom_mapping.get_cores(
         mol_a,
@@ -1050,7 +868,7 @@ def test_no_chiral_atom_restraints():
     core = _get_core_by_mcs(mol_a, mol_b)
 
     forcefield = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, forcefield)
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
 
@@ -1066,7 +884,7 @@ def test_no_chiral_bond_restraints():
     core = _get_core_by_mcs(mol_a, mol_b)
 
     forcefield = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, forcefield)
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
 
@@ -1189,7 +1007,7 @@ def test_hif2a_pairs_setup_st():
     for mol_a, mol_b in pairs:
         print(mol_a.GetProp("_Name"), "->", mol_b.GetProp("_Name"))
         core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
-        SingleTopology(mol_a, mol_b, core, ff)  # Test that this doesn't not throw assertion
+        SingleTopology.from_mols(mol_a, mol_b, core, ff)  # Test that this doesn't not throw assertion
 
 
 @pytest.mark.nocuda
@@ -1239,7 +1057,7 @@ $$$$""",
 
     core = np.array([[0, 0], [1, 2]])
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
     # chiral force constants should be on for all chiral terms at lambda=0 and lambda=1
     vs_0 = st.setup_intermediate_state(0.0)
     chiral_idxs_0 = vs_0.chiral_atom.potential.idxs
@@ -1302,7 +1120,7 @@ $$$$""",
     core = np.array([[0, 0], [4, 1]])
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
 
     vs_0 = st.setup_intermediate_state(0.0)
     chiral_idxs_0 = vs_0.chiral_atom.potential.idxs
@@ -1358,7 +1176,7 @@ $$$$""",
     core = np.array([[0, 0], [1, 1], [2, 2]])
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
 
     # chiral force constants should be on for all chiral terms at lambda=0 and lambda=1
     vs_0 = st.setup_intermediate_state(0.0)
@@ -1415,7 +1233,7 @@ $$$$""",
     core = np.array([[0, 0], [1, 1], [2, 2], [3, 3]])
 
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
 
     # chiral force constants should be on for all chiral terms at lambda=0 and lambda=1
     vs_0 = st.setup_intermediate_state(0.0)
@@ -1490,7 +1308,7 @@ $$$$""",
     # chiral force constants should be on for all 7 chiral
     # terms at lambda=0
     ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
     vs_0 = st.setup_intermediate_state(0.0)
     chiral_idxs_0 = vs_0.chiral_atom.potential.idxs
     chiral_params_0 = vs_0.chiral_atom.params
@@ -1531,7 +1349,7 @@ def permute_atom_indices(mol_a, mol_b, core, seed):
 
 def get_vacuum_system_and_conf(mol_a, mol_b, core, lamb):
     ff = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, ff)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, ff)
     conf_a = get_romol_conf(mol_a)
     conf_b = get_romol_conf(mol_b)
     conf = st.combine_confs(conf_a, conf_b, lamb)
@@ -1605,8 +1423,8 @@ def assert_symmetric_interpolation(mol_a, mol_b, core):
     # map atoms in the combined mol_ab to the atoms in the combined mol_ba
     fused_map = _get_fused_map(mol_a, mol_b, core)
 
-    st_fwd = SingleTopology(mol_a, mol_b, core, ff)
-    st_rev = SingleTopology(mol_b, mol_a, core[:, ::-1], ff)
+    st_fwd = SingleTopology.from_mols(mol_a, mol_b, core, ff)
+    st_rev = SingleTopology.from_mols(mol_b, mol_a, core[:, ::-1], ff)
     conf_a = get_romol_conf(mol_a)
     conf_b = get_romol_conf(mol_b)
     test_conf = st_fwd.combine_confs(conf_a, conf_b, 0)

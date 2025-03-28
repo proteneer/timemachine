@@ -107,6 +107,9 @@ class AbstractSystem(ABC):
         return potentials
 
 
+# assert canonical ordering in post_init
+
+
 @dataclass
 class HostSystem(AbstractSystem):
     # utility system container

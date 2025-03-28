@@ -24,7 +24,6 @@ from timemachine.fe.free_energy import (
     get_context,
 )
 from timemachine.fe.model_utils import apply_hmr
-from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.topology import BaseTopology
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
@@ -106,14 +105,14 @@ def hi2fa_test_frames():
 def generate_hif2a_frames(n_frames: int, frame_interval: int, seed=None, barostat_interval: int = 5):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    # st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     # build the protein system.
     with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
         host_config = builders.build_protein_system(
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )
-    initial_state = prepare_single_topology_initial_state(st, host_config)
+    initial_state = prepare_single_topology_initial_state(mol_a, mol_b, core, forcefield, host_config)
 
     intg = initial_state.integrator.impl()
 
@@ -435,10 +434,13 @@ def benchmark_local(
 def run_single_topology_benchmarks(
     config: BenchmarkConfig,
     stage: str,
-    st: SingleTopology,
+    mol_a,
+    mol_b,
+    core,
+    ff,
     host_config: Optional[HostConfig],
 ):
-    initial_state = prepare_single_topology_initial_state(st, host_config)
+    initial_state = prepare_single_topology_initial_state(mol_a, mol_b, core, ff, host_config)
     barostat_interval = 0
     if host_config is not None:
         host_fns = host_config.host_system.get_U_fns()
@@ -522,7 +524,6 @@ def benchmark_hif2a(config: BenchmarkConfig):
     # we use simple charge "sc" to be able to run on machines that don't have openeye licenses.
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
 
     # build the protein system.
     with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as path_to_pdb:
@@ -530,25 +531,24 @@ def benchmark_hif2a(config: BenchmarkConfig):
             str(path_to_pdb), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
         )
 
-    run_single_topology_benchmarks(config, "hif2a", st, host_config)
+    run_single_topology_benchmarks(config, "hif2a", mol_a, mol_b, core, forcefield, host_config)
 
 
 def benchmark_solvent(config: BenchmarkConfig):
     # we use simple charge "sc" to be able to run on machines that don't have openeye licenses.
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
+
     host_config = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
-    run_single_topology_benchmarks(config, "solvent", st, host_config)
+    run_single_topology_benchmarks(config, "solvent", mol_a, mol_b, core, forcefield, host_config)
 
 
 def benchmark_vacuum(config: BenchmarkConfig):
     # we use simple charge "sc" to be able to run on machines that don't have openeye licenses.
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
 
-    run_single_topology_benchmarks(config, "vacuum", st, None)
+    run_single_topology_benchmarks(config, "vacuum", mol_a, mol_b, core, forcefield, None)
 
 
 def benchmark_ahfe(config: BenchmarkConfig):

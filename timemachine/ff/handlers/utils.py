@@ -69,6 +69,58 @@ def canonicalize_bond(arr):
         return arr
 
 
+def canonicalize_improper_idxs(idxs) -> tuple[int, int, int, int]:
+    """
+    Canonicalize an improper_idx while being symmetry aware.
+
+    Given idxs (j,c,k,l), where c is the center, and (j,k,l) are neighbors:
+
+    0) Canonicalize the (j,k,l) into (jj,kk,ll) by sorting
+    1) Generate clockwise rotations of (jj,kk,ll)
+    2) Generate counter clockwise rotations of (jj,kk,ll)
+    3) We now can sort 1) and 2) and assign a mapping
+
+    If the (j,k,l) is in the cw rotation ordered set, we're done. Otherwise it must
+    be in the ccw ordered set. We look up the corresponding idx in the cw set.
+
+    This does not do idxs[0] < idxs[-1] canonicalization.
+    """
+    j, c, k, l = idxs
+
+    # c is the center
+    # generate lexical order
+    key = (j, k, l)
+
+    jj, kk, ll = sorted(key)
+
+    # generate clockwise permutations
+    # note: cw/ccw has nothing to do with the direction of rotation
+    # cw/ccw is related by a pair swap.
+    cw_jkl = (jj, kk, ll)  # starting idxs
+    cw_klj = (kk, ll, jj)  # rotate left
+    cw_ljk = (ll, jj, kk)  # rotate left
+    cw_items = sorted([cw_jkl, cw_klj, cw_ljk])
+
+    if key in cw_items:
+        return (j, c, k, l)
+
+    # generate counter clockwise permutations
+    ccw_kjl = (kk, jj, ll)  # swap 1st and 2nd element
+    ccw_jlk = (jj, ll, kk)  # rotate left
+    ccw_lkj = (ll, kk, jj)  # rotate left
+    ccw_items = sorted([ccw_kjl, ccw_jlk, ccw_lkj])
+
+    assert key in ccw_items
+
+    for idx, cw_item in enumerate(ccw_items):
+        if cw_item == key:
+            break
+
+    j, k, l = cw_items[idx]
+
+    return (j, c, k, l)
+
+
 def match_smirks(mol, smirks):
     """
     Notes

@@ -10,7 +10,6 @@ from scipy.special import logsumexp
 from timemachine.constants import DEFAULT_PRESSURE, DEFAULT_TEMP
 from timemachine.fe.free_energy import InitialState, MDParams, get_water_sampler_params, sample
 from timemachine.fe.model_utils import apply_hmr, image_frame
-from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders
@@ -861,9 +860,7 @@ def hif2a_rbfe_state() -> InitialState:
         host_config = builders.build_protein_system(str(path_to_pdb), ff.protein_ff, ff.water_ff)
     host_config.box += np.diag([0.1, 0.1, 0.1])
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    st = SingleTopology(mol_a, mol_b, core, ff)
-
-    initial_state = prepare_single_topology_initial_state(st, host_config)
+    initial_state = prepare_single_topology_initial_state(mol_a, mol_b, core, ff, host_config)
 
     traj = sample(
         initial_state, MDParams(n_frames=1, n_eq_steps=0, steps_per_frame=10_000, seed=seed), max_buffer_frames=1
