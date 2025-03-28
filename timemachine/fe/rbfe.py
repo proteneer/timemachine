@@ -37,6 +37,7 @@ from timemachine.fe.plots import (
     plot_hrex_transition_matrix,
 )
 from timemachine.fe.single_topology import AtomMapFlags, AtomMapMixin, SingleTopology
+from timemachine.fe.system import HostGuestSystem, HostSystem
 from timemachine.fe.utils import bytes_to_id, get_mol_name, get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
@@ -94,9 +95,6 @@ def assert_all_states_have_same_masses(initial_states: list[InitialState]):
     np.testing.assert_array_almost_equal(deviation_among_windows, 0, err_msg="masses assumed constant w.r.t. lambda")
 
 
-from timemachine.fe.system import HostGuestSystem, HostSystem
-
-
 def setup_initial_state(
     st: SingleTopology,
     lamb: float,
@@ -108,24 +106,11 @@ def setup_initial_state(
     ligand_idxs: NDArray[np.int32],
     protein_idxs: NDArray[np.int32],
 ) -> InitialState:
-    # conf_a = get_romol_conf(st.mol_a)
-    # conf_b = get_romol_conf(st.mol_b)
-
-    # ligand_conf = st.combine_confs(conf_a, conf_b, lamb)
-    # num_ligand_atoms = len(ligand_conf)
     # use a different seed to initialize every window,
     # but in a way that should be symmetric for
     # A -> B vs. B -> A edge definitions
     x0 = st.combine_confs(x_a, x_b, lamb)
     init_seed = int(seed + bytes_to_id(x0.tobytes())) % MAX_SEED_VALUE
-    # if host:
-    #     x0, hmr_masses, potentials, baro = setup_in_env(st, host, ligand_conf, lamb, temperature, init_seed)
-    #     box0 = host.box
-    #     protein_idxs = np.arange(0, len(host.masses) - host.num_water_atoms)
-    # else:
-    #     x0, box0, hmr_masses, potentials, baro = setup_in_vacuum(st, ligand_conf, lamb)
-    #     protein_idxs = np.array([], dtype=np.int32)
-
     hmr_masses = st.combine_masses(use_hmr=True)
     intermediate_state = st.setup_intermediate_state(lamb)
     potentials = intermediate_state.get_U_fns()
@@ -139,6 +124,8 @@ def setup_initial_state(
         baro = MonteCarloBarostat(
             len(hmr_masses), DEFAULT_PRESSURE, temperature, group_idxs, barostat_interval, run_seed + 1
         )
+    else:
+        baro = None
 
     # provide a different run_seed for every lambda window,
     # but in a way that should be symmetric for
@@ -146,11 +133,6 @@ def setup_initial_state(
 
     # initialize velocities
     v0 = sample_velocities(hmr_masses, temperature, init_seed)
-
-    # determine ligand idxs
-
-    # num_total_atoms = len(x0)
-    # ligand_idxs = np.arange(num_total_atoms - num_ligand_atoms, num_total_atoms, dtype=np.int32)
 
     # initialize Langevin integrator
     dt = 2.5e-3
@@ -160,7 +142,6 @@ def setup_initial_state(
     # Determine the ligand atoms that are in the 4d plane defined by all w_coords being 0.0
     # TBD: Do something more sophisticated depending on the actual parameters for when we vary w_coords independently.
     # Easily done for solvent and complex, little bit trickier in the vacuum case where there is a NonbondedPairlistPrecomputed
-
     if lamb == 0.0:
         interacting_atoms = [x for x in ligand_idxs if (st.c_flags[x] != AtomMapFlags.MOL_B)]
     elif lamb == 1.0:
@@ -555,7 +536,7 @@ def make_setup_initial_states_fns(
         num_host_atoms = len(host_config.masses)
         guest_atom_map_mixin = AtomMapMixin(mol_a.GetNumAtoms(), mol_b.GetNumAtoms(), core)
         ligand_idxs = np.arange(0, guest_atom_map_mixin.get_num_atoms(), dtype=np.int32) + num_host_atoms
-        protein_idxs = np.arange(0, num_host_atoms, dtype=np.int32) - host_config.num_water_atoms
+        protein_idxs = np.arange(0, num_host_atoms - host_config.num_water_atoms, dtype=np.int32)
         x_a = np.vstack([host_config.conf, get_romol_conf(mol_a)])
         x_b = np.vstack([host_config.conf, get_romol_conf(mol_b)])
         box = host_config.box
@@ -1067,7 +1048,7 @@ def estimate_relative_free_energy_bisection_hrex(
     lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
 
     lambda_grid = bisection_lambda_schedule(n_windows, lambda_interval=lambda_interval)
-    initial_states = batch_fn(lambda_schedule=lambda_grid, seed=md_params.seed)
+    initial_states = batch_fn(lambda_schedule=lambda_grid, min_cutoff=min_cutoff)
 
     make_optimized_initial_state_fn = partial(
         optimize_initial_state_from_pre_optimized,
