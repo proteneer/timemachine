@@ -440,7 +440,7 @@ TIBDExchangeMove<RealType>::move_host(const int N, const double *h_coords, const
     d_box.copy_from(h_box);
 
     cudaStream_t stream;
-    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamDefault));
 
     this->move(N, d_coords.data, d_box.data, stream);
     gpuErrchk(cudaStreamSynchronize(stream));

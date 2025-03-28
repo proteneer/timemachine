@@ -461,7 +461,7 @@ std::vector<std::vector<RealType>> BDExchangeMove<RealType>::compute_incremental
     d_samples_.copy_from(h_mol_idxs);
 
     cudaStream_t stream;
-    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamDefault));
 
     // Set the offset to 0
     gpuErrchk(cudaMemsetAsync(d_noise_offset_.data, 0, d_noise_offset_.size(), stream));
@@ -513,7 +513,7 @@ std::vector<RealType> BDExchangeMove<RealType>::compute_initial_log_weights_host
     d_box.copy_from(h_box);
 
     cudaStream_t stream;
-    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamDefault));
 
     // Setup the initial weights
     this->compute_initial_log_weights_device(N, d_coords.data, d_box.data, stream);
@@ -571,7 +571,7 @@ template <typename RealType> std::vector<double> BDExchangeMove<RealType>::get_p
 
 template <typename RealType> void BDExchangeMove<RealType>::set_params(const std::vector<double> &params) {
     cudaStream_t stream;
-    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    gpuErrchk(cudaStreamCreateWithFlags(&stream, cudaStreamDefault));
     DeviceBuffer<double> d_params(params.size());
     d_params.copy_from(&params[0]);
     this->set_params_device(params.size(), d_params.data, stream);
