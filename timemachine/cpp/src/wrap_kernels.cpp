@@ -611,6 +611,7 @@ void declare_context(py::module &m) {
             &Context::setup_local_md,
             py::arg("temperature"),
             py::arg("freeze_reference"),
+            py::arg("ixn_group_nblist_padding") = 0.3,
             R"pbdoc(
         Configures the potential for local MD. This is automatically done when calling local MD methods,
         but can be done explicitly and with different parameters.
@@ -624,10 +625,14 @@ void declare_context(py::module &m) {
             Whether or not to freeze reference, otherwise applies restraint between frozen
             particles and the reference.
 
+        ixn_group_nblist_padding: double
+            Neighborlist padding of the interaction group setup for local MD. Best
+            to use the default value.
+
         Raises
         ------
             RuntimeError:
-                Called a second time, can only be called once.
+                Called with different parameters, after being initialized previously.
     )pbdoc")
         .def(
             "set_x_t",

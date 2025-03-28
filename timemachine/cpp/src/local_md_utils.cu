@@ -69,8 +69,8 @@ void set_nonbonded_ixn_potential_idxs(
     }
 }
 
-std::shared_ptr<BoundPotential>
-construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const int P, const double *d_params) {
+std::shared_ptr<BoundPotential> construct_ixn_group_potential(
+    const int N, std::shared_ptr<Potential> pot, const int P, const double *d_params, double nblist_padding) {
     std::vector<double> h_params(P);
     gpuErrchk(cudaMemcpy(&h_params[0], d_params, P * sizeof(*d_params), cudaMemcpyDeviceToHost));
     std::vector<int> row_dummy_idxs{0};
@@ -83,13 +83,13 @@ construct_ixn_group_potential(const int N, std::shared_ptr<Potential> pot, const
     if (std::shared_ptr<NonbondedAllPairs<float>> nb_pot = std::dynamic_pointer_cast<NonbondedAllPairs<float>>(pot);
         nb_pot) {
         std::shared_ptr<Potential> ixn_group(new NonbondedInteractionGroup<float>(
-            N, row_dummy_idxs, col_dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff()));
+            N, row_dummy_idxs, col_dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff(), false, nblist_padding));
         return std::shared_ptr<BoundPotential>(new BoundPotential(ixn_group, h_params));
     } else if (std::shared_ptr<NonbondedAllPairs<double>> nb_pot =
                    std::dynamic_pointer_cast<NonbondedAllPairs<double>>(pot);
                nb_pot) {
         std::shared_ptr<Potential> ixn_group(new NonbondedInteractionGroup<double>(
-            N, row_dummy_idxs, col_dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff()));
+            N, row_dummy_idxs, col_dummy_idxs, nb_pot->get_beta(), nb_pot->get_cutoff(), false, nblist_padding));
         return std::shared_ptr<BoundPotential>(new BoundPotential(ixn_group, h_params));
     } else {
         throw std::runtime_error("unable to cast potential to NonbondedAllPairs");

@@ -19,7 +19,8 @@ public:
         const int N,
         const std::vector<std::shared_ptr<BoundPotential>> &bps,
         bool freeze_reference = true,
-        double temperature = 0.0);
+        double temperature = 0.0,
+        double ixn_group_nblist_padding = 0.3);
 
     ~LocalMDPotentials();
 
@@ -47,6 +48,7 @@ public:
 
     const bool freeze_reference;
     const double temperature;
+    const double ixn_group_nblist_padding;
 
 private:
     const int N_;
