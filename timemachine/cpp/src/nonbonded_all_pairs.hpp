@@ -23,6 +23,7 @@ private:
 
     // This may overflow, either reset to 0 or increment
     unsigned int steps_since_last_sort_;
+    unsigned int steps_per_sort_;
 
     unsigned int *d_atom_idxs_; // [K_] indices of interacting atoms
 
@@ -96,6 +97,9 @@ public:
     unsigned int *get_atom_idxs_device() const { return d_atom_idxs_; };
 
     std::vector<int> get_atom_idxs();
+
+    void set_calls_per_sort(const int num_calls);
+    int get_calls_per_sort();
 
     void set_atom_idxs(const std::vector<int> &atom_idxs);
 

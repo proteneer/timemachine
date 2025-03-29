@@ -32,6 +32,7 @@ private:
     double cutoff_;
     // This is safe to overflow, either reset to 0 or increment
     unsigned int steps_since_last_sort_;
+    unsigned int steps_per_sort_;
     Neighborlist<RealType> nblist_;
 
     const double nblist_padding_;
@@ -71,6 +72,9 @@ private:
         const bool allow_empty);
 
 public:
+    void set_calls_per_sort(const int num_calls);
+    int get_calls_per_sort();
+
     void set_atom_idxs_device(
         const int NC, const int NR, unsigned int *d_column_idxs, unsigned int *d_row_idxs, const cudaStream_t stream);
 

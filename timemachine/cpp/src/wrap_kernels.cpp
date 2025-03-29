@@ -1452,6 +1452,8 @@ template <typename RealType> void declare_nonbonded_all_pairs(py::module &m, con
         .def("set_atom_idxs", &NonbondedAllPairs<RealType>::set_atom_idxs, py::arg("atom_idxs"))
         .def("get_atom_idxs", &NonbondedAllPairs<RealType>::get_atom_idxs)
         .def("get_num_atom_idxs", &NonbondedAllPairs<RealType>::get_num_atom_idxs)
+        .def("get_calls_per_sort", &NonbondedAllPairs<RealType>::get_calls_per_sort)
+        .def("set_calls_per_sort", &NonbondedAllPairs<RealType>::set_calls_per_sort, py::arg("steps"))
         .def(
             py::init([](const int N,
                         const double beta,
@@ -1502,6 +1504,8 @@ template <typename RealType> void declare_nonbonded_interaction_group(py::module
                         Second group of atoms in the interaction.
 
             )pbdoc")
+        .def("get_calls_per_sort", &NonbondedInteractionGroup<RealType>::get_calls_per_sort)
+        .def("set_calls_per_sort", &NonbondedInteractionGroup<RealType>::set_calls_per_sort, py::arg("steps"))
         .def(
             py::init([](const int N,
                         const py::array_t<int, py::array::c_style> &row_atom_idxs_i,

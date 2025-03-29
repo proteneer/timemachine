@@ -305,7 +305,17 @@ void NonbondedAllPairs<RealType>::du_dp_fixed_to_float(
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);
         du_dp_float[idx_w] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DW>(du_dp[idx_w]);
     }
+
+};
+
+template <typename RealType> void NonbondedAllPairs<RealType>::set_calls_per_sort(const int num_calls) {
+    if (num_calls <= 0) {
+        throw std::runtime_error("num_calls must be greater than 0");
+    }
+    this->steps_per_sort_ = num_calls;
 }
+
+template <typename RealType> int NonbondedAllPairs<RealType>::get_calls_per_sort() { return steps_per_sort_; }
 
 template class NonbondedAllPairs<double>;
 template class NonbondedAllPairs<float>;
