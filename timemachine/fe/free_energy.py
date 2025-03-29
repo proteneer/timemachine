@@ -1487,6 +1487,9 @@ def run_sims_hrex(
             context.set_v_t(xvb.velocities)
             context.set_box(xvb.box)
 
+            # Reset the potentials since the coordinates are potentially changed
+            # triggers need hilbert sort and neighborlist rebuild for AllPairs/IxnGroup
+            potential.reset()
             params = params_by_state[state_idx]
             bound_potentials[0].set_params(params)
 
