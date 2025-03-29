@@ -1352,8 +1352,20 @@ def generate_pair_bar_ulkns(
         if i < len(initial_states) - 1:
             state_idxs.append(i + 1)
         for j, pot in enumerate(state.potentials):
+            # Reset potential state, to avoid stale state reducing performance
+            unbound_pot = unbound_impls[j]
+            unbound_pot.reset()
+            initial_calls_per_sort = len(state_idxs)
+            if isinstance(unbound_pot, custom_ops.FanoutSummedPotential):
+                all_pairs = unbound_pot.get_potentials()[0]
+                initial_calls_per_sort = all_pairs.get_calls_per_sort()  # type: ignore
+                all_pairs.set_calls_per_sort(len(state_idxs) * 100)  # type: ignore
+            elif hasattr(unbound_pot, "set_calls_per_sort"):
+                initial_calls_per_sort = unbound_pot.get_calls_per_sort()  # type: ignore
+                unbound_pot.set_calls_per_sort(len(state_idxs) * 100)  # type: ignore
+
             params = np.array([initial_states[idx].potentials[j].params for idx in state_idxs])
-            _, _, Us = unbound_impls[j].execute_batch(
+            _, _, Us = unbound_pot.execute_batch(
                 frames,
                 params,
                 boxes,
@@ -1361,6 +1373,11 @@ def generate_pair_bar_ulkns(
                 compute_du_dp=False,
                 compute_u=True,
             )
+            if isinstance(unbound_pot, custom_ops.FanoutSummedPotential):
+                all_pairs = unbound_pot.get_potentials()[0]
+                all_pairs.set_calls_per_sort(initial_calls_per_sort)  # type: ignore
+            elif hasattr(unbound_pot, "set_calls_per_sort"):
+                unbound_pot.set_calls_per_sort(initial_calls_per_sort)  # type: ignore
 
             Us = Us.T  # Transpose to get energies by params
             us = Us.reshape(len(state_idxs), -1) / kBT
