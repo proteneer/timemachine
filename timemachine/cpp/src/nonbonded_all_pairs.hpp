@@ -100,6 +100,9 @@ public:
 
     std::vector<int> get_atom_idxs();
 
+    void set_calls_per_sort(const int num_calls);
+    int get_calls_per_sort();
+
     void set_atom_idxs(const std::vector<int> &atom_idxs);
 
     void set_atom_idxs_device(const int K, const unsigned int *d_atom_idxs, const cudaStream_t stream);
