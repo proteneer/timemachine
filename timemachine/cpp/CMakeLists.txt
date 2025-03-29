@@ -31,7 +31,6 @@ string(APPEND CMAKE_CUDA_FLAGS
   " -Wfloat-conversion"
   " -Wno-deprecated-declarations"
   " -restrict"  # Warn if device pointers are not restricted
-  " -static-global-template-stub=false"
 )
 message("C++ Compiler Flags" ${CMAKE_CXX_FLAGS})
 message("Cuda Compiler Flags" ${CMAKE_CUDA_FLAGS})
