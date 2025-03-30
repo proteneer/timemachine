@@ -31,8 +31,13 @@ void verify_mols_contiguous(const std::vector<std::vector<int>> &group_idxs) {
     for (unsigned int i = 0; i < group_idxs.size(); i++) {
         std::vector<int> atoms = group_idxs[i];
         const int num_atoms = atoms.size();
-        if (atoms[0] != last_water_end + 1) {
-            throw std::runtime_error("Molecules are not contiguous: mol " + std::to_string(i));
+        // if (atoms[0] != last_water_end + 1) {
+        //     throw std::runtime_error("Molecules are not verify_mols_contiguous: mol " + std::to_string(i) + " " + std::to_string(atoms[0]));
+        // }
+        if (atoms[0] < last_water_end + 1) {
+            printf("Atom 0 %d last water + 1 %d\n", atoms[0], last_water_end + 1);
+            throw std::runtime_error(
+                "Molecules are not made up of monotonically increasing indices: mol " + std::to_string(i));
         }
         std::sort(atoms.begin(), atoms.end());
         int last_atom = atoms[0];
@@ -66,7 +71,7 @@ std::array<std::vector<int>, 3> prepare_group_idxs_for_gpu(const std::vector<std
     std::vector<int> atom_idxs(num_grouped_atoms);
     for (int i = 0; i < num_mols; i++) {
         std::vector<int> atoms = group_idxs[i];
-        // ASSUMES MOLS ARE MADE UP CONTIGIOUS INDICES IE mols[0] = [0, 1, 2], mols[1] = [3, 2], etc
+        // ASSUMES MOLS ARE MADE UP OF CONTIGIOUS INDICES IE mols[0] = [0, 1, 2], mols[1] = [3, 2], etc
         // IF mols[0] = [5, 7], mols[1] = [0, 8], THIS WON'T WORK.
         // If this is not the case need a complete mapping of atom_idx to mol_idx
         // Sort the atom indices from smallest to largest so that you can know the range of indices in the molecule
