@@ -47,6 +47,7 @@ from timemachine.potentials import (
 )
 from timemachine.potentials.potential import get_bound_potential_by_type
 from timemachine.utils import batches
+import subprocess
 
 WATER_SAMPLER_MOVERS = (
     custom_ops.TIBDExchangeMove_f32,
@@ -1583,6 +1584,7 @@ def run_sims_hrex(
             print("HREX acceptance rates, average:", format_rates(average_swap_acceptance_rates))
             print("HREX replica permutation      :", hrex.replica_idx_by_state)
             print()
+            print(subprocess.run(['df', '-h'], capture_output=True, text=True).stdout)
 
             last_update_time = current_time
 
