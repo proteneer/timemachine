@@ -26,7 +26,7 @@ from timemachine.fe.plots import (
     plot_overlap_summary_figure,
 )
 from timemachine.fe.protocol_refinement import greedy_bisection_step
-from timemachine.fe.rest.single_topology import InterpolationFxnName
+from timemachine.fe.rest.interpolation import InterpolationFxnName
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.fe.utils import get_mol_masses, get_romol_conf
 from timemachine.ff import Forcefield, ForcefieldParams
@@ -626,9 +626,7 @@ def get_context(initial_state: InitialState, md_params: Optional[MDParams] = Non
         # Setup the water indices
         hb_potential = get_bound_potential_by_type(initial_state.potentials, HarmonicBond).potential
         group_indices = get_group_indices(get_bond_list(hb_potential), len(initial_state.integrator.masses))
-
         water_idxs = get_water_idxs(group_indices, ligand_idxs=initial_state.ligand_idxs)
-
         # Select a Nonbonded Potential to get the the cutoff/beta, assumes all have same cutoff/beta.
         nb = get_bound_potential_by_type(initial_state.potentials, NonbondedInteractionGroup).potential
 

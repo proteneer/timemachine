@@ -16,10 +16,11 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_TEMP, ONE_4PI_EPS0
-from timemachine.fe import interpolate, rbfe
+from timemachine.fe import interpolate
 from timemachine.fe.aligned_potential import interpolate_w_coord
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
+from timemachine.fe.rbfe import make_setup_initial_states_fns
+from timemachine.fe.single_topology import AtomMapFlags
 from timemachine.fe.utils import set_mol_name
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import nonbonded
@@ -63,15 +64,14 @@ def fixed_overflowed(a):
     return converted_a == np.iinfo(np.int64).max
 
 
-def prepare_single_topology_initial_state(st: SingleTopology, host_config: Optional[HostConfig], lamb: float = 0.1):
+def prepare_single_topology_initial_state(mol_a, mol_b, core, ff, host_config: Optional[HostConfig], lamb: float = 0.1):
     temperature = DEFAULT_TEMP
-    host = None
-    if host_config is not None:
-        host = rbfe.setup_optimized_host(st, host_config)
+    seed = 2022
+    batch_fn, _ = make_setup_initial_states_fns(mol_a, mol_b, core, ff, host_config, temperature, seed)
+
     is_complex_leg = host_config is not None and len(host_config.conf) != host_config.num_water_atoms
-    initial_state = rbfe.setup_initial_states(
-        st, host, temperature, [lamb], seed=2022, min_cutoff=0.7 if is_complex_leg else None
-    )[0]
+    min_cutoff = 0.7 if is_complex_leg else None
+    initial_state = batch_fn(lambda_schedule=[lamb], min_cutoff=min_cutoff)[0]
     return initial_state
 
 
@@ -600,7 +600,9 @@ def ligand_from_smiles(smiles: str, seed: int = 2024) -> Chem.Mol:
     return mol
 
 
-def get_guest_params(mol_a, mol_b, atom_map_mixin, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
+def get_alchemical_guest_params(
+    mol_a, mol_b, atom_map_mixin, q_handle, lj_handle, lamb: float, cutoff: float
+) -> jax.Array:
     """
     Return an array containing the guest_charges, guest_sigmas, guest_epsilons, guest_w_coords
     for the guest at a given lambda.

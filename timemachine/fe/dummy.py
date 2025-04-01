@@ -64,7 +64,9 @@ def generate_dummy_group_assignments(
        latter might be desirable for efficiency but is more complicated to implement).
     """
     assert len(set(core_atoms)) == len(core_atoms)
-    assert len(list(nx.connected_components(bond_graph))) == 1
+
+    # weakened for host_guest_system due to presence of disconnected components
+    # assert len(list(nx.connected_components(bond_graph))) == 1
 
     core_atoms_ = frozenset(core_atoms)
     dummy_atoms = frozenset(bond_graph.nodes()) - core_atoms_

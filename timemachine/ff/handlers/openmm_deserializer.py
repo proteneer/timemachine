@@ -3,7 +3,7 @@ import openmm as mm
 from openmm import unit
 
 from timemachine import constants, potentials
-from timemachine.ff.handlers.utils import canonicalize_bond
+from timemachine.ff.handlers.utils import canonicalize_bond, canonicalize_improper_idxs
 
 
 def value(quantity):
@@ -172,7 +172,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> tuple[list[potential
                 length = value(length)
                 k = value(k)
 
-                bond_idxs_.append([src_idx, dst_idx])
+                bond_idxs_.append(canonicalize_bond([src_idx, dst_idx]))
                 bond_params_.append((k, length))
 
         bond_idxs = np.array(bond_idxs_, dtype=np.int32)
@@ -190,7 +190,7 @@ def deserialize_system(system: mm.System, cutoff: float) -> tuple[list[potential
                 angle = value(angle)
                 k = value(k)
 
-                angle_idxs_.append([src_idx, mid_idx, dst_idx])
+                angle_idxs_.append(canonicalize_bond([src_idx, mid_idx, dst_idx]))
                 angle_params_.append((k, angle, 0.0))  # 0.0 is for epsilon
 
         angle_idxs = np.array(angle_idxs_, dtype=np.int32)
@@ -229,13 +229,13 @@ def deserialize_system(system: mm.System, cutoff: float) -> tuple[list[potential
             angle_ijk = canonicalize_bond((i, j, k))
             angle_jkl = canonicalize_bond((j, k, l))
             if angle_ijk in canonical_angle_idxs and angle_jkl in canonical_angle_idxs:
-                proper_idxs.append(idxs)
+                proper_idxs.append(canonicalize_bond(idxs))
                 proper_params.append(params)
             elif angle_ijk not in canonical_angle_idxs and angle_jkl not in canonical_angle_idxs:
                 assert 0
             else:
                 # xor case imply improper
-                improper_idxs.append(idxs)
+                improper_idxs.append(canonicalize_improper_idxs(idxs))
                 improper_params.append(params)
 
         proper = potentials.PeriodicTorsion(np.array(proper_idxs, dtype=np.int32)).bind(np.array(proper_params))

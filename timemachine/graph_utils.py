@@ -3,7 +3,7 @@ from typing import TypeVar
 import networkx as nx
 
 
-def convert_to_nx(mol):
+def convert_to_nx(mol) -> nx.Graph:
     """
     Convert an Chem.Mol into a networkx graph.
     """
@@ -13,6 +13,20 @@ def convert_to_nx(mol):
 
     for bond in mol.GetBonds():
         src, dst = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        g.add_edge(src, dst)
+
+    return g
+
+
+def convert_to_nx_from_bond_list(bond_list, num_atoms) -> nx.Graph:
+    """
+    Convert an Chem.Mol into a networkx graph.
+    """
+    g = nx.Graph()
+    for atom in range(num_atoms):
+        g.add_node(atom)
+
+    for src, dst in bond_list:
         g.add_edge(src, dst)
 
     return g

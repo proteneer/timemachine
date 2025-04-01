@@ -19,7 +19,6 @@ from timemachine.fe.free_energy import (
     sample,
 )
 from timemachine.fe.model_utils import image_frame
-from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.topology import BaseTopology
 from timemachine.fe.utils import read_sdf
 from timemachine.ff import Forcefield
@@ -390,9 +389,7 @@ def brd4_rbfe_state() -> InitialState:
         host_config.box += np.diag([0.1, 0.1, 0.1])
 
     core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
-    st = SingleTopology(mol_a, mol_b, core, ff)
-
-    initial_state = prepare_single_topology_initial_state(st, host_config, lamb=lamb)
+    initial_state = prepare_single_topology_initial_state(mol_a, mol_b, core, ff, host_config, lamb=lamb)
 
     traj = sample(
         initial_state, MDParams(n_frames=1, n_eq_steps=0, steps_per_frame=10_000, seed=seed), max_buffer_frames=1

@@ -7,8 +7,7 @@ from numpy.typing import NDArray
 
 from timemachine.constants import DEFAULT_TEMP
 from timemachine.fe.free_energy import HostConfig, MDParams, sample
-from timemachine.fe.rbfe import setup_initial_states, setup_optimized_host
-from timemachine.fe.single_topology import SingleTopology
+from timemachine.fe.rbfe import make_setup_initial_states_fns, setup_optimized_host
 from timemachine.fe.utils import get_romol_conf
 from timemachine.ff import Forcefield
 from timemachine.lib import custom_ops
@@ -407,12 +406,13 @@ def setup_hif2a_initial_state(host_name: str):
     else:
         assert 0, "Invalid host name"
 
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-    host = setup_optimized_host(st, host_config)
-    lambda_grid = np.array([0.0])
-    initial_state = setup_initial_states(st, host, DEFAULT_TEMP, lambda_grid, seed=2024, min_cutoff=None)[0]
+    host_config = setup_optimized_host(mol_a, mol_b, forcefield, host_config)
 
-    return st, host, host_name, initial_state
+    seed = 2024
+    batch_fn, _ = make_setup_initial_states_fns(mol_a, mol_b, core, forcefield, host_config, DEFAULT_TEMP, seed)
+
+    lambda_grid = np.array([0.0])
+    return batch_fn(lambda_schedule=lambda_grid, min_cutoff=None)[0]
 
 
 def compute_mean_tile_density(
@@ -476,7 +476,7 @@ def test_nblist_density_dhfr(cutoff, precision):
 @pytest.mark.parametrize("precision", [np.float32])
 def test_nblist_density(hif2a_single_topology_leg, frames, precision):
     cutoff = 1.2
-    st, host, host_name, initial_state = hif2a_single_topology_leg
+    initial_state = hif2a_single_topology_leg
 
     md_params = MDParams(n_eq_steps=0, steps_per_frame=200, n_frames=frames, seed=2024)
 

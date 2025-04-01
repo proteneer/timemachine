@@ -39,9 +39,13 @@ from timemachine.fe.free_energy import (
     trajectories_by_replica_to_by_state,
     verify_and_sanitize_potential_matrix,
 )
-from timemachine.fe.rbfe import Host, setup_initial_state, setup_initial_states, setup_optimized_host
+from timemachine.fe.rbfe import (
+    make_setup_initial_states_fns,
+    setup_initial_state,
+    setup_optimized_host,
+)
 from timemachine.fe.rest.single_topology import SingleTopologyREST
-from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
+from timemachine.fe.single_topology import AtomMapMixin, SingleTopology
 from timemachine.fe.stored_arrays import StoredArrays
 from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator
@@ -141,11 +145,11 @@ def test_functional():
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, forcefield)
 
     vac_sys = st.setup_intermediate_state(0.5)
-    x_a = utils.get_romol_conf(st.mol_a)
-    x_b = utils.get_romol_conf(st.mol_b)
+    x_a = utils.get_romol_conf(mol_a)
+    x_b = utils.get_romol_conf(mol_b)
     coords = st.combine_confs(x_a, x_b)
     box = np.eye(3) * 100
 
@@ -269,17 +273,18 @@ def test_vacuum_and_solvent_edge_types():
 def hif2a_ligand_pair_single_topology():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-    return st, forcefield
+    vacuum_st = SingleTopology.from_mols(mol_a, mol_b, core, forcefield)
+    return vacuum_st, forcefield, mol_a, mol_b
 
 
 @pytest.fixture(scope="module")
 def solvent_hif2a_ligand_pair_single_topology_lam0_state(hif2a_ligand_pair_single_topology):
-    st, forcefield = hif2a_ligand_pair_single_topology
-    solvent_host_config = builders.build_water_system(3.0, forcefield.water_ff, mols=[st.mol_a, st.mol_b])
-    solvent_host = setup_optimized_host(st, solvent_host_config)
-    state = setup_initial_states(st, solvent_host, DEFAULT_TEMP, [0.0], 2023)[0]
-    return state
+    vacuum_st, forcefield, mol_a, mol_b = hif2a_ligand_pair_single_topology
+    solvent_host_config = builders.build_water_system(3.0, forcefield.water_ff, mols=[mol_a, mol_b])
+    batch_fns, _ = make_setup_initial_states_fns(
+        mol_a, mol_b, vacuum_st.core, forcefield, solvent_host_config, DEFAULT_TEMP, 2023
+    )
+    return batch_fns(lambda_schedule=[0.0], min_cutoff=None)[0]
 
 
 @pytest.mark.parametrize("n_frames", [1, 10])
@@ -328,9 +333,8 @@ def test_batches(n, batch_size):
 def hif2a_ligand_pair_single_topology_lam0_state():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-    state = setup_initial_state(st, 0.0, None, DEFAULT_TEMP, 2023)
-    return state
+    _, setup_fn = make_setup_initial_states_fns(mol_a, mol_b, core, forcefield, None, DEFAULT_TEMP, 2023)
+    return setup_fn(lamb=0.0)
 
 
 @pytest.mark.parametrize("seed", [2024])
@@ -346,15 +350,21 @@ def test_initial_state_interacting_ligand_atoms(host_name, seed):
     lambdas = np.linspace(0.0, 1.0, 4)
     forcefield = Forcefield.load_default()
     host_config: Optional[HostConfig] = None
-    host: Optional[Host] = None
 
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+
+    amm = AtomMapMixin(mol_a.GetNumAtoms(), mol_b.GetNumAtoms(), core)
+    mol_a_atoms = amm.get_dummy_atoms_a()
+    mol_b_atoms = amm.get_dummy_atoms_b()
+    core_atoms = amm.get_core_atoms()
+
     if host_name == "complex":
         with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
             host_config = builders.build_protein_system(
                 str(protein_path), forcefield.protein_ff, forcefield.water_ff, mols=[mol_a, mol_b]
             )
         host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
+
     elif host_name == "solvent":
         host_config = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
         host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
@@ -362,28 +372,23 @@ def test_initial_state_interacting_ligand_atoms(host_name, seed):
         # vacuum
         pass
 
-    single_topology = SingleTopology(mol_a, mol_b, core, forcefield)
+    if host_name == "complex" or host_name == "solvent":
+        mol_a_atoms = set([x + len(host_config.masses) for x in mol_a_atoms])
+        mol_b_atoms = set([x + len(host_config.masses) for x in mol_b_atoms])
+        core_atoms = set([x + len(host_config.masses) for x in core_atoms])
 
-    host_atoms = 0
-    if host_config is not None:
-        host = setup_optimized_host(single_topology, host_config)
-        host_atoms += len(host_config.conf)
-
-    initial_states = setup_initial_states(
-        single_topology, host, DEFAULT_TEMP, lambdas, seed=seed, min_cutoff=0.7 if host_name is not None else None
-    )
+    batch_fn, _ = make_setup_initial_states_fns(mol_a, mol_b, core, forcefield, host_config, DEFAULT_TEMP, seed)
+    initial_states = batch_fn(lambda_schedule=lambdas, min_cutoff=0.7)
 
     for state in initial_states:
-        mol_a_atoms = state.ligand_idxs[single_topology.c_flags != AtomMapFlags.MOL_B]
-        mol_b_atoms = state.ligand_idxs[single_topology.c_flags != AtomMapFlags.MOL_A]
-        core_atoms = state.ligand_idxs[single_topology.c_flags == AtomMapFlags.CORE]
         assert state.interacting_atoms is not None
+        int_set = set([int(x) for x in state.interacting_atoms])
         if state.lamb == 0.0:
-            assert set(state.interacting_atoms) == set(mol_a_atoms)
+            assert int_set == mol_a_atoms.union(core_atoms)
         elif state.lamb == 1.0:
-            assert set(state.interacting_atoms) == set(mol_b_atoms)
+            assert int_set == mol_b_atoms.union(core_atoms)
         else:
-            assert set(state.interacting_atoms) == set(core_atoms)
+            assert int_set == core_atoms
 
 
 @pytest.mark.nocuda
@@ -417,7 +422,7 @@ def test_plot_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_st
 @pytest.mark.nocuda
 @pytest.mark.parametrize("max_temperature_scale", [1.0, 2.0])
 @pytest.mark.parametrize("num_windows", [2, 5])
-def test_get_water_sampler_params(num_windows, max_temperature_scale):
+def test_get_water_sampler_params_with_REST(num_windows, max_temperature_scale):
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     # Use the simple charges simply because it is faster
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
@@ -425,13 +430,13 @@ def test_get_water_sampler_params(num_windows, max_temperature_scale):
     host_config = builders.build_water_system(3.0, forcefield.water_ff, mols=[mol_a, mol_b])
 
     # (YTZ): dedup later with rbfe.Host
-    solvent_host = Host(
-        host_config.host_system,
-        host_config.masses,
-        host_config.conf,
-        host_config.box,
-        host_config.num_water_atoms,
-        host_config.omm_topology,
+    solvent_host = HostConfig(
+        host_system=host_config.host_system,
+        masses=host_config.masses,
+        conf=host_config.conf,
+        box=host_config.box,
+        num_water_atoms=host_config.num_water_atoms,
+        omm_topology=host_config.omm_topology,
     )
 
     mol_a_only_atoms = np.array([i for i in range(st.get_num_atoms()) if st.c_flags[i] == 1])
@@ -442,7 +447,7 @@ def test_get_water_sampler_params(num_windows, max_temperature_scale):
         bound_nb_pot = get_bound_potential_by_type(state.potentials, Nonbonded)
         nb_pot = bound_nb_pot.potential
         system = st.combine_with_host(
-            solvent_host.system, lamb, solvent_host.num_water_atoms, st.ff, solvent_host.omm_topology
+            solvent_host.host_system, lamb, solvent_host.num_water_atoms, forcefield, solvent_host.omm_topology
         )
         ligand_water_params = system.nonbonded_ixn_group.params[host_config.conf.shape[0] :]
         if lamb == 0.0:
@@ -463,7 +468,7 @@ def test_get_water_sampler_params_complex():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     # Use the simple charges because it is faster
     forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    st = SingleTopology.from_mols(mol_a, mol_b, core, forcefield)
 
     with path_to_internal_file("timemachine.testsystems.data", "hif2a_nowater_min.pdb") as protein_path:
         host_config = builders.build_protein_system(
@@ -471,13 +476,13 @@ def test_get_water_sampler_params_complex():
         )
         host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes near boundary
 
-    host = Host(
-        host_config.host_system,
-        host_config.masses,
-        host_config.conf,
-        host_config.box,
-        host_config.num_water_atoms,
-        host_config.omm_topology,
+    host = HostConfig(
+        host_system=host_config.host_system,
+        masses=host_config.masses,
+        conf=host_config.conf,
+        box=host_config.box,
+        num_water_atoms=host_config.num_water_atoms,
+        omm_topology=host_config.omm_topology,
     )
 
     lamb = 0.5  # arbitrary
@@ -597,15 +602,15 @@ def test_estimate_free_energy_bar_with_energy_overflow():
 )
 @pytest.mark.parametrize("seed", [2024, 2025])
 def test_compute_potential_matrix(hif2a_ligand_pair_single_topology, n_states: int, max_delta_states: int | None, seed):
-    st, _ = hif2a_ligand_pair_single_topology
+    st, _, mol_a, mol_b = hif2a_ligand_pair_single_topology
     states = [st.setup_intermediate_state(lam) for lam in np.linspace(0.0, 1.0, n_states)]
 
     bps = [make_summed_potential(s.get_U_fns()) for s in states]
     potential = bps[0].potential
     params_by_state = np.array([bp.params for bp in bps])
 
-    conf_a = utils.get_romol_conf(st.mol_a)
-    conf_b = utils.get_romol_conf(st.mol_b)
+    conf_a = utils.get_romol_conf(mol_a)
+    conf_b = utils.get_romol_conf(mol_b)
     conf = st.combine_confs(conf_a, conf_b)
 
     rng = np.random.default_rng(seed)
@@ -676,7 +681,7 @@ def test_trajectories_by_replica_to_by_state(seed, n_states, n_iters, n_atoms):
 
 @pytest.mark.nogpu
 def test_assert_potentials_compatible(hif2a_ligand_pair_single_topology):
-    st, _ = hif2a_ligand_pair_single_topology
+    st, _, _, _ = hif2a_ligand_pair_single_topology
     bps = st.src_system.get_U_fns()
 
     def should_succeed(bps1, bps2):
@@ -752,11 +757,11 @@ def test_initial_state_to_bound_impl():
     # initial_state = solvent_hif2a_ligand_pair_single_topology_lam0_state()
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     forcefield = Forcefield.load_default()
-    st = SingleTopology(mol_a, mol_b, core, forcefield)
-    solvent_host_config = builders.build_water_system(3.0, forcefield.water_ff, mols=[st.mol_a, st.mol_b])
-    solvent_host = setup_optimized_host(st, solvent_host_config)
-    initial_state = setup_initial_states(st, solvent_host, DEFAULT_TEMP, [0.5], 2024)[0]
+    solvent_host_config = builders.build_water_system(3.0, forcefield.water_ff, mols=[mol_a, mol_b])
+    solvent_host_config = setup_optimized_host(mol_a, mol_b, forcefield, solvent_host_config)
 
+    batch_fn, _ = make_setup_initial_states_fns(mol_a, mol_b, core, forcefield, solvent_host_config, DEFAULT_TEMP, 2024)
+    initial_state = batch_fn(lambda_schedule=[0.5], min_cutoff=2024)[0]
     # minimal test
     bound_impl = initial_state.to_bound_impl()
     x, box = initial_state.x0, initial_state.box0

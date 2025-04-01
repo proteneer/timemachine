@@ -23,12 +23,9 @@ from timemachine.fe.free_energy import (
 from timemachine.fe.lambda_schedule import bisection_lambda_schedule
 from timemachine.fe.rbfe import (
     DEFAULT_HREX_PARAMS,
+    make_setup_initial_states_fns,
     optimize_initial_state_from_pre_optimized,
-    setup_initial_state,
-    setup_initial_states,
-    setup_optimized_host,
 )
-from timemachine.fe.single_topology import SingleTopology
 from timemachine.ff import Forcefield
 from timemachine.md import builders
 from timemachine.testsystems.relative import get_hif2a_ligand_pair_single_topology
@@ -74,24 +71,26 @@ def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpo
     elif host_name == "solvent":
         host_config = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
         host_config.box += np.diag([0.1, 0.1, 0.1])  # remove any possible clashes
-    single_topology = SingleTopology(mol_a, mol_b, core, forcefield)
-    host = setup_optimized_host(single_topology, host_config) if host_config else None
+    elif host_name == "vacuum":
+        host_config = None
 
     lambda_grid = np.linspace(*lambda_endpoints, n_windows)
-
-    initial_states = setup_initial_states(
-        single_topology, host, DEFAULT_TEMP, lambda_grid, seed=2023, min_cutoff=0.7 if host_name == "complex" else None
-    )
-
     n_frames = 500 // n_windows
 
-    assert len(initial_states) == n_windows
-
-    return single_topology, host, host_name, n_frames, n_windows, initial_states
+    return mol_a, mol_b, core, host_name, forcefield, host_config, n_frames, lambda_grid
 
 
 def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling) -> float:
-    single_topology, host, host_name, n_frames, n_windows, initial_states = hif2a_single_topology_leg
+    mol_a, mol_b, core, host_name, ff, host_config, n_frames, lambda_grid = hif2a_single_topology_leg
+    n_windows = len(lambda_grid)
+    temperature = DEFAULT_TEMP
+    seed = 2023
+    batch_fn, make_initial_state_fn = make_setup_initial_states_fns(
+        mol_a, mol_b, core, ff, host_config, temperature, seed
+    )
+
+    initial_states = batch_fn(lambda_schedule=lambda_grid, min_cutoff=0.7)
+    assert len(initial_states) == n_windows
     assert n_windows >= 2
     if host_name != "complex" and enable_water_sampling:
         pytest.skip("Water sampling disabled outside of complex")
@@ -116,14 +115,6 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
         # the amount of minimization. Benchmark intends to emulate estimate_relative_free_energy_bisection
         lambda_grid = bisection_lambda_schedule(
             n_windows, lambda_interval=(initial_states[0].lamb, initial_states[-1].lamb)
-        )
-        # Function to be used by run_sims_bisection
-        make_initial_state_fn = partial(
-            setup_initial_state,
-            single_topology,
-            host=host,
-            temperature=temperature,
-            seed=md_params.seed,
         )
 
         optimize_initial_state_fn = partial(
@@ -196,12 +187,14 @@ if __name__ == "__main__":
 
     timings = defaultdict(list)
     for windows in args.n_windows:
-        single_topology, host, host_name, _, _, initial_states = setup_hif2a_single_topology_leg(
+        mol_a, mol_b, core, host_name, forcefield, host_config, _, lambda_grid = setup_hif2a_single_topology_leg(
             args.leg, windows, (0.0, 1.0)
         )
         for mode in args.modes:
             ns_per_day = run_benchmark_hif2a_single_topology(
-                (single_topology, host, host_name, args.n_frames, windows, initial_states), mode, args.water_sampling
+                (mol_a, mol_b, core, host_name, forcefield, host_config, args.n_frames, lambda_grid),
+                mode,
+                args.water_sampling,
             )
             timings[mode].append(ns_per_day)
     with open(f"{args.leg}_{args.n_frames}_benchmarks.json", "w") as ofs:
