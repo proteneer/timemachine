@@ -313,6 +313,8 @@ def rebalance_lambda_schedule(
         solver_protocol=DEFAULT_SOLVER_PROTOCOL,
     )
     # note: len(initial_states) >= 2 in general, so this is not equivalent to 2 * overlap_matrix[0][1]
+
+    # skip if intiial overlap is poor
     mbar_scalar_overlap = mbar.compute_overlap()["scalar"]
     if mbar_scalar_overlap < initial_mbar_threshold:
         msg = f"""
@@ -321,7 +323,6 @@ def rebalance_lambda_schedule(
             (with overlap {mbar_scalar_overlap} < {initial_mbar_threshold})
         """
         warnings.warn(msg)
-
         new_schedule = initial_lambs
     else:
         f_k = mbar.f_k
@@ -329,20 +330,37 @@ def rebalance_lambda_schedule(
         overlap_dist = make_fast_approx_overlap_distance_fxn(initial_lambs, u_kn, f_k, n_k)
         target_dist = 1.0 - target_overlap
 
-        greedy_prot = greedily_optimize_protocol(
-            overlap_dist, target_dist, bisection_xtol=xtol, protocol_interval=(lambda_min, lambda_max)
-        )
-
-        if len(greedy_prot) > len(initial_lambs):
-            warnings.warn("Optimized schedule has more windows than initial schedule, falling back to initial schedule")
-            new_schedule = initial_lambs
-        else:
-            new_schedule = np.asarray(greedy_prot)
-            print(
-                f"Optimized schedule has {len(new_schedule)} windows compared to {len(initial_lambs)} windows initially, target overlap {target_overlap}"
+        # REST compatibility: optimize in sub-intervals (lambda_min, 0.5) and (0.5, lambda_max)
+        def optimize(lmin, lmax):
+            lambdas = greedily_optimize_protocol(
+                overlap_dist, target_dist, bisection_xtol=xtol, protocol_interval=(lmin, lmax)
             )
+            return np.array(lambdas)
 
-    return [setup_initial_state_fn(lamb) for lamb in new_schedule]
+        if lambda_min < 0.5:
+            greedy_prot_left = optimize(lambda_min, min(0.5, lambda_max))
+        else:
+            greedy_prot_left = np.array([])
+        if lambda_max > 0.5:
+            greedy_prot_right = optimize(max(0.5, lambda_min), lambda_max)
+        else:
+            greedy_prot_right = np.array([])
+        new_schedule = np.hstack([np.array(greedy_prot_left), np.array(greedy_prot_right)])
+
+    # don't increase # of windows
+    if len(new_schedule) > len(initial_lambs):
+        warnings.warn("Optimized schedule has more windows than initial schedule, falling back to initial schedule")
+        new_schedule = initial_lambs
+    else:
+        print(
+            f"Optimized schedule has {len(new_schedule)} windows compared to {len(initial_lambs)} windows initially, target overlap {target_overlap}"
+        )
+    initial_states = [setup_initial_state_fn(lamb) for lamb in new_schedule]
+
+    if not (min(new_schedule) == lambda_min) and (max(new_schedule) == lambda_max):
+        msg = f"optimized interval {(min(new_schedule), max(new_schedule))} != {(lambda_min, lambda_max)}"
+        raise RuntimeError(msg)
+    return initial_states
 
 
 def get_nearest_state_idx(lamb: float, initial_states: Sequence[InitialState]) -> int:
@@ -715,7 +733,13 @@ def estimate_relative_free_energy_bisection(
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
 
     lambda_interval = lambda_interval or (0.0, 1.0)
-    lambda_min, lambda_max = lambda_interval[0], lambda_interval[1]
+    lambda_min, lambda_max = min(lambda_interval), max(lambda_interval)
+
+    # REST compatibility: avoid bypassing maximally softened state @ lam=0.5
+    if lambda_min < 0.5 < lambda_max:
+        initial_lambdas = [lambda_min, 0.5, lambda_max]
+    else:
+        initial_lambdas = [lambda_min, lambda_max]
 
     temperature = DEFAULT_TEMP
 
@@ -747,10 +771,10 @@ def estimate_relative_free_energy_bisection(
 
     try:
         results, trajectories = run_sims_bisection(
-            [lambda_min, lambda_max],
+            initial_lambdas,
             make_bisection_state,
             md_params,
-            n_bisections=n_windows - 2,
+            n_bisections=n_windows - len(initial_lambdas),
             temperature=temperature,
             min_overlap=min_overlap,
         )
@@ -758,8 +782,9 @@ def estimate_relative_free_energy_bisection(
         final_result = results[-1]
 
         plots = make_pair_bar_plots(final_result, temperature, combined_prefix)
+        expected_num_trajs = len(results) + len(initial_lambdas) - 1
 
-        assert len(trajectories) == len(results) + 1
+        assert len(trajectories) == expected_num_trajs, f"{len(trajectories)} != {expected_num_trajs}"
 
         return SimulationResult(
             final_result,
