@@ -13,6 +13,8 @@
 
 #include <numeric>
 
+static const int STEPS_PER_SORT = 100;
+
 namespace timemachine {
 
 template <typename RealType>
@@ -24,7 +26,7 @@ NonbondedAllPairs<RealType>::NonbondedAllPairs(
     const bool disable_hilbert_sort,
     const double nblist_padding)
     : N_(N), K_(atom_idxs ? atom_idxs->size() : N_), beta_(beta), cutoff_(cutoff), steps_since_last_sort_(0),
-      steps_per_sort_(100), d_atom_idxs_(nullptr), nblist_(N_), nblist_padding_(nblist_padding), hilbert_sort_(nullptr),
+      d_atom_idxs_(nullptr), nblist_(N_), nblist_padding_(nblist_padding), hilbert_sort_(nullptr),
       disable_hilbert_(disable_hilbert_sort), sum_storage_bytes_(0),
 
       kernel_ptrs_({// enumerate over every possible kernel combination
@@ -144,8 +146,8 @@ void NonbondedAllPairs<RealType>::set_atom_idxs_device(
 };
 
 template <typename RealType> bool NonbondedAllPairs<RealType>::needs_sort() {
-    return steps_since_last_sort_ % steps_per_sort_ == 0;
-};
+    return steps_since_last_sort_ % STEPS_PER_SORT == 0;
+}
 
 template <typename RealType>
 void NonbondedAllPairs<RealType>::sort(const double *d_coords, const double *d_box, cudaStream_t stream) {

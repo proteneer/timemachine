@@ -23,7 +23,6 @@ private:
 
     // This may overflow, either reset to 0 or increment
     unsigned int steps_since_last_sort_;
-    unsigned int steps_per_sort_;
 
     unsigned int *d_atom_idxs_; // [K_] indices of interacting atoms
 
