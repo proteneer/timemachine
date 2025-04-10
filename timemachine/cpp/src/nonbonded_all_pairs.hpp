@@ -85,6 +85,8 @@ public:
         __int128 *d_u,
         cudaStream_t stream) override;
 
+    virtual void reset() override;
+
     double get_cutoff() const { return cutoff_; };
 
     double get_nblist_padding() const { return nblist_padding_; };

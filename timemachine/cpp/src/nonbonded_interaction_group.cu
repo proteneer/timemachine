@@ -380,6 +380,11 @@ void NonbondedInteractionGroup<RealType>::validate_idxs(
     }
 }
 
+template <typename RealType> void NonbondedInteractionGroup<RealType>::reset() {
+    // Reset the steps since the last sort
+    steps_since_last_sort_ = 0;
+}
+
 template class NonbondedInteractionGroup<double>;
 template class NonbondedInteractionGroup<float>;
 

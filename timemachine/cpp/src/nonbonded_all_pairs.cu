@@ -117,14 +117,14 @@ template <typename RealType> void NonbondedAllPairs<RealType>::set_atom_idxs(con
     atom_idxs_buffer.copy_from(&unsigned_idxs[0]);
     this->set_atom_idxs_device(atom_idxs.size(), atom_idxs_buffer.data, stream);
     gpuErrchk(cudaStreamSynchronize(stream));
-}
+};
 
 template <typename RealType> std::vector<int> NonbondedAllPairs<RealType>::get_atom_idxs() {
     std::vector<unsigned int> atom_idxs_buffer(K_);
     gpuErrchk(cudaMemcpy(&atom_idxs_buffer[0], d_atom_idxs_, K_ * sizeof(*d_atom_idxs_), cudaMemcpyDeviceToHost));
     std::vector<int> atom_idxs = std::vector<int>(atom_idxs_buffer.begin(), atom_idxs_buffer.end());
     return atom_idxs;
-}
+};
 
 template <typename RealType>
 void NonbondedAllPairs<RealType>::set_atom_idxs_device(
@@ -143,7 +143,7 @@ void NonbondedAllPairs<RealType>::set_atom_idxs_device(
     this->K_ = K;
     // Reset the steps so that we do a new sort
     this->steps_since_last_sort_ = 0;
-}
+};
 
 template <typename RealType> bool NonbondedAllPairs<RealType>::needs_sort() {
     return steps_since_last_sort_ % STEPS_PER_SORT == 0;
@@ -161,7 +161,7 @@ void NonbondedAllPairs<RealType>::sort(const double *d_coords, const double *d_b
     gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, sizeof(*d_rebuild_nblist_), stream));
     // Set the pinned memory to indicate that we need to rebuild
     p_rebuild_nblist_[0] = 1;
-}
+};
 
 template <typename RealType>
 void NonbondedAllPairs<RealType>::execute_device(
@@ -287,7 +287,7 @@ void NonbondedAllPairs<RealType>::execute_device(
     }
     // Increment steps
     steps_since_last_sort_++;
-}
+};
 
 template <typename RealType>
 void NonbondedAllPairs<RealType>::du_dp_fixed_to_float(
@@ -305,7 +305,12 @@ void NonbondedAllPairs<RealType>::du_dp_fixed_to_float(
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);
         du_dp_float[idx_w] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DW>(du_dp[idx_w]);
     }
-}
+};
+
+template <typename RealType> void NonbondedAllPairs<RealType>::reset() {
+    // Reset the steps since the last sort
+    steps_since_last_sort_ = 0;
+};
 
 template class NonbondedAllPairs<double>;
 template class NonbondedAllPairs<float>;

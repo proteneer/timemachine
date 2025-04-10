@@ -71,6 +71,8 @@ private:
         const bool allow_empty);
 
 public:
+    virtual void reset() override;
+
     void set_atom_idxs_device(
         const int NC, const int NR, unsigned int *d_column_idxs, unsigned int *d_row_idxs, const cudaStream_t stream);
 
