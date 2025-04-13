@@ -1,0 +1,27 @@
+name: Docker-Build
+
+
+on:
+  push:
+    branches: [ $default-branch ]
+  pull_request:
+    branches: [ $default-branch ]
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  DEFAULT_IMAGE_NAME: ${{ github.repository }}:${{default-branch}}
+  DOCKER_TAG:  ${{ github.repository }}:${{github.ref_name}}
+
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build the Docker image
+    - run: docker build -t $DOCKER_TAG --cache-from $DOCKER_TAG --cache-from $DEFAULT_IMAGE_NAME --cache-to type=inline --target timemachine_ci .
+    - run: docker push $DOCKER_TAG
