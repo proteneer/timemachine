@@ -7,7 +7,7 @@ env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
-  DEFAULT_IMAGE_NAME: ${{ github.repository }}:${{default-branch}}
+  DEFAULT_IMAGE_NAME: ${{ github.repository }}:${{github.event.repository.default_branch}}
   DOCKER_TAG:  ${{ github.repository }}:${{github.ref_name}}
   CUDA_ARCH: 75
 
