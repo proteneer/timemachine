@@ -24,5 +24,5 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build the Docker image
-      run: docker build --build-arg $CUDA_ARCH -t $DOCKER_TAG --cache-from $DOCKER_TAG --cache-from $DEFAULT_IMAGE_NAME --cache-to type=inline --target timemachine_ci .
-      # - run: docker push $DOCKER_TAG
+    - run: docker build --build-arg $CUDA_ARCH -t $DOCKER_TAG --cache-from $DOCKER_TAG --cache-from $DEFAULT_IMAGE_NAME --cache-to type=inline --target timemachine_ci .
+    - run: docker push $DOCKER_TAG
