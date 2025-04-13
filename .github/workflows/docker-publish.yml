@@ -9,7 +9,7 @@ env:
   # github.repository as <account>/<repo>
   DEFAULT_IMAGE_NAME: ${{ github.repository }}:${{github.event.repository.default_branch}}
   DOCKER_TAG:  ${{ github.repository }}:jank
-  CUDA_ARCH: 75
+  CUDA_ARCH: all-major
 
 
 jobs:
