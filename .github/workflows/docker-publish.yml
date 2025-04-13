@@ -8,7 +8,7 @@ env:
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
   DEFAULT_IMAGE_NAME: ${{ github.repository }}:${{github.event.repository.default_branch}}
-  DOCKER_TAG:  ${{ github.repository }}:${{github.ref_name}}
+  DOCKER_TAG:  ${{ github.repository }}:jank
   CUDA_ARCH: 75
 
 
