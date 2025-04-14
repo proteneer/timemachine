@@ -8,7 +8,7 @@ on:
     branches:
       - ${{github.event.repository.default_branch}}
   schedule:
-    cron: '0 0 * * *'
+    - cron: '0 0 * * *'
 
 
 jobs:
