@@ -68,14 +68,14 @@ def test_invertibility_of_interval_maps():
 
 
 def collect_samples(mol):
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     AllChem.EmbedMolecule(mol)
     samples = generate_ligand_samples(1000, mol, ff, DEFAULT_TEMP, 2022)[0][:, 0]
     return samples - samples[:, 0, np.newaxis]  # center first atom, for ease of visualization
 
 
 def get_hb_params(mol):
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     params, bond_idxs = ff.hb_handle.parameterize(mol)
     return params, bond_idxs
 
