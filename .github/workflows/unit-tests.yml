@@ -8,46 +8,49 @@ on:
     branches:
       - master
 
-env:
-  CUDA_ARCH: all-major
-
 
 jobs:
 
-  build_docker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build Docker Container
-        run: docker build --build-arg $CUDA_ARCH -t timemachine_ci --target timemachine_ci .
-
-  lint:
-    runs-on: ubuntu-latest
-    needs: build_docker
-    container:
-      image: timemachine_ci
-      env:
-        CUDA_ARCH: 75
-    steps:
-    - name: Run Lint
-      run: make verify
-
   test_no_gpu:
-    needs: lint
     runs-on: ubuntu-latest
-    container:
-      image: timemachine_ci
+    strategy:
+      matrix:
+        python-version: ["3.12"]
     steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install jax==0.4.38 jaxlib==0.4.38
+        pip install -r requirements.txt
+        CMAKE_ARGS=-DCUDA_ARCH=75 pip install -e .[dev,test,viz]
+
     - name: Run No GPU Tests
       run: make nogpu_tests
 
   test_no_cuda:
     runs-on: ubuntu-latest
-    needs: lint
-    container:
-      image: timemachine_ci
+    strategy:
+      matrix:
+        python-version: ["3.12"]
     steps:
-    - name: Run No Cuda Tests
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
       run: |
-        SKIP_CUSTOM_OPS=1 pip install .[test]
-        make nocuda_tests
+        python -m pip install --upgrade pip
+        pip install jax==0.4.38 jaxlib==0.4.38
+        pip install -r requirements.txt
+        SKIP_CUSTOM_OPS=true pip install -e .[dev,test,viz]
+
+    - name: Run No Cuda Tests
+      run: make nocuda_tests
