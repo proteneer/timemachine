@@ -81,7 +81,7 @@ def get_hb_params(mol):
 
 
 def get_vacuum_u_fxn(mol, temperature=DEFAULT_TEMP):
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     U_fxn = jit(VacuumState(mol, ff).U_full)
     kBT = BOLTZ * temperature
 

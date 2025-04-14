@@ -235,7 +235,7 @@ def test_absolute_vacuum():
         mols = utils.read_sdf(path_to_ligand)
     mol = mols[0]
 
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
 
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)

@@ -365,7 +365,7 @@ def test_ethane_cyclobutadiene():
     mol_b = ligand_from_smiles("c1ccc1", seed=2022)
 
     core = np.array([[2, 0], [4, 2], [0, 3], [3, 7]])
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, ff)
 
     g = nx.Graph()

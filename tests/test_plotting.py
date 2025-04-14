@@ -97,7 +97,7 @@ def test_plot_work_with_infs():
 
 
 def test_plot_interpolation_schedule():
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
     st = single_topology.SingleTopology(mol_a, mol_b, core, ff)
     plot_core_interpolation_schedule(st)
