@@ -22,13 +22,16 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install jax==0.4.38 jaxlib==0.4.38
         pip install -r requirements.txt
-        CUDA_ARCH=75 pip install -e .[dev,test,viz]
-        make nogpu_tests
+        CMAKE_ARGS=-DCUDA_ARCH=75 pip install -e .[dev,test,viz]
+
+    - name: Run No GPU Tests
+      run: make nogpu_tests
 
   test_no_cuda:
     runs-on: ubuntu-latest
@@ -41,10 +44,13 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install jax==0.4.38 jaxlib==0.4.38
         pip install -r requirements.txt
         SKIP_CUSTOM_OPS=true pip install -e .[dev,test,viz]
-        make nocuda_tests
+
+    - name: Run No Cuda Tests
+      run: make nocuda_tests

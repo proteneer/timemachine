@@ -23,8 +23,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install jax==0.4.38 jaxlib==0.4.38
         pip install -r requirements.txt
-        CUDA_ARCH=75 pip install -e .[dev,test,viz]
-        make nogpu_nightly_tests
+        CMAKE_ARGS=-DCUDA_ARCH=75 pip install -e .[dev,test,viz]
+
+    - name: Run Nightly No GPU tests
+      run: make nogpu_nightly_tests
 
   test_no_cuda_nightly:
     runs-on: ubuntu-latest
@@ -43,4 +45,6 @@ jobs:
         pip install jax==0.4.38 jaxlib==0.4.38
         pip install -r requirements.txt
         SKIP_CUSTOM_OPS=true pip install -e .[dev,test,viz]
-        make nocuda_nightly_tests
+
+    - name: Run Nightly No CUDA tests
+      run: make nocuda_nightly_tests
