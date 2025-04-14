@@ -623,7 +623,7 @@ def arbitrary_transformation():
     mol_b = mols["57"]
 
     core = _get_core_by_mcs(mol_a, mol_b)
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, ff)
     conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     return st, conf
@@ -1049,7 +1049,7 @@ def test_no_chiral_atom_restraints():
     mol_b = ligand_from_smiles("c1(I)ccccc1")
     core = _get_core_by_mcs(mol_a, mol_b)
 
-    forcefield = Forcefield.load_default()
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
@@ -1065,7 +1065,7 @@ def test_no_chiral_bond_restraints():
     mol_b = ligand_from_smiles("CI")
     core = _get_core_by_mcs(mol_a, mol_b)
 
-    forcefield = Forcefield.load_default()
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, forcefield)
     init_conf = st.combine_confs(get_romol_conf(mol_a), get_romol_conf(mol_b))
     state = st.setup_intermediate_state(0.1)
@@ -1601,7 +1601,7 @@ def assert_symmetric_interpolation(mol_a, mol_b, core):
         - grad_fwd, grad_rev for an arbitrary conformation is identical under atom mapping
 
     """
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     # map atoms in the combined mol_ab to the atoms in the combined mol_ba
     fused_map = _get_fused_map(mol_a, mol_b, core)
 

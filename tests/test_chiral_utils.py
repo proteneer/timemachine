@@ -403,7 +403,7 @@ def test_find_flipped_planar_torsions():
     AllChem.EmbedMolecule(mol, randomSeed=0)
 
     # rdkit embedding has non-planar torsions spanning the amide bond
-    replace_conformer_with_minimized(mol, Forcefield.load_default())
+    replace_conformer_with_minimized(mol, Forcefield.load_from_file("smirnoff_1_1_0_sc.py"))
 
     core_ok = [0, 1, 2, 3, 4, 5, 6, 7, 8]
     core_bad = [0, 1, 2, 3, 5, 4, 6, 7, 8]

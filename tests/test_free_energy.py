@@ -252,7 +252,7 @@ def test_vacuum_and_solvent_edge_types():
         mols = utils.read_sdf(path_to_ligand)
     mol = mols[0]
 
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     host_config = builders.build_water_system(3.0, ff.water_ff, mols=[mol])
     bt = topology.BaseTopology(mol, ff)
     afe = free_energy.AbsoluteFreeEnergy(mol, bt)
@@ -388,9 +388,13 @@ def test_initial_state_interacting_ligand_atoms(host_name, seed):
 
 @pytest.mark.nocuda
 @patch("timemachine.fe.free_energy.plot_overlap_detail_figure")
-def test_plot_pair_bar_plots(mock_fig, hif2a_ligand_pair_single_topology_lam0_state):
+def test_plot_pair_bar_plots(mock_fig):
+    mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
+    st = SingleTopology(mol_a, mol_b, core, forcefield)
+    state = setup_initial_state(st, 0.0, None, DEFAULT_TEMP, 2023)
     pair_result = PairBarResult(
-        [hif2a_ligand_pair_single_topology_lam0_state] * 2,
+        [state] * 2,
         [
             BarResult(
                 0.0,
