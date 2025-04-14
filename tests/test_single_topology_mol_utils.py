@@ -97,7 +97,7 @@ def test_st_mol():
     # at lambda=0,lambda=0.01: bond (6,8) should be missing, bond (3,4) should be present
     # at lambda=99,lambda=1: bond (6,8) should be present, and bond (3,4) should be missing
     # near lambda=0.5, both bonds are present (this is implementation dependent, and may break later on)
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     st = SingleTopology(mol_a, mol_b, core, ff)
 
     for lamb in [0.0, 0.01]:

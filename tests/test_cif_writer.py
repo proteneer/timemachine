@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.nocuda]
 
 def test_write_single_topology_frame():
     mol_a, mol_b, core = get_hif2a_ligand_pair_single_topology()
-    forcefield = Forcefield.load_default()
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     top = SingleTopology(mol_a, mol_b, core, forcefield)
     host_config = builders.build_water_system(4.0, forcefield.water_ff, mols=[mol_a, mol_b])
 

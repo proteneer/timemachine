@@ -235,7 +235,7 @@ def test_experimental_conversions_to_kj():
 
 
 def test_get_strained_atoms():
-    ff = Forcefield.load_default()
+    ff = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     np.random.seed(2022)
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
     AllChem.EmbedMolecule(mol)
