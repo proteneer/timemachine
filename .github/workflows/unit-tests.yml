@@ -8,24 +8,8 @@ on:
     branches:
       - master
 
-env:
-  # Use docker.io for Docker Hub if empty
-  REGISTRY: ghcr.io
-  # github.repository as <account>/<repo>
-  DEFAULT_IMAGE_NAME: ${{ github.repository }}:${{github.event.repository.default_branch}}
-  CUDA_ARCH: all-major
-
 
 jobs:
-  # build:
-
-  #   runs-on: ubuntu-latest
-
-  #   steps:
-  #   - uses: actions/checkout@v4
-  #   - name: Build the Docker image
-  #     run: docker build --build-arg $CUDA_ARCH -t $DOCKER_TAG --cache-from $DOCKER_TAG --cache-from $DEFAULT_IMAGE_NAME --cache-to type=inline --target timemachine_ci .
-  #     # - run: docker push $DOCKER_TAG
 
   test_no_gpu:
     runs-on: ubuntu-latest
