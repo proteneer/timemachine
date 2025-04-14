@@ -13,12 +13,50 @@ env:
 
 
 jobs:
-  build:
+  # build:
 
+  #   runs-on: ubuntu-latest
+
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Build the Docker image
+  #     run: docker build --build-arg $CUDA_ARCH -t $DOCKER_TAG --cache-from $DOCKER_TAG --cache-from $DEFAULT_IMAGE_NAME --cache-to type=inline --target timemachine_ci .
+  #     # - run: docker push $DOCKER_TAG
+
+  test_no_gpu:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
     steps:
     - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build --build-arg $CUDA_ARCH -t $DOCKER_TAG --cache-from $DOCKER_TAG --cache-from $DEFAULT_IMAGE_NAME --cache-to type=inline --target timemachine_ci .
-      # - run: docker push $DOCKER_TAG
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install jax=0.4.28
+        pip install -r requirements.txt
+        SKIP_CUSTOM_OPS=true pip install -e .[dev,test,viz]
+        make nogpu_tests
+
+  test_no_cuda:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install jax=0.4.28
+        pip install -r requirements.txt
+        SKIP_CUSTOM_OPS=true pip install -e .[dev,test,viz]
+        make nocuda_tests
