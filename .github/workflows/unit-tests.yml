@@ -1,14 +1,16 @@
 name: Unit Tests
 
-
-on: push
+on:
+  push:
+    branches: [ ${{github.event.repository.default_branch}} ]
+  pull_request:
+    branches: [ ${{github.event.repository.default_branch}} ]
 
 env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
   DEFAULT_IMAGE_NAME: ${{ github.repository }}:${{github.event.repository.default_branch}}
-  DOCKER_TAG:  ${{ github.repository }}:jank
   CUDA_ARCH: all-major
 
 
