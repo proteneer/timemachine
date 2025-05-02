@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 project(timemachine LANGUAGES CXX CUDA)
 
 find_package(Python 3.12...<4 COMPONENTS Interpreter Development REQUIRED)
+find_package(CUDA REQUIRED)
 
 set(PYBIND11_PYTHON_VERSION ${Python_VERSION} CACHE STRING "Which version of python we're building wrappers against")
 
@@ -32,6 +33,11 @@ string(APPEND CMAKE_CUDA_FLAGS
   " -Wno-deprecated-declarations"
   " -restrict"  # Warn if device pointers are not restricted
 )
+
+if(CUDA_VERSION VERSION_GREATER_EQUAL "12.8")
+  string(APPEND CMAKE_CUDA_FLAGS " -static-global-template-stub=false")
+endif()
+
 message("C++ Compiler Flags" ${CMAKE_CXX_FLAGS})
 message("Cuda Compiler Flags" ${CMAKE_CUDA_FLAGS})
 
