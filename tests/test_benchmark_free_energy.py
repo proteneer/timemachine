@@ -36,7 +36,6 @@ from timemachine.md import builders
 from timemachine.potentials import (
     ChiralAtomRestraint,
     HarmonicAngle,
-    HarmonicAngleStable,
     HarmonicBond,
     NonbondedPairList,
     NonbondedPairListPrecomputed,
@@ -56,8 +55,7 @@ def run_with_timing(f: Callable[[], A]) -> tuple[A, float]:
 
 
 hif2a_single_topology_leg_params = {
-    f"{host_name}-{n_windows}": (host_name, n_windows)
-    for host_name, n_windows in product([None, "complex", "solvent"], [5, 10, 20])
+    f"{host_name}-{n_windows}": (host_name, n_windows) for host_name, n_windows in product([None], [2])
 }
 
 
@@ -70,7 +68,7 @@ def hif2a_single_topology_leg(request):
 
 
 def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpoints: tuple[float, float]):
-    forcefield = Forcefield.load_default()
+    forcefield = Forcefield.load_from_file("smirnoff_1_1_0_sc.py")
     host_config: Optional[HostConfig] = None
     assert len(lambda_endpoints) == 2
     assert lambda_endpoints[0] < lambda_endpoints[1]
@@ -102,8 +100,6 @@ def setup_hif2a_single_topology_leg(host_name: str, n_windows: int, lambda_endpo
 
 
 def combine_vacuum_initial_states(states):
-    from collections import defaultdict
-
     atoms_per_state = [state.x0.shape[0] for state in states]
     combined_coords = np.concatenate([state.x0 for state in states])
     combined_masses = np.concatenate([state.integrator.masses for state in states])
@@ -112,24 +108,29 @@ def combine_vacuum_initial_states(states):
     box = max([x.box0 for x in states], key=lambda x: np.linalg.det(x))
     potentials_by_type = defaultdict(list)
     for state in states:
-        for pot in state.potentials:
-            potentials_by_type[type(pot.potential)].append(pot)
+        for i, pot in enumerate(state.potentials):
+            potentials_by_type[i].append(pot)
     valid = [
         HarmonicBond,
         HarmonicAngle,
-        HarmonicAngleStable,
         PeriodicTorsion,
         NonbondedPairList,
         NonbondedPairListPrecomputed,
         ChiralAtomRestraint,
     ]
-    for x in potentials_by_type.keys():
-        if x not in valid:
+    for x, bps in potentials_by_type.items():
+        if type(bps[0].potential) not in valid:
             raise ValueError(f"{x} {valid}")
     mega_bps = []
-    for pot_type, bps in potentials_by_type.items():
+    for idx, bps in potentials_by_type.items():
+        pot_type = type(bps[0].potential)
+        assert all(isinstance(bp.potential, pot_type) for bp in bps)
+        # if pot_type == PeriodicTorsion:
+        #     # Proper + Improper
+        #     assert len(bps) == len(states) * 2
+        # else:
         assert len(bps) == len(states)
-        if pot_type in (PeriodicTorsion, HarmonicBond, HarmonicAngleStable, HarmonicAngle, ChiralAtomRestraint):
+        if pot_type in (PeriodicTorsion, HarmonicBond, HarmonicAngle, ChiralAtomRestraint):
             new_idxs = []
             new_params = []
             offset = 0
@@ -161,10 +162,22 @@ def combine_vacuum_initial_states(states):
             )
         else:
             assert 0
+    # Removes one potential because it merges PeriodicTorsion
     assert len(mega_bps) == len(states[0].potentials)
     new_integrator = replace(states[0].integrator, masses=combined_masses)
+    ligand_idxs = []
+    offset = 0
+    for state in states:
+        ligand_idxs.append(state.ligand_idxs + offset)
+        offset += len(state.ligand_idxs)
     return replace(
-        states[0], integrator=new_integrator, x0=combined_coords, v0=combined_velos, box0=box, potentials=mega_bps
+        states[0],
+        ligand_idxs=np.array(ligand_idxs, dtype=np.int32).reshape(-1),
+        integrator=new_integrator,
+        x0=combined_coords,
+        v0=combined_velos,
+        box0=box,
+        potentials=mega_bps,
     )
 
 
@@ -268,7 +281,7 @@ def run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_
 @pytest.mark.nightly(reason="Slow")
 @pytest.mark.parametrize("enable_water_sampling", [False, True])
 @pytest.mark.parametrize("mode", ["sequential", "bisection", "hrex"])
-def test_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling):
+def test_benchmark_hif2a_sigle_topology(hif2a_single_topology_leg, mode, enable_water_sampling):
     run_benchmark_hif2a_single_topology(hif2a_single_topology_leg, mode, enable_water_sampling)
 
 
@@ -284,8 +297,30 @@ def test_combined_vacuum_matches_sequential(hif2a_single_topology_leg):
     for state in initial_states:
         state.integrator = new_impl
     mega_initial_state = combine_vacuum_initial_states(initial_states)
+    for i, pot in enumerate(mega_initial_state.potentials):
+        idx_offset = 0
+        atom_offset = 0
+        for j, state in enumerate(initial_states):
+            src_pot = state.potentials[i]
+            total_idxs = len(src_pot.potential.idxs)
+            np.testing.assert_array_equal(
+                src_pot.potential.idxs, pot.potential.idxs[idx_offset : idx_offset + total_idxs] - atom_offset
+            )
+            np.testing.assert_array_equal(src_pot.params, pot.params[idx_offset : idx_offset + total_idxs])
+            idx_offset += total_idxs
+            atom_offset += state.x0.shape[0]
+    idx_offset = 0
+    atom_offset = 0
+    for state in initial_states:
+        np.testing.assert_array_equal(
+            state.ligand_idxs,
+            mega_initial_state.ligand_idxs[idx_offset : idx_offset + len(state.ligand_idxs)] - atom_offset,
+        )
+        idx_offset += len(state.ligand_idxs)
+        atom_offset += state.x0.shape[0]
 
-    _, ref_trajs = run_sims_sequential(initial_states, md_params, temperature=DEFAULT_TEMP)
+    ref_trajs = [sample(state, md_params, max_buffer_frames=n_frames) for state in initial_states]
+    assert not np.all(ref_trajs[0].frames == ref_trajs[-1].frames)
     combined_trajs = sample(mega_initial_state, md_params, max_buffer_frames=n_frames)
     state_coords = initial_states[0].x0
     combined_xs = np.array(combined_trajs.frames).reshape(n_frames, n_windows, *state_coords.shape)
@@ -293,6 +328,37 @@ def test_combined_vacuum_matches_sequential(hif2a_single_topology_leg):
         n_frames, n_windows, *state_coords.shape
     )
     np.testing.assert_array_equal(ref_xs_concat, combined_xs)
+
+    last_combined_frame = combined_trajs.frames[-1]
+    combined_bound_impls = [pot.to_gpu(np.float32).bound_impl for pot in mega_initial_state.potentials]
+    combined_du_dx = [
+        bound_impl.execute(last_combined_frame, mega_initial_state.box0, compute_u=False)[0]
+        for bound_impl in combined_bound_impls
+    ]
+    combined_u = [
+        bound_impl.execute(last_combined_frame, mega_initial_state.box0, compute_du_dx=False, compute_u=True)[1]
+        for bound_impl in combined_bound_impls
+    ]
+    split_du_dx = []
+    split_u = []
+    for state, traj in zip(initial_states, ref_trajs):
+        state_du_dx = []
+        frame = traj.frames[-1]
+        box = traj.boxes[-1]
+        for pot in state.potentials:
+            bound_impl = pot.to_gpu(np.float32).bound_impl
+            du_dx, u = bound_impl.execute(frame, box, compute_u=True, compute_du_dx=True)
+            state_du_dx.append(du_dx)
+            split_u.append(u)
+
+        split_du_dx.append(state_du_dx)
+
+    combined_du_dx = np.array(combined_du_dx)
+    split_du_dx = np.array(split_du_dx)
+    split_du_dx = split_du_dx.swapaxes(0, 1).reshape(combined_du_dx.shape)
+    np.testing.assert_array_equal(combined_du_dx, split_du_dx)
+
+    np.testing.assert_allclose(np.sum(split_u), np.sum(combined_u))
 
 
 if __name__ == "__main__":
