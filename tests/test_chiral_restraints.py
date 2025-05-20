@@ -7,10 +7,12 @@ from jax import numpy as jnp
 from rdkit import Chem
 
 from timemachine.constants import (
+    DEFAULT_ATOM_MAPPING_KWARGS,
     DEFAULT_CHIRAL_ATOM_RESTRAINT_K,
     DEFAULT_CHIRAL_BOND_RESTRAINT_K,
 )
 from timemachine.fe import topology, utils
+from timemachine.fe.atom_mapping import get_cores
 from timemachine.fe.chiral_utils import (
     make_chiral_flip_heatmaps,
     make_chiral_restr_fxns,
@@ -691,9 +693,9 @@ def make_chiral_flip_pair(well_aligned=True):
     )
 
     if well_aligned:
-        return mol_a, mol_b_1, core_1
+        return AtomMapMixin(mol_a, mol_b_1, core_1)
     else:
-        return mol_a, mol_b_0, core_0
+        return AtomMapMixin(mol_a, mol_b_0, core_0)
 
 
 @pytest.mark.parametrize("well_aligned", [True, False])
@@ -704,8 +706,8 @@ def test_chiral_inversion_in_single_topology_runs(well_aligned):
     )
     ff = Forcefield.load_default()
 
-    mol_a, mol_b, core = make_chiral_flip_pair(well_aligned)
-    _ = run_vacuum(mol_a, mol_b, core, ff, None, very_short_hrex_params, n_windows=3)
+    atom_map = make_chiral_flip_pair(well_aligned)
+    _ = run_vacuum(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, very_short_hrex_params, n_windows=3)
 
 
 @pytest.mark.nightly(reason="slow")
@@ -715,20 +717,18 @@ def test_chiral_inversion_in_single_topology(well_aligned):
 
     ff = Forcefield.load_default()
 
-    mol_a, mol_b, core = make_chiral_flip_pair(well_aligned)
+    atom_map = make_chiral_flip_pair(well_aligned)
 
     vacuum_results = run_vacuum(
-        mol_a,
-        mol_b,
-        core,
+        atom_map.mol_a,
+        atom_map.mol_b,
+        atom_map.core,
         ff,
         None,
         DEFAULT_HREX_PARAMS,
         min_overlap=0.667,  # No need to have a higher overlap then 0.667
     )
-
-    atom_map = AtomMapMixin(mol_a.GetNumAtoms(), mol_b.GetNumAtoms(), core)
-    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(vacuum_results, atom_map, mol_a, mol_b)
+    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(vacuum_results, atom_map)
     assert (heatmap_a[0] == 0).all(), "chirality in end state A was not preserved"
     assert (heatmap_b[-1] == 0).all(), "chirality in end state B was not preserved"
 
@@ -815,9 +815,14 @@ M  END""",
         removeHs=False,
     )
 
+    atom_mappng_kwargs = DEFAULT_ATOM_MAPPING_KWARGS.copy()
+    core = get_cores(mol_a, mol_b, **atom_mappng_kwargs)[0]
+
+    atom_map = AtomMapMixin(mol_a, mol_b, core)
+
     assert len(setup_all_chiral_atom_restr_idxs(mol_a, utils.get_romol_conf(mol_a))) == 0
     assert len(setup_all_chiral_atom_restr_idxs(mol_b, utils.get_romol_conf(mol_b))) == 20
-    U_a, U_b = make_chiral_restr_fxns(mol_a, mol_b)
+    U_a, U_b = make_chiral_restr_fxns(atom_map.mol_a, atom_map.mol_b)
     assert U_a(utils.get_romol_conf(mol_a)) == 0.0
     assert U_b(utils.get_romol_conf(mol_b)) == 0.0
 
@@ -829,14 +834,13 @@ def test_chiral_inversion_in_single_topology_solvent():
     ff = Forcefield.load_default()
 
     # Run the poorly aligned version, restraints get exercised
-    mol_a, mol_b, core = make_chiral_flip_pair(False)
+    atom_map = make_chiral_flip_pair(False)
 
     md_params = DEFAULT_HREX_PARAMS
     md_params = replace(md_params, n_frames=100)
 
-    res, _ = run_solvent(mol_a, mol_b, core, ff, None, md_params, n_windows=3)
-    atom_map = AtomMapMixin(mol_a.GetNumAtoms(), mol_b.GetNumAtoms(), core)
-    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(res, atom_map, mol_a, mol_b)
+    res, _ = run_solvent(atom_map.mol_a, atom_map.mol_b, atom_map.core, ff, None, md_params, n_windows=3)
+    heatmap_a, heatmap_b = make_chiral_flip_heatmaps(res, atom_map)
     assert (heatmap_a[0] == 0).all(), "chirality in end state A was not preserved"
     assert (heatmap_b[-1] == 0).all(), "chirality in end state B was not preserved"
 

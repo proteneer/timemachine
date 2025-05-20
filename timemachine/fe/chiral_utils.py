@@ -440,7 +440,7 @@ def xs_ab_from_xs(xs: NDArray, atom_map):
     # Import here to avoid circular, TBD Deboggle
     from timemachine.fe.cif_writer import convert_single_topology_mols
 
-    n_a = atom_map.num_atoms_a
+    n_a = atom_map.mol_a.GetNumAtoms()
     xs_a_, xs_b_ = [], []
     for x in xs:
         combined = convert_single_topology_mols(x, atom_map)
@@ -451,7 +451,7 @@ def xs_ab_from_xs(xs: NDArray, atom_map):
     return xs_a, xs_b
 
 
-def make_chiral_flip_heatmaps(simulation_result, atom_map, mol_a, mol_b):
+def make_chiral_flip_heatmaps(simulation_result, atom_map):
     """Evaluate mol_a and mol_b chiral restraint energy in each frame of a simulation
 
     Parameters
@@ -470,7 +470,7 @@ def make_chiral_flip_heatmaps(simulation_result, atom_map, mol_a, mol_b):
     """
     mol_a_chiral_conflicts = []
     mol_b_chiral_conflicts = []
-    U_a, U_b = make_chiral_restr_fxns(mol_a, mol_b)
+    U_a, U_b = make_chiral_restr_fxns(atom_map.mol_a, atom_map.mol_b)
 
     for traj in simulation_result.frames:
         # Truncate off just the ligands, to handle all type of simulations

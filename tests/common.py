@@ -8,7 +8,6 @@ from tempfile import TemporaryDirectory
 from typing import Optional
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 from hilbertcurve.hilbertcurve import HilbertCurve
 from numpy.typing import NDArray
@@ -16,10 +15,9 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from timemachine.constants import DEFAULT_TEMP, ONE_4PI_EPS0
-from timemachine.fe import interpolate, rbfe
-from timemachine.fe.aligned_potential import interpolate_w_coord
+from timemachine.fe import rbfe
 from timemachine.fe.free_energy import HostConfig
-from timemachine.fe.single_topology import AtomMapFlags, SingleTopology
+from timemachine.fe.single_topology import SingleTopology
 from timemachine.fe.utils import set_mol_name
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers import nonbonded
@@ -598,66 +596,3 @@ def ligand_from_smiles(smiles: str, seed: int = 2024) -> Chem.Mol:
     AllChem.EmbedMolecule(mol, randomSeed=seed)
     set_mol_name(mol, smiles)
     return mol
-
-
-def get_guest_params(mol_a, mol_b, atom_map_mixin, q_handle, lj_handle, lamb: float, cutoff: float) -> jax.Array:
-    """
-    Return an array containing the guest_charges, guest_sigmas, guest_epsilons, guest_w_coords
-    for the guest at a given lambda.
-    """
-    guest_charges = []
-    guest_sigmas = []
-    guest_epsilons = []
-    guest_w_coords = []
-
-    # generate charges and lj parameters for each guest
-    guest_a_q = q_handle.parameterize(mol_a)
-    guest_a_lj = lj_handle.parameterize(mol_a)
-
-    guest_b_q = q_handle.parameterize(mol_b)
-    guest_b_lj = lj_handle.parameterize(mol_b)
-
-    for idx, membership in enumerate(atom_map_mixin.c_flags):
-        if membership == AtomMapFlags.CORE:  # core atom
-            a_idx = atom_map_mixin.c_to_a[idx]
-            b_idx = atom_map_mixin.c_to_b[idx]
-
-            q = interpolate.linear_interpolation(guest_a_q[a_idx], guest_b_q[b_idx], lamb)
-            sig = interpolate.linear_interpolation(guest_a_lj[a_idx, 0], guest_b_lj[b_idx, 0], lamb)
-            eps = interpolate.linear_interpolation(guest_a_lj[a_idx, 1], guest_b_lj[b_idx, 1], lamb)
-
-            # interpolate charges when in common-core
-            # q = (1 - lamb) * guest_a_q[a_idx] + lamb * guest_b_q[b_idx]
-            # sig = (1 - lamb) * guest_a_lj[a_idx, 0] + lamb * guest_b_lj[b_idx, 0]
-            # eps = (1 - lamb) * guest_a_lj[a_idx, 1] + lamb * guest_b_lj[b_idx, 1]
-
-            # fixed at w = 0
-            w = 0.0
-
-        elif membership == AtomMapFlags.MOL_A:  # dummy_A
-            a_idx = atom_map_mixin.c_to_a[idx]
-            q = guest_a_q[a_idx]
-            sig = guest_a_lj[a_idx, 0]
-            eps = guest_a_lj[a_idx, 1]
-
-            # Decouple dummy group A as lambda goes from 0 to 1
-            w = interpolate_w_coord(0.0, cutoff, lamb)
-
-        elif membership == AtomMapFlags.MOL_B:  # dummy_B
-            b_idx = atom_map_mixin.c_to_b[idx]
-            q = guest_b_q[b_idx]
-            sig = guest_b_lj[b_idx, 0]
-            eps = guest_b_lj[b_idx, 1]
-
-            # Couple dummy group B as lambda goes from 0 to 1
-            # NOTE: this is only for host-guest nonbonded ixns (there is no clash between A and B at lambda = 0.5)
-            w = interpolate_w_coord(cutoff, 0.0, lamb)
-        else:
-            assert 0
-
-        guest_charges.append(q)
-        guest_sigmas.append(sig)
-        guest_epsilons.append(eps)
-        guest_w_coords.append(w)
-
-    return jnp.stack(jnp.array([guest_charges, guest_sigmas, guest_epsilons, guest_w_coords]), axis=1)

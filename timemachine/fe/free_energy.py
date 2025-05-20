@@ -599,7 +599,7 @@ def get_water_sampler_params(initial_state: InitialState) -> NDArray:
         host_idxs = np.delete(np.arange(initial_state.x0.shape[0]), initial_state.ligand_idxs)
         water_idxs = np.delete(host_idxs, initial_state.protein_idxs)
         nb_all_pairs_params = get_bound_potential_by_type(initial_state.potentials, Nonbonded).params
-        np.testing.assert_array_equal(nb_all_pairs_params[water_idxs], water_sampler_params[water_idxs])
+        assert (nb_all_pairs_params[water_idxs] == water_sampler_params[water_idxs]).all()
         host_params = nb_all_pairs_params[host_idxs]
         water_sampler_params[host_idxs] = host_params
 
@@ -1289,12 +1289,12 @@ def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
         # The protein and water parameters should match exactly for the water sampling parameters
         water_sampler_params_a = get_water_sampler_params(state_a)
         water_sampler_params_b = get_water_sampler_params(state_b)
-        np.testing.assert_array_equal(state_a.ligand_idxs, state_b.ligand_idxs)
+        assert (state_a.ligand_idxs == state_b.ligand_idxs).all()
         non_ligand_idxs = np.delete(np.arange(state_a.x0.shape[0]), state_a.ligand_idxs)
-        np.testing.assert_array_equal(water_sampler_params_a[non_ligand_idxs], water_sampler_params_b[non_ligand_idxs])
+        assert (water_sampler_params_a[non_ligand_idxs] == water_sampler_params_b[non_ligand_idxs]).all()
     else:
         # assert (A, B) are compatible NVT ensembles
-        np.testing.assert_array_equal(state_a.box0, state_b.box0)
+        assert (state_a.box0 == state_b.box0).all()
 
 
 def compute_u_kn(trajs, initial_states) -> tuple[NDArray, NDArray]:
