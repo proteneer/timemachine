@@ -193,13 +193,13 @@ def test_combined_parameters_nonbonded_intermediate(
     (w_b,) = set(ws_b)
 
     # w in [0, cutoff]
-    assert 0 < w_a < potential.cutoff
-    assert 0 < w_b < potential.cutoff
+    assert 0 <= w_a <= potential.cutoff
+    assert 0 <= w_b <= potential.cutoff
 
     if lamb < 0.5:
-        assert w_a < w_b
+        assert w_a <= w_b
     else:
-        assert w_b < w_a
+        assert w_b <= w_a
 
 
 @pytest.mark.parametrize("host_system_fixture", ["solvent_host_system", "complex_host_system"])

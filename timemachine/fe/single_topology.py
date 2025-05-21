@@ -100,6 +100,45 @@ DUMMY_A_CHIRAL_ANGLE_CONVERTING_OFF_MIN_MAX = _flip_min_max(DUMMY_B_CHIRAL_ANGLE
 DUMMY_B_TORSION_MIN_MAX = [0.7, 1.0]  # chiral and achiral both use the same min/max for torsions
 DUMMY_A_TORSION_MIN_MAX = _flip_min_max(DUMMY_B_TORSION_MIN_MAX)
 
+# Bi-phasic nonbonded interpolation protocol.
+# At lambda=0.5, both dummy groups are present.
+# Ideal case is when a replacement (i.e. insertion/deletion) is occuring
+# off of the same core-anchor.
+
+#        |.                  /     ... dummy_b
+# cutoff | .                /      ___ dummy_a
+#        |  .              /
+#        |   .            /
+#  LJ_W  |    .          /
+#        |     .        /
+#        |      .      /
+#        |_______======.......
+#   0    ----------------------
+#        0       lambda       1
+
+#  dst   |_______      ........    ... dummy_b
+#        |       \    .            ___ dummy_a
+#        |        \  .
+#        |         \.
+#  QLJ   |         .\
+#        |        .  \
+#        |       .    \
+#        |.......      \_______
+#  src   ----------------------
+#        0       lambda       1
+
+DUMMY_A_NONBONDED_W_MIN_MAX = [2 / 3, 1]
+DUMMY_B_NONBONDED_W_MIN_MAX = _flip_min_max(DUMMY_A_NONBONDED_W_MIN_MAX)
+
+DUMMY_A_NONBONDED_EPS_MIN_MAX = [1 / 3, 2 / 3]
+DUMMY_B_NONBONDED_EPS_MIN_MAX = _flip_min_max(DUMMY_A_NONBONDED_EPS_MIN_MAX)
+
+DUMMY_A_NONBONDED_Q_MIN_MAX = [1 / 3, 2 / 3]
+DUMMY_B_NONBONDED_Q_MIN_MAX = _flip_min_max(DUMMY_A_NONBONDED_Q_MIN_MAX)
+
+# charge balancing
+CORE_NONBONDED_QLJ_MIN_MAX = [1 / 3, 2 / 3]
+
 
 class ChiralVolumeDisabledWarning(UserWarning):
     pass
@@ -960,29 +999,47 @@ def batch_interpolate_nonbonded_pair_list_params(
     src_qlj, src_w = src_params[:, : NBParamIdx.W_IDX], src_params[:, NBParamIdx.W_IDX]
     dst_qlj, dst_w = dst_params[:, : NBParamIdx.W_IDX], dst_params[:, NBParamIdx.W_IDX]
 
-    is_excluded_src = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
-    is_excluded_dst = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
+    is_dummy_b = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
+    is_dummy_a = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
 
-    # parameters for pairs that do not interact in the src state
-    w = interpolate_w_coord(cutoff, dst_w, lamb)
-    pair_params_excluded_src = jnp.concatenate((dst_qlj, w[:, None]), axis=1)
+    # q - what about dummy_B - dummy_B interactions
 
-    # parameters for pairs that do not interact in the dst state
-    w = interpolate_w_coord(src_w, cutoff, lamb)
-    pair_params_excluded_dst = jnp.concatenate((src_qlj, w[:, None]), axis=1)
+    # parameters for pairs that do not interact in the src state (dummy_B - core interaction, dummy_B - dummy_B interactions)
+    # (these are pairs that are being turned on)
+    w = interpolate.pad(interpolate_w_coord, cutoff, dst_w, lamb, *DUMMY_B_NONBONDED_W_MIN_MAX)
+    q = interpolate.pad(
+        interpolate.linear_interpolation,
+        jnp.zeros_like(dst_qlj[:, 0]),
+        dst_qlj[:, 0],
+        lamb,
+        *DUMMY_B_NONBONDED_Q_MIN_MAX,
+    )
+    pair_params_dummy_b = jnp.concatenate((q[:, None], dst_qlj[:, 1:3], w[:, None]), axis=1)
 
-    # parameters for pairs that interact in both src and dst states
-    w = jax.vmap(interpolate.linear_interpolation, (0, 0, None))(src_w, dst_w, lamb)
-    qlj = interpolate.linear_interpolation(src_qlj, dst_qlj, lamb)
-    pair_params_not_excluded = jnp.concatenate((qlj, w[:, None]), axis=1)
+    # parameters for pairs that do not interact in the dst state (dummy_A - core interaction, dummy_A - dummy_A interactions)
+    # (there are pairs that are being turned off)
+    w = interpolate.pad(interpolate_w_coord, src_w, cutoff, lamb, *DUMMY_A_NONBONDED_W_MIN_MAX)
+    q = interpolate.pad(
+        interpolate.linear_interpolation,
+        src_qlj[:, 0],
+        jnp.zeros_like(src_qlj[:, 0]),
+        lamb,
+        *DUMMY_A_NONBONDED_Q_MIN_MAX,
+    )
+    pair_params_dummy_a = jnp.concatenate((q[:, None], src_qlj[:, 1:3], w[:, None]), axis=1)
+
+    # parameters for pairs that interact in both src and dst states (core - core interaction)
+    w = jnp.zeros(len(src_params))
+    qlj = interpolate.pad(interpolate.linear_interpolation, src_qlj, dst_qlj, lamb, *CORE_NONBONDED_QLJ_MIN_MAX)
+    pair_params_core = jnp.concatenate((qlj, w[:, None]), axis=1)
 
     pair_params = jnp.where(
-        is_excluded_src,
-        pair_params_excluded_src,
+        is_dummy_b,
+        pair_params_dummy_b,
         jnp.where(
-            is_excluded_dst,
-            pair_params_excluded_dst,
-            pair_params_not_excluded,
+            is_dummy_a,
+            pair_params_dummy_a,
+            pair_params_core,
         ),
     )
 
@@ -1857,32 +1914,65 @@ class SingleTopology(AtomMapMixin):
                 a_idx = self.c_to_a[idx]
                 b_idx = self.c_to_b[idx]
 
-                # interpolate charges when in common-core
-                q = (1 - lamb) * guest_a_q[a_idx] + lamb * guest_b_q[b_idx]
-                sig = (1 - lamb) * guest_a_lj[a_idx, 0] + lamb * guest_b_lj[b_idx, 0]
-                eps = (1 - lamb) * guest_a_lj[a_idx, 1] + lamb * guest_b_lj[b_idx, 1]
+                q_src = guest_a_q[a_idx]
+                q_dst = guest_b_q[b_idx]
+                q = interpolate.pad(interpolate.linear_interpolation, q_src, q_dst, lamb, *CORE_NONBONDED_QLJ_MIN_MAX)
 
-                # fixed at w = 0
+                sig_src = guest_a_lj[a_idx, 0]
+                sig_dst = guest_b_lj[b_idx, 0]
+                sig = interpolate.pad(
+                    interpolate.linear_interpolation, sig_src, sig_dst, lamb, *CORE_NONBONDED_QLJ_MIN_MAX
+                )
+
+                eps_src = guest_a_lj[a_idx, 1]
+                eps_dst = guest_b_lj[b_idx, 1]
+                eps = interpolate.pad(
+                    interpolate.linear_interpolation, eps_src, eps_dst, lamb, *CORE_NONBONDED_QLJ_MIN_MAX
+                )
+
                 w = 0.0
 
             elif membership == AtomMapFlags.MOL_A:  # dummy_A
                 a_idx = self.c_to_a[idx]
-                q = guest_a_q[a_idx]
-                sig = guest_a_lj[a_idx, 0]
-                eps = guest_a_lj[a_idx, 1]
 
+                q_src = guest_a_q[a_idx]
+                q_dst = 0
+                q = interpolate.pad(interpolate.linear_interpolation, q_src, q_dst, lamb, *DUMMY_A_NONBONDED_Q_MIN_MAX)
+
+                sig_src = guest_a_lj[a_idx, 0]
+                eps_src = guest_a_lj[a_idx, 1]
+                eps_dst = max(0.02, eps_src / 3)
+                sig = sig_src
+
+                # weaken epsilon, then gradually strengthen the interaction
+                eps = interpolate.pad(
+                    interpolate.linear_interpolation, eps_src, eps_dst, lamb, *DUMMY_A_NONBONDED_EPS_MIN_MAX
+                )
                 # Decouple dummy group A as lambda goes from 0 to 1
-                w = interpolate_w_coord(0.0, cutoff, lamb)
+                w_src = 0.0
+                w_dst = cutoff
+                w = interpolate.pad(interpolate_w_coord, w_src, w_dst, lamb, *DUMMY_A_NONBONDED_W_MIN_MAX)
 
             elif membership == AtomMapFlags.MOL_B:  # dummy_B
                 b_idx = self.c_to_b[idx]
-                q = guest_b_q[b_idx]
-                sig = guest_b_lj[b_idx, 0]
-                eps = guest_b_lj[b_idx, 1]
 
-                # Couple dummy group B as lambda goes from 0 to 1
-                # NOTE: this is only for host-guest nonbonded ixns (there is no clash between A and B at lambda = 0.5)
-                w = interpolate_w_coord(cutoff, 0.0, lamb)
+                q_src = 0
+                q_dst = guest_b_q[b_idx]
+                q = interpolate.pad(interpolate.linear_interpolation, q_src, q_dst, lamb, *DUMMY_B_NONBONDED_Q_MIN_MAX)
+
+                sig_dst = guest_b_lj[b_idx, 0]
+                eps_dst = guest_b_lj[b_idx, 1]
+                sig = sig_dst
+                eps_src = max(0.02, eps_dst / 3)
+
+                eps = interpolate.pad(
+                    interpolate.linear_interpolation, eps_src, eps_dst, lamb, *DUMMY_B_NONBONDED_EPS_MIN_MAX
+                )
+
+                w_src = cutoff
+                w_dst = 0.0
+                w = interpolate.pad(interpolate_w_coord, w_src, w_dst, lamb, *DUMMY_B_NONBONDED_W_MIN_MAX)
+
             else:
                 assert 0
 
@@ -1890,6 +1980,10 @@ class SingleTopology(AtomMapMixin):
             guest_sigmas.append(sig)
             guest_epsilons.append(eps)
             guest_w_coords.append(w)
+
+        # assert that net charges are consistent between end-states and intermediate states
+        # np.testing.assert_array_almost_equal(np.sum(guest_charges), np.sum(guest_a_q), decimal=3)
+        # np.testing.assert_array_almost_equal(np.sum(guest_charges), np.sum(guest_b_q), decimal=3)
 
         return jnp.stack(jnp.array([guest_charges, guest_sigmas, guest_epsilons, guest_w_coords]), axis=1)
 
