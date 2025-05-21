@@ -223,6 +223,7 @@ def main():
     parser.add_argument(
         "--output_dir", default=None, help="Directory to output results, else generates a directory based on the time"
     )
+    parser.add_argument("--custom_core_path", default=None, help="Path to custom core")
     args = parser.parse_args()
 
     if "complex" in args.legs:
@@ -261,6 +262,9 @@ def main():
     )
 
     core = atom_mapping.get_cores(mol_a, mol_b, **DEFAULT_ATOM_MAPPING_KWARGS)[0]
+    print("WARNING: using a custom core")
+    # custom_core that demaps the phenyl ring
+    core = np.stack([np.arange(28), np.arange(28)], axis=1)
 
     # Store top level data
     file_client.store("atom_mapping.svg", plot_atom_mapping_grid(mol_a, mol_b, core).encode("utf-8"))
