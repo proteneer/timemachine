@@ -1981,10 +1981,6 @@ class SingleTopology(AtomMapMixin):
             guest_epsilons.append(eps)
             guest_w_coords.append(w)
 
-        # assert that net charges are consistent between end-states and intermediate states
-        # np.testing.assert_array_almost_equal(np.sum(guest_charges), np.sum(guest_a_q), decimal=3)
-        # np.testing.assert_array_almost_equal(np.sum(guest_charges), np.sum(guest_b_q), decimal=3)
-
         return jnp.stack(jnp.array([guest_charges, guest_sigmas, guest_epsilons, guest_w_coords]), axis=1)
 
     def _parameterize_host_nonbonded(self, host_nonbonded: BoundPotential[Nonbonded]) -> BoundPotential[Nonbonded]:
