@@ -850,7 +850,7 @@ def plot_interpolation_schedule(st, filter_fn, fig_title, n_windows):
 
     fig.suptitle(fig_title + " Bonded Terms", fontsize=12)
     plt.tight_layout()
-    plt.show()
+    # plt.show()
 
     # nonbonded_terms
     fig, axs = plt.subplots(4, 2, figsize=(9, 9))
@@ -858,7 +858,7 @@ def plot_interpolation_schedule(st, filter_fn, fig_title, n_windows):
     _plot_guest_nb_params_interpolation(lambdas, st, filter_fn, axs, row=2)
     fig.suptitle(fig_title + " Nonbonded Terms", fontsize=12)
     plt.tight_layout()
-    plt.show()
+    # plt.show()
 
 
 def plot_core_interpolation_schedule(st, n_windows=48):
