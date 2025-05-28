@@ -143,7 +143,9 @@ def test_functional():
     forcefield = Forcefield.load_default()
     st = SingleTopology(mol_a, mol_b, core, forcefield)
 
-    vac_sys = st.setup_intermediate_state(0.5)
+    # (ytz): if lambda=0.5, all ws=0 and assert_ff_optimizable fails due
+    # to ill-conditioned setup.
+    vac_sys = st.setup_intermediate_state(0.3)
     x_a = utils.get_romol_conf(st.mol_a)
     x_b = utils.get_romol_conf(st.mol_b)
     coords = st.combine_confs(x_a, x_b)

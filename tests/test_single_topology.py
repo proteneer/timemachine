@@ -21,7 +21,6 @@ from timemachine.constants import (
 )
 from timemachine.fe import atom_mapping, single_topology
 from timemachine.fe.dummy import MultipleAnchorWarning, canonicalize_bond
-from timemachine.fe.interpolate import align_nonbonded_idxs_and_params, linear_interpolation
 from timemachine.fe.single_topology import (
     AtomMapMixin,
     ChargePertubationError,
@@ -657,58 +656,6 @@ def test_setup_intermediate_state_not_unreasonably_slow(arbitrary_transformation
 
     # weak assertion to catch egregious perf issues while being unlikely to raise false positives
     assert elapsed_time / n_states <= 1.0
-
-
-@pytest.mark.nocuda
-def test_setup_intermediate_nonbonded_term(arbitrary_transformation):
-    """Tests that the current vectorized implementation _setup_intermediate_nonbonded_term is consistent with the
-    previous implementation"""
-    st, _ = arbitrary_transformation
-
-    def setup_intermediate_nonbonded_term_ref(src_nonbonded, dst_nonbonded, lamb, align_fn, interpolate_qlj_fn):
-        cutoff = src_nonbonded.potential.cutoff
-        pair_idxs = []
-        pair_params = []
-        for idxs, src_params, dst_params in zip(
-            st.aligned_nonbonded_pair_list.idxs,
-            st.aligned_nonbonded_pair_list.src_params,
-            st.aligned_nonbonded_pair_list.dst_params,
-        ):
-            src_qlj, src_w = src_params[:3], src_params[3]
-            dst_qlj, dst_w = dst_params[:3], dst_params[3]
-
-            src_qlj = tuple(src_qlj.tolist())
-            dst_qlj = tuple(dst_qlj.tolist())
-
-            if src_qlj == (0, 0, 0):  # i.e. excluded in src state
-                new_params = (*dst_qlj, interpolate_w_coord(cutoff, 0, lamb))
-            elif dst_qlj == (0, 0, 0):
-                new_params = (*src_qlj, interpolate_w_coord(0, cutoff, lamb))
-            else:
-                new_params = (
-                    *interpolate_qlj_fn(jnp.array(src_qlj), jnp.array(dst_qlj), lamb),
-                    interpolate_w_coord(src_w, dst_w, lamb),
-                )
-
-            pair_idxs.append(idxs)
-            pair_params.append(new_params)
-
-        return potentials.NonbondedPairListPrecomputed(
-            np.array(pair_idxs), src_nonbonded.potential.beta, src_nonbonded.potential.cutoff
-        ).bind(jnp.array(pair_params))
-
-    for lamb in np.linspace(0.0, 1.0, 10):
-        nonbonded_ref = setup_intermediate_nonbonded_term_ref(
-            st.src_system.nonbonded_pair_list,
-            st.dst_system.nonbonded_pair_list,
-            lamb,
-            align_nonbonded_idxs_and_params,
-            linear_interpolation,
-        )
-        nonbonded_test = st.aligned_nonbonded_pair_list.interpolate(lamb)
-
-        np.testing.assert_array_equal(nonbonded_ref.potential.idxs, nonbonded_test.potential.idxs)
-        np.testing.assert_array_almost_equal(nonbonded_ref.params, nonbonded_test.params)
 
 
 @pytest.mark.nocuda

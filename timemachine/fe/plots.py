@@ -684,19 +684,179 @@ def _plot_improper_interpolation(xs, systems, filter_fn, axs, row):
     axs[row, 1].set_xlabel("lambda window")
 
 
+def _plot_guest_nb_params_interpolation(lambdas, st, filter_fn, axs, row):
+    lambda_by_atom_qs = []  # num lambdas x num_atoms
+    lambda_by_atom_ws = []  # num lambdas x num_atoms
+    lambda_by_atom_sigmas = []  # num lambdas x num_atoms
+    lambda_by_atom_epsilons = []  # num lambdas x num_atoms
+
+    for lamb in lambdas:
+        gp = st._get_guest_params(st.ff.q_handle, st.ff.lj_handle, lamb, 1.2)
+        row_qs = []
+        row_sigmas = []
+        row_epsilons = []
+        row_ws = []
+        for atom_idx, (q, s, e, w) in enumerate(gp):
+            if filter_fn([atom_idx]):
+                row_qs.append(q)
+                row_ws.append(w)
+                row_sigmas.append(s)
+                row_epsilons.append(e)
+        lambda_by_atom_qs.append(row_qs)
+        lambda_by_atom_ws.append(row_ws)
+        lambda_by_atom_sigmas.append(row_sigmas)
+        lambda_by_atom_epsilons.append(row_epsilons)
+
+    atom_qs_by_lambda = np.array(lambda_by_atom_qs).T  # num_atoms x num_lambdas
+    atom_ws_by_lambda = np.array(lambda_by_atom_ws).T  # num_atoms x num_lambdas
+    atom_sigmas_by_lambda = np.array(lambda_by_atom_sigmas).T  # num_atoms x num_lambdas
+    atom_epsilons_by_lambda = np.array(lambda_by_atom_epsilons).T  # num_atoms x num_lambdas
+
+    for atom_charges in atom_qs_by_lambda:
+        if abs(atom_charges[-1] - atom_charges[0]) > 1e-1:
+            alpha = 0.75
+        else:
+            alpha = 0.1
+        axs[row, 0].plot(lambdas, atom_charges, alpha=alpha)
+
+    for atom_ws in atom_ws_by_lambda:
+        if abs(atom_ws[-1] - atom_ws[0]) > 1e-1:
+            alpha = 0.75
+        else:
+            alpha = 0.1
+        axs[row, 1].plot(lambdas, atom_ws, alpha=alpha)
+
+    for atom_sigmas in atom_sigmas_by_lambda:
+        if abs(atom_sigmas[-1] - atom_sigmas[0]) > 1e-2:
+            alpha = 0.75
+        else:
+            alpha = 0.1
+        axs[row + 1, 0].plot(lambdas, atom_sigmas, alpha=alpha)
+
+    for atom_epsilons in atom_epsilons_by_lambda:
+        if abs(atom_epsilons[-1] - atom_epsilons[0]) > 1e-2:
+            alpha = 0.75
+        else:
+            alpha = 0.1
+        axs[row + 1, 1].plot(lambdas, atom_epsilons, alpha=alpha)
+
+    axs[row, 0].set_title("nb_ixn q_i")
+    axs[row, 1].set_title("nb_ixn w_i")
+    axs[row + 1, 0].set_title("nb_ixn sig_i/2")
+    axs[row + 1, 1].set_title("nb_ixn sqrt(eps_i)")
+
+    axs[row, 0].set_ylabel("e- * sqrt(EPS0)")
+    axs[row, 1].set_ylabel("w (nm)")
+    axs[row + 1, 0].set_ylabel("sigma_i/2")
+    axs[row + 1, 1].set_ylabel("sqrt(epsilon_i)")
+
+    axs[row, 0].set_xlabel("lambda window")
+    axs[row, 1].set_xlabel("lambda window")
+    axs[row + 1, 0].set_xlabel("lambda window")
+    axs[row + 1, 1].set_xlabel("lambda window")
+
+
+def _plot_nonbonded_pairlist_interpolation(xs, systems, filter_fn, axs, row):
+    qs = []  # K x # n_pairs
+    ws = []  # K x # n_pairs
+    sigmas = []
+    epsilons = []
+    for sys in systems:
+        pair_idxs = sys.nonbonded_pair_list.potential.idxs
+        keep_idxs = []
+        for b_idx, idxs in enumerate(pair_idxs):
+            if filter_fn(idxs):
+                keep_idxs.append(b_idx)
+        keep_idxs = np.array(keep_idxs, dtype=np.int32)
+        nb_params = sys.nonbonded_pair_list.params
+        qs.append(nb_params[keep_idxs, 0])
+        sigmas.append(nb_params[keep_idxs, 1])
+        epsilons.append(nb_params[keep_idxs, 2])
+        ws.append(nb_params[keep_idxs, 3])
+
+    pair_idxs = pair_idxs[keep_idxs]
+    qs = np.array(qs).T  # n_pairs x K
+    ws = np.array(ws).T  # n_pairs x K
+    sigmas = np.array(sigmas).T  # n_pairs x K
+    epsilons = np.array(epsilons).T  # n_pairs x K
+    num_pairs = qs.shape[0]
+    for p_idx in range(num_pairs):
+        if abs(qs[p_idx][0] - qs[p_idx][-1]) > 1e-1:
+            label = f"{pair_idxs[p_idx]}"
+            alpha = 1.0
+        else:
+            label = None
+            alpha = 0.1
+
+        axs[row, 0].plot(xs, qs[p_idx], label=label, alpha=alpha)
+
+        if abs(ws[p_idx][0] - ws[p_idx][-1]) > 1e-2:
+            label = f"{pair_idxs[p_idx]}"
+            alpha = 1.0
+        else:
+            label = None
+            alpha = 0.1
+
+        axs[row, 1].plot(xs, ws[p_idx], label=label, alpha=alpha)
+
+        if abs(sigmas[p_idx][0] - sigmas[p_idx][-1]) > 1e-1:
+            label = f"{pair_idxs[p_idx]}"
+            alpha = 1.0
+        else:
+            label = None
+            alpha = 0.1
+
+        axs[row + 1, 0].plot(xs, sigmas[p_idx], label=label, alpha=alpha)
+
+        if abs(epsilons[p_idx][0] - epsilons[p_idx][-1]) > 1e-2:
+            label = f"{pair_idxs[p_idx]}"
+            alpha = 1.0
+        else:
+            label = None
+            alpha = 0.1
+
+        axs[row + 1, 1].plot(xs, epsilons[p_idx], label=label, alpha=alpha)
+
+    axs[row, 0].set_title("nb_pl q_ij")
+    axs[row, 1].set_title("nb_pl w_ij")
+    axs[row + 1, 0].set_title("nb_pl sig_ij")
+    axs[row + 1, 1].set_title("nb_pl eps_ij")
+
+    axs[row, 0].set_ylabel("q_ij*sqrt(EPS0)")
+    axs[row, 1].set_ylabel("w(nm)")
+    axs[row + 1, 0].set_ylabel("sigma")
+    axs[row + 1, 1].set_ylabel("epsilon")
+
+    axs[row, 0].set_xlabel("lambda window")
+    axs[row, 1].set_xlabel("lambda window")
+    axs[row + 1, 0].set_xlabel("lambda window")
+    axs[row + 1, 1].set_xlabel("lambda window")
+
+
 def plot_interpolation_schedule(st, filter_fn, fig_title, n_windows):
-    fig, axs = plt.subplots(5, 2, figsize=(9, 12))
     # plot the force constant and equilibrium bond lengths along lambda
     lambdas = np.linspace(0, 1.0, n_windows)
     systems = []
     for lam in lambdas:
         systems.append(st.setup_intermediate_state(lam))
+
+    # bonded terms
+    fig, axs = plt.subplots(5, 2, figsize=(9, 12))
     _plot_bond_interpolation(st, lambdas, systems, filter_fn, axs, row=0)
     _plot_chiral_atom_interpolation(lambdas, systems, filter_fn, axs, row=1)
     _plot_angle_interpolation(st, lambdas, systems, filter_fn, axs, row=2)
     _plot_proper_interpolation(lambdas, systems, filter_fn, axs, row=3)
     _plot_improper_interpolation(lambdas, systems, filter_fn, axs, row=4)
-    fig.suptitle(fig_title, fontsize=12)
+
+    fig.suptitle(fig_title + " Bonded Terms", fontsize=12)
+    plt.tight_layout()
+    # plt.show()
+
+    # nonbonded_terms
+    fig, axs = plt.subplots(4, 2, figsize=(9, 9))
+    _plot_nonbonded_pairlist_interpolation(lambdas, systems, filter_fn, axs, row=0)
+    _plot_guest_nb_params_interpolation(lambdas, st, filter_fn, axs, row=2)
+    fig.suptitle(fig_title + " Nonbonded Terms", fontsize=12)
     plt.tight_layout()
     # plt.show()
 
