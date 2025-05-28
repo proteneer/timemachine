@@ -1002,8 +1002,6 @@ def batch_interpolate_nonbonded_pair_list_params(
     is_dummy_b = jnp.all(src_qlj == 0.0, axis=1, keepdims=True)
     is_dummy_a = jnp.all(dst_qlj == 0.0, axis=1, keepdims=True)
 
-    # q - what about dummy_B - dummy_B interactions
-
     # parameters for pairs that do not interact in the src state (dummy_B - core interaction, dummy_B - dummy_B interactions)
     # (these are pairs that are being turned on)
     w = interpolate.pad(interpolate_w_coord, cutoff, dst_w, lamb, *DUMMY_B_NONBONDED_W_MIN_MAX)
@@ -1019,6 +1017,7 @@ def batch_interpolate_nonbonded_pair_list_params(
     # parameters for pairs that do not interact in the dst state (dummy_A - core interaction, dummy_A - dummy_A interactions)
     # (there are pairs that are being turned off)
     w = interpolate.pad(interpolate_w_coord, src_w, cutoff, lamb, *DUMMY_A_NONBONDED_W_MIN_MAX)
+
     q = interpolate.pad(
         interpolate.linear_interpolation,
         src_qlj[:, 0],
