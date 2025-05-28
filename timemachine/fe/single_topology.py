@@ -1934,16 +1934,15 @@ class SingleTopology(AtomMapMixin):
 
             elif membership == AtomMapFlags.MOL_A:  # dummy_A
                 a_idx = self.c_to_a[idx]
-
                 q_src = guest_a_q[a_idx]
                 q_dst = 0
                 q = interpolate.pad(interpolate.linear_interpolation, q_src, q_dst, lamb, *DUMMY_A_NONBONDED_Q_MIN_MAX)
 
                 sig_src = guest_a_lj[a_idx, 0]
                 eps_src = guest_a_lj[a_idx, 1]
-                eps_dst = max(0.02, eps_src / 3)
-                sig = sig_src
+                eps_dst = jnp.max(jnp.array([0.02, eps_src / 3]))
 
+                sig = sig_src
                 # weaken epsilon, then gradually strengthen the interaction
                 eps = interpolate.pad(
                     interpolate.linear_interpolation, eps_src, eps_dst, lamb, *DUMMY_A_NONBONDED_EPS_MIN_MAX
@@ -1962,9 +1961,9 @@ class SingleTopology(AtomMapMixin):
 
                 sig_dst = guest_b_lj[b_idx, 0]
                 eps_dst = guest_b_lj[b_idx, 1]
-                sig = sig_dst
-                eps_src = max(0.02, eps_dst / 3)
+                eps_src = jnp.max(jnp.array([0.02, eps_dst / 3]))
 
+                sig = sig_dst
                 eps = interpolate.pad(
                     interpolate.linear_interpolation, eps_src, eps_dst, lamb, *DUMMY_B_NONBONDED_EPS_MIN_MAX
                 )
