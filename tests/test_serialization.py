@@ -281,6 +281,21 @@ def test_am1bcc():
     assert am1.props == am1.props
 
 
+def test_resp():
+    smirks = []
+    params = []
+    props = None
+
+    am1 = nonbonded.RESPHandler(smirks, params, props)
+    obj = am1.serialize()
+    all_handlers, _, _ = deserialize_handlers(bin_to_str(obj))
+
+    am1 = all_handlers[0]
+    np.testing.assert_equal(am1.smirks, am1.smirks)
+    np.testing.assert_equal(am1.params, am1.params)
+    assert am1.props == am1.props
+
+
 def test_am1ccc():
     patterns = [
         ["[#6X4:1]-[#1:2]", 0.46323257920556493],

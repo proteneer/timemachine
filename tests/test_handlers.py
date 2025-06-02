@@ -456,6 +456,34 @@ def test_am1bcc_parameterization():
     # assert vjp_fn(charges_adjoints) == None
 
 
+def test_resp_parameterization():
+    # currently takes no parameters
+    smirks = []
+    params = []
+    props = None
+
+    cache_key = nonbonded.RESP
+    am1h = nonbonded.RESPHandler(smirks, params, props)
+    mol = Chem.AddHs(Chem.MolFromSmiles("C1CNCOC1F"))
+    AllChem.EmbedMolecule(mol)
+
+    assert not mol.HasProp(cache_key)
+
+    charges = am1h.parameterize(mol)
+
+    assert len(charges) == mol.GetNumAtoms()
+    assert mol.HasProp(cache_key)
+
+    cached_charges = am1h.parameterize(mol)
+    np.testing.assert_equal(charges, cached_charges)
+
+    new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, None, mol))
+
+    # charges_adjoints = np.random.randn(*charges.shape)
+
+    # assert vjp_fn(charges_adjoints) == None
+
+
 def test_am1_ccc():
     patterns = [
         ["[#6X4:1]-[#1:2]", 0.46323257920556493],
