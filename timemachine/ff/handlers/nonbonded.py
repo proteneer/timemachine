@@ -317,10 +317,10 @@ def rdkit_assign_partial_charges(
                     -1,
                     -1,
                     -1,
-                    1.85,
+                    1.85,  # Br
                 ]
             )
-        )  # Br
+        )
 
         # ESP charge
         esp.esp_solve(mol, dm, rad=rad)
@@ -341,16 +341,6 @@ def rdkit_assign_partial_charges(
         ).tolist()
 
     return rows, e_dft
-
-
-def boltzmann_weight(conformer_properties: np.array, conformer_energies: np.array, temp: float = 298.15) -> float:
-    energies = conformer_energies - np.min(conformer_energies)
-
-    R = physical_constants["kelvin-hartree relationship"][0]  # eH/K
-    weights = np.exp(-1 * energies / (627.509 * R * temp))
-    weights = weights / np.sum(weights)
-
-    return np.average(conformer_properties, weights=weights, axis=0)
 
 
 def resp_assign_charges(_rdmol):
@@ -376,7 +366,6 @@ def resp_assign_charges(_rdmol):
             energies.append(energy)
 
     am1_partial_charges = np.array(charges)
-    energies = np.array(energies)
 
     partial_charges = np.mean(am1_partial_charges, axis=0)
 
@@ -514,21 +503,15 @@ def compute_or_load_oe_charges(mol, mode=AM1ELF10):
 def compute_or_load_resp_charges(mol):
     """
     Unless already cached in mol's "{mode}{CACHE_SUFFIX}" property,
-    use RESP to compute partial charges using the specified mode.
+    use RESP to compute partial charges.
     """
 
     mode = "resp"
     # check for cache
     cache_prop_name = f"{mode}{CACHE_SUFFIX}"
     if not mol.HasProp(cache_prop_name):
-        # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
-        # to be an issue that the atom ordering modifies the return values as well. A follow up
-        # with OpenEye is in order
-        # https://github.com/openforcefield/openff-toolkit/issues/983
         resp_charges = list(resp_assign_charges(mol))
-
         mol.SetProp(cache_prop_name, base64.b64encode(pickle.dumps(resp_charges)))
-
     else:
         resp_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_prop_name)))
         assert len(resp_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
