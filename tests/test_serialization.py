@@ -286,14 +286,14 @@ def test_resp():
     params = []
     props = None
 
-    am1 = nonbonded.RESPHandler(smirks, params, props)
-    obj = am1.serialize()
+    resp = nonbonded.RESPHandler(smirks, params, props)
+    obj = resp.serialize()
     all_handlers, _, _ = deserialize_handlers(bin_to_str(obj))
 
-    am1 = all_handlers[0]
-    np.testing.assert_equal(am1.smirks, am1.smirks)
-    np.testing.assert_equal(am1.params, am1.params)
-    assert am1.props == am1.props
+    resp = all_handlers[0]
+    np.testing.assert_equal(resp.smirks, resp.smirks)
+    np.testing.assert_equal(resp.params, resp.params)
+    assert resp.props == resp.props
 
 
 def test_am1ccc():

@@ -972,7 +972,7 @@ class RESPHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        return compute_or_load_oe_charges(mol, mode=AM1BCCELF10)
+        return compute_or_load_resp_charges(mol)
 
 
 class AM1BCCIntraHandler(AM1BCCHandler):
