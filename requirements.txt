@@ -7,3 +7,9 @@ rdkit==2024.9.4
 --extra-index-url https://pypi.anaconda.org/OpenEye/simple
 openeye-toolkits==2020.2.0
 openmm==8.2.0
+gpu4pyscf-cuda12x
+cutensor-cu12
+Auto3D
+torch
+torchvision
+torchaudio

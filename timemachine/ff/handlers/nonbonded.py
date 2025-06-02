@@ -1,18 +1,35 @@
 import base64
+import os
 import pickle
+import subprocess
+import tempfile
 import warnings
-from collections import Counter
+from collections import Counter, defaultdict
+from functools import partial
+from shutil import which
 
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
+from Auto3D.ASE.geometry import opt_geometry
 from jax import jit, vmap
 from numpy.typing import NDArray
+from openff.recharge.aromaticity import AromaticityModel
+from openff.recharge.utilities.molecule import extract_conformers
+from openff.toolkit import unit, RDKitToolkitWrapper
+from openff.toolkit.topology import Molecule
+from openff.toolkit.utils import AntechamberNotFoundError
+from openff.units import Quantity
+from pyscf import gto, scf
+from pyscf.data import radii
 from rdkit import Chem
+from rdkit.Chem import AllChem
+from rdkit.Chem.Descriptors import NumRadicalElectrons
+from rdkit.Chem.rdMolTransforms import GetBondLength
+from scipy.constants import physical_constants
 
 from timemachine import constants
-from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
-from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
+from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel, match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.utils import (
     canonicalize_bond,
@@ -20,8 +37,8 @@ from timemachine.ff.handlers.utils import (
     make_residue_mol,
     make_residue_mol_from_template,
     update_mol_topology,
+    match_smirks as rd_match_smirks,
 )
-from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
 from timemachine.graph_utils import convert_to_nx
 
 CACHE_SUFFIX = "Cache"
@@ -119,6 +136,7 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
 
     if charge_model in ELF10_MODELS:
         oe_generate_conformations(oemol)
+        print(f"Generated {oemol.NumConfs()} OpenEye conformers")
 
     result = oequacpac.OEAssignCharges(oemol, charge_engine)
     if result is False:
@@ -148,6 +166,238 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
 
     # returned charges are in TM units, in original atom ordering
     return inlined_constant * partial_charges[inv_permutation]
+
+
+def rdkit_generate_conformations(mol):
+    ri = mol.GetRingInfo()
+    largest_ring_size = max((len(r) for r in ri.AtomRings()), default=0)
+    if largest_ring_size > 10:
+        print("Detected macrocycle")
+        params = Chem.rdDistGeom.ETKDGv3()
+    else:
+        params = Chem.rdDistGeom.srETKDGv3()
+        params.useSmallRingTorsions = True
+
+    params.pruneRmsThresh = 1.0
+    params.clearConfs = True
+
+    AllChem.EmbedMultipleConfs(mol, 800, params)
+    AllChem.MMFFOptimizeMoleculeConfs(mol, maxIters=500)
+
+
+def make_xyz(rdmol: Chem.Mol) -> str:
+    xyz = []
+    for atom in rdmol.GetAtoms():
+        atom_index = atom.GetIdx()
+        pos = rdmol.GetConformer().GetAtomPosition(atom_index)
+        xyz.append(f"{atom.GetSymbol()} {pos.x} {pos.y} {pos.z}")
+    return "\n".join(xyz)
+
+
+def rdkit_assign_partial_charges(
+    _rdmol: Chem.Mol,
+    use_conformers: list[Quantity],
+    _cls=None,
+) -> tuple[np.array, float]:
+    from gpu4pyscf.pop import esp
+
+    ANTECHAMBER_PATH = which("antechamber")
+    if ANTECHAMBER_PATH is None:
+        raise AntechamberNotFoundError("Antechamber not found, cannot run assign_partial_charges()")
+
+    rdmol = Chem.Mol(_rdmol)
+    rdmol.GetConformer().SetPositions(np.array(use_conformers[0], dtype=np.float64))
+
+    # Compute charges
+    with tempfile.TemporaryDirectory() as tmpdir:
+        net_charge = Chem.GetFormalCharge(rdmol)
+
+        print(Chem.MolToMolBlock(rdmol), file=open(os.path.join(tmpdir, "molecule.sdf"), "w+"))
+
+        subprocess.check_output(
+            [
+                "antechamber",
+                "-i",
+                "molecule.sdf",
+                "-o",
+                "charged.ac",
+                "-fo",
+                "ac",
+                "-fi",
+                "sdf",
+                "-nc",
+                str(net_charge),
+            ],
+            cwd=tmpdir,
+        )
+
+        try:
+            out_path = opt_geometry(os.path.join(tmpdir, "molecule.sdf"), model_name="AIMNET")
+            m = Chem.MolFromMolFile(out_path, removeHs=False)
+            bad_bond = False
+            for bnd in m.GetBonds():
+                bond_length = GetBondLength(m.GetConformer(), bnd.GetBeginAtomIdx(), bnd.GetEndAtomIdx())
+                if bond_length > 3.0:
+                    print(
+                        f"Bond length {bond_length} is too high between {bnd.GetBeginAtom().GetSymbol()} and {bnd.GetEndAtom().GetSymbol()}"
+                    )
+                    bad_bond = True
+
+            if not bad_bond:
+                xyz = make_xyz(m)
+            else:
+                xyz = make_xyz(rdmol)
+        except Exception as e:
+            print(e)
+            xyz = make_xyz(rdmol)
+
+        subprocess.check_output(["respgen", "-i", "charged.ac", "-o", "tmp.respin", "-f", "resp"], cwd=tmpdir)
+        symmetry_groups = defaultdict(set)
+        with open(os.path.join(tmpdir, "tmp.respin"), "r") as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                if "&end" in line:
+                    for atm_idx, l in enumerate(lines[i + 4 :], 1):
+                        parts = l.split()
+                        if parts:
+                            group = int(parts[1])
+                            if group:
+                                symmetry_groups[group].add(atm_idx - 1)
+                                symmetry_groups[group].add(group - 1)
+
+        mol = gto.Mole()
+        mol.cart = True
+        mol.charge = Chem.GetFormalCharge(rdmol)
+        mol.spin = NumRadicalElectrons(rdmol)
+        mol.atom = xyz
+        mol.basis = "6-31gs"
+        mol.build()
+
+        mf = scf.RHF(mol).to_gpu()
+        e_dft = mf.kernel()
+        dm = mf.make_rdm1()
+
+        rad = (
+            1.0
+            / radii.BOHR
+            * np.asarray(
+                [
+                    -1,
+                    1.20,  # H
+                    1.20,  # He
+                    1.37,  # Li
+                    1.45,  # Be
+                    1.45,  # B
+                    1.50,  # C
+                    1.50,  # N,
+                    1.40,  # O
+                    1.35,  # F,
+                    1.30,  # Ne,
+                    1.57,  # Na,
+                    1.36,  # Mg
+                    1.24,  # Al,
+                    1.17,  # Si,
+                    1.80,  # P,
+                    1.75,  # S,
+                    1.70,  # Cl
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    1.85,
+                ]
+            )
+        )  # Br
+
+        # ESP charge
+        esp.esp_solve(mol, dm, rad=rad)
+        print("Fitted ESP charge")
+
+        # RESP charge // first stage fitting
+        esp.resp_solve(mol, dm, rad=rad)
+        sum_constraints = []
+
+        # RESP charge // second stage fitting
+        rows = esp.resp_solve(
+            mol,
+            dm,
+            rad=rad,
+            resp_a=1e-3,
+            sum_constraints=sum_constraints,
+            equal_constraints=[list(s) for s in symmetry_groups.values()],
+        ).tolist()
+
+    return rows, e_dft
+
+
+def boltzmann_weight(conformer_properties: np.array, conformer_energies: np.array, temp: float = 298.15) -> float:
+    energies = conformer_energies - np.min(conformer_energies)
+
+    R = physical_constants["kelvin-hartree relationship"][0]  # eH/K
+    weights = np.exp(-1 * energies / (627.509 * R * temp))
+    weights = weights / np.sum(weights)
+
+    return np.average(conformer_properties, weights=weights, axis=0)
+
+
+def resp_assign_charges(_rdmol):
+    rdmol = Chem.Mol(_rdmol)
+    rdkit_generate_conformations(rdmol)
+
+    print(f"Generated {rdmol.GetNumConformers()} RDKit conformers")
+
+    molecule: Molecule = Molecule.from_rdkit(rdmol)
+    molecule.apply_elf_conformer_selection(
+        limit=10, toolkit_registry=RDKitToolkitWrapper(), rms_tolerance=1.0 * unit.angstrom
+    )
+
+    print(f"Selected {len(molecule.conformers)} RDKit conformers")
+
+    conformers = extract_conformers(molecule)
+
+    charges = []
+    energies = []
+    for chs, energy in map(partial(rdkit_assign_partial_charges, _rdmol), [[c] for c in conformers]):
+        if chs is not None:
+            charges.append(chs)
+            energies.append(energy)
+
+    am1_partial_charges = np.array(charges)
+    energies = np.array(energies)
+
+    partial_charges = np.mean(am1_partial_charges, axis=0)
+
+    expected_charge = Chem.GetFormalCharge(rdmol)
+    current_charge = 0.0
+    for pc in partial_charges:
+        current_charge += pc
+    charge_offset = (expected_charge - current_charge) / rdmol.GetNumAtoms()
+    partial_charges += charge_offset
+
+    # Verify that the charges sum up to an integer
+    net_charge = np.sum(partial_charges)
+    net_charge_is_integral = np.isclose(net_charge, np.round(net_charge), atol=1e-5)
+    assert net_charge_is_integral, f"Charge is not an integer: {net_charge}"
+
+    # https://github.com/proteneer/timemachine#forcefield-gotchas
+    # "The charges have been multiplied by sqrt(ONE_4PI_EPS0) as an optimization."
+    inlined_constant = np.sqrt(constants.ONE_4PI_EPS0)
+
+    # returned charges are in TM units, in original atom ordering
+    return inlined_constant * partial_charges
 
 
 def generate_exclusion_idxs(
@@ -259,6 +509,31 @@ def compute_or_load_oe_charges(mol, mode=AM1ELF10):
         assert len(oe_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
 
     return np.array(oe_charges)
+
+
+def compute_or_load_resp_charges(mol):
+    """
+    Unless already cached in mol's "{mode}{CACHE_SUFFIX}" property,
+    use RESP to compute partial charges using the specified mode.
+    """
+
+    mode = "resp"
+    # check for cache
+    cache_prop_name = f"{mode}{CACHE_SUFFIX}"
+    if not mol.HasProp(cache_prop_name):
+        # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
+        # to be an issue that the atom ordering modifies the return values as well. A follow up
+        # with OpenEye is in order
+        # https://github.com/openforcefield/openff-toolkit/issues/983
+        resp_charges = list(resp_assign_charges(mol))
+
+        mol.SetProp(cache_prop_name, base64.b64encode(pickle.dumps(resp_charges)))
+
+    else:
+        resp_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_prop_name)))
+        assert len(resp_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
+
+    return np.array(resp_charges)
 
 
 def compute_or_load_bond_smirks_matches(mol, smirks_list):
@@ -588,6 +863,36 @@ class AM1BCCHandler(SerializableMixIn):
     [2] Charging Inconsistencies
         https://github.com/openforcefield/openff-toolkit/issues/1170
     """
+
+    def __init__(self, smirks, params, props):
+        assert len(smirks) == 0
+        assert len(params) == 0
+        assert props is None
+        self.smirks = []
+        self.params = []
+        self.props = None
+
+    def partial_parameterize(self, _, mol):
+        return self.static_parameterize(mol)
+
+    def parameterize(self, mol):
+        return self.static_parameterize(mol)
+
+    @staticmethod
+    def static_parameterize(mol):
+        """
+        Parameters
+        ----------
+
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        """
+        return compute_or_load_oe_charges(mol, mode=AM1BCCELF10)
+
+
+class RESPHandler(SerializableMixIn):
+    """The RESPHandler generates charges for molecules using RESP."""
 
     def __init__(self, smirks, params, props):
         assert len(smirks) == 0
