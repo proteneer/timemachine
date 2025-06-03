@@ -255,8 +255,6 @@ class Forcefield:
                 q_handle_intra = nonbonded.AM1CCCIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
             elif isinstance(q_handle, nonbonded.AM1BCCHandler):
                 q_handle_intra = nonbonded.AM1BCCIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
-            elif isinstance(q_handle, nonbonded.RESPHandler):
-                q_handle_intra = nonbonded.RESPHandler(q_handle.smirks, q_handle.params, q_handle.props)
             elif isinstance(q_handle, nonbonded.SimpleChargeHandler):
                 q_handle_intra = nonbonded.SimpleChargeIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
             elif isinstance(q_handle, nonbonded.PrecomputedChargeHandler):
