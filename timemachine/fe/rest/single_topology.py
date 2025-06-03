@@ -2,15 +2,17 @@ from dataclasses import replace
 from functools import cached_property
 
 import jax.numpy as jnp
+import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 from openmm import app
 from rdkit import Chem
 
 from timemachine.constants import NBParamIdx
-from timemachine.fe.single_topology import AlignedPotential, SingleTopology
+from timemachine.fe.single_topology import AlignedPotential, AtomMapFlags, SingleTopology
 from timemachine.fe.system import GuestSystem, HostGuestSystem, HostSystem
 from timemachine.ff import Forcefield
+from timemachine.graph_utils import convert_to_nx
 
 from .bond import CanonicalBond, CanonicalProper, mkbond, mkproper
 from .interpolation import InterpolationFxn, InterpolationFxnName, Symmetric, get_interpolation_fxn
@@ -80,8 +82,64 @@ class SingleTopologyREST(SingleTopology):
             max_temperature_scale, temperature_scale_interpolation
         )
 
+        # MAX_CYCLE_LENGTH = 12
+
+        self._nxg_a = convert_to_nx(mol_a)
+        self._nxg_b = convert_to_nx(mol_b)
+        # self._cycles_a = nx.simple_cycles(self._nxg_a, length_bound=MAX_CYCLE_LENGTH)
+        # self._cycles_b = nx.simple_cycles(self._nxg_b, length_bound=MAX_CYCLE_LENGTH)
+
+        self._cycles_a = nx.cycle_basis(self._nxg_a)
+        self._cycles_b = nx.cycle_basis(self._nxg_b)
+
+    # expand REST region to include complete ring groups
+    @staticmethod
+    def expand_rest_region_in_mol(atom_idxs, cycles, mol):
+        region = set()
+        for atom_idx in atom_idxs:
+            for cycle in cycles:
+                if atom_idx in cycle:
+                    for cycle_atom in cycle:
+                        region.add(cycle_atom)
+
+        # find terminal, 1-connected atoms that are not in the REST region, and add them.
+        inner_rest_idxs = region.union(set(atom_idxs))
+        outer_rest_idxs = set()
+        for atom in mol.GetAtoms():
+            nbs = atom.GetNeighbors()
+            if len(nbs) == 1:
+                nb = nbs[0].GetIdx()
+                if nb in inner_rest_idxs:
+                    outer_rest_idxs.add(atom.GetIdx())
+            elif len(nbs) == 2:
+                # special case to deal with 1-connected nitriles, hydroxyls
+                nb_nb = None
+                if nbs[0].GetIdx() in inner_rest_idxs:
+                    nb_nb = nbs[1]
+                elif nbs[1].GetIdx() in inner_rest_idxs:
+                    nb_nb = nbs[0]
+
+                if nb_nb is not None and nb_nb.GetDegree() == 1:
+                    outer_rest_idxs.add(atom.GetIdx())
+                    outer_rest_idxs.add(nb_nb.GetIdx())
+
+        return inner_rest_idxs.union(outer_rest_idxs)
+
+    def split_combined_idxs(self, combined_idxs):
+        mol_a_idxs = []
+        for idx in combined_idxs:
+            if self.c_flags[idx] == AtomMapFlags.CORE or self.c_flags[idx] == AtomMapFlags.MOL_A:
+                mol_a_idxs.append(self.c_to_a[idx])
+
+        mol_b_idxs = []
+        for idx in combined_idxs:
+            if self.c_flags[idx] == AtomMapFlags.CORE or self.c_flags[idx] == AtomMapFlags.MOL_B:
+                mol_b_idxs.append(self.c_to_b[idx])
+
+        return mol_a_idxs, mol_b_idxs
+
     @cached_property
-    def rest_region_atom_idxs(self) -> set[int]:
+    def base_rest_region_atom_idxs(self) -> set[int]:
         """Returns the set of indices of atoms in the combined ligand that are in the REST region.
 
         Here the REST region is defined to include combined ligand atoms involved in bond, angle, or improper torsion
@@ -108,6 +166,17 @@ class SingleTopologyREST(SingleTopology):
         idxs |= self.get_dummy_atoms_b()
 
         return idxs
+
+    @cached_property
+    def rest_region_atom_idxs(self) -> set[int]:
+        mol_a_idxs, mol_b_idxs = self.split_combined_idxs(self.base_rest_region_atom_idxs)
+
+        expanded_set_a = self.expand_rest_region_in_mol(mol_a_idxs, self._cycles_a, self.mol_a)
+        expanded_set_b = self.expand_rest_region_in_mol(mol_b_idxs, self._cycles_b, self.mol_b)
+
+        final_idxs = set([self.a_to_c[x] for x in expanded_set_a]).union([self.b_to_c[x] for x in expanded_set_b])
+
+        return final_idxs
 
     @cached_property
     def aliphatic_ring_bonds(self) -> set[CanonicalBond]:
