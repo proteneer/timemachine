@@ -221,6 +221,7 @@ class Forcefield:
                     nonbonded.AM1BCCCCCHandler,
                     nonbonded.AM1CCCHandler,
                     nonbonded.AM1BCCHandler,
+                    nonbonded.RESPHandler,
                     nonbonded.SimpleChargeHandler,
                     nonbonded.PrecomputedChargeHandler,
                     nonbonded.NNHandler,

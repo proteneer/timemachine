@@ -19,7 +19,8 @@ from rdkit.Chem.Descriptors import NumRadicalElectrons
 from rdkit.Chem.rdMolTransforms import GetBondLength
 
 from timemachine import constants
-from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel, match_smirks as oe_match_smirks
+from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
+from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.utils import (
     canonicalize_bond,
@@ -185,7 +186,7 @@ def make_xyz(rdmol: Chem.Mol) -> str:
     return "\n".join(xyz)
 
 
-def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list) -> tuple[np.array, float]:
+def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list) -> tuple[np.ndarray, float]:
     """
     Calculate RESP (Restrained ElectroStatic Potential) partial charges for a molecule.
 
@@ -202,14 +203,14 @@ def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list) -> tuple
 
     Returns
     -------
-    tuple[np.array, float]
+    tuple[np.ndarray, float]
         - Array of RESP partial charges for each atom
         - Total DFT energy of the molecule
     """
-    from pyscf import gto, scf
-    from pyscf.data import radii
     from Auto3D.ASE.geometry import opt_geometry
     from gpu4pyscf.pop import esp
+    from pyscf import gto, scf
+    from pyscf.data import radii
 
     # Check that antechamber is available for symmetry checking
     ANTECHAMBER_PATH = which("antechamber")
@@ -280,7 +281,7 @@ def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list) -> tuple
         # Parse symmetry constraints from respgen output
         # These ensure chemically equivalent atoms (e.g., methyl hydrogens) get identical charges
         symmetry_groups = defaultdict(set)
-        with open(os.path.join(tmpdir, "tmp.respin"), "r") as f:
+        with open(os.path.join(tmpdir, "tmp.respin")) as f:
             lines = f.readlines()
             for i, line in enumerate(lines):
                 if "&end" in line:
@@ -401,7 +402,7 @@ def resp_assign_elf_charges(_rdmol):
     # Create a copy of the molecule for conformer generation
 
     from openff.recharge.utilities.molecule import extract_conformers
-    from openff.toolkit import unit, RDKitToolkitWrapper
+    from openff.toolkit import RDKitToolkitWrapper, unit
     from openff.toolkit.topology import Molecule
 
     rdmol = Chem.Mol(_rdmol)
