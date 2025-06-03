@@ -81,14 +81,8 @@ class SingleTopologyREST(SingleTopology):
         self._temperature_scale_interpolation_fxn: InterpolationFxn = get_temperature_scale_interpolation_fxn(
             max_temperature_scale, temperature_scale_interpolation
         )
-
-        # MAX_CYCLE_LENGTH = 12
-
         self._nxg_a = convert_to_nx(mol_a)
         self._nxg_b = convert_to_nx(mol_b)
-        # self._cycles_a = nx.simple_cycles(self._nxg_a, length_bound=MAX_CYCLE_LENGTH)
-        # self._cycles_b = nx.simple_cycles(self._nxg_b, length_bound=MAX_CYCLE_LENGTH)
-
         self._cycles_a = nx.cycle_basis(self._nxg_a)
         self._cycles_b = nx.cycle_basis(self._nxg_b)
 
