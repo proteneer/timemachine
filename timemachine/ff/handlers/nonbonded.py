@@ -11,22 +11,12 @@ from shutil import which
 import jax.numpy as jnp
 import networkx as nx
 import numpy as np
-from Auto3D.ASE.geometry import opt_geometry
 from jax import jit, vmap
 from numpy.typing import NDArray
-from openff.recharge.aromaticity import AromaticityModel
-from openff.recharge.utilities.molecule import extract_conformers
-from openff.toolkit import unit, RDKitToolkitWrapper
-from openff.toolkit.topology import Molecule
-from openff.toolkit.utils import AntechamberNotFoundError
-from openff.units import Quantity
-from pyscf import gto, scf
-from pyscf.data import radii
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.Descriptors import NumRadicalElectrons
 from rdkit.Chem.rdMolTransforms import GetBondLength
-from scipy.constants import physical_constants
 
 from timemachine import constants
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel, match_smirks as oe_match_smirks
@@ -195,7 +185,7 @@ def make_xyz(rdmol: Chem.Mol) -> str:
     return "\n".join(xyz)
 
 
-def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list[Quantity]) -> tuple[np.array, float]:
+def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list) -> tuple[np.array, float]:
     """
     Calculate RESP (Restrained ElectroStatic Potential) partial charges for a molecule.
 
@@ -216,12 +206,15 @@ def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list[Quantity]
         - Array of RESP partial charges for each atom
         - Total DFT energy of the molecule
     """
+    from pyscf import gto, scf
+    from pyscf.data import radii
+    from Auto3D.ASE.geometry import opt_geometry
     from gpu4pyscf.pop import esp
 
     # Check that antechamber is available for symmetry checking
     ANTECHAMBER_PATH = which("antechamber")
     if ANTECHAMBER_PATH is None:
-        raise AntechamberNotFoundError("Antechamber not found, cannot run assign_partial_charges()")
+        raise ValueError("Antechamber not found, cannot run assign_partial_charges()")
 
     # Create a copy of the molecule and set conformer positions
     rdmol = Chem.Mol(_rdmol)
@@ -404,6 +397,11 @@ def resp_assign_elf_charges(_rdmol):
         Array of averaged RESP partial charges scaled by sqrt(ONE_4PI_EPS0)
     """
     # Create a copy of the molecule for conformer generation
+
+    from openff.recharge.utilities.molecule import extract_conformers
+    from openff.toolkit import unit, RDKitToolkitWrapper
+    from openff.toolkit.topology import Molecule
+
     rdmol = Chem.Mol(_rdmol)
     rdkit_generate_conformations(rdmol)
 
