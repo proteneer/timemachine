@@ -310,6 +310,8 @@ def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list) -> tuple
 
         # Define van der Waals radii for ESP grid point generation
         # These determine where electrostatic potential points are sampled
+        # Taken from https://github.com/pyscf/gpu4pyscf/blob/57cf1d437adb820ce7f69f8872f2500c751bdd97/gpu4pyscf/pop/esp.py#L32
+        # with an added parameter for Br
         rad = (
             1.0
             / radii.BOHR
