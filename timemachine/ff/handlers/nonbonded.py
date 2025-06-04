@@ -982,6 +982,10 @@ class AM1BCCIntraHandler(AM1BCCHandler):
     pass
 
 
+class RESPIntraHandler(RESPHandler):
+    pass
+
+
 class AM1BCCSolventHandler(AM1BCCHandler):
     pass
 
