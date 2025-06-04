@@ -203,7 +203,6 @@ class Forcefield:
                     nonbonded.AM1BCCIntraHandler,
                     nonbonded.SimpleChargeIntraHandler,
                     nonbonded.PrecomputedChargeIntraHandler,
-                    nonbonded.RESPHandler,
                 ),
             ):
                 # Need to be checked first since they are also subclasses
