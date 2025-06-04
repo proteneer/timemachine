@@ -260,6 +260,8 @@ class Forcefield:
                 q_handle_intra = nonbonded.PrecomputedChargeIntraHandler(
                     q_handle.smirks, q_handle.params, q_handle.props
                 )
+            elif isinstance(q_handle, nonbonded.RESPHandler):
+                q_handle_intra = nonbonded.RESPHandler(q_handle.smirks, q_handle.params, q_handle.props)
             else:
                 raise ValueError(f"Unsupported charge handler {q_handle}")
 
