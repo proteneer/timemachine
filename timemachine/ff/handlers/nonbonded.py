@@ -17,7 +17,6 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.Descriptors import NumRadicalElectrons
 from rdkit.Chem.rdMolTransforms import GetBondLength
-from timemachine.parallel.utils import get_gpu_count
 
 from timemachine import constants
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
@@ -34,6 +33,7 @@ from timemachine.ff.handlers.utils import (
     match_smirks as rd_match_smirks,
 )
 from timemachine.graph_utils import convert_to_nx
+from timemachine.parallel.utils import get_gpu_count
 
 CACHE_SUFFIX = "Cache"
 AM1_CHARGE_CACHE = "AM1Cache"
