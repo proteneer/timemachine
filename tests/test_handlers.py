@@ -23,8 +23,6 @@ from timemachine.md import builders
 from timemachine.testsystems import fetch_freesolv
 from timemachine.utils import path_to_internal_file
 
-pytestmark = [pytest.mark.nocuda]
-
 TEST_FEATURE_SIZE = 16
 
 
@@ -123,6 +121,7 @@ def env_nn_args():
     return enc_unflatten_str, params, props
 
 
+@pytest.mark.nocuda
 def test_harmonic_bond():
     patterns = [
         ["[#6X4:1]-[#6X4:2]", 0.1, 0.2],
@@ -250,6 +249,7 @@ def test_harmonic_bond():
     assert bond_params.shape == (0, 2)
 
 
+@pytest.mark.nocuda
 def test_harmonic_angle():
     patterns = [
         ["[*:1]-[#8:2]-[*:3]", 0.1, 0.2],
@@ -273,6 +273,7 @@ def test_harmonic_angle():
     assert angle_params.shape == (0, 3)
 
 
+@pytest.mark.nocuda
 def test_proper_torsion():
     # proper torsions have a variadic number of terms
 
@@ -323,6 +324,7 @@ def test_proper_torsion():
     assert proper_idxs.shape == (0, 4)
 
 
+@pytest.mark.nocuda
 def test_improper_torsion():
     patterns = [
         ["[*:1]~[#6X3:2](~[*:3])~[*:4]", 1.5341333333333333, 3.141592653589793, 2.0],
@@ -378,6 +380,7 @@ def test_improper_torsion():
         assert idxs[0] < idxs[-1]
 
 
+@pytest.mark.nocuda
 def test_exclusions():
     mol = Chem.MolFromSmiles("FC(F)=C(F)F")
     exc_idxs, scales = nonbonded.generate_exclusion_idxs(mol, scale12=0.0, scale13=0.2, scale14_q=0.25, scale14_lj=0.75)
@@ -428,6 +431,7 @@ def test_exclusions():
     np.testing.assert_equal(scales, expected_scales)
 
 
+@pytest.mark.nocuda
 def test_am1bcc_parameterization():
     # currently takes no parameters
     smirks = []
@@ -479,6 +483,7 @@ def test_resp_parameterization():
     new_charges, vjp_fn = jax.vjp(functools.partial(resp.partial_parameterize, None, mol))
 
 
+@pytest.mark.nocuda
 def test_am1_ccc():
     patterns = [
         ["[#6X4:1]-[#1:2]", 0.46323257920556493],
@@ -587,6 +592,7 @@ $$$$
     np.testing.assert_array_equal(es_params_from_cache, es_params)
 
 
+@pytest.mark.nocuda
 def test_simple_charge_handler():
     patterns = [
         ["[#1:1]", 99.0],
@@ -702,6 +708,7 @@ def test_gbsa_handler():
     assert np.all(adjoints[mask] == 0.0)
 
 
+@pytest.mark.nocuda
 def test_am1ccc_throws_error_on_phosphorus():
     """Temporary, until phosphorus patterns are added to AM1CCC port"""
     ff = Forcefield.load_default()
@@ -715,6 +722,7 @@ def test_am1ccc_throws_error_on_phosphorus():
     assert "unsupported element" in str(e)
 
 
+@pytest.mark.nocuda
 @pytest.mark.parametrize(
     "am1bcc_ff", ["smirnoff_1_1_0_am1bcc.py", "smirnoff_2_0_0_am1bcc.py", "smirnoff_2_2_0_am1bcc.py"]
 )
@@ -740,6 +748,7 @@ def test_am1bcc_handles_phosphorus(am1bcc_ff):
     )
 
 
+@pytest.mark.nocuda
 def test_am1_differences():
     ff = Forcefield.load_default()
 
@@ -777,6 +786,7 @@ def test_am1_differences():
             assert 0
 
 
+@pytest.mark.nocuda
 def test_am1elf10_conformer_independence():
     with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         mols = utils.read_sdf(path_to_ligand)
@@ -803,6 +813,7 @@ def test_am1elf10_conformer_independence():
         assert np.sum(delta_charges) == pytest.approx(0.0)
 
 
+@pytest.mark.nocuda
 def test_trans_carboxlic_acid():
     # Test fallback to turn off hydrogen sampling if charge generation failed
     # due to trans-COOH
@@ -818,6 +829,7 @@ def test_trans_carboxlic_acid():
     assert np.sum(delta_charges) == pytest.approx(0.0)
 
 
+@pytest.mark.nocuda
 def test_freesolv_failures():
     # Test failures for 3 cases in freesolv in openeye toolkits 2022.2.2
     with path_to_internal_file("timemachine.testsystems.data", "freesolv_omega_failures.sdf") as path_to_ligand:
@@ -828,6 +840,7 @@ def test_freesolv_failures():
         assert am1elf10_charges is not None
 
 
+@pytest.mark.nocuda
 def test_compute_or_load_oe_charges():
     """Loop over test ligands, asserting that charges are stored in expected property and that the same charges are
     returned on repeated calls"""
@@ -867,6 +880,7 @@ def assert_permutation_equivariance(mol, fxn, perm):
     np.testing.assert_allclose(qs_perm, qs[perm])
 
 
+@pytest.mark.nocuda
 @pytest.mark.parametrize("mol_idx", [0, 1, 2, 3, 4, 5])
 def test_partial_charge_equivariance_on_freesolv(mol_idx):
     ff = Forcefield.load_default()
@@ -880,6 +894,7 @@ def test_partial_charge_equivariance_on_freesolv(mol_idx):
     assert_permutation_equivariance(mol, ff.q_handle.parameterize, perm)
 
 
+@pytest.mark.nocuda
 def test_charging_compounds_with_non_zero_charge():
     patterns = [
         ["[#6a:1]:[#6a:2]", 0.0],
@@ -907,6 +922,7 @@ def test_charging_compounds_with_non_zero_charge():
     np.testing.assert_almost_equal(np.sum(es_params) / np.sqrt(ONE_4PI_EPS0), -1.0, decimal=5)
 
 
+@pytest.mark.nocuda
 def test_precomputed_charge_handler():
     with path_to_internal_file("timemachine.testsystems.water_exchange", "bb_centered_espaloma.sdf") as path_to_ligand:
         mol = utils.read_sdf(path_to_ligand)[0]
@@ -1018,6 +1034,7 @@ def test_precomputed_charge_handler():
     )
 
 
+@pytest.mark.nocuda
 def test_compute_or_load_bond_smirks_matches():
     """Loop over test ligands, asserting that
     * verify no cache key
@@ -1061,6 +1078,7 @@ def test_compute_or_load_bond_smirks_matches():
         np.testing.assert_array_equal(fresh_types, cached_types)
 
 
+@pytest.mark.nocuda
 def test_apply_bond_charge_corrections():
     """Assert that applying random bond charge corrections does not change net charge"""
 
@@ -1090,6 +1108,7 @@ def test_apply_bond_charge_corrections():
         np.testing.assert_almost_equal(final_net_charge, initial_net_charge)
 
 
+@pytest.mark.nocuda
 def test_lennard_jones_handler():
     patterns = [
         ["[#1:1]", 99.0, 999.0],
@@ -1167,6 +1186,7 @@ def test_lennard_jones_handler():
     assert np.all(adjoints[mask] == 0.0)
 
 
+@pytest.mark.nocuda
 def test_symmetric_am1ccc():
     """Assert that (symmetric_bond_smarts, +1.0) has same behavior as (symmetric_bond_smarts, 0.0) on one test mol"""
 
@@ -1187,6 +1207,7 @@ def test_symmetric_am1ccc():
     np.testing.assert_array_equal(test_charges, ref_charges)
 
 
+@pytest.mark.nocuda
 def test_nn_handler():
     with path_to_internal_file("timemachine.testsystems.data", "ligands_40.sdf") as path_to_ligand:
         all_mols = utils.read_sdf(path_to_ligand)
@@ -1219,6 +1240,7 @@ def test_nn_handler():
     print("jit grad", jax.jit(grad_fn)(params))  # also a few seconds
 
 
+@pytest.mark.nocuda
 def test_harmonic_bonds_complete():
     """On a test molecule containing [oxygen] ~ [halogen] bonds,
     assert that a ValueError is raised."""
@@ -1233,6 +1255,7 @@ def test_harmonic_bonds_complete():
     assert "missing bonds" in str(e)
 
 
+@pytest.mark.nocuda
 @pytest.mark.parametrize("is_nn", [True, False])
 @pytest.mark.parametrize(
     "protein_path_and_symmetries",
@@ -1335,6 +1358,7 @@ def test_env_bcc_peptide_symmetries(protein_path_and_symmetries, is_nn, env_nn_a
             np.testing.assert_almost_equal(raw_charges[other], raw_charges[first])
 
 
+@pytest.mark.nocuda
 @pytest.mark.nightly(reason="Slow")
 @pytest.mark.parametrize("is_nn", [True, False])
 @pytest.mark.parametrize("protein_path", ["5dfr_solv_equil.pdb", "hif2a_nowater_min.pdb"])

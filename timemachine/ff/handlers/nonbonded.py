@@ -212,10 +212,7 @@ def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list) -> tuple
     """
     from Auto3D.ASE.geometry import opt_geometry
 
-    if get_gpu_count() > 0:
-        from gpu4pyscf.pop import esp
-    else:
-        from pyscf import esp
+    from gpu4pyscf.pop import esp
     from pyscf import gto, scf
     from pyscf.data import radii
 
