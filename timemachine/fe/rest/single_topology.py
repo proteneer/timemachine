@@ -77,7 +77,7 @@ class SingleTopologyREST(SingleTopology):
             Interpolation function to use for temperature scaling. One of "linear", "quadratic", or "exponential"
         """
         super().__init__(mol_a, mol_b, core, forcefield)
-
+        print("rest is enabled with temp:", max_temperature_scale)
         self._temperature_scale_interpolation_fxn: InterpolationFxn = get_temperature_scale_interpolation_fxn(
             max_temperature_scale, temperature_scale_interpolation
         )
