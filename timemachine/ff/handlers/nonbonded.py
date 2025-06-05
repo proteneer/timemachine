@@ -33,7 +33,6 @@ from timemachine.ff.handlers.utils import (
     match_smirks as rd_match_smirks,
 )
 from timemachine.graph_utils import convert_to_nx
-from timemachine.parallel.utils import get_gpu_count
 
 CACHE_SUFFIX = "Cache"
 AM1_CHARGE_CACHE = "AM1Cache"
@@ -211,7 +210,6 @@ def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list) -> tuple
         - Total DFT energy of the molecule
     """
     from Auto3D.ASE.geometry import opt_geometry
-
     from gpu4pyscf.pop import esp
     from pyscf import gto, scf
     from pyscf.data import radii
