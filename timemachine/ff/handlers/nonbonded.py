@@ -413,7 +413,7 @@ def resp_assign_elf_charges(_rdmol):
     print(f"Generated {rdmol.GetNumConformers()} RDKit conformers")
 
     # Convert to OpenFF Molecule for ELF conformer selection
-    molecule: Molecule = Molecule.from_rdkit(rdmol)
+    molecule: Molecule = Molecule.from_rdkit(rdmol, allow_undefined_stereo=True)
     # Apply ELF conformer selection to get diverse, representative conformers
     # This helps ensure charges are computed from a representative ensemble
     molecule.apply_elf_conformer_selection(
