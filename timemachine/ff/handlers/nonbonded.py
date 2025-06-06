@@ -221,7 +221,10 @@ def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list) -> tuple
 
     # Create a copy of the molecule and set conformer positions
     rdmol = Chem.Mol(_rdmol)
-    rdmol.GetConformer().SetPositions(np.array(use_conformers[0], dtype=np.float64))
+    rdmol.RemoveAllConformers()
+    conf = Chem.Conformer(rdmol.GetNumAtoms())
+    conf.SetPositions(np.array(use_conformers[0], dtype=np.float64))
+    rdmol.AddConformer(conf, assignId=True)
 
     # Compute charges
     with tempfile.TemporaryDirectory() as tmpdir:
