@@ -584,7 +584,7 @@ def compute_or_load_resp_charges(mol):
     use RESP to compute partial charges.
     """
 
-    mode = "resp"
+    mode = "RESP"
     # check for cache
     cache_prop_name = f"{mode}{CACHE_SUFFIX}"
     if not mol.HasProp(cache_prop_name):
