@@ -466,7 +466,7 @@ def test_resp_parameterization():
     params = []
     props = None
 
-    cache_key = nonbonded.RESP
+    cache_key = nonbonded.RESP_CHARGE_CACHE
     resp = nonbonded.RESPHandler(smirks, params, props)
     mol = Chem.AddHs(Chem.MolFromSmiles("C1CNCOC1F"))
 
