@@ -88,8 +88,8 @@ RUN (apt-get update || true) && apt-get install --no-install-recommends -y libxr
     && rm -rf /var/lib/apt/lists/*
 
 # Copy curand libraries from image, only require cudart and curand
-COPY --from=timemachine_cuda_dev /usr/local/cuda/targets/x86_64-linux/lib/libcurand* /usr/local/cuda/targets/x86_64-linux/lib/
-COPY --from=timemachine_cuda_dev /usr/local/cuda/lib64/libcurand* /usr/local/cuda/lib64/
+COPY --from=timemachine_cuda_dev /usr/local/cuda/targets/x86_64-linux/lib/lib* /usr/local/cuda/targets/x86_64-linux/lib/
+COPY --from=timemachine_cuda_dev /usr/local/cuda/lib64/lib* /usr/local/cuda/lib64/
 
 COPY --from=timemachine_cuda_dev /opt/conda/ /opt/conda/
 COPY --from=timemachine_cuda_dev /code/ /code/
