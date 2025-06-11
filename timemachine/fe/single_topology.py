@@ -1005,6 +1005,9 @@ def batch_interpolate_nonbonded_pair_list_params(
     # parameters for pairs that do not interact in the src state (dummy_B - core interaction, dummy_B - dummy_B interactions)
     # (these are pairs that are being turned on)
     w = interpolate.pad(interpolate_w_coord, cutoff, dst_w, lamb, *DUMMY_B_NONBONDED_W_MIN_MAX)
+    eps_dst = dst_qlj[:, NBParamIdx.LJ_EPS_IDX]
+    eps_src = jnp.clip(eps_dst / 4, 0.02, eps_dst / 4)
+    eps = interpolate.pad(interpolate.linear_interpolation, eps_src, eps_dst, lamb, *DUMMY_B_NONBONDED_EPS_MIN_MAX)
     q = interpolate.pad(
         interpolate.linear_interpolation,
         jnp.zeros_like(dst_qlj[:, 0]),
@@ -1012,12 +1015,14 @@ def batch_interpolate_nonbonded_pair_list_params(
         lamb,
         *DUMMY_B_NONBONDED_Q_MIN_MAX,
     )
-    pair_params_dummy_b = jnp.concatenate((q[:, None], dst_qlj[:, 1:3], w[:, None]), axis=1)
+    pair_params_dummy_b = jnp.concatenate((q[:, None], dst_qlj[:, 1:2], eps[:, None], w[:, None]), axis=1)
 
     # parameters for pairs that do not interact in the dst state (dummy_A - core interaction, dummy_A - dummy_A interactions)
     # (there are pairs that are being turned off)
     w = interpolate.pad(interpolate_w_coord, src_w, cutoff, lamb, *DUMMY_A_NONBONDED_W_MIN_MAX)
-
+    eps_src = src_qlj[:, NBParamIdx.LJ_EPS_IDX]
+    eps_dst = jnp.clip(eps_src / 4, 0.02, eps_src / 4)
+    eps = interpolate.pad(interpolate.linear_interpolation, eps_src, eps_dst, lamb, *DUMMY_A_NONBONDED_EPS_MIN_MAX)
     q = interpolate.pad(
         interpolate.linear_interpolation,
         src_qlj[:, 0],
@@ -1025,7 +1030,7 @@ def batch_interpolate_nonbonded_pair_list_params(
         lamb,
         *DUMMY_A_NONBONDED_Q_MIN_MAX,
     )
-    pair_params_dummy_a = jnp.concatenate((q[:, None], src_qlj[:, 1:3], w[:, None]), axis=1)
+    pair_params_dummy_a = jnp.concatenate((q[:, None], src_qlj[:, 1:2], eps[:, None], w[:, None]), axis=1)
 
     # parameters for pairs that interact in both src and dst states (core - core interaction)
     w = jnp.zeros(len(src_params))
