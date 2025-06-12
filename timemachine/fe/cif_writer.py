@@ -128,7 +128,7 @@ class CIFWriter:
 
         self.topology = combined_topology
         self.out_handle = open(out_filepath, "w")
-        PDBxFile.writeHeader(self.topology, self.out_handle)
+        PDBxFile.writeHeader(self.topology, self.out_handle, keepIds=True)
         self.topology = self.topology
         self.frame_idx = 0
 
