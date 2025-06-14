@@ -26,8 +26,8 @@ def convert_single_topology_mols(coords: np.ndarray, atom_map: AtomMapMixin) -> 
         >>> writer.close()
 
     """
-    xa = np.zeros((atom_map.mol_a.GetNumAtoms(), 3))
-    xb = np.zeros((atom_map.mol_b.GetNumAtoms(), 3))
+    xa = np.zeros((atom_map.num_atoms_a, 3))
+    xb = np.zeros((atom_map.num_atoms_b, 3))
     for a_idx, c_idx in enumerate(atom_map.a_to_c):
         xa[a_idx] = coords[c_idx]
     for b_idx, c_idx in enumerate(atom_map.b_to_c):
@@ -72,6 +72,8 @@ class CIFWriter:
 
         combined_topology = app.Topology()
 
+        used_residue_ids = []
+
         # see if an existing topology is present
         for obj_idx, obj in enumerate(objs):
             old_topology = obj
@@ -85,7 +87,19 @@ class CIFWriter:
                 old_atom_obj_kv = {}
                 for old_residue in old_topology.residues():
                     chain_obj = old_chain_obj_kv[old_residue.chain]
-                    new_residue = combined_topology.addResidue(name=old_residue.name, chain=chain_obj, id=old_residue.id)
+                    new_residue = combined_topology.addResidue(
+                        name=old_residue.name,
+                        chain=chain_obj,
+                        id=(old_residue.id + old_residue.insertionCode if old_residue.insertionCode else "")
+                        if old_residue.name != "HOH"
+                        else str(max(used_residue_ids) + 1),
+                    )
+
+                    try:
+                        used_residue_ids.append(int(new_residue.id))
+                    except ValueError:
+                        # not an int id
+                        pass
                     for old_atom in old_residue.atoms():
                         new_atom = combined_topology.addAtom(old_atom.name, old_atom.element, new_residue)
                         assert old_atom not in old_atom_obj_kv
@@ -102,7 +116,15 @@ class CIFWriter:
             elif isinstance(obj, Chem.Mol):
                 mol = obj
                 new_chain = combined_topology.addChain()
-                new_residue = combined_topology.addResidue(name="LIG", chain=new_chain)
+                new_residue = combined_topology.addResidue(
+                    name="LIG", chain=new_chain, id=str(max(used_residue_ids) + 1)
+                )
+
+                try:
+                    used_residue_ids.append(int(new_residue.id))
+                except ValueError:
+                    # not an int id
+                    pass
                 old_idx_to_new_atom_map = {}
                 for atom in mol.GetAtoms():
                     name = atom.GetSymbol() + str(atom.GetIdx())
@@ -125,6 +147,9 @@ class CIFWriter:
         # assert that ids are unique.
         atom_ids = list([x.id for x in combined_topology.atoms()])
         assert len(atom_ids) == len(set(atom_ids))
+
+        residue_ids = list([x.id for x in combined_topology.residues()])
+        assert len(residue_ids) == len(set(residue_ids))
 
         self.topology = combined_topology
         self.out_handle = open(out_filepath, "w")
