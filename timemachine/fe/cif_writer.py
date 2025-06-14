@@ -92,7 +92,7 @@ class CIFWriter:
                         chain=chain_obj,
                         id=(old_residue.id + old_residue.insertionCode if old_residue.insertionCode else "")
                         if old_residue.name != "HOH"
-                        else str(max(used_residue_ids) + 1),
+                        else str(max(used_residue_ids + [0]) + 1),
                     )
 
                     try:
@@ -117,7 +117,7 @@ class CIFWriter:
                 mol = obj
                 new_chain = combined_topology.addChain()
                 new_residue = combined_topology.addResidue(
-                    name="LIG", chain=new_chain, id=str(max(used_residue_ids) + 1)
+                    name="LIG", chain=new_chain, id=str(max(used_residue_ids + [0]) + 1)
                 )
 
                 try:
