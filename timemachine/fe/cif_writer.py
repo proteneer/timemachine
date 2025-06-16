@@ -90,9 +90,10 @@ class CIFWriter:
                     new_residue = combined_topology.addResidue(
                         name=old_residue.name,
                         chain=chain_obj,
-                        id=(old_residue.id + old_residue.insertionCode if old_residue.insertionCode else "")
+                        id=old_residue.id + (old_residue.insertionCode if old_residue.insertionCode else "")
                         if old_residue.name != "HOH"
                         else str(max([*used_residue_ids, 0]) + 1),
+                        insertionCode=old_residue.insertionCode
                     )
 
                     try:
