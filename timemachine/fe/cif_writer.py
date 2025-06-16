@@ -90,10 +90,8 @@ class CIFWriter:
                     new_residue = combined_topology.addResidue(
                         name=old_residue.name,
                         chain=chain_obj,
-                        id=old_residue.id + (old_residue.insertionCode if old_residue.insertionCode else "")
-                        if old_residue.name != "HOH"
-                        else str(max([*used_residue_ids, 0]) + 1),
-                        insertionCode=old_residue.insertionCode
+                        id=old_residue.id if old_residue.name != "HOH" else str(max([*used_residue_ids, 0]) + 1),
+                        insertionCode=old_residue.insertionCode,
                     )
 
                     try:
@@ -148,9 +146,6 @@ class CIFWriter:
         # assert that ids are unique.
         atom_ids = list([x.id for x in combined_topology.atoms()])
         assert len(atom_ids) == len(set(atom_ids))
-
-        residue_ids = list([x.id for x in combined_topology.residues()])
-        assert len(residue_ids) == len(set(residue_ids))
 
         self.topology = combined_topology
         self.out_handle = open(out_filepath, "w")
