@@ -72,6 +72,8 @@ class CIFWriter:
 
         combined_topology = app.Topology()
 
+        used_residue_ids = []
+
         # see if an existing topology is present
         for obj_idx, obj in enumerate(objs):
             old_topology = obj
@@ -85,7 +87,20 @@ class CIFWriter:
                 old_atom_obj_kv = {}
                 for old_residue in old_topology.residues():
                     chain_obj = old_chain_obj_kv[old_residue.chain]
-                    new_residue = combined_topology.addResidue(name=old_residue.name, chain=chain_obj)
+                    new_residue = combined_topology.addResidue(
+                        name=old_residue.name,
+                        chain=chain_obj,
+                        id=old_residue.id + (old_residue.insertionCode if old_residue.insertionCode else "")
+                        if old_residue.name != "HOH"
+                        else str(max([*used_residue_ids, 0]) + 1),
+                        insertionCode=old_residue.insertionCode,
+                    )
+
+                    try:
+                        used_residue_ids.append(int(new_residue.id))
+                    except ValueError:
+                        # not an int id
+                        pass
                     for old_atom in old_residue.atoms():
                         new_atom = combined_topology.addAtom(old_atom.name, old_atom.element, new_residue)
                         assert old_atom not in old_atom_obj_kv
@@ -102,7 +117,15 @@ class CIFWriter:
             elif isinstance(obj, Chem.Mol):
                 mol = obj
                 new_chain = combined_topology.addChain()
-                new_residue = combined_topology.addResidue(name="LIG", chain=new_chain)
+                new_residue = combined_topology.addResidue(
+                    name="LIG", chain=new_chain, id=str(max([*used_residue_ids, 0]) + 1)
+                )
+
+                try:
+                    used_residue_ids.append(int(new_residue.id))
+                except ValueError:
+                    # not an int id
+                    pass
                 old_idx_to_new_atom_map = {}
                 for atom in mol.GetAtoms():
                     name = atom.GetSymbol() + str(atom.GetIdx())
@@ -126,9 +149,12 @@ class CIFWriter:
         atom_ids = list([x.id for x in combined_topology.atoms()])
         assert len(atom_ids) == len(set(atom_ids))
 
+        residue_ids = list([x.id for x in combined_topology.residues()])
+        assert len(residue_ids) == len(set(residue_ids))
+
         self.topology = combined_topology
         self.out_handle = open(out_filepath, "w")
-        PDBxFile.writeHeader(self.topology, self.out_handle)
+        PDBxFile.writeHeader(self.topology, self.out_handle, keepIds=True)
         self.topology = self.topology
         self.frame_idx = 0
 
@@ -143,7 +169,7 @@ class CIFWriter:
 
         """
         self.frame_idx += 1
-        PDBxFile.writeModel(self.topology, x, self.out_handle, self.frame_idx)
+        PDBxFile.writeModel(self.topology, x, self.out_handle, self.frame_idx, keepIds=True)
 
     def close(self):
         # Need this final #
