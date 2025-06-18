@@ -47,7 +47,7 @@ from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.thermostat.utils import sample_velocities
 from timemachine.optimize.protocol import greedily_optimize_protocol, make_fast_approx_overlap_distance_fxn
-from timemachine.potentials import BoundPotential, jax_utils
+from timemachine.potentials import BoundPotential, HarmonicBond, jax_utils
 
 DEFAULT_NUM_WINDOWS = 48
 
@@ -228,6 +228,33 @@ def setup_optimized_host(st: SingleTopology, config: HostConfig) -> Host:
     return Host(config.host_system, config.masses, conf, box, config.num_water_atoms, config.omm_topology)
 
 
+class StretchedBondException(Exception):
+    pass
+
+
+def assert_bonds_are_not_stretched(initial_states: list[InitialState], threshold=0.01):
+    # assert the bonds that are turned on do not deviate from their equilibrium values by more than 0.1A
+    for state in initial_states:
+        for bp in state.potentials:
+            pot = bp.potential
+            if isinstance(pot, HarmonicBond):
+                bond_idxs = pot.idxs
+                bond_ks = bp.params[:, 0]
+                bond_b0s = bp.params[:, 1]
+                coords = state.x0
+
+                # todo: vectorize using bonded.py
+                for k, b0, (src, dst) in zip(bond_ks, bond_b0s, bond_idxs):
+                    if k > 10000:
+                        src_coords = coords[src]
+                        dst_coords = coords[dst]
+                        dij = np.linalg.norm(src_coords - dst_coords)
+                        if abs(dij - b0) > threshold:
+                            raise StretchedBondException(
+                                f"Lambda {state.lamb:.2f} has stretched bond {(int(src), int(dst))}, dij: {dij * 10:.3f}A, b0: {b0 * 10:.3f}A"
+                            )
+
+
 def setup_initial_states(
     st: SingleTopology,
     host: Optional[Host],
@@ -285,6 +312,9 @@ def setup_initial_states(
 
     # perform any concluding sanity-checks
     assert_all_states_have_same_masses(initial_states)
+
+    print("Checking bonds are not excessively stretched")
+    assert_bonds_are_not_stretched(initial_states)
 
     return initial_states
 
