@@ -1297,21 +1297,92 @@ def assert_ensembles_compatible(state_a: InitialState, state_b: InitialState):
         assert (state_a.box0 == state_b.box0).all()
 
 
-def compute_u_kn(trajs, initial_states) -> tuple[NDArray, NDArray]:
+def compute_u_kn(trajs, initial_states, batch_size: int = 1000) -> tuple[NDArray, NDArray]:
     """makes K^2 calls to execute_batch_sparse"""
 
-    u_kl = make_u_kl_fxn(trajs, initial_states)
-    N_k = [len(traj.frames) for traj in trajs]
-    K = len(N_k)
-    assert len(initial_states) == K
+    # Validate assumptions
+    kBTs = [BOLTZ * state.integrator.temperature for state in initial_states]
+    assert len(set(kBTs)) == 1
+    kBT = kBTs[0]
 
-    u_kln = np.nan * np.zeros((K, K, max(N_k)))
+    # Prepare parameters
+    s_0 = initial_states[0]
+    sp = make_summed_potential(s_0.potentials)
+    K = len(initial_states)
+    P = len(sp.params)
+    all_params = np.zeros((K, P))
+    all_params[0] = sp.params
+
+    for i in range(1, K):
+        s = initial_states[i]
+        assert_ensembles_compatible(s_0, s)
+        assert_potentials_compatible(s_0.potentials, s.potentials)
+        all_params[i] = make_summed_potential(s.potentials).params
+
+    sp_gpu = sp.potential.to_gpu(np.float32)
+
+    # Collect all frames and boxes
+    all_frames = []
+    all_boxes = []
+    frame_counts = []
+
+    for traj in trajs:
+        frames = np.array(traj.frames)
+        boxes = np.array(traj.boxes)
+        all_frames.append(frames)
+        all_boxes.append(boxes)
+        frame_counts.append(len(frames))
+
+    N_k = np.array(frame_counts)
+    max_N = max(N_k)
+
+    # Initialize result array
+    u_kln = np.full((K, K, max_N), np.nan)
+
+    # Process in batches for better GPU utilization
     for k in range(K):
-        for l in range(K):
-            u_kln[k, l, : N_k[k]] = u_kl(k, l)
+        frames_k = all_frames[k]
+        boxes_k = all_boxes[k]
+        n_frames = len(frames_k)
 
+        # Batch process all states for this trajectory
+        for batch_start in range(0, n_frames, batch_size):
+            batch_end = min(batch_start + batch_size, n_frames)
+            batch_frames = frames_k[batch_start:batch_end]
+            batch_boxes = boxes_k[batch_start:batch_end]
+            batch_size_actual = batch_end - batch_start
+
+            # Prepare batch indices for all states
+            coords_batch = np.tile(batch_frames, (K, 1, 1))
+            boxes_batch = np.tile(batch_boxes, (K, 1, 1))
+            params_batch = np.repeat(all_params, batch_size_actual, axis=0)
+
+            coords_idxs = np.tile(np.arange(batch_size_actual), K).astype(np.uint32)
+            params_idxs = np.repeat(np.arange(K), batch_size_actual).astype(np.uint32)
+
+            # Single GPU call for all states
+            _, _, Us = sp_gpu.unbound_impl.execute_batch_sparse(
+                coords_batch.reshape(-1, *frames_k.shape[1:]),
+                params_batch,
+                boxes_batch.reshape(-1, 3, 3),
+                coords_idxs,
+                params_idxs,
+                False,
+                False,
+                True,
+            )
+
+            # Reshape and store results
+            Us = np.nan_to_num(Us, nan=+np.inf) / kBT
+            Us_reshaped = Us.reshape(K, batch_size_actual)
+
+            for l in range(K):
+                u_kln[k, l, batch_start:batch_end] = Us_reshaped[l]
+
+    # Convert to standard format
     u_kn = kln_to_kn(u_kln, N_k)
-    return u_kn, np.array(N_k)
+
+    return u_kn, N_k
 
 
 def generate_pair_bar_ulkns(
