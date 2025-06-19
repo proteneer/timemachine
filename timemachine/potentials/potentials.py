@@ -162,7 +162,7 @@ class NonbondedAllPairs(Potential):
 
 
 @dataclass
-class NonbondedInteractionGroup(Potential):
+class NonbondedInteractionGroupLegacy(Potential):
     num_atoms: int
     row_atom_idxs: NDArray[np.int32]
     beta: float

@@ -5,12 +5,16 @@ import numpy as np
 from numpy.typing import NDArray
 
 from timemachine.lib import custom_ops
+from timemachine.optimized_kernels import OptimizedLangevinIntegrator
 
 # safe to pickle!
 
+# Replace LangevinIntegrator with optimized version
+LangevinIntegrator = OptimizedLangevinIntegrator
+
 
 @dataclass
-class LangevinIntegrator:
+class LangevinIntegratorLegacy:
     temperature: float
     dt: float
     friction: float

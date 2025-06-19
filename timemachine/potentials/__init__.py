@@ -12,13 +12,15 @@ from .potentials import (
     Nonbonded,
     NonbondedAllPairs,
     NonbondedExclusions,
-    NonbondedInteractionGroup,
     NonbondedPairList,
     NonbondedPairListPrecomputed,
     PeriodicTorsion,
     SummedPotential,
     make_summed_potential,
 )
+
+# Import optimized version and alias it as NonbondedInteractionGroup
+from ..optimized_kernels import OptimizedNonbondedInteractionGroup as NonbondedInteractionGroup
 
 __all__ = [
     "BoundGpuImplWrapper",
