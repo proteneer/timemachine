@@ -58,6 +58,7 @@ class Forcefield:
             nonbonded.AM1BCCCCCHandler,
             nonbonded.PrecomputedChargeHandler,
             nonbonded.NNHandler,
+            nonbonded.RESPHandler,
         ]
     ]
     q_handle_intra: Optional[
@@ -68,6 +69,7 @@ class Forcefield:
             nonbonded.AM1BCCCCCIntraHandler,
             nonbonded.PrecomputedChargeHandler,
             nonbonded.NNHandler,
+            nonbonded.RESPIntraHandler,
         ]
     ]
 
@@ -201,6 +203,7 @@ class Forcefield:
                     nonbonded.AM1CCCIntraHandler,
                     nonbonded.AM1BCCIntraHandler,
                     nonbonded.SimpleChargeIntraHandler,
+                    nonbonded.RESPIntraHandler,
                     nonbonded.PrecomputedChargeIntraHandler,
                 ),
             ):
@@ -220,6 +223,7 @@ class Forcefield:
                     nonbonded.AM1BCCCCCHandler,
                     nonbonded.AM1CCCHandler,
                     nonbonded.AM1BCCHandler,
+                    nonbonded.RESPHandler,
                     nonbonded.SimpleChargeHandler,
                     nonbonded.PrecomputedChargeHandler,
                     nonbonded.NNHandler,
@@ -258,6 +262,8 @@ class Forcefield:
                 q_handle_intra = nonbonded.PrecomputedChargeIntraHandler(
                     q_handle.smirks, q_handle.params, q_handle.props
                 )
+            elif isinstance(q_handle, nonbonded.RESPHandler):
+                q_handle_intra = nonbonded.RESPIntraHandler(q_handle.smirks, q_handle.params, q_handle.props)
             else:
                 raise ValueError(f"Unsupported charge handler {q_handle}")
 
