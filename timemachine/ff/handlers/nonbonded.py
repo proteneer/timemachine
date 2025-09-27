@@ -1,7 +1,12 @@
 import base64
+import os
 import pickle
+import subprocess
+import tempfile
 import warnings
-from collections import Counter
+from collections import Counter, defaultdict
+from functools import partial
+from shutil import which
 
 import jax.numpy as jnp
 import networkx as nx
@@ -9,6 +14,9 @@ import numpy as np
 from jax import jit, vmap
 from numpy.typing import NDArray
 from rdkit import Chem
+from rdkit.Chem import AllChem
+from rdkit.Chem.Descriptors import NumRadicalElectrons
+from rdkit.Chem.rdMolTransforms import GetBondLength
 
 from timemachine import constants
 from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
@@ -21,7 +29,9 @@ from timemachine.ff.handlers.utils import (
     make_residue_mol_from_template,
     update_mol_topology,
 )
-from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
+from timemachine.ff.handlers.utils import (
+    match_smirks as rd_match_smirks,
+)
 from timemachine.graph_utils import convert_to_nx
 
 CACHE_SUFFIX = "Cache"
@@ -29,6 +39,7 @@ AM1_CHARGE_CACHE = "AM1Cache"
 AM1BCC_CHARGE_CACHE = "AM1BCCCache"
 AM1ELF10_CHARGE_CACHE = "AM1ELF10Cache"
 AM1BCCELF10_CHARGE_CACHE = "AM1BCCELF10Cache"
+RESP_CHARGE_CACHE = "RESPCache"
 BOND_SMIRK_MATCH_CACHE = "BondSmirkMatchCache"
 NN_FEATURES_PROPNAME = "NNFeatures"
 
@@ -37,6 +48,7 @@ AM1ELF10 = "AM1ELF10"
 AM1BCC = "AM1BCC"
 AM1BCCELF10 = "AM1BCCELF10"
 ELF10_MODELS = (AM1ELF10, AM1BCCELF10)
+RESP = "RESP"
 
 
 def convert_to_oe(mol):
@@ -119,6 +131,7 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
 
     if charge_model in ELF10_MODELS:
         oe_generate_conformations(oemol)
+        print(f"Generated {oemol.NumConfs()} OpenEye conformers")
 
     result = oequacpac.OEAssignCharges(oemol, charge_engine)
     if result is False:
@@ -148,6 +161,313 @@ def oe_assign_charges(mol, charge_model=AM1BCCELF10):
 
     # returned charges are in TM units, in original atom ordering
     return inlined_constant * partial_charges[inv_permutation]
+
+
+def rdkit_generate_conformations(mol):
+    mol_copy = Chem.Mol(mol)
+    ri = mol.GetRingInfo()
+    largest_ring_size = max((len(r) for r in ri.AtomRings()), default=0)
+    if largest_ring_size > 10:
+        print("Detected macrocycle")
+        params = Chem.rdDistGeom.ETKDGv3()
+    else:
+        params = Chem.rdDistGeom.srETKDGv3()
+        params.useSmallRingTorsions = True
+
+    params.pruneRmsThresh = 1.0
+    params.clearConfs = True
+
+    confs = len(AllChem.EmbedMultipleConfs(mol, 800, params))
+    if confs == 0:
+        mol.AddConformer(mol_copy.GetConformer())
+    AllChem.MMFFOptimizeMoleculeConfs(mol, maxIters=500)
+
+
+def make_xyz(rdmol: Chem.Mol) -> str:
+    xyz = []
+    for atom in rdmol.GetAtoms():
+        atom_index = atom.GetIdx()
+        pos = rdmol.GetConformer().GetAtomPosition(atom_index)
+        xyz.append(f"{atom.GetSymbol()} {pos.x} {pos.y} {pos.z}")
+    return "\n".join(xyz)
+
+
+def resp_assign_partial_charges(_rdmol: Chem.Mol, use_conformers: list) -> tuple[np.ndarray, float]:
+    """
+    Calculate RESP (Restrained ElectroStatic Potential) partial charges for a molecule.
+
+    This function performs quantum mechanical calculations to derive atomic partial charges
+    that best reproduce the molecular electrostatic potential while applying restraints
+    to prevent overfitting.
+
+    Parameters
+    ----------
+    _rdmol : Chem.Mol
+        Input RDKit molecule object
+    use_conformers : list[Quantity]
+        List of conformer coordinates to use (only the first conformer is used)
+
+    Returns
+    -------
+    tuple[np.ndarray, float]
+        - Array of RESP partial charges for each atom
+        - Total DFT energy of the molecule
+    """
+    from Auto3D.ASE.geometry import opt_geometry
+    from gpu4pyscf.pop import esp
+    from pyscf import gto, scf
+    from pyscf.data import radii
+
+    # Check that antechamber is available for symmetry checking
+    ANTECHAMBER_PATH = which("antechamber")
+    if ANTECHAMBER_PATH is None:
+        raise ValueError("Antechamber not found, cannot run assign_partial_charges()")
+
+    # Create a copy of the molecule and set conformer positions
+    rdmol = Chem.Mol(_rdmol)
+    rdmol.RemoveAllConformers()
+    conf = Chem.Conformer(rdmol.GetNumAtoms())
+    conf.SetPositions(np.array(use_conformers[0], dtype=np.float64))
+    rdmol.AddConformer(conf, assignId=True)
+
+    # Compute charges
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Get the formal charge of the molecule for QM calculations
+        net_charge = Chem.GetFormalCharge(rdmol)
+
+        # Write molecule to SDF file for antechamber processing
+        print(Chem.MolToMolBlock(rdmol), file=open(os.path.join(tmpdir, "molecule.sdf"), "w+"))
+
+        # Run antechamber to generate atom types and connectivity information
+        # This creates a .ac file with atom type assignments needed for RESP
+        subprocess.check_output(
+            [
+                "antechamber",
+                "-i",
+                "molecule.sdf",
+                "-o",
+                "charged.ac",
+                "-fo",
+                "ac",
+                "-fi",
+                "sdf",
+                "-nc",
+                str(net_charge),
+            ],
+            cwd=tmpdir,
+        )
+
+        # Attempt to optimize geometry using AIMNET neural network potential
+        # This can provide better initial coordinates for QM calculations
+        try:
+            out_path = opt_geometry(os.path.join(tmpdir, "molecule.sdf"), model_name="AIMNET")
+            m = Chem.MolFromMolFile(out_path, removeHs=False)
+            bad_bond = False
+            # Check for unreasonable bond lengths that indicate optimization failure
+            for bnd in m.GetBonds():
+                bond_length = GetBondLength(m.GetConformer(), bnd.GetBeginAtomIdx(), bnd.GetEndAtomIdx())
+                if bond_length > 3.0:
+                    print(
+                        f"Bond length {bond_length} is too high between {bnd.GetBeginAtom().GetSymbol()} and {bnd.GetEndAtom().GetSymbol()}"
+                    )
+                    bad_bond = True
+
+            if not bad_bond:
+                # Use optimized coordinates if geometry is reasonable
+                xyz = make_xyz(m)
+            else:
+                # Fall back to original coordinates if optimization failed
+                xyz = make_xyz(rdmol)
+        except Exception as e:
+            # If optimization fails entirely, use original coordinates
+            print(e)
+            xyz = make_xyz(rdmol)
+
+        # Generate RESP input file with symmetry constraints
+        # respgen identifies chemically equivalent atoms that should have equal charges
+        subprocess.check_output(["respgen", "-i", "charged.ac", "-o", "tmp.respin", "-f", "resp"], cwd=tmpdir)
+
+        # Parse symmetry constraints from respgen output
+        # These ensure chemically equivalent atoms (e.g., methyl hydrogens) get identical charges
+        symmetry_groups = defaultdict(set)
+        with open(os.path.join(tmpdir, "tmp.respin")) as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                if "&end" in line:
+                    # Parse atom symmetry groups starting 4 lines after "&end"
+                    for atm_idx, l in enumerate(lines[i + 4 :], 1):
+                        parts = l.split()
+                        if parts:
+                            group = int(parts[1])
+                            if group:
+                                # Add atoms to their symmetry group
+                                symmetry_groups[group].add(atm_idx - 1)
+                                symmetry_groups[group].add(group - 1)
+
+        # Set up PySCF molecule object for quantum calculations
+        mol = gto.Mole()
+        mol.cart = True  # Use Cartesian basis functions
+        mol.charge = Chem.GetFormalCharge(rdmol)
+        mol.spin = NumRadicalElectrons(rdmol)  # Number of unpaired electrons
+        mol.atom = xyz  # Atomic coordinates
+        mol.basis = "6-31gs"  # Standard basis set for RESP calculations
+        mol.build()
+
+        # Perform Restricted Hartree-Fock calculation on GPU
+        mf = scf.RHF(mol).to_gpu()
+        e_dft = mf.kernel()  # Total electronic energy
+        dm = mf.make_rdm1()  # Density matrix
+
+        # Define van der Waals radii for ESP grid point generation
+        # These determine where electrostatic potential points are sampled
+        # Taken from https://github.com/pyscf/gpu4pyscf/blob/57cf1d437adb820ce7f69f8872f2500c751bdd97/gpu4pyscf/pop/esp.py#L32
+        # with an added parameter for Br
+        rad = (
+            1.0
+            / radii.BOHR
+            * np.asarray(
+                [
+                    -1,
+                    1.20,  # H
+                    1.20,  # He
+                    1.37,  # Li
+                    1.45,  # Be
+                    1.45,  # B
+                    1.50,  # C
+                    1.50,  # N,
+                    1.40,  # O
+                    1.35,  # F,
+                    1.30,  # Ne,
+                    1.57,  # Na,
+                    1.36,  # Mg
+                    1.24,  # Al,
+                    1.17,  # Si,
+                    1.80,  # P,
+                    1.75,  # S,
+                    1.70,  # Cl
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    -1,
+                    1.85,  # Br
+                ]
+            )
+        )
+
+        # First fit ESP charges without restraints
+        # This provides initial charges that exactly reproduce the electrostatic potential
+        esp.esp_solve(mol, dm, rad=rad)
+        print("Fitted ESP charge")
+
+        # First stage RESP fitting with default restraints
+        # This applies weak restraints to prevent overfitting
+        esp.resp_solve(mol, dm, rad=rad)
+        sum_constraints = []
+
+        # Second stage RESP fitting with symmetry constraints
+        # This ensures chemically equivalent atoms have identical charges
+        rows = esp.resp_solve(
+            mol,
+            dm,
+            rad=rad,
+            resp_a=1e-3,  # Restraint strength parameter
+            sum_constraints=sum_constraints,
+            equal_constraints=[list(s) for s in symmetry_groups.values()],  # Symmetry constraints
+        ).tolist()
+
+    return rows, e_dft
+
+
+def resp_assign_elf_charges(_rdmol):
+    """
+    Calculate RESP charges using ELF (Electrostatically Least-interacting Functional) conformer selection.
+
+    This function generates multiple conformers, selects the most diverse ones using ELF,
+    computes RESP charges for each conformer, and returns the averaged charges.
+
+    Parameters
+    ----------
+    _rdmol : Chem.Mol
+        Input RDKit molecule object
+
+    Returns
+    -------
+    np.array
+        Array of averaged RESP partial charges scaled by sqrt(ONE_4PI_EPS0)
+    """
+    # Create a copy of the molecule for conformer generation
+
+    from openff.recharge.utilities.molecule import extract_conformers
+    from openff.toolkit import RDKitToolkitWrapper, unit
+    from openff.toolkit.topology import Molecule
+
+    rdmol = Chem.Mol(_rdmol)
+    rdkit_generate_conformations(rdmol)
+
+    print(f"Generated {rdmol.GetNumConformers()} RDKit conformers")
+
+    # Convert to OpenFF Molecule for ELF conformer selection
+    molecule: Molecule = Molecule.from_rdkit(rdmol, allow_undefined_stereo=True)
+    # Apply ELF conformer selection to get diverse, representative conformers
+    # This helps ensure charges are computed from a representative ensemble
+    molecule.apply_elf_conformer_selection(
+        limit=10, toolkit_registry=RDKitToolkitWrapper(), rms_tolerance=1.0 * unit.angstrom
+    )
+
+    print(f"Selected {len(molecule.conformers)} RDKit conformers")
+
+    # Extract conformer coordinates for RESP calculations
+    conformers = extract_conformers(molecule)
+
+    # Calculate RESP charges for each selected conformer
+    charges = []
+    energies = []
+    for chs, energy in map(partial(resp_assign_partial_charges, _rdmol), [[c] for c in conformers]):
+        if chs is not None:
+            charges.append(chs)
+            energies.append(energy)
+
+    # Convert charges list to numpy array for averaging
+    am1_partial_charges = np.array(charges)
+
+    # Average charges across all conformers
+    # This provides more robust charges that account for conformational flexibility
+    partial_charges = np.mean(am1_partial_charges, axis=0)
+
+    # Ensure total charge equals the formal charge of the molecule
+    # Small numerical errors can accumulate, so we redistribute any discrepancy
+    expected_charge = Chem.GetFormalCharge(rdmol)
+    current_charge = 0.0
+    for pc in partial_charges:
+        current_charge += pc
+    charge_offset = (expected_charge - current_charge) / rdmol.GetNumAtoms()
+    partial_charges += charge_offset
+
+    # Verify that the charges sum up to an integer
+    net_charge = np.sum(partial_charges)
+    net_charge_is_integral = np.isclose(net_charge, np.round(net_charge), atol=1e-5)
+    assert net_charge_is_integral, f"Charge is not an integer: {net_charge}"
+
+    # Apply scaling factor for TimeMachine's optimized charge representation
+    # https://github.com/proteneer/timemachine#forcefield-gotchas
+    # "The charges have been multiplied by sqrt(ONE_4PI_EPS0) as an optimization."
+    inlined_constant = np.sqrt(constants.ONE_4PI_EPS0)
+
+    # returned charges are in TM units, in original atom ordering
+    return inlined_constant * partial_charges
 
 
 def generate_exclusion_idxs(
@@ -259,6 +579,25 @@ def compute_or_load_oe_charges(mol, mode=AM1ELF10):
         assert len(oe_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
 
     return np.array(oe_charges)
+
+
+def compute_or_load_resp_charges(mol):
+    """
+    Unless already cached in mol's "{mode}{CACHE_SUFFIX}" property,
+    use RESP to compute partial charges.
+    """
+
+    mode = "RESP"
+    # check for cache
+    cache_prop_name = f"{mode}{CACHE_SUFFIX}"
+    if not mol.HasProp(cache_prop_name):
+        resp_charges = list(resp_assign_elf_charges(mol))
+        mol.SetProp(cache_prop_name, base64.b64encode(pickle.dumps(resp_charges)))
+    else:
+        resp_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_prop_name)))
+        assert len(resp_charges) == mol.GetNumAtoms(), "Charge cache has different number of charges than mol atoms"
+
+    return np.array(resp_charges)
 
 
 def compute_or_load_bond_smirks_matches(mol, smirks_list):
@@ -616,7 +955,41 @@ class AM1BCCHandler(SerializableMixIn):
         return compute_or_load_oe_charges(mol, mode=AM1BCCELF10)
 
 
+class RESPHandler(SerializableMixIn):
+    """The RESPHandler generates charges for molecules using RESP."""
+
+    def __init__(self, smirks, params, props):
+        assert len(smirks) == 0
+        assert len(params) == 0
+        assert props is None
+        self.smirks = []
+        self.params = []
+        self.props = None
+
+    def partial_parameterize(self, _, mol):
+        return self.static_parameterize(mol)
+
+    def parameterize(self, mol):
+        return self.static_parameterize(mol)
+
+    @staticmethod
+    def static_parameterize(mol):
+        """
+        Parameters
+        ----------
+
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        """
+        return compute_or_load_resp_charges(mol)
+
+
 class AM1BCCIntraHandler(AM1BCCHandler):
+    pass
+
+
+class RESPIntraHandler(RESPHandler):
     pass
 
 
