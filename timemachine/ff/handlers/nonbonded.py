@@ -909,7 +909,7 @@ class AM1CCCHandler(SerializableMixIn):
         self.smirks = smirks
         self.params = np.array(params, dtype=np.float64)
         self.props = props
-        self.supported_elements = {1, 6, 7, 8, 9, 14, 16, 17, 35, 53}  # note: omits phosphorus (15) for now
+        self.supported_elements = {1, 6, 7, 8, 9, 14, 15, 16, 17, 35, 53}
 
     def validate_input(self, mol):
         # TODO: read off supported elements from self.smirks, rather than hard-coding list of supported elements?
