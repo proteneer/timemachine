@@ -149,11 +149,8 @@ def oe_generate_conformations(oemol, sample_hydrogens=True):
     if rd_mol is None:
         raise RuntimeError(f"Failed to convert OEMol to RDKit mol for '{oemol.GetTitle()}'")
 
-    # Add hydrogens if needed
-    rd_mol = Chem.AddHs(rd_mol, addCoords=True)
-
     # Generate additional conformers using RDKit ETKDGv3
-    rd_mol_etkdg = Chem.AddHs(Chem.MolFromMolBlock(sdf_string, removeHs=False), addCoords=True)
+    rd_mol_etkdg = Chem.MolFromMolBlock(sdf_string, removeHs=False)
     generate_conformations_etkdg(rd_mol_etkdg)
 
     # Add ETKDGv3 conformers to the original
@@ -192,7 +189,7 @@ def oe_assign_charges(mol, charge_model: str = AM1BCCELF10) -> NDArray:
 
     charge_engines = {
         AM1: oequacpac.OEAM1Charges(symmetrize=True),
-        AM1ELF10: oequacpac.OEELFCharges(oequacpac.OEAM1Charges(symmetrize=True), 10),
+        AM1ELF10: oequacpac.OEELFCharges(oequacpac.OEAM1Charges(symmetrize=True)),
         AM1BCC: oequacpac.OEAM1BCCCharges(symmetrize=True),
         AM1BCCELF10: oequacpac.OEAM1BCCELF10Charges(),
     }
@@ -272,7 +269,7 @@ def generate_conformations_etkdg(mol: Chem.Mol, n_confs: int = 800, rms_threshol
 
         # Minimize with MMFF94s (like Omega does)
         try:
-            AllChem.MMFFOptimizeMoleculeConfs(mol_copy, mmffVariant="MMFF94s", maxIters=200, numThreads=0)
+            AllChem.MMFFOptimizeMoleculeConfs(mol_copy, mmffVariant="MMFF94s", maxIters=20, numThreads=0)
         except Exception:
             pass
 
